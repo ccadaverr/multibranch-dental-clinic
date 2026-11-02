@@ -1,6 +1,6 @@
 import { useClinicalSession } from '../use-clinical-session.js'
 import { clinicalSessionKey, resolveEncounter } from '../encounter.js'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Button, Card, ConfirmDialog, Field, FilterBar, Modal, Notice, PageHeader } from '../components.jsx'
 import { createPrescription, downloadPrescriptionPdf, issuePrescription, listPrescriptions, prescription, prescriptionVisits, savePrescriptionLicense, updatePrescription, voidPrescription } from '../api-client.js'
 import '../dentist-clinical.css'
@@ -49,6 +49,15 @@ function PrescriptionsBody({ store, role, context, setPage }) {
   const toast = store?.toast || (() => {})
   const [rows, setRows] = useState(null), [error, setError] = useState(''), [openId, setOpenId] = useState(null), [writing, setWriting] = useState(null)
   const [query, setQuery] = useState(''), [statusFilter, setStatusFilter] = useState('all')
+  // Invalidate UI completions synchronously when selection changes. The server
+  // command still finishes for its original prescription, even after unmount.
+  const editorGeneration = useRef(0)
+  const generation = editorGeneration.current
+  const selectDraft = id => {
+    if(id===writing)return
+    editorGeneration.current++
+    setWriting(id)
+  }
   const load = () => listPrescriptions().then(r => { if (r.ok) { setRows(r.data); setError('') } else setError(r.message || 'Prescriptions could not be loaded.') })
   useEffect(() => { load() }, [])
   const dentist = role === 'dentist', owner = role === 'owner'
@@ -71,7 +80,7 @@ function PrescriptionsBody({ store, role, context, setPage }) {
       text={owner ? 'Prescriptions issued at the clinic: number, date, dentist and branch. The medicines are visible only to the dentists, the branch front desk and the patient.'
         : dentist ? 'Write a prescription for a recent visit. Issuing locks it; a mistake is voided with a reason and a new one is issued. There is no drug list and no interaction check: you decide what to prescribe.'
           : 'Prescriptions issued at your branch, to view and print. Only a dentist writes or changes them.'}/>
-    {dentist && <WriteCard context={context} toast={toast} onDone={id => { load(); setOpenId(id) }} editing={writing} onEdited={() => setWriting(null)}/>}
+    {dentist && <WriteCard key={writing || 'new'} context={context} toast={toast} onDone={id => { load(); setOpenId(id) }} editing={writing} onEdited={() => selectDraft(null)} isCurrent={() => editorGeneration.current===generation}/>}
     {dentist && <LicenseCard toast={toast}/>}
     {error && <Notice tone="warning" title="Unavailable">{error}</Notice>}
     <Card title={owner ? 'Issued prescriptions' : 'Prescriptions'}>
@@ -99,43 +108,63 @@ function PrescriptionsBody({ store, role, context, setPage }) {
           <div><b>{p.number || 'Draft'}{p.patient ? ` · ${p.patient.name}` : ''}</b>
             <span><span className={`fd-badge ${TONE[p.status]}`}>{p.status === 'Void' ? 'VOID' : p.status}</span> · {p.date ? day(p.date) : 'not issued'} · {p.dentist} · {p.branch}</span></div>
           <div className="ns-actions">
-            {p.can_edit && <Button size="sm" variant="soft" onClick={() => setWriting(p.id)}>Edit draft</Button>}
+            {p.can_edit && <Button size="sm" variant="soft" onClick={() => selectDraft(p.id)}>Edit draft</Button>}
             <Button size="sm" variant={owner ? 'soft' : 'ghost'} onClick={() => setOpenId(p.id)}>{owner ? 'View record' : 'Open'}</Button>
           </div>
         </li>)}</ul>}
     </Card>
-    {openId && <PrescriptionDialog id={openId} toast={toast} onClose={() => setOpenId(null)} onChanged={load} onEdit={dentist ? id => { setOpenId(null); setWriting(id) } : undefined}/>}
+    {openId && <PrescriptionDialog id={openId} toast={toast} onClose={() => setOpenId(null)} onChanged={load} onEdit={dentist ? id => { setOpenId(null); selectDraft(id) } : undefined}/>}
   </div>
 }
 
-function WriteCard({ toast, onDone, editing, onEdited, context }) {
+function WriteCard({ toast, onDone, editing, onEdited, context, isCurrent }) {
+  const mounted=useRef(true)
+  const visitGeneration=useRef(0)
+  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false}},[])
   const [visits, setVisits] = useState(null), [meta, setMeta] = useState({}), [visitId, setVisitId] = useState(context?.visitId||'')
   const [lines, setLines] = useState([{ ...EMPTY_LINE }]), [note, setNote] = useState(''), [draft, setDraft] = useState(null)
   const [err, setErr] = useState(''), [busy, setBusy] = useState(''), [confirmIssue, setConfirmIssue] = useState(false)
-  useEffect(() => { prescriptionVisits().then(r => { if (r.ok) { setVisits(context?.visitId?r.data.filter(v=>v.id===context.visitId&&v.patient?.id===(context.patientPublicId||context.patientId)):r.data); setMeta(r.meta || {}) } }) }, [])
+  useEffect(() => { let live=true; prescriptionVisits().then(r => { if (live && r.ok) { setVisits(context?.visitId?r.data.filter(v=>v.id===context.visitId&&v.patient?.id===(context.patientPublicId||context.patientId)):r.data); setMeta(r.meta || {}) } }); return()=>{live=false} }, [])
   useEffect(() => {
     if (!editing) return
-    prescription(editing).then(r => { if (r.ok) { setDraft(r.data); setVisitId(r.data.visit); setLines(r.data.lines.map(l => ({ ...EMPTY_LINE, ...l }))); setNote(r.data.note || '') } })
+    let live=true
+    prescription(editing).then(r => {
+      if(!live)return
+      if (r.ok && r.data.id===editing && r.data.status==='Draft' && r.data.can_edit) { setDraft(r.data); setVisitId(r.data.visit); setLines(r.data.lines.map(l => ({ ...EMPTY_LINE, ...l }))); setNote(r.data.note || '') }
+      else setErr(r.ok ? 'This prescription is no longer an editable draft.' : firstError(r))
+    })
+    return()=>{live=false}
   }, [editing])
   const visit = (visits || []).find(v => v.id === visitId)
   const set = (i, k, v, custom = false) => setLines(ls => ls.map((l, j) => j === i ? { ...l, [k]: v, ...(custom ? { [`${k}Other`]: true } : {}) } : l))
   const choose = (i, field, option) => setLines(ls => ls.map((l, j) => j === i ? chooseOption(l, field, option) : l))
   const missingCustomValue = lines.some(line => CUSTOM_FIELDS.some(field => line[`${field}Other`] && !line[field].trim()))
+  const changeVisit = id => {
+    // A new selection starts a blank editor. Invalidate synchronously, including
+    // A -> B -> A; comparing only the Visit ID would revive A's old completion.
+    visitGeneration.current++
+    setVisitId(id); setLines([{ ...EMPTY_LINE }]); setNote(''); setErr(''); setBusy(''); setConfirmIssue(false)
+  }
   const reset = () => { setDraft(null); setVisitId(''); setLines([{ ...EMPTY_LINE }]); setNote(''); onEdited() }
   const save = async issue => {
     if (missingCustomValue) return setErr('Specify the selected Other values before saving.')
+    const generation=visitGeneration.current
     setBusy(issue ? 'issue' : 'save'); setErr('')
     const body = { lines: lines.filter(l => l.medicine.trim()).map(apiLine), note: note.trim() || null }
     let r = draft ? await updatePrescription(draft.id, { ...body, expected_revision: draft.revision }) : await createPrescription({ visit_id: visitId, ...body })
     if (r.ok && issue) r = await issuePrescription(r.data.id, r.data.revision)
+    // A transmitted Save/explicit Issue retains its original identity. Only its
+    // current editor may consume the result, report feedback or navigate.
+    if(!mounted.current||!isCurrent()||visitGeneration.current!==generation)return
     setBusy('')
     if (!r.ok) return setErr(firstError(r))
     toast(issue ? `Issued ${r.data.number}. The patient was told it is ready in the portal.` : 'Draft saved. Only dentists at this branch can see it.', 'success')
     reset(); onDone(r.data.id)
   }
+  if(editing&&!draft)return <Card title="Open prescription draft">{err?<Notice tone="warning" title="Draft unavailable">{err}</Notice>:<p role="status">Loading prescription draft…</p>}<Button variant="ghost" onClick={onEdited}>Cancel</Button></Card>
   return <Card title={draft ? `Edit draft for ${draft.patient?.name}` : 'Write a prescription'}>
     {!visits ? <p className="au-muted" role="status">Loading visits…</p> : <form className="au-form" onSubmit={e => { e.preventDefault(); save(false) }}>
-      {!draft && <Field label="Visit" required hint="Visits at your branches in the last 30 days."><select value={visitId} onChange={e => setVisitId(e.target.value)} required>
+      {!draft && <Field label="Visit" required hint="Visits at your branches in the last 30 days."><select value={visitId} onChange={e => changeVisit(e.target.value)} required>
         <option value="">Choose a visit…</option>{visits.map(v => <option key={v.id} value={v.id}>{day(v.date)} · {v.patient.name}{v.patient.age !== null ? ` (${v.patient.age})` : ''} · {v.branch}</option>)}</select></Field>}
       {(visit || draft) && <Notice tone="warning" title="Check allergies before prescribing">{meta.allergies?.length ? meta.allergies.join(', ') : meta.allergy_notice}</Notice>}
       <datalist id="rx-common">{[...new Set([...(meta.common_medicines || []), ...COMMON_MEDICINE_NAMES])].map(m => <option key={m} value={m}/>)}</datalist>
@@ -271,11 +300,15 @@ function LicenseCard({ toast }) {
 }
 
 export function PrescriptionDialog({ id, toast, onClose, onChanged, onEdit }) {
+  const mounted=useRef(true), currentId=useRef(id)
+  currentId.current=id
+  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false}},[])
   const [p, setP] = useState(null), [error, setError] = useState(''), [reason, setReason] = useState(''), [voiding, setVoiding] = useState(false), [busy, setBusy] = useState(false)
-  useEffect(() => { prescription(id).then(r => (r.ok ? setP(r.data) : setError(r.message || 'This prescription could not be opened.'))) }, [id])
+  useEffect(() => { let live=true;setP(null);setError('');prescription(id).then(r => {if(live){r.ok ? setP(r.data) : setError(r.message || 'This prescription could not be opened.')}});return()=>{live=false} }, [id])
   const doVoid = async () => {
     setBusy(true)
     const r = await voidPrescription(id, reason.trim())
+    if(!mounted.current||currentId.current!==id)return
     setBusy(false)
     if (!r.ok) return toast(firstError(r), 'warning')
     setP(r.data); setVoiding(false); toast('Voided. Write a new prescription if one is still needed.', 'success'); onChanged?.()
@@ -293,7 +326,7 @@ export function PrescriptionDialog({ id, toast, onClose, onChanged, onEdit }) {
       {voiding && <Field label="Reason for voiding" required><input value={reason} maxLength={300} onChange={e => setReason(e.target.value)}/></Field>}
       <div className="ns-actions">
         {onEdit && p.status === 'Draft' && p.can_edit && <Button variant="soft" onClick={() => onEdit(p.id)}>Edit draft</Button>}
-        {p.status !== 'Draft' && <Button variant="soft" icon="download" onClick={async () => { const r = await downloadPrescriptionPdf(p.id, p.number); if (!r.ok) toast(r.message || 'The PDF could not be downloaded.', 'warning') }}>Download PDF</Button>}
+        {p.status !== 'Draft' && <Button variant="soft" icon="download" onClick={async () => { const r = await downloadPrescriptionPdf(p.id, p.number); if (!r.ok&&mounted.current&&currentId.current===id) toast(r.message || 'The PDF could not be downloaded.', 'warning') }}>Download PDF</Button>}
         {p.can_void && !voiding && <Button variant="ghost" onClick={() => setVoiding(true)}>Void…</Button>}
         {voiding && <Button disabled={busy || reason.trim().length < 3} onClick={doVoid}>{busy ? 'Voiding…' : 'Void this prescription'}</Button>}
         <Button variant="ghost" onClick={onClose}>Close</Button>

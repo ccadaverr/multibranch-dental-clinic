@@ -1,0 +1,48 @@
+{
+  "results": [
+    {
+      "width": 390,
+      "dependentBooking": "pass",
+      "duplicateSubmit": "pass",
+      "sharedControlsFourRoles": "pass",
+      "modalFocus": "pass",
+      "overflow": "pass"
+    },
+    {
+      "width": 768,
+      "dependentBooking": "pass",
+      "duplicateSubmit": "pass",
+      "sharedControlsFourRoles": "pass",
+      "modalFocus": "pass",
+      "overflow": "pass"
+    },
+    {
+      "width": 1024,
+      "dependentBooking": "pass",
+      "duplicateSubmit": "pass",
+      "sharedControlsFourRoles": "pass",
+      "modalFocus": "pass",
+      "overflow": "pass"
+    },
+    {
+      "width": 1440,
+      "dependentBooking": "pass",
+      "duplicateSubmit": "pass",
+      "sharedControlsFourRoles": "pass",
+      "modalFocus": "pass",
+      "overflow": "pass"
+    }
+  ],
+  "additional": [
+    "online explicit intent",
+    "revoked authorization and retry",
+    "stale slot refusal",
+    "patient change clears slot",
+    "calendar context refresh",
+    "reduced motion"
+  ],
+  "requests": 56,
+  "syntheticMutations": 6,
+  "pageErrors": [],
+  "authenticatedAcceptance": false
+}

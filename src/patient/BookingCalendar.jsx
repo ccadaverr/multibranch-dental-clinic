@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Icon } from '../components.jsx'
 import { appointmentAvailability, bookingCalendar } from '../api-client.js'
 import { dateLong, time12 } from './format.js'
@@ -13,22 +13,29 @@ const LABEL = { available: 'available', full: 'fully booked', closed: 'closed', 
  * Every state comes from GET /api/appointments/calendar, i.e. the same rules the booking command enforces.
  */
 // `onFullDay` (booking only): a fully booked day stays selectable so the patient can join the waitlist for it (A5).
-export function BookingCalendar({ branchId, serviceId, dentistId = null, appointmentId = null, value, onChange, onFullDay = null }) {
+export function BookingCalendar({ branchId, serviceId, dentistId = null, appointmentId = null, forPatientId = null, value, onChange, onFullDay = null }) {
   const [month, setMonth] = useState(value ? value.slice(0, 7) : null)
   const [state, setState] = useState({ status: 'loading', data: null, error: '' })
   const [attempt, setAttempt] = useState(0)
   const [closedNote, setClosedNote] = useState(null) // F5: the reason of a closed day the patient tapped
+  const loaded = useRef(null)
   useEffect(() => {
-    if (month && state.data?.month === month && state.status === 'ready') return undefined // the first load already returned this month
+    const contextKey = selectedMonth => JSON.stringify([branchId, serviceId, dentistId, appointmentId, forPatientId, selectedMonth, attempt])
+    if (loaded.current === contextKey(month)) return undefined
+    // Once visible data is cleared, the previous key is no longer a usable
+    // cache. Returning to it while another request is pending must reload it.
+    loaded.current = null
     let live = true
-    setState(s => ({ ...s, status: 'loading' }))
-    bookingCalendar({ branch_ref: branchId, service_ref: serviceId, dentist_ref: dentistId, appointment_id: appointmentId, month }).then(r => {
+    setState({ status: 'loading', data: null, error: '' })
+    setClosedNote(null)
+    bookingCalendar({ branch_ref: branchId, service_ref: serviceId, dentist_ref: dentistId, appointment_id: appointmentId, for_patient_id: forPatientId, month }).then(r => {
       if (!live) return
+      loaded.current = r.ok ? contextKey(r.data.month) : null
       setState(r.ok ? { status: 'ready', data: r.data, error: '' } : { status: 'error', data: null, error: r.message || 'The calendar could not be loaded.' })
       if (r.ok && !month) setMonth(r.data.month)
     })
     return () => { live = false }
-  }, [branchId, serviceId, dentistId, appointmentId, month, attempt])
+  }, [branchId, serviceId, dentistId, appointmentId, forPatientId, month, attempt])
 
   const cells = useMemo(() => {
     if (!state.data) return []
@@ -75,18 +82,18 @@ const STANDARD_SLOTS = [
 ]
 
 /** Time chips for one day, grouped Morning / Afternoon, from GET /api/appointments/availability. */
-export function TimeSlots({ branchId, serviceId, dentistId = null, appointmentId = null, date, value, onChange }) {
+export function TimeSlots({ branchId, serviceId, dentistId = null, appointmentId = null, forPatientId = null, date, value, onChange }) {
   const [state, setState] = useState({ status: 'loading', slots: [], error: '' })
   const [attempt, setAttempt] = useState(0)
   useEffect(() => {
     if (!date) return undefined
     let live = true
     setState({ status: 'loading', slots: [], error: '' })
-    appointmentAvailability({ branch_ref: branchId, service_ref: serviceId, date, dentist_ref: dentistId, appointment_id: appointmentId }).then(r => {
+    appointmentAvailability({ branch_ref: branchId, service_ref: serviceId, date, dentist_ref: dentistId, appointment_id: appointmentId, for_patient_id: forPatientId }).then(r => {
       if (live) setState(r.ok ? { status: 'ready', slots: r.data?.slots || [], error: '' } : { status: 'error', slots: [], error: r.message || 'Times could not be loaded.' })
     })
     return () => { live = false }
-  }, [branchId, serviceId, dentistId, appointmentId, date, attempt])
+  }, [branchId, serviceId, dentistId, appointmentId, forPatientId, date, attempt])
 
   if (!date) return null
   if (state.status === 'loading') return <Skeleton lines={2} card={false} label="Loading times"/>

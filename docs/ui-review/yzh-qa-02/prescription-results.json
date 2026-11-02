@@ -1,0 +1,45 @@
+{
+  "staleDraftResponse": "pass",
+  "mutations": [
+    {
+      "p": "/api/prescriptions/2",
+      "body": {
+        "lines": [
+          {
+            "medicine": "Paracetamol",
+            "dosage": "500mg",
+            "frequency": "",
+            "duration": "",
+            "instructions": ""
+          }
+        ],
+        "note": null,
+        "expected_revision": 1
+      }
+    },
+    {
+      "p": "/api/prescriptions/2",
+      "body": {
+        "lines": [
+          {
+            "medicine": "Paracetamol",
+            "dosage": "500mg",
+            "frequency": "",
+            "duration": "",
+            "instructions": ""
+          }
+        ],
+        "note": null,
+        "expected_revision": 1
+      }
+    },
+    {
+      "p": "/api/prescriptions/2/issue",
+      "body": {
+        "expected_revision": 1
+      }
+    }
+  ],
+  "errors": [],
+  "synthetic": true
+}

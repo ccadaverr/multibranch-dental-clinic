@@ -1,0 +1,266 @@
+{
+  "authenticatedAcceptance": false,
+  "synthetic": true,
+  "results": [
+    {
+      "width": 390,
+      "name": "save-success",
+      "status": "pass"
+    },
+    {
+      "width": 390,
+      "name": "save-failure",
+      "status": "pass"
+    },
+    {
+      "width": 390,
+      "name": "issue-success",
+      "status": "pass"
+    },
+    {
+      "width": 390,
+      "name": "issue-failure",
+      "status": "pass"
+    },
+    {
+      "width": 390,
+      "name": "cancel-pending-save",
+      "status": "pass"
+    },
+    {
+      "width": 390,
+      "name": "void-success",
+      "status": "pass"
+    },
+    {
+      "width": 390,
+      "name": "void-failure",
+      "status": "pass"
+    },
+    {
+      "width": 390,
+      "name": "quote-initial-failure",
+      "status": "pass"
+    },
+    {
+      "width": 390,
+      "name": "quote-ambiguous-cash",
+      "status": "pass"
+    },
+    {
+      "width": 390,
+      "name": "quote-ambiguous-online",
+      "status": "pass"
+    },
+    {
+      "width": 390,
+      "name": "payment-copy",
+      "status": "pass"
+    },
+    {
+      "width": 390,
+      "name": "calendar-late-success",
+      "status": "pass"
+    },
+    {
+      "width": 390,
+      "name": "calendar-late-failure",
+      "status": "pass"
+    },
+    {
+      "width": 768,
+      "name": "save-success",
+      "status": "pass"
+    },
+    {
+      "width": 768,
+      "name": "save-failure",
+      "status": "pass"
+    },
+    {
+      "width": 768,
+      "name": "issue-success",
+      "status": "pass"
+    },
+    {
+      "width": 768,
+      "name": "issue-failure",
+      "status": "pass"
+    },
+    {
+      "width": 768,
+      "name": "cancel-pending-save",
+      "status": "pass"
+    },
+    {
+      "width": 768,
+      "name": "void-success",
+      "status": "pass"
+    },
+    {
+      "width": 768,
+      "name": "void-failure",
+      "status": "pass"
+    },
+    {
+      "width": 768,
+      "name": "quote-initial-failure",
+      "status": "pass"
+    },
+    {
+      "width": 768,
+      "name": "quote-ambiguous-cash",
+      "status": "pass"
+    },
+    {
+      "width": 768,
+      "name": "quote-ambiguous-online",
+      "status": "pass"
+    },
+    {
+      "width": 768,
+      "name": "payment-copy",
+      "status": "pass"
+    },
+    {
+      "width": 768,
+      "name": "calendar-late-success",
+      "status": "pass"
+    },
+    {
+      "width": 768,
+      "name": "calendar-late-failure",
+      "status": "pass"
+    },
+    {
+      "width": 1024,
+      "name": "save-success",
+      "status": "pass"
+    },
+    {
+      "width": 1024,
+      "name": "save-failure",
+      "status": "pass"
+    },
+    {
+      "width": 1024,
+      "name": "issue-success",
+      "status": "pass"
+    },
+    {
+      "width": 1024,
+      "name": "issue-failure",
+      "status": "pass"
+    },
+    {
+      "width": 1024,
+      "name": "cancel-pending-save",
+      "status": "pass"
+    },
+    {
+      "width": 1024,
+      "name": "void-success",
+      "status": "pass"
+    },
+    {
+      "width": 1024,
+      "name": "void-failure",
+      "status": "pass"
+    },
+    {
+      "width": 1024,
+      "name": "quote-initial-failure",
+      "status": "pass"
+    },
+    {
+      "width": 1024,
+      "name": "quote-ambiguous-cash",
+      "status": "pass"
+    },
+    {
+      "width": 1024,
+      "name": "quote-ambiguous-online",
+      "status": "pass"
+    },
+    {
+      "width": 1024,
+      "name": "payment-copy",
+      "status": "pass"
+    },
+    {
+      "width": 1024,
+      "name": "calendar-late-success",
+      "status": "pass"
+    },
+    {
+      "width": 1024,
+      "name": "calendar-late-failure",
+      "status": "pass"
+    },
+    {
+      "width": 1440,
+      "name": "save-success",
+      "status": "pass"
+    },
+    {
+      "width": 1440,
+      "name": "save-failure",
+      "status": "pass"
+    },
+    {
+      "width": 1440,
+      "name": "issue-success",
+      "status": "pass"
+    },
+    {
+      "width": 1440,
+      "name": "issue-failure",
+      "status": "pass"
+    },
+    {
+      "width": 1440,
+      "name": "cancel-pending-save",
+      "status": "pass"
+    },
+    {
+      "width": 1440,
+      "name": "void-success",
+      "status": "pass"
+    },
+    {
+      "width": 1440,
+      "name": "void-failure",
+      "status": "pass"
+    },
+    {
+      "width": 1440,
+      "name": "quote-initial-failure",
+      "status": "pass"
+    },
+    {
+      "width": 1440,
+      "name": "quote-ambiguous-cash",
+      "status": "pass"
+    },
+    {
+      "width": 1440,
+      "name": "quote-ambiguous-online",
+      "status": "pass"
+    },
+    {
+      "width": 1440,
+      "name": "payment-copy",
+      "status": "pass"
+    },
+    {
+      "width": 1440,
+      "name": "calendar-late-success",
+      "status": "pass"
+    },
+    {
+      "width": 1440,
+      "name": "calendar-late-failure",
+      "status": "pass"
+    }
+  ]
+}

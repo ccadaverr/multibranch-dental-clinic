@@ -1,0 +1,725 @@
+{
+  "date": "2026-11-03",
+  "timezone": "Asia/Manila",
+  "branch": "qa/yzhekiel-ui-20261102",
+  "head": "a6a0de5bf36c77a43d948b98f821940bac41df3d",
+  "before": {
+    "modifiedTracked": 10,
+    "untracked": 74,
+    "staged": 0
+  },
+  "after": {
+    "modifiedTracked": 10,
+    "untracked": 127,
+    "staged": 0
+  },
+  "priorFiles": [
+    {
+      "path": "QA-YZHEKIEL.md",
+      "hash": "955959C6195DF6F3676821C8B4795C995125D6CF86D838A35B25F73110067121",
+      "afterHash": "47A766F027DD1A4831BF3C9FCA8448D03FB1BF4905C534B08ACE4DE2A3A88A5B",
+      "unchanged": false
+    },
+    {
+      "path": "src/api-client.js",
+      "hash": "456B62E20B6E4614BF1E0738A52ACB0298A3B51BE1EDECC11104EC140B323AB0",
+      "afterHash": "456B62E20B6E4614BF1E0738A52ACB0298A3B51BE1EDECC11104EC140B323AB0",
+      "unchanged": true
+    },
+    {
+      "path": "src/appointments-api.js",
+      "hash": "AA9A2F482206B11CF84DB6191249CBCF2EEB5379E3F2B2E1BF91D38D8080CEF6",
+      "afterHash": "AA9A2F482206B11CF84DB6191249CBCF2EEB5379E3F2B2E1BF91D38D8080CEF6",
+      "unchanged": true
+    },
+    {
+      "path": "src/pages/ServerPrescriptions.jsx",
+      "hash": "9EABC0D855AD8AEE24F44CCCA8A4DD2B105A74229955500F380E017D751CC4C4",
+      "afterHash": "7274C80F3A10C7D2E1216C99F94DF404C93EE97FBAF21B735E5D9793E7B1944D",
+      "unchanged": false
+    },
+    {
+      "path": "src/patient/BookingCalendar.jsx",
+      "hash": "C4F53383F7C881F17C74B5696B5E5CD1A32DC30E474E00260DFE8A4022FB0FBE",
+      "afterHash": "C4F53383F7C881F17C74B5696B5E5CD1A32DC30E474E00260DFE8A4022FB0FBE",
+      "unchanged": true
+    },
+    {
+      "path": "src/patient/booking-flow.js",
+      "hash": "59375869BB9C6359290BEC173D3B5AFBED09E297A64FAABB8BCFD119DAEA6BEA",
+      "afterHash": "59375869BB9C6359290BEC173D3B5AFBED09E297A64FAABB8BCFD119DAEA6BEA",
+      "unchanged": true
+    },
+    {
+      "path": "src/patient/pages/Book.jsx",
+      "hash": "FCC2729A95BBF71E1B7F0907A7B2DDAA5A5517F7F6844804FB5CB52DF70C8EA5",
+      "afterHash": "FCC2729A95BBF71E1B7F0907A7B2DDAA5A5517F7F6844804FB5CB52DF70C8EA5",
+      "unchanged": true
+    },
+    {
+      "path": "tests/den-ui-01.browser.mjs",
+      "hash": "47941A21A39448B2BB24431DBA49CFB0378286B93C1609F0F8CE9A4590C07EF8",
+      "afterHash": "47941A21A39448B2BB24431DBA49CFB0378286B93C1609F0F8CE9A4590C07EF8",
+      "unchanged": true
+    },
+    {
+      "path": "tests/den-ui-02.browser.mjs",
+      "hash": "E1C7DD5669841C75D0102B44F251C9EE60734BB0007A16D36C4428F9CC6D09D1",
+      "afterHash": "E1C7DD5669841C75D0102B44F251C9EE60734BB0007A16D36C4428F9CC6D09D1",
+      "unchanged": true
+    },
+    {
+      "path": "tests/fixtures/den-ui-02.jsx",
+      "hash": "25224B8DACF7AC1CF7060A642FD3F7B621582447C484819CFDE8C0AE3BC20FD6",
+      "afterHash": "25224B8DACF7AC1CF7060A642FD3F7B621582447C484819CFDE8C0AE3BC20FD6",
+      "unchanged": true
+    },
+    {
+      "path": "docs/YZH_QA_02_CROSS_ROLE_ACCEPTANCE_REPORT.md",
+      "hash": "D978816FFF7CC44CB5ADFE414FBE54A245C4524BA7FE6C9AEC52A518C525BD20",
+      "afterHash": "7709BD866ACE61C0DA7531C8F4C514FDD78DE117CE26678FCA812D12C0999B14",
+      "unchanged": false
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/booking-1024.png",
+      "hash": "40A0A5D177EE1E765348DFC686B944DB15B4C5E2AE3F1CB0417C90C83CCC8370",
+      "afterHash": "40A0A5D177EE1E765348DFC686B944DB15B4C5E2AE3F1CB0417C90C83CCC8370",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/booking-1440.png",
+      "hash": "55CCB0694966097DE40ED629BF6099230CD5F8A97DF7A79AE97ED075C8E7B7CE",
+      "afterHash": "55CCB0694966097DE40ED629BF6099230CD5F8A97DF7A79AE97ED075C8E7B7CE",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/booking-390.png",
+      "hash": "BB850AC749CD22FD7E4A9977891BC79434D8EE4A6553E65FCEC66595E115FF33",
+      "afterHash": "BB850AC749CD22FD7E4A9977891BC79434D8EE4A6553E65FCEC66595E115FF33",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/booking-768.png",
+      "hash": "C007C45AF846E89A207C8D1FEB9B35A641322B00CE1948C82C937F4781BD6A39",
+      "afterHash": "C007C45AF846E89A207C8D1FEB9B35A641322B00CE1948C82C937F4781BD6A39",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/browser-results.json",
+      "hash": "6F2C4D61B2DA125C89CC2A099F0B2B3BE2D4746F9009CFD9D04D93769A925B24",
+      "afterHash": "6F2C4D61B2DA125C89CC2A099F0B2B3BE2D4746F9009CFD9D04D93769A925B24",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/clinical/browser-results.json",
+      "hash": "496600C3CD6F9A4B4ECA20AB96838F31991F1F63904AD6E901225562EA1E8E98",
+      "afterHash": "496600C3CD6F9A4B4ECA20AB96838F31991F1F63904AD6E901225562EA1E8E98",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/clinical/chart-1024.png",
+      "hash": "9FB95DC3D43E790174F5F6BEAC514F79C4A1E2C64420FE53266D621CC15CFA37",
+      "afterHash": "9FB95DC3D43E790174F5F6BEAC514F79C4A1E2C64420FE53266D621CC15CFA37",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/clinical/chart-1440.png",
+      "hash": "C9D275E805983F23B14B12F47619268E40839B507B08DCA0AC5C374359A2CBB2",
+      "afterHash": "C9D275E805983F23B14B12F47619268E40839B507B08DCA0AC5C374359A2CBB2",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/clinical/chart-390.png",
+      "hash": "CE297340DEC47135E03312402D9E0AF4AA912B86B9DDD7079F96EB84BFDDFA44",
+      "afterHash": "CE297340DEC47135E03312402D9E0AF4AA912B86B9DDD7079F96EB84BFDDFA44",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/clinical/chart-768.png",
+      "hash": "1A70185062672B6190D62A4B1D36A16DC6497319CACF162B88071082631503EF",
+      "afterHash": "1A70185062672B6190D62A4B1D36A16DC6497319CACF162B88071082631503EF",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/clinical/encounter-1024.png",
+      "hash": "415655A25E4511630539ECBCF176BF2BBC4F3051C9FBE0D506F7D1E95427A9BD",
+      "afterHash": "415655A25E4511630539ECBCF176BF2BBC4F3051C9FBE0D506F7D1E95427A9BD",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/clinical/encounter-1440.png",
+      "hash": "B939C5D86186AA9FCF762B73B30E7C6AE41661CA7194946E88889D7B8E558786",
+      "afterHash": "B939C5D86186AA9FCF762B73B30E7C6AE41661CA7194946E88889D7B8E558786",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/clinical/encounter-390.png",
+      "hash": "E90AB705952F358A3F4D0C6253F217CD22197044630A496E3E31757437DAC082",
+      "afterHash": "E90AB705952F358A3F4D0C6253F217CD22197044630A496E3E31757437DAC082",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/clinical/encounter-768.png",
+      "hash": "6E0BC2E46D4D78E738DF2BD34897E2B2890A93C6C1A97C4ECBEE6B2AFA97A75A",
+      "afterHash": "6E0BC2E46D4D78E738DF2BD34897E2B2890A93C6C1A97C4ECBEE6B2AFA97A75A",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/clinical/queue-1024.png",
+      "hash": "3A5C227C8983C6AE0413E2062CB5280E7D43D30603975E11C9F2567D7AC57AD6",
+      "afterHash": "3A5C227C8983C6AE0413E2062CB5280E7D43D30603975E11C9F2567D7AC57AD6",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/clinical/queue-1440.png",
+      "hash": "97B7F9D9FE279CC9BC7B2C5802B4F4E04D2D01CDADAC6103A02853AF7F690379",
+      "afterHash": "97B7F9D9FE279CC9BC7B2C5802B4F4E04D2D01CDADAC6103A02853AF7F690379",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/clinical/queue-390.png",
+      "hash": "2E1F7E738708F79657617A813C78F73F241D9DA11ABF6ADDC28333A1CFE1FABD",
+      "afterHash": "2E1F7E738708F79657617A813C78F73F241D9DA11ABF6ADDC28333A1CFE1FABD",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/clinical/queue-768.png",
+      "hash": "F489CE4199A9FAAC51B06452874712930BDFF8E48A019A5976474D86D0471295",
+      "afterHash": "F489CE4199A9FAAC51B06452874712930BDFF8E48A019A5976474D86D0471295",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/controls-1024.png",
+      "hash": "82FA7981A6DF1D644FB651B2C63D42EF77FB0CEC4945F6342609F6B6536B21B8",
+      "afterHash": "82FA7981A6DF1D644FB651B2C63D42EF77FB0CEC4945F6342609F6B6536B21B8",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/controls-1440.png",
+      "hash": "809E1861C020EE4824738E7CA027D052E08D8927A6CE6C6F2C6AD4DB57A92A3D",
+      "afterHash": "809E1861C020EE4824738E7CA027D052E08D8927A6CE6C6F2C6AD4DB57A92A3D",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/controls-390.png",
+      "hash": "56EBD741E315C96E4BCB65F9597CF876B2EF01FE83965C98F5E9B6177DBF54F7",
+      "afterHash": "56EBD741E315C96E4BCB65F9597CF876B2EF01FE83965C98F5E9B6177DBF54F7",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/controls-768.png",
+      "hash": "2C8A95F4CAF10B02941A4FFDD244C953A37E71EA843E8A95F377D155379A8821",
+      "afterHash": "2C8A95F4CAF10B02941A4FFDD244C953A37E71EA843E8A95F377D155379A8821",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/prescription-results.json",
+      "hash": "001C58B0244367062CB1EC66AE3C52129D51A2809F2FDD0F45772EA25521367A",
+      "afterHash": "001C58B0244367062CB1EC66AE3C52129D51A2809F2FDD0F45772EA25521367A",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/r1/after-results.json",
+      "hash": "6CE6B39D5140A3C986AEBE2445411B815C824F3ABF06517C8D81BC6F8A9C75D6",
+      "afterHash": "6CE6B39D5140A3C986AEBE2445411B815C824F3ABF06517C8D81BC6F8A9C75D6",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/r1/before-results.json",
+      "hash": "1F72D326BD169D482396650D3BEDCD8F0D465121C6B131078F882ACF2A49455D",
+      "afterHash": "1F72D326BD169D482396650D3BEDCD8F0D465121C6B131078F882ACF2A49455D",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/r1/clinical/browser-results.json",
+      "hash": "496600C3CD6F9A4B4ECA20AB96838F31991F1F63904AD6E901225562EA1E8E98",
+      "afterHash": "496600C3CD6F9A4B4ECA20AB96838F31991F1F63904AD6E901225562EA1E8E98",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/r1/clinical/chart-1024.png",
+      "hash": "F4FBACA646BA2CC61E1EF62A64C1AD8BD4691911B476CD90BBC45232C74A1900",
+      "afterHash": "F4FBACA646BA2CC61E1EF62A64C1AD8BD4691911B476CD90BBC45232C74A1900",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/r1/clinical/chart-1440.png",
+      "hash": "C7CADA2BD424D65A1F9C56509BEF69C29F704EFABBA8DDAC373D53BBA0C9563B",
+      "afterHash": "C7CADA2BD424D65A1F9C56509BEF69C29F704EFABBA8DDAC373D53BBA0C9563B",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/r1/clinical/chart-390.png",
+      "hash": "C942BB258718E37EE731009753F1BFD3ED8A9A4D9C1761B8E8C129D6A1E3C080",
+      "afterHash": "C942BB258718E37EE731009753F1BFD3ED8A9A4D9C1761B8E8C129D6A1E3C080",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/r1/clinical/chart-768.png",
+      "hash": "1A70185062672B6190D62A4B1D36A16DC6497319CACF162B88071082631503EF",
+      "afterHash": "1A70185062672B6190D62A4B1D36A16DC6497319CACF162B88071082631503EF",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/r1/clinical/encounter-1024.png",
+      "hash": "BB630E1B16A24ABBFBA2DF00165131A28015E1737A832B3227DC37EFDE85E96D",
+      "afterHash": "BB630E1B16A24ABBFBA2DF00165131A28015E1737A832B3227DC37EFDE85E96D",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/r1/clinical/encounter-1440.png",
+      "hash": "6E5471C511AA610789BA9E332C759910C6C57D37757F9583EFAB4F7C68487DE6",
+      "afterHash": "6E5471C511AA610789BA9E332C759910C6C57D37757F9583EFAB4F7C68487DE6",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/r1/clinical/encounter-390.png",
+      "hash": "F6FAE148570EE03F5116491404A71B16D09ADB9ED60F51B9E5FB0A8146D993ED",
+      "afterHash": "F6FAE148570EE03F5116491404A71B16D09ADB9ED60F51B9E5FB0A8146D993ED",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/r1/clinical/encounter-768.png",
+      "hash": "993C516B5F91DF6D8972E44657297AAEF3F8C222E166880BC0C8E6C0A79A157E",
+      "afterHash": "993C516B5F91DF6D8972E44657297AAEF3F8C222E166880BC0C8E6C0A79A157E",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/r1/clinical/queue-1024.png",
+      "hash": "3A5C227C8983C6AE0413E2062CB5280E7D43D30603975E11C9F2567D7AC57AD6",
+      "afterHash": "3A5C227C8983C6AE0413E2062CB5280E7D43D30603975E11C9F2567D7AC57AD6",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/r1/clinical/queue-1440.png",
+      "hash": "97B7F9D9FE279CC9BC7B2C5802B4F4E04D2D01CDADAC6103A02853AF7F690379",
+      "afterHash": "97B7F9D9FE279CC9BC7B2C5802B4F4E04D2D01CDADAC6103A02853AF7F690379",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/r1/clinical/queue-390.png",
+      "hash": "2E1F7E738708F79657617A813C78F73F241D9DA11ABF6ADDC28333A1CFE1FABD",
+      "afterHash": "2E1F7E738708F79657617A813C78F73F241D9DA11ABF6ADDC28333A1CFE1FABD",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/r1/clinical/queue-768.png",
+      "hash": "F489CE4199A9FAAC51B06452874712930BDFF8E48A019A5976474D86D0471295",
+      "afterHash": "F489CE4199A9FAAC51B06452874712930BDFF8E48A019A5976474D86D0471295",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/r1/copy-before-results.json",
+      "hash": "E6BAD53D840AA11CFB239E0D6A3B48507FADB92E0D2F54A02DF0189B20423A0C",
+      "afterHash": "E6BAD53D840AA11CFB239E0D6A3B48507FADB92E0D2F54A02DF0189B20423A0C",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/r1/existing-booking/booking-1024.png",
+      "hash": "837E663A803941E3E94471B5C02D32FDCBB60EF602C59C4A247F87C05412D28A",
+      "afterHash": "837E663A803941E3E94471B5C02D32FDCBB60EF602C59C4A247F87C05412D28A",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/r1/existing-booking/booking-1440.png",
+      "hash": "F48C83A324C95FE9E15F1EC76BC48DE2CCF138D7D22FFB9525C58B63F52F009F",
+      "afterHash": "F48C83A324C95FE9E15F1EC76BC48DE2CCF138D7D22FFB9525C58B63F52F009F",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/r1/existing-booking/booking-390.png",
+      "hash": "E576051622F16893FBBEB97908236B155232166CD314187A9A7FF9279136FF57",
+      "afterHash": "E576051622F16893FBBEB97908236B155232166CD314187A9A7FF9279136FF57",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/r1/existing-booking/booking-768.png",
+      "hash": "5D874287DCCBDAFCC973442AE02754AF93BBF5F07E291E1CED241841E42C7F1B",
+      "afterHash": "5D874287DCCBDAFCC973442AE02754AF93BBF5F07E291E1CED241841E42C7F1B",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/r1/existing-booking/browser-results.json",
+      "hash": "6F2C4D61B2DA125C89CC2A099F0B2B3BE2D4746F9009CFD9D04D93769A925B24",
+      "afterHash": "6F2C4D61B2DA125C89CC2A099F0B2B3BE2D4746F9009CFD9D04D93769A925B24",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/r1/existing-booking/controls-1024.png",
+      "hash": "5B864D94B1F4144DF82095FEF1EEB48275CF3C35F342F5D65D99EB2E926A31A5",
+      "afterHash": "5B864D94B1F4144DF82095FEF1EEB48275CF3C35F342F5D65D99EB2E926A31A5",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/r1/existing-booking/controls-1440.png",
+      "hash": "5B4C1015C5C81B831A2CC51E3389704E6D8BEAA115844A73B2CD27DA51557DBC",
+      "afterHash": "5B4C1015C5C81B831A2CC51E3389704E6D8BEAA115844A73B2CD27DA51557DBC",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/r1/existing-booking/controls-390.png",
+      "hash": "56EBD741E315C96E4BCB65F9597CF876B2EF01FE83965C98F5E9B6177DBF54F7",
+      "afterHash": "56EBD741E315C96E4BCB65F9597CF876B2EF01FE83965C98F5E9B6177DBF54F7",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/r1/existing-booking/controls-768.png",
+      "hash": "C3D032495DE5839A3C173792CCE7D481CBDBC5B727F3D90CA521F88F292CD373",
+      "afterHash": "C3D032495DE5839A3C173792CCE7D481CBDBC5B727F3D90CA521F88F292CD373",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/r1/existing-prescription/prescription-results.json",
+      "hash": "001C58B0244367062CB1EC66AE3C52129D51A2809F2FDD0F45772EA25521367A",
+      "afterHash": "001C58B0244367062CB1EC66AE3C52129D51A2809F2FDD0F45772EA25521367A",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/r1/online-1024.png",
+      "hash": "D62175C57070F9321248AB1B49AB89FD5517FB0EF38D66F0F2DFD7488A40084B",
+      "afterHash": "D62175C57070F9321248AB1B49AB89FD5517FB0EF38D66F0F2DFD7488A40084B",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/r1/online-1440.png",
+      "hash": "D90540F1F2FBE6757E7B8DEAB9678FA0D5636E904C6052B58DB6D7ABF21B7E2E",
+      "afterHash": "D90540F1F2FBE6757E7B8DEAB9678FA0D5636E904C6052B58DB6D7ABF21B7E2E",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/r1/online-390.png",
+      "hash": "4C1958B2307FCF8E623BF1493F4BF782278DB37D3A9001A6DC7BF75D79032E1D",
+      "afterHash": "4C1958B2307FCF8E623BF1493F4BF782278DB37D3A9001A6DC7BF75D79032E1D",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/r1/online-768.png",
+      "hash": "F9ABD8E86ABAE8D49E98AFDB50251908AAA196BDFD1E9C905946371B21B45C2A",
+      "afterHash": "F9ABD8E86ABAE8D49E98AFDB50251908AAA196BDFD1E9C905946371B21B45C2A",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/r1/quote-retry-1024.png",
+      "hash": "8A059FD7BCD3976022E491EA745C31C6B440F403C4A4323E7DD4123083518CE5",
+      "afterHash": "8A059FD7BCD3976022E491EA745C31C6B440F403C4A4323E7DD4123083518CE5",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/r1/quote-retry-1440.png",
+      "hash": "2E25F8BA38DDE50ED95455196BBD59F03981DE9F48F7DB1360270269641BEF87",
+      "afterHash": "2E25F8BA38DDE50ED95455196BBD59F03981DE9F48F7DB1360270269641BEF87",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/r1/quote-retry-390.png",
+      "hash": "C74C240094D966BA251C5648D5A604723FA07F25173703B2EDB6017E96542D2D",
+      "afterHash": "C74C240094D966BA251C5648D5A604723FA07F25173703B2EDB6017E96542D2D",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/r1/quote-retry-768.png",
+      "hash": "F2907C76DAB4816F4EDBD7060B3C4BDACB4047BBBBE131402B1F3867A71B2760",
+      "afterHash": "F2907C76DAB4816F4EDBD7060B3C4BDACB4047BBBBE131402B1F3867A71B2760",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/schedule/browser-results.json",
+      "hash": "72670430A5B872CCAEDD43390D0771AC138ECFA7D408729756CEB1EAC2DE3956",
+      "afterHash": "72670430A5B872CCAEDD43390D0771AC138ECFA7D408729756CEB1EAC2DE3956",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/schedule/home-1440.png",
+      "hash": "ACE11BC79E1FB066F17BE2730BEB69DED1C9547C68BFC7D74A688BB0E4C07B88",
+      "afterHash": "ACE11BC79E1FB066F17BE2730BEB69DED1C9547C68BFC7D74A688BB0E4C07B88",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/schedule/home-390.png",
+      "hash": "6517951DE4470058CEF6B26F1E28B457A9B201E5A0BC1CD16C2ABFCC7B90927D",
+      "afterHash": "6517951DE4470058CEF6B26F1E28B457A9B201E5A0BC1CD16C2ABFCC7B90927D",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/schedule/home-768.png",
+      "hash": "B00F292CB670CAEBA08F8FA4924357DE1407A4C679020AE61E6F611D578260F9",
+      "afterHash": "B00F292CB670CAEBA08F8FA4924357DE1407A4C679020AE61E6F611D578260F9",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/schedule/schedule-1440.png",
+      "hash": "4343C941BB444015630A9C1DCA07C34120E1B29D09B99A13A7ED47BA0CADA1FA",
+      "afterHash": "4343C941BB444015630A9C1DCA07C34120E1B29D09B99A13A7ED47BA0CADA1FA",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/schedule/schedule-390.png",
+      "hash": "FC74ED82D1D7CCDB39AB1DC3CAC103F45ADE325DF7F9309DA3C73CF3C8B9C893",
+      "afterHash": "FC74ED82D1D7CCDB39AB1DC3CAC103F45ADE325DF7F9309DA3C73CF3C8B9C893",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/schedule/schedule-768.png",
+      "hash": "D1285DA13603BFAFA539F73826BD0236235ED128DB67BE96C997EA6AC5548F8C",
+      "afterHash": "D1285DA13603BFAFA539F73826BD0236235ED128DB67BE96C997EA6AC5548F8C",
+      "unchanged": true
+    },
+    {
+      "path": "docs/ui-review/yzh-qa-02/staff-results.json",
+      "hash": "8585BC84D9120C2A6D5652923B8C013B006ED03AF5CEE902066A722E674C8D1D",
+      "afterHash": "8585BC84D9120C2A6D5652923B8C013B006ED03AF5CEE902066A722E674C8D1D",
+      "unchanged": true
+    },
+    {
+      "path": "tests/fixtures/yzh-qa-02.html",
+      "hash": "5A58C3B43F2A9166618EEF4E05DABC91A7B7C1CB16489A039B08653136C24CD6",
+      "afterHash": "5A58C3B43F2A9166618EEF4E05DABC91A7B7C1CB16489A039B08653136C24CD6",
+      "unchanged": true
+    },
+    {
+      "path": "tests/fixtures/yzh-qa-02.jsx",
+      "hash": "92DB3F7DEF296C47A405DA7E10DACF834D9CF52924ADF027ACFD11E00AE384A0",
+      "afterHash": "92DB3F7DEF296C47A405DA7E10DACF834D9CF52924ADF027ACFD11E00AE384A0",
+      "unchanged": true
+    },
+    {
+      "path": "tests/yzh-qa-02-calendar.browser.mjs",
+      "hash": "3CEA48A379E5BF4C3B46E9F3D9E3D302116655F35DCF575618C83050CC2CAAA5",
+      "afterHash": "3CEA48A379E5BF4C3B46E9F3D9E3D302116655F35DCF575618C83050CC2CAAA5",
+      "unchanged": true
+    },
+    {
+      "path": "tests/yzh-qa-02-prescription.browser.mjs",
+      "hash": "6FB2F8749407FE9AA8FE8FC646E69D79E50A30DABAC0214A4741B6AB6EA3D3B8",
+      "afterHash": "6FB2F8749407FE9AA8FE8FC646E69D79E50A30DABAC0214A4741B6AB6EA3D3B8",
+      "unchanged": true
+    },
+    {
+      "path": "tests/yzh-qa-02-r1.browser.mjs",
+      "hash": "21FC601AFC49515FEE3C6C6F4E6D60164B4F1173E94F4DBFA13484BE7EDA5164",
+      "afterHash": "51CEFCE69E90A3DDF36ADEB2E0137D0A12FD7049369393CCD7279E5D283859D7",
+      "unchanged": false
+    },
+    {
+      "path": "tests/yzh-qa-02-staff.browser.mjs",
+      "hash": "644CD4893AD9CB84B4EBF1CF7B6C404E0EF67613E61CADEEB401257E92D0E297",
+      "afterHash": "644CD4893AD9CB84B4EBF1CF7B6C404E0EF67613E61CADEEB401257E92D0E297",
+      "unchanged": true
+    },
+    {
+      "path": "tests/yzh-qa-02.browser.mjs",
+      "hash": "7E9E21AE5064417DEA1ABD879236D8B94FA3A7A12488ACA57BEDF3AE7D733C5B",
+      "afterHash": "7E9E21AE5064417DEA1ABD879236D8B94FA3A7A12488ACA57BEDF3AE7D733C5B",
+      "unchanged": true
+    },
+    {
+      "path": "tests/yzh-qa-02.test.js",
+      "hash": "EA5739E8362102AB76038E4B0AF83171E7521099C18C2EC8D5069799C2EAFC8C",
+      "afterHash": "EA5739E8362102AB76038E4B0AF83171E7521099C18C2EC8D5069799C2EAFC8C",
+      "unchanged": true
+    }
+  ],
+  "changedPriorFiles": [
+    "QA-YZHEKIEL.md",
+    "src/pages/ServerPrescriptions.jsx",
+    "docs/YZH_QA_02_CROSS_ROLE_ACCEPTANCE_REPORT.md",
+    "tests/yzh-qa-02-r1.browser.mjs"
+  ],
+  "missingPriorFiles": [],
+  "priorEvidenceFiles": 65,
+  "priorEvidenceAllByteIdentical": true,
+  "newFiles": [
+    "docs/ui-review/yzh-qa-02/r2/after-results.json",
+    "docs/ui-review/yzh-qa-02/r2/before-results.json",
+    "docs/ui-review/yzh-qa-02/r2/clinical/browser-results.json",
+    "docs/ui-review/yzh-qa-02/r2/clinical/chart-1024.png",
+    "docs/ui-review/yzh-qa-02/r2/clinical/chart-1440.png",
+    "docs/ui-review/yzh-qa-02/r2/clinical/chart-390.png",
+    "docs/ui-review/yzh-qa-02/r2/clinical/chart-768.png",
+    "docs/ui-review/yzh-qa-02/r2/clinical/encounter-1024.png",
+    "docs/ui-review/yzh-qa-02/r2/clinical/encounter-1440.png",
+    "docs/ui-review/yzh-qa-02/r2/clinical/encounter-390.png",
+    "docs/ui-review/yzh-qa-02/r2/clinical/encounter-768.png",
+    "docs/ui-review/yzh-qa-02/r2/clinical/queue-1024.png",
+    "docs/ui-review/yzh-qa-02/r2/clinical/queue-1440.png",
+    "docs/ui-review/yzh-qa-02/r2/clinical/queue-390.png",
+    "docs/ui-review/yzh-qa-02/r2/clinical/queue-768.png",
+    "docs/ui-review/yzh-qa-02/r2/existing-booking/booking-1024.png",
+    "docs/ui-review/yzh-qa-02/r2/existing-booking/booking-1440.png",
+    "docs/ui-review/yzh-qa-02/r2/existing-booking/booking-390.png",
+    "docs/ui-review/yzh-qa-02/r2/existing-booking/booking-768.png",
+    "docs/ui-review/yzh-qa-02/r2/existing-booking/browser-results.json",
+    "docs/ui-review/yzh-qa-02/r2/existing-booking/controls-1024.png",
+    "docs/ui-review/yzh-qa-02/r2/existing-booking/controls-1440.png",
+    "docs/ui-review/yzh-qa-02/r2/existing-booking/controls-390.png",
+    "docs/ui-review/yzh-qa-02/r2/existing-booking/controls-768.png",
+    "docs/ui-review/yzh-qa-02/r2/existing-prescription/prescription-results.json",
+    "docs/ui-review/yzh-qa-02/r2/issue-failure-1024.png",
+    "docs/ui-review/yzh-qa-02/r2/issue-failure-1440.png",
+    "docs/ui-review/yzh-qa-02/r2/issue-failure-390.png",
+    "docs/ui-review/yzh-qa-02/r2/issue-failure-768.png",
+    "docs/ui-review/yzh-qa-02/r2/issue-success-1024.png",
+    "docs/ui-review/yzh-qa-02/r2/issue-success-1440.png",
+    "docs/ui-review/yzh-qa-02/r2/issue-success-390.png",
+    "docs/ui-review/yzh-qa-02/r2/issue-success-768.png",
+    "docs/ui-review/yzh-qa-02/r2/preservation-results.json",
+    "docs/ui-review/yzh-qa-02/r2/r1-regression/after-results.json",
+    "docs/ui-review/yzh-qa-02/r2/r1-regression/online-1024.png",
+    "docs/ui-review/yzh-qa-02/r2/r1-regression/online-1440.png",
+    "docs/ui-review/yzh-qa-02/r2/r1-regression/online-390.png",
+    "docs/ui-review/yzh-qa-02/r2/r1-regression/online-768.png",
+    "docs/ui-review/yzh-qa-02/r2/r1-regression/quote-retry-1024.png",
+    "docs/ui-review/yzh-qa-02/r2/r1-regression/quote-retry-1440.png",
+    "docs/ui-review/yzh-qa-02/r2/r1-regression/quote-retry-390.png",
+    "docs/ui-review/yzh-qa-02/r2/r1-regression/quote-retry-768.png",
+    "docs/ui-review/yzh-qa-02/r2/save-failure-1024.png",
+    "docs/ui-review/yzh-qa-02/r2/save-failure-1440.png",
+    "docs/ui-review/yzh-qa-02/r2/save-failure-390.png",
+    "docs/ui-review/yzh-qa-02/r2/save-failure-768.png",
+    "docs/ui-review/yzh-qa-02/r2/save-success-1024.png",
+    "docs/ui-review/yzh-qa-02/r2/save-success-1440.png",
+    "docs/ui-review/yzh-qa-02/r2/save-success-390.png",
+    "docs/ui-review/yzh-qa-02/r2/save-success-768.png",
+    "docs/ui-review/yzh-qa-02/r2/verification-results.json",
+    "tests/yzh-qa-02-r2.browser.mjs"
+  ],
+  "finalStatus": [
+    " M QA-YZHEKIEL.md",
+    " M src/api-client.js",
+    " M src/appointments-api.js",
+    " M src/pages/ServerPrescriptions.jsx",
+    " M src/patient/BookingCalendar.jsx",
+    " M src/patient/booking-flow.js",
+    " M src/patient/pages/Book.jsx",
+    " M tests/den-ui-01.browser.mjs",
+    " M tests/den-ui-02.browser.mjs",
+    " M tests/fixtures/den-ui-02.jsx",
+    "?? docs/YZH_QA_02_CROSS_ROLE_ACCEPTANCE_REPORT.md",
+    "?? docs/ui-review/yzh-qa-02/booking-1024.png",
+    "?? docs/ui-review/yzh-qa-02/booking-1440.png",
+    "?? docs/ui-review/yzh-qa-02/booking-390.png",
+    "?? docs/ui-review/yzh-qa-02/booking-768.png",
+    "?? docs/ui-review/yzh-qa-02/browser-results.json",
+    "?? docs/ui-review/yzh-qa-02/clinical/browser-results.json",
+    "?? docs/ui-review/yzh-qa-02/clinical/chart-1024.png",
+    "?? docs/ui-review/yzh-qa-02/clinical/chart-1440.png",
+    "?? docs/ui-review/yzh-qa-02/clinical/chart-390.png",
+    "?? docs/ui-review/yzh-qa-02/clinical/chart-768.png",
+    "?? docs/ui-review/yzh-qa-02/clinical/encounter-1024.png",
+    "?? docs/ui-review/yzh-qa-02/clinical/encounter-1440.png",
+    "?? docs/ui-review/yzh-qa-02/clinical/encounter-390.png",
+    "?? docs/ui-review/yzh-qa-02/clinical/encounter-768.png",
+    "?? docs/ui-review/yzh-qa-02/clinical/queue-1024.png",
+    "?? docs/ui-review/yzh-qa-02/clinical/queue-1440.png",
+    "?? docs/ui-review/yzh-qa-02/clinical/queue-390.png",
+    "?? docs/ui-review/yzh-qa-02/clinical/queue-768.png",
+    "?? docs/ui-review/yzh-qa-02/controls-1024.png",
+    "?? docs/ui-review/yzh-qa-02/controls-1440.png",
+    "?? docs/ui-review/yzh-qa-02/controls-390.png",
+    "?? docs/ui-review/yzh-qa-02/controls-768.png",
+    "?? docs/ui-review/yzh-qa-02/prescription-results.json",
+    "?? docs/ui-review/yzh-qa-02/r1/after-results.json",
+    "?? docs/ui-review/yzh-qa-02/r1/before-results.json",
+    "?? docs/ui-review/yzh-qa-02/r1/clinical/browser-results.json",
+    "?? docs/ui-review/yzh-qa-02/r1/clinical/chart-1024.png",
+    "?? docs/ui-review/yzh-qa-02/r1/clinical/chart-1440.png",
+    "?? docs/ui-review/yzh-qa-02/r1/clinical/chart-390.png",
+    "?? docs/ui-review/yzh-qa-02/r1/clinical/chart-768.png",
+    "?? docs/ui-review/yzh-qa-02/r1/clinical/encounter-1024.png",
+    "?? docs/ui-review/yzh-qa-02/r1/clinical/encounter-1440.png",
+    "?? docs/ui-review/yzh-qa-02/r1/clinical/encounter-390.png",
+    "?? docs/ui-review/yzh-qa-02/r1/clinical/encounter-768.png",
+    "?? docs/ui-review/yzh-qa-02/r1/clinical/queue-1024.png",
+    "?? docs/ui-review/yzh-qa-02/r1/clinical/queue-1440.png",
+    "?? docs/ui-review/yzh-qa-02/r1/clinical/queue-390.png",
+    "?? docs/ui-review/yzh-qa-02/r1/clinical/queue-768.png",
+    "?? docs/ui-review/yzh-qa-02/r1/copy-before-results.json",
+    "?? docs/ui-review/yzh-qa-02/r1/existing-booking/booking-1024.png",
+    "?? docs/ui-review/yzh-qa-02/r1/existing-booking/booking-1440.png",
+    "?? docs/ui-review/yzh-qa-02/r1/existing-booking/booking-390.png",
+    "?? docs/ui-review/yzh-qa-02/r1/existing-booking/booking-768.png",
+    "?? docs/ui-review/yzh-qa-02/r1/existing-booking/browser-results.json",
+    "?? docs/ui-review/yzh-qa-02/r1/existing-booking/controls-1024.png",
+    "?? docs/ui-review/yzh-qa-02/r1/existing-booking/controls-1440.png",
+    "?? docs/ui-review/yzh-qa-02/r1/existing-booking/controls-390.png",
+    "?? docs/ui-review/yzh-qa-02/r1/existing-booking/controls-768.png",
+    "?? docs/ui-review/yzh-qa-02/r1/existing-prescription/prescription-results.json",
+    "?? docs/ui-review/yzh-qa-02/r1/online-1024.png",
+    "?? docs/ui-review/yzh-qa-02/r1/online-1440.png",
+    "?? docs/ui-review/yzh-qa-02/r1/online-390.png",
+    "?? docs/ui-review/yzh-qa-02/r1/online-768.png",
+    "?? docs/ui-review/yzh-qa-02/r1/quote-retry-1024.png",
+    "?? docs/ui-review/yzh-qa-02/r1/quote-retry-1440.png",
+    "?? docs/ui-review/yzh-qa-02/r1/quote-retry-390.png",
+    "?? docs/ui-review/yzh-qa-02/r1/quote-retry-768.png",
+    "?? docs/ui-review/yzh-qa-02/r2/after-results.json",
+    "?? docs/ui-review/yzh-qa-02/r2/before-results.json",
+    "?? docs/ui-review/yzh-qa-02/r2/clinical/browser-results.json",
+    "?? docs/ui-review/yzh-qa-02/r2/clinical/chart-1024.png",
+    "?? docs/ui-review/yzh-qa-02/r2/clinical/chart-1440.png",
+    "?? docs/ui-review/yzh-qa-02/r2/clinical/chart-390.png",
+    "?? docs/ui-review/yzh-qa-02/r2/clinical/chart-768.png",
+    "?? docs/ui-review/yzh-qa-02/r2/clinical/encounter-1024.png",
+    "?? docs/ui-review/yzh-qa-02/r2/clinical/encounter-1440.png",
+    "?? docs/ui-review/yzh-qa-02/r2/clinical/encounter-390.png",
+    "?? docs/ui-review/yzh-qa-02/r2/clinical/encounter-768.png",
+    "?? docs/ui-review/yzh-qa-02/r2/clinical/queue-1024.png",
+    "?? docs/ui-review/yzh-qa-02/r2/clinical/queue-1440.png",
+    "?? docs/ui-review/yzh-qa-02/r2/clinical/queue-390.png",
+    "?? docs/ui-review/yzh-qa-02/r2/clinical/queue-768.png",
+    "?? docs/ui-review/yzh-qa-02/r2/existing-booking/booking-1024.png",
+    "?? docs/ui-review/yzh-qa-02/r2/existing-booking/booking-1440.png",
+    "?? docs/ui-review/yzh-qa-02/r2/existing-booking/booking-390.png",
+    "?? docs/ui-review/yzh-qa-02/r2/existing-booking/booking-768.png",
+    "?? docs/ui-review/yzh-qa-02/r2/existing-booking/browser-results.json",
+    "?? docs/ui-review/yzh-qa-02/r2/existing-booking/controls-1024.png",
+    "?? docs/ui-review/yzh-qa-02/r2/existing-booking/controls-1440.png",
+    "?? docs/ui-review/yzh-qa-02/r2/existing-booking/controls-390.png",
+    "?? docs/ui-review/yzh-qa-02/r2/existing-booking/controls-768.png",
+    "?? docs/ui-review/yzh-qa-02/r2/existing-prescription/prescription-results.json",
+    "?? docs/ui-review/yzh-qa-02/r2/issue-failure-1024.png",
+    "?? docs/ui-review/yzh-qa-02/r2/issue-failure-1440.png",
+    "?? docs/ui-review/yzh-qa-02/r2/issue-failure-390.png",
+    "?? docs/ui-review/yzh-qa-02/r2/issue-failure-768.png",
+    "?? docs/ui-review/yzh-qa-02/r2/issue-success-1024.png",
+    "?? docs/ui-review/yzh-qa-02/r2/issue-success-1440.png",
+    "?? docs/ui-review/yzh-qa-02/r2/issue-success-390.png",
+    "?? docs/ui-review/yzh-qa-02/r2/issue-success-768.png",
+    "?? docs/ui-review/yzh-qa-02/r2/preservation-results.json",
+    "?? docs/ui-review/yzh-qa-02/r2/r1-regression/after-results.json",
+    "?? docs/ui-review/yzh-qa-02/r2/r1-regression/online-1024.png",
+    "?? docs/ui-review/yzh-qa-02/r2/r1-regression/online-1440.png",
+    "?? docs/ui-review/yzh-qa-02/r2/r1-regression/online-390.png",
+    "?? docs/ui-review/yzh-qa-02/r2/r1-regression/online-768.png",
+    "?? docs/ui-review/yzh-qa-02/r2/r1-regression/quote-retry-1024.png",
+    "?? docs/ui-review/yzh-qa-02/r2/r1-regression/quote-retry-1440.png",
+    "?? docs/ui-review/yzh-qa-02/r2/r1-regression/quote-retry-390.png",
+    "?? docs/ui-review/yzh-qa-02/r2/r1-regression/quote-retry-768.png",
+    "?? docs/ui-review/yzh-qa-02/r2/save-failure-1024.png",
+    "?? docs/ui-review/yzh-qa-02/r2/save-failure-1440.png",
+    "?? docs/ui-review/yzh-qa-02/r2/save-failure-390.png",
+    "?? docs/ui-review/yzh-qa-02/r2/save-failure-768.png",
+    "?? docs/ui-review/yzh-qa-02/r2/save-success-1024.png",
+    "?? docs/ui-review/yzh-qa-02/r2/save-success-1440.png",
+    "?? docs/ui-review/yzh-qa-02/r2/save-success-390.png",
+    "?? docs/ui-review/yzh-qa-02/r2/save-success-768.png",
+    "?? docs/ui-review/yzh-qa-02/r2/verification-results.json",
+    "?? docs/ui-review/yzh-qa-02/schedule/browser-results.json",
+    "?? docs/ui-review/yzh-qa-02/schedule/home-1440.png",
+    "?? docs/ui-review/yzh-qa-02/schedule/home-390.png",
+    "?? docs/ui-review/yzh-qa-02/schedule/home-768.png",
+    "?? docs/ui-review/yzh-qa-02/schedule/schedule-1440.png",
+    "?? docs/ui-review/yzh-qa-02/schedule/schedule-390.png",
+    "?? docs/ui-review/yzh-qa-02/schedule/schedule-768.png",
+    "?? docs/ui-review/yzh-qa-02/staff-results.json",
+    "?? tests/fixtures/yzh-qa-02.html",
+    "?? tests/fixtures/yzh-qa-02.jsx",
+    "?? tests/yzh-qa-02-calendar.browser.mjs",
+    "?? tests/yzh-qa-02-prescription.browser.mjs",
+    "?? tests/yzh-qa-02-r1.browser.mjs",
+    "?? tests/yzh-qa-02-r2.browser.mjs",
+    "?? tests/yzh-qa-02-staff.browser.mjs",
+    "?? tests/yzh-qa-02.browser.mjs",
+    "?? tests/yzh-qa-02.test.js"
+  ]
+}

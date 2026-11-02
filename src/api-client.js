@@ -331,6 +331,7 @@ export function readAllNotifications() { return request('/api/notifications/read
 export function bookingBranchOptions(params) { return request(`/api/appointments/branch-options${query(params)}`) }
 export function bookingDentistOptions(params) { return request(`/api/appointments/dentist-options${query(params)}`) }
 export function bookingCalendar(params) { return request(`/api/appointments/calendar${query(params)}`) }
+export function bookingOptions(params) { return request(`/api/appointments/booking-options${query(params)}`) }
 
 // M26 Patient feedback (foundation, Patient only): submit, own history, eligible Visits. Cursor-paged. There is no reviewer API.
 export function eligibleFeedbackVisits(params) { return request(`/api/feedback/eligible-visits${query(params)}`) }

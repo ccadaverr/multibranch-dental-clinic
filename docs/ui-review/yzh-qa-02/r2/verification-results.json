@@ -1,0 +1,113 @@
+{
+  "date": "2026-11-03",
+  "timezone": "Asia/Manila",
+  "branch": "qa/yzhekiel-ui-20261102",
+  "head": "a6a0de5bf36c77a43d948b98f821940bac41df3d",
+  "syntheticBrowserOnly": true,
+  "authenticatedAcceptance": false,
+  "backendCommandsExecuted": false,
+  "checks": [
+    {
+      "command": "node tests/yzh-qa-02-r2.browser.mjs --before",
+      "exitCode": 1,
+      "expectedFailure": true,
+      "passed": 0,
+      "failed": 4,
+      "widths": [
+        390
+      ]
+    },
+    {
+      "command": "node tests/yzh-qa-02-r2.browser.mjs",
+      "exitCode": 0,
+      "passed": 52,
+      "failed": 0,
+      "widths": [
+        390,
+        768,
+        1024,
+        1440
+      ]
+    },
+    {
+      "command": "npm.cmd test",
+      "exitCode": 0,
+      "passed": 1028,
+      "failed": 0,
+      "skipped": 5,
+      "total": 1033
+    },
+    {
+      "command": "npm.cmd run test:smoke",
+      "exitCode": 0,
+      "result": "PASS"
+    },
+    {
+      "command": "npm.cmd run build",
+      "exitCode": 0,
+      "result": "PASS"
+    },
+    {
+      "command": "QA_EVIDENCE_DIR=docs/ui-review/yzh-qa-02/r2/r1-regression node tests/yzh-qa-02-r1.browser.mjs",
+      "exitCode": 0,
+      "passed": 52,
+      "failed": 0,
+      "widths": [
+        390,
+        768,
+        1024,
+        1440
+      ]
+    },
+    {
+      "command": "QA_EVIDENCE_DIR=docs/ui-review/yzh-qa-02/r2/existing-booking node tests/yzh-qa-02.browser.mjs",
+      "exitCode": 0,
+      "result": "PASS",
+      "requests": 56,
+      "syntheticMutations": 6,
+      "pageErrors": [],
+      "widths": [
+        390,
+        768,
+        1024,
+        1440
+      ]
+    },
+    {
+      "command": "QA_EVIDENCE_DIR=docs/ui-review/yzh-qa-02/r2/clinical PLAYWRIGHT_MODULE=<workspace>/node_modules/playwright node tests/den-ui-02.browser.mjs",
+      "exitCode": 0,
+      "result": "PASS",
+      "requests": 197,
+      "pageErrors": [],
+      "widths": [
+        390,
+        768,
+        1024,
+        1440
+      ]
+    },
+    {
+      "command": "QA_EVIDENCE_DIR=docs/ui-review/yzh-qa-02/r2/existing-prescription node tests/yzh-qa-02-prescription.browser.mjs",
+      "exitCode": 0,
+      "result": "PASS",
+      "syntheticMutations": 3
+    },
+    {
+      "command": "node tests/yzh-qa-02-calendar.browser.mjs",
+      "exitCode": 0,
+      "result": "PASS",
+      "calendarReads": [
+        "b1",
+        "b2"
+      ]
+    }
+  ],
+  "warnings": [
+    "Existing React Table key warning",
+    "Existing production chunk larger than 500 kB"
+  ],
+  "predefense": {
+    "executed": false,
+    "reason": "Existing set -euo pipefail CRLF blocker verified statically; no backend/database probes run."
+  }
+}

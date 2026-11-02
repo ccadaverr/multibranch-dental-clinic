@@ -1,0 +1,12 @@
+{
+  "authenticatedAcceptance": false,
+  "synthetic": true,
+  "results": [
+    {
+      "width": 390,
+      "name": "payment-copy",
+      "status": "fail",
+      "error": "online choice must not carry cash reassurance\n\n1 !== 0\n"
+    }
+  ]
+}

@@ -19,6 +19,7 @@ import '/src/styles.css'
 import '/src/foundation.css'
 import '/src/patient.css'
 import '/src/polish.css'
+import '/src/automations.css'
 setClockSource(()=>new Date(today+'T10:00:00+08:00'))
 function Fixture(){
   const initial=useRef(clinicalFixture())

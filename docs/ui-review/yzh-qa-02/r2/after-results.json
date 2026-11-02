@@ -1,0 +1,1723 @@
+{
+  "synthetic": true,
+  "authenticatedAcceptance": false,
+  "sourceSha256": "7274c80f3a10c7d2e1216c99f94df404c93ee97fbaf21b735e5d9793e7b1944d",
+  "results": [
+    {
+      "width": 390,
+      "name": "save-success",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vB",
+            "lines": [
+              {
+                "medicine": "Ibuprofen",
+                "dosage": "250mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic B note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "name": "save-failure",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vB",
+            "lines": [
+              {
+                "medicine": "Ibuprofen",
+                "dosage": "250mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic B note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "name": "issue-success",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions/rx-A/issue",
+          "body": {
+            "expected_revision": 1
+          }
+        },
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vB",
+            "lines": [
+              {
+                "medicine": "Ibuprofen",
+                "dosage": "250mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic B note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "name": "issue-failure",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions/rx-A/issue",
+          "body": {
+            "expected_revision": 1
+          }
+        },
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vB",
+            "lines": [
+              {
+                "medicine": "Ibuprofen",
+                "dosage": "250mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic B note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "name": "issue-create-success",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions/rx-A/issue",
+          "body": {
+            "expected_revision": 1
+          }
+        },
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vB",
+            "lines": [
+              {
+                "medicine": "Ibuprofen",
+                "dosage": "250mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic B note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "name": "issue-create-failure",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vB",
+            "lines": [
+              {
+                "medicine": "Ibuprofen",
+                "dosage": "250mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic B note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "name": "save-A-B-A",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "name": "save-failure-A-B-A",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "name": "issue-A-B-A",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions/rx-A/issue",
+          "body": {
+            "expected_revision": 1
+          }
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "name": "issue-failure-A-B-A",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions/rx-A/issue",
+          "body": {
+            "expected_revision": 1
+          }
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "name": "B-error-survives-A-failure",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vB",
+            "lines": [
+              {
+                "medicine": "Ibuprofen",
+                "dosage": "250mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic B note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "name": "active-B-issue",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vB",
+            "lines": [
+              {
+                "medicine": "Ibuprofen",
+                "dosage": "250mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic B note"
+          }
+        },
+        {
+          "path": "/api/prescriptions/rx-B/issue",
+          "body": {
+            "expected_revision": 1
+          }
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "name": "visit-change-starts-blank",
+      "status": "pass"
+    },
+    {
+      "width": 768,
+      "name": "save-success",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vB",
+            "lines": [
+              {
+                "medicine": "Ibuprofen",
+                "dosage": "250mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic B note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 768,
+      "name": "save-failure",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vB",
+            "lines": [
+              {
+                "medicine": "Ibuprofen",
+                "dosage": "250mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic B note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 768,
+      "name": "issue-success",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions/rx-A/issue",
+          "body": {
+            "expected_revision": 1
+          }
+        },
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vB",
+            "lines": [
+              {
+                "medicine": "Ibuprofen",
+                "dosage": "250mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic B note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 768,
+      "name": "issue-failure",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions/rx-A/issue",
+          "body": {
+            "expected_revision": 1
+          }
+        },
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vB",
+            "lines": [
+              {
+                "medicine": "Ibuprofen",
+                "dosage": "250mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic B note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 768,
+      "name": "issue-create-success",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions/rx-A/issue",
+          "body": {
+            "expected_revision": 1
+          }
+        },
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vB",
+            "lines": [
+              {
+                "medicine": "Ibuprofen",
+                "dosage": "250mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic B note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 768,
+      "name": "issue-create-failure",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vB",
+            "lines": [
+              {
+                "medicine": "Ibuprofen",
+                "dosage": "250mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic B note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 768,
+      "name": "save-A-B-A",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 768,
+      "name": "save-failure-A-B-A",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 768,
+      "name": "issue-A-B-A",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions/rx-A/issue",
+          "body": {
+            "expected_revision": 1
+          }
+        }
+      ]
+    },
+    {
+      "width": 768,
+      "name": "issue-failure-A-B-A",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions/rx-A/issue",
+          "body": {
+            "expected_revision": 1
+          }
+        }
+      ]
+    },
+    {
+      "width": 768,
+      "name": "B-error-survives-A-failure",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vB",
+            "lines": [
+              {
+                "medicine": "Ibuprofen",
+                "dosage": "250mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic B note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 768,
+      "name": "active-B-issue",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vB",
+            "lines": [
+              {
+                "medicine": "Ibuprofen",
+                "dosage": "250mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic B note"
+          }
+        },
+        {
+          "path": "/api/prescriptions/rx-B/issue",
+          "body": {
+            "expected_revision": 1
+          }
+        }
+      ]
+    },
+    {
+      "width": 768,
+      "name": "visit-change-starts-blank",
+      "status": "pass"
+    },
+    {
+      "width": 1024,
+      "name": "save-success",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vB",
+            "lines": [
+              {
+                "medicine": "Ibuprofen",
+                "dosage": "250mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic B note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 1024,
+      "name": "save-failure",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vB",
+            "lines": [
+              {
+                "medicine": "Ibuprofen",
+                "dosage": "250mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic B note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 1024,
+      "name": "issue-success",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions/rx-A/issue",
+          "body": {
+            "expected_revision": 1
+          }
+        },
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vB",
+            "lines": [
+              {
+                "medicine": "Ibuprofen",
+                "dosage": "250mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic B note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 1024,
+      "name": "issue-failure",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions/rx-A/issue",
+          "body": {
+            "expected_revision": 1
+          }
+        },
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vB",
+            "lines": [
+              {
+                "medicine": "Ibuprofen",
+                "dosage": "250mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic B note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 1024,
+      "name": "issue-create-success",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions/rx-A/issue",
+          "body": {
+            "expected_revision": 1
+          }
+        },
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vB",
+            "lines": [
+              {
+                "medicine": "Ibuprofen",
+                "dosage": "250mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic B note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 1024,
+      "name": "issue-create-failure",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vB",
+            "lines": [
+              {
+                "medicine": "Ibuprofen",
+                "dosage": "250mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic B note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 1024,
+      "name": "save-A-B-A",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 1024,
+      "name": "save-failure-A-B-A",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 1024,
+      "name": "issue-A-B-A",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions/rx-A/issue",
+          "body": {
+            "expected_revision": 1
+          }
+        }
+      ]
+    },
+    {
+      "width": 1024,
+      "name": "issue-failure-A-B-A",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions/rx-A/issue",
+          "body": {
+            "expected_revision": 1
+          }
+        }
+      ]
+    },
+    {
+      "width": 1024,
+      "name": "B-error-survives-A-failure",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vB",
+            "lines": [
+              {
+                "medicine": "Ibuprofen",
+                "dosage": "250mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic B note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 1024,
+      "name": "active-B-issue",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vB",
+            "lines": [
+              {
+                "medicine": "Ibuprofen",
+                "dosage": "250mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic B note"
+          }
+        },
+        {
+          "path": "/api/prescriptions/rx-B/issue",
+          "body": {
+            "expected_revision": 1
+          }
+        }
+      ]
+    },
+    {
+      "width": 1024,
+      "name": "visit-change-starts-blank",
+      "status": "pass"
+    },
+    {
+      "width": 1440,
+      "name": "save-success",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vB",
+            "lines": [
+              {
+                "medicine": "Ibuprofen",
+                "dosage": "250mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic B note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 1440,
+      "name": "save-failure",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vB",
+            "lines": [
+              {
+                "medicine": "Ibuprofen",
+                "dosage": "250mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic B note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 1440,
+      "name": "issue-success",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions/rx-A/issue",
+          "body": {
+            "expected_revision": 1
+          }
+        },
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vB",
+            "lines": [
+              {
+                "medicine": "Ibuprofen",
+                "dosage": "250mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic B note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 1440,
+      "name": "issue-failure",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions/rx-A/issue",
+          "body": {
+            "expected_revision": 1
+          }
+        },
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vB",
+            "lines": [
+              {
+                "medicine": "Ibuprofen",
+                "dosage": "250mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic B note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 1440,
+      "name": "issue-create-success",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions/rx-A/issue",
+          "body": {
+            "expected_revision": 1
+          }
+        },
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vB",
+            "lines": [
+              {
+                "medicine": "Ibuprofen",
+                "dosage": "250mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic B note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 1440,
+      "name": "issue-create-failure",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vB",
+            "lines": [
+              {
+                "medicine": "Ibuprofen",
+                "dosage": "250mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic B note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 1440,
+      "name": "save-A-B-A",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 1440,
+      "name": "save-failure-A-B-A",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 1440,
+      "name": "issue-A-B-A",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions/rx-A/issue",
+          "body": {
+            "expected_revision": 1
+          }
+        }
+      ]
+    },
+    {
+      "width": 1440,
+      "name": "issue-failure-A-B-A",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions/rx-A/issue",
+          "body": {
+            "expected_revision": 1
+          }
+        }
+      ]
+    },
+    {
+      "width": 1440,
+      "name": "B-error-survives-A-failure",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vA",
+            "lines": [
+              {
+                "medicine": "Paracetamol",
+                "dosage": "500mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic A note"
+          }
+        },
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vB",
+            "lines": [
+              {
+                "medicine": "Ibuprofen",
+                "dosage": "250mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic B note"
+          }
+        }
+      ]
+    },
+    {
+      "width": 1440,
+      "name": "active-B-issue",
+      "status": "pass",
+      "calls": [
+        {
+          "path": "/api/prescriptions",
+          "body": {
+            "visit_id": "vB",
+            "lines": [
+              {
+                "medicine": "Ibuprofen",
+                "dosage": "250mg",
+                "frequency": "",
+                "duration": "",
+                "instructions": ""
+              }
+            ],
+            "note": "Synthetic B note"
+          }
+        },
+        {
+          "path": "/api/prescriptions/rx-B/issue",
+          "body": {
+            "expected_revision": 1
+          }
+        }
+      ]
+    },
+    {
+      "width": 1440,
+      "name": "visit-change-starts-blank",
+      "status": "pass"
+    }
+  ]
+}

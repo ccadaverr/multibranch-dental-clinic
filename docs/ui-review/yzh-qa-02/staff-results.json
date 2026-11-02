@@ -1,0 +1,27 @@
+{
+  "results": [
+    {
+      "width": 390,
+      "scheduledCheckInActions": 3,
+      "combobox": "pass"
+    },
+    {
+      "width": 768,
+      "scheduledCheckInActions": 3,
+      "combobox": "pass"
+    },
+    {
+      "width": 1024,
+      "scheduledCheckInActions": 3,
+      "combobox": "pass"
+    },
+    {
+      "width": 1440,
+      "scheduledCheckInActions": 3,
+      "combobox": "pass"
+    }
+  ],
+  "errors": [],
+  "callbackFixture": true,
+  "authenticatedAcceptance": false
+}

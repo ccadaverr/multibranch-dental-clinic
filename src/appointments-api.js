@@ -158,7 +158,7 @@ export async function fetchRecommendation({ serviceId, branchId = null, coords =
 
 const commandResult = result => (result.ok ? { ok: true, row: result.data } : normalizeFailure(result))
 
-export async function createAppointment({ branchId, serviceId, date, start, notes = null, patientPublicId = null, dentistId = null, forPatientId = null, consultationAcknowledged = null, payAtClinic = false }, key) {
+export async function createAppointment({ branchId, serviceId, date, start, notes = null, patientPublicId = null, dentistId = null, forPatientId = null, consultationAcknowledged = null, payAtClinic = false, paymentChoice = null }, key) {
   const payload = { branch_ref: branchId, service_ref: serviceId, date, start_time: start }
   if (notes) payload.notes = notes
   if (patientPublicId) payload.patient_id = patientPublicId
@@ -166,6 +166,7 @@ export async function createAppointment({ branchId, serviceId, date, start, note
   if (dentistId) payload.dentist_ref = dentistId
   if (consultationAcknowledged !== null) payload.consultation_acknowledged = !!consultationAcknowledged
   if (payAtClinic) payload.pay_at_clinic = true
+  if (paymentChoice === 'online') payload.pay_at_clinic = false
   return commandResult(await api.createAppointment(payload, key))
 }
 

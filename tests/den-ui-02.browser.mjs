@@ -43,11 +43,12 @@ await page.route('**/sanctum/csrf-cookie',r=>r.fulfill({status:204}))
 const button=name=>page.getByRole('button',{name,exact:true})
 const go=async()=>{await page.goto('http://127.0.0.1:5187/tests/fixtures/den-ui-02.html');await button('Call patient').first().waitFor()}
 const noOverflow=async()=>assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1))
-await mkdir('docs/ui-review/den-ui-02',{recursive:true})
+const evidence=process.env.QA_EVIDENCE_DIR||'docs/ui-review/den-ui-02'
+await mkdir(evidence,{recursive:true})
 try{
- for(const width of [390,768,1440]){
+ for(const width of [390,768,1024,1440]){
   reset();await page.setViewportSize({width,height:1000});await go();await noOverflow()
-  await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:`docs/ui-review/den-ui-02/queue-${width}.png`,fullPage:true})
+  await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:`${evidence}/queue-${width}.png`,fullPage:true})
   await button('Review encounter').first().click();await button('Start Treatment').waitFor();assert(await button('Start Treatment').isDisabled())
   await button('My Queue').last().click();await button('Call patient').first().click();await button('Open encounter').click()
   delay=100;await button('Start Treatment').dblclick();await page.getByText('Saved on the clinic server. Revision 1.',{exact:true}).waitFor();delay=0
@@ -63,11 +64,18 @@ try{
   await button('Add performed procedure').click();await page.getByLabel('Procedure 1').selectOption('svc1');await page.getByLabel('Procedure / treatment performed',{exact:true}).fill('Illustrative completed consultation')
   await page.getByLabel('Dentist indicates prescription required').check();await page.getByLabel('Dentist indicates follow-up required').check();await page.getByLabel('Follow-up reason',{exact:true}).selectOption('Post-Op Check')
   delay=100;await button('Save Treatment Progress').dblclick();await page.getByText('Saved on the clinic server. Revision 3.',{exact:true}).waitFor();delay=0
-  await noOverflow();await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:`docs/ui-review/den-ui-02/encounter-${width}.png`,fullPage:true})
+  await noOverflow();await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:`${evidence}/encounter-${width}.png`,fullPage:true})
   fail='validation';await button('Complete Treatment').click();await page.getByRole('dialog').getByRole('button',{name:'Complete Treatment',exact:true}).click();await page.getByText('Command not confirmed',{exact:true}).waitFor();assert(await page.getByLabel('Clinical notes',{exact:true}).isEnabled())
   await button('Complete Treatment').click();await page.getByRole('dialog').getByRole('button',{name:'Complete Treatment',exact:true}).dblclick();await page.getByText('Treatment completion confirmed by the clinic server.',{exact:true}).waitFor();assert(await page.getByLabel('Clinical notes',{exact:true}).isDisabled())
   await page.getByText(/Prescription indicated; clinical review/).waitFor();await page.getByText(/This is not a booking confirmation/).waitFor()
-  await button('Open dental chart').click();await page.locator('.od-tooth').first().waitFor();assert.equal((await page.evaluate(()=>window.encFixture.getContext())).patientId,'p1');await button('Return to encounter').click()
+  await button('Open dental chart').click();await page.locator('.od-tooth').first().waitFor();assert.equal((await page.evaluate(()=>window.encFixture.getContext())).patientId,'p1')
+  const tooth=page.locator('.od-tooth').first(), transform=await tooth.getAttribute('transform')
+  await tooth.focus();await page.keyboard.press('Enter');assert(await tooth.evaluate(e=>e.classList.contains('is-selected')))
+  assert.equal(await tooth.getAttribute('transform'),transform,'selection preserves tooth coordinates')
+  await page.getByRole('tab',{name:'Front view',exact:true}).click();await page.locator('.od-tooth').first().click()
+  await page.getByRole('tab',{name:'Top view (Arch)',exact:true}).click();await page.locator('.od-tooth.is-selected').waitFor();await noOverflow()
+  await page.screenshot({path:`${evidence}/chart-${width}.png`,fullPage:true})
+  await button('Return to encounter').click()
   await button('Open visit prescriptions').click();await page.getByText('Prescriptions for this encounter. A Draft has not been issued.').waitFor();await button('Return to encounter').click()
   await button('Open patient follow-ups').click();await page.getByText(/Patient follow-up tasks. A recommendation/).waitFor();await button('Return to encounter').click()
   results.push({width,flow:'passed'});assert.deepEqual(errors,[])
@@ -101,6 +109,6 @@ try{
  // Unknown/foreign context never substitutes a patient.
  await page.evaluate(()=>window.encFixture.go('treatment',{queueEntryId:'q1',patientId:'p2',visitId:'v1'}));await page.getByRole('heading',{name:'Encounter unavailable',exact:true}).waitFor();assert.equal(await page.getByLabel('Clinical notes',{exact:true}).count(),0)
  assert.deepEqual(errors,[])
- await writeFile('docs/ui-review/den-ui-02/browser-results.json',JSON.stringify({results,errors,requests:calls.length,mutations:calls.filter(c=>c.method!=='GET').length,synthetic:true},null,2))
+ await writeFile(`${evidence}/browser-results.json`,JSON.stringify({results,errors,requests:calls.length,mutations:calls.filter(c=>c.method!=='GET').length,synthetic:true},null,2))
  console.log(JSON.stringify({results,requests:calls.length,errors}))
 }finally{await browser.close()}

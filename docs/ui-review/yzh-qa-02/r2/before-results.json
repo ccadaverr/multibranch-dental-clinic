@@ -1,0 +1,31 @@
+{
+  "synthetic": true,
+  "authenticatedAcceptance": false,
+  "sourceSha256": "9eabc0d855ad8aee24f44ccca8a4dd2b105a74229955500f380e017d751cc4c4",
+  "results": [
+    {
+      "width": 390,
+      "name": "save-success",
+      "status": "fail",
+      "error": "late A must not reset the active Visit\n\n'' !== 'vB'\n"
+    },
+    {
+      "width": 390,
+      "name": "save-failure",
+      "status": "fail",
+      "error": "late A must not replace current feedback\n\n1 !== 0\n"
+    },
+    {
+      "width": 390,
+      "name": "issue-success",
+      "status": "fail",
+      "error": "late A must not reset the active Visit\n\n'' !== 'vB'\n"
+    },
+    {
+      "width": 390,
+      "name": "issue-failure",
+      "status": "fail",
+      "error": "late A must not replace current feedback\n\n1 !== 0\n"
+    }
+  ]
+}

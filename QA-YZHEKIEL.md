@@ -1,5 +1,24 @@
 # QA SLICE: YZHEKIEL (UI/UX)
 
+## YZH-QA-02 R2 — new-prescription Visit identity (2026-11-03, Asia/Manila)
+
+The independent R1 re-audit's remaining P1 was reproduced before editing: all four delayed new-prescription Save/Issue success/failure cases failed. R2 adds synchronous Visit-selection generation ownership, starts an explicitly changed Visit with blank medicine/note state, and suppresses stale completion effects without retargeting or replaying the original command. Final R2 browser matrix: **52/52**, including A → B → A success/failure, B's own error, active B Save/Issue, and both Issue response stages. Existing R1 matrix **52/52**, booking/clinical/original prescription/calendar harnesses PASS; full frontend **1028 passed, 0 failed, 5 skipped**, smoke/build PASS. See report section K and `docs/ui-review/yzh-qa-02/r2/`. **GO FOR READ-ONLY R2 RE-AUDIT** only; authenticated E2E, GEN-06/DEN-03 and deployment/predefense limitations remain. No commit, backend change or database operation.
+
+## YZH-QA-02 independent acceptance — 2026-11-02 (Asia/Manila)
+
+**Post-audit R1:** the two P1 findings (stale prescription write completion and disabled quotation recovery) and two P2 findings (calendar A/pending-B/A and online-payment copy) are corrected in the same workspace. Deterministic browser regressions and all four widths are recorded in report section J. R1 full suite: **1028 passed, 0 failed, 5 skipped**; smoke/build pass. Prior QA-02 evidence preserved byte-for-byte. Recommendation: **GO FOR READ-ONLY RE-AUDIT**, with authenticated acceptance still blocked; no commit/integration authorization implied.
+
+Branch `qa/yzhekiel-ui-20261102`, baseline HEAD `a6a0de5bf36c77a43d948b98f821940bac41df3d`, initially clean. See [cross-role acceptance report](docs/YZH_QA_02_CROSS_ROLE_ACCEPTANCE_REPORT.md) for reproductions, bounded frontend corrections, screenshots, exact commands and closure checklist.
+
+- Reproduced/corrected: same-month booking calendar retaining another branch's availability; dependent search/create context mismatch; integrated payment quote/capability not consumed; prescription draft A's delayed response replacing draft B. No backend edits.
+- Synthetic browser coverage: 390/768/1024/1440 for booking, shared controls, Staff check-in/walk-in combobox, clinical queue/editor/chart, and Dentist Home/Schedule. Prescription late-response test fails before correction and passes after it; Save stays Draft and Issue requires confirmation.
+- Baseline reproduced: 1025 passed / 0 failed / 5 skipped. Final frontend: 1028 passed / 0 failed / 5 skipped; smoke/build pass. Existing Table key/chunk warnings remain. Required predefense check is blocked by existing CRLF at line 8.
+- **GEN-06 remains blocked/unverified**: no evidence tying the original vague report to a global dropdown defect; shared-control and selected active-page tests are not exhaustive authenticated cross-role acceptance. **DEN-03 remains unverified**, independent of passing current schedule/date checks. Existing Done statuses and Jaztin/Richmon/Celin ownership unchanged.
+- **Authenticated cross-role end-to-end acceptance: BLOCKED — approved authenticated synthetic session unavailable**, confirmed by the user. Only synthetic/intercepted browser work authorized. No production account, real record, existing clinic credential or auth bypass used. Remaining prerequisites and exact scenarios are in report section H.
+- No commit, merge, push or deployment; nothing staged. Ready for bounded code review with these acceptance gates outstanding.
+
+---
+
 > Self-contained slice of FINALS-QA-REVISIONS.md. Give Claude THIS file only, plus the context pack and the code files for the batch you are working on.
 > **This file is the source of truth for Yzhekiel's status.** Update `status` fields and tick checkboxes here.
 > Master reference: FINALS-QA-REVISIONS.md (assumptions, default decisions, full matrix, other members' work).

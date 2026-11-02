@@ -38,7 +38,7 @@ await page.route('**/api/**', async route => {
 })
 const url = process.env.DEN_UI_URL || 'http://127.0.0.1:5186/tests/fixtures/den-ui-01.html'
 const overflow = async label => assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), label + ': horizontal overflow')
-const evidence = 'docs/ui-review/den-ui-01'
+const evidence = process.env.QA_EVIDENCE_DIR || 'docs/ui-review/den-ui-01'
 await mkdir(evidence, { recursive: true })
 try {
   for (const width of [390, 768, 1440, 375, 430, 1024]) {

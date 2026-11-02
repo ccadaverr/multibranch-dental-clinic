@@ -1,5 +1,11 @@
 // Shared rules for manual selection and external service prefills. Never guess
 // an alternative consultation when the configured service is unavailable.
+export function bookingPaymentChoices(quote, choice) {
+  const matches = quote && quote.branch_ref === choice.branch?.id && quote.service_ref === choice.service?.id && quote.date === choice.date
+  const fee = matches && quote.currency === 'PHP' && quote.booking_fee_php !== null && quote.booking_fee_php !== '' && Number.isFinite(Number(quote.booking_fee_php)) && Number(quote.booking_fee_php) >= 0 ? Number(quote.booking_fee_php) : null
+  return { cash: !!matches && quote.pay_at_clinic_available === true, online: !!matches && fee !== null && quote.online_payment_available === true && Array.isArray(quote.payment_methods) && quote.payment_methods.length > 0, fee }
+}
+
 export function resolveBookingService(services, id) {
   const wanted = (services || []).find(s => s.id === id)
   if (!wanted || wanted.status !== 'Active' || wanted.online_booking === 'hidden') {
