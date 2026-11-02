@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { runInNewContext } from 'node:vm'
 import { documentationPayload } from '../src/treatments-api.js'
 
-const page = readFileSync(new URL('../src/pages/Clinical.jsx', import.meta.url), 'utf8')
+const page = readFileSync(new URL('../src/pages/EncounterWorkspace.jsx', import.meta.url), 'utf8')
 const helpers = ['FOLLOWUP_REASONS', 'savedFollowupReasonOther', 'followupReasonOption', 'chooseFollowupReason', 'missingFollowupReason']
   .map(name => {
     const declaration = page.match(new RegExp(`^const ${name} = .+$`, 'm'))?.[0]
@@ -17,8 +17,8 @@ const { savedFollowupReasonOther, followupReasonOption, chooseFollowupReason, mi
 
 test('GEN-07: follow-up Other stays selected while its custom reason changes', () => {
   let form = { followupRequired: true, followupReason: '', followupReasonOther: false }
-  assert.equal(followupReasonOption(form), 'Post-Op Check')
-  assert.equal(missingFollowupReason(form), false)
+  assert.equal(followupReasonOption(form), '')
+  assert.equal(missingFollowupReason(form), true)
 
   form = chooseFollowupReason(form, 'Other')
   assert.equal(followupReasonOption(form), 'Other')
@@ -49,7 +49,7 @@ test('GEN-07: saved custom reason remains editable and UI state stays out of the
   assert.match(page, /value=\{followupReasonOption\(form\)\}/)
   assert.match(page, /onChange=\{e => setForm\(chooseFollowupReason\(form,e\.target\.value\)\)\}/)
   assert.match(page, /\{form\.followupReasonOther && \(/)
-  assert.match(page, /disabled=\{saving\|\|!canStart\|\|followupReasonMissing\}/)
-  assert.match(page, /disabled=\{saving\|\|!dirty\|\|followupReasonMissing\}/)
-  assert.match(page, /disabled=\{saving\|\|followupReasonMissing\}/)
+  assert.match(page, /disabled=\{saving\|\|!canStart\|\|followupReasonMissing\|\|!fresh\}/)
+  assert.match(page, /disabled=\{saving\|\|!dirty\|\|newer\|\|followupReasonMissing\|\|!fresh\}/)
+  assert.match(page, /disabled=\{saving\|\|dirty\|\|newer\|\|followupReasonMissing\|\|!fresh\}/)
 })

@@ -1,3 +1,5 @@
+import { useClinicalSession } from '../use-clinical-session.js'
+import { clinicalSessionKey, resolveEncounter } from '../encounter.js'
 import React, { useEffect, useState } from 'react'
 import { Button, Card, ConfirmDialog, Field, FilterBar, Modal, Notice, PageHeader } from '../components.jsx'
 import { createPrescription, downloadPrescriptionPdf, issuePrescription, listPrescriptions, prescription, prescriptionVisits, savePrescriptionLicense, updatePrescription, voidPrescription } from '../api-client.js'
@@ -36,7 +38,14 @@ const COMMON_DURATIONS = ['3 days', '5 days', '7 days', '10 days', '14 days', 'A
  * A mistake is voided with a reason and a new one is issued. The front desk views and prints issued ones; the Owner sees
  * metadata only.
  */
-export function PrescriptionsServerPage({ store, role }) {
+export function PrescriptionsServerPage(props) {
+  const allowed=useClinicalSession(props.store)
+  if(props.role==='dentist'&&!allowed)return <Notice>Clinical session unavailable. Prescription information is hidden.</Notice>
+  const linked=props.context?.returnEncounter?resolveEncounter(props.store.state,props.store.session,props.context.returnEncounter):null
+  if(linked&&!linked.ok)return <Notice>{linked.message}<Button onClick={()=>props.setPage('queue')}>My Queue</Button></Notice>
+  return <PrescriptionsBody key={clinicalSessionKey(props.store.session)+(props.context?.visitId||'all')} {...props}/>
+}
+function PrescriptionsBody({ store, role, context, setPage }) {
   const toast = store?.toast || (() => {})
   const [rows, setRows] = useState(null), [error, setError] = useState(''), [openId, setOpenId] = useState(null), [writing, setWriting] = useState(null)
   const [query, setQuery] = useState(''), [statusFilter, setStatusFilter] = useState('all')
@@ -44,6 +53,7 @@ export function PrescriptionsServerPage({ store, role }) {
   useEffect(() => { load() }, [])
   const dentist = role === 'dentist', owner = role === 'owner'
   const filteredRows = (rows || []).filter(p => {
+    if(context?.visitId&&(p.visit!==context.visitId||p.patient?.id!==(context.patientPublicId||context.patientId)))return false
     if (statusFilter !== 'all' && p.status !== statusFilter) return false
     if (!query.trim()) return true
     const q = query.toLowerCase()
@@ -55,11 +65,13 @@ export function PrescriptionsServerPage({ store, role }) {
     )
   })
   return <div className="st-page dentist-prescriptions">
+    {context?.returnEncounter&&<Button variant="ghost" onClick={()=>setPage('treatment',context.returnEncounter)}>Return to encounter</Button>}
+    {context?.visitId&&<Notice>Prescriptions for this encounter. A Draft has not been issued.</Notice>}
     <PageHeader kicker={owner ? 'Administration' : 'Clinical'} title="Prescriptions"
       text={owner ? 'Prescriptions issued at the clinic: number, date, dentist and branch. The medicines are visible only to the dentists, the branch front desk and the patient.'
         : dentist ? 'Write a prescription for a recent visit. Issuing locks it; a mistake is voided with a reason and a new one is issued. There is no drug list and no interaction check: you decide what to prescribe.'
           : 'Prescriptions issued at your branch, to view and print. Only a dentist writes or changes them.'}/>
-    {dentist && <WriteCard toast={toast} onDone={id => { load(); setOpenId(id) }} editing={writing} onEdited={() => setWriting(null)}/>}
+    {dentist && <WriteCard context={context} toast={toast} onDone={id => { load(); setOpenId(id) }} editing={writing} onEdited={() => setWriting(null)}/>}
     {dentist && <LicenseCard toast={toast}/>}
     {error && <Notice tone="warning" title="Unavailable">{error}</Notice>}
     <Card title={owner ? 'Issued prescriptions' : 'Prescriptions'}>
@@ -96,11 +108,11 @@ export function PrescriptionsServerPage({ store, role }) {
   </div>
 }
 
-function WriteCard({ toast, onDone, editing, onEdited }) {
-  const [visits, setVisits] = useState(null), [meta, setMeta] = useState({}), [visitId, setVisitId] = useState('')
+function WriteCard({ toast, onDone, editing, onEdited, context }) {
+  const [visits, setVisits] = useState(null), [meta, setMeta] = useState({}), [visitId, setVisitId] = useState(context?.visitId||'')
   const [lines, setLines] = useState([{ ...EMPTY_LINE }]), [note, setNote] = useState(''), [draft, setDraft] = useState(null)
   const [err, setErr] = useState(''), [busy, setBusy] = useState(''), [confirmIssue, setConfirmIssue] = useState(false)
-  useEffect(() => { prescriptionVisits().then(r => { if (r.ok) { setVisits(r.data); setMeta(r.meta || {}) } }) }, [])
+  useEffect(() => { prescriptionVisits().then(r => { if (r.ok) { setVisits(context?.visitId?r.data.filter(v=>v.id===context.visitId&&v.patient?.id===(context.patientPublicId||context.patientId)):r.data); setMeta(r.meta || {}) } }) }, [])
   useEffect(() => {
     if (!editing) return
     prescription(editing).then(r => { if (r.ok) { setDraft(r.data); setVisitId(r.data.visit); setLines(r.data.lines.map(l => ({ ...EMPTY_LINE, ...l }))); setNote(r.data.note || '') } })

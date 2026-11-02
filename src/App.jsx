@@ -1,4 +1,6 @@
 import { validSession, canAccessPage } from './safeguards.js'
+import { ClinicalNavigation, useClinicalNavigation } from './clinical-navigation.jsx'
+import { clinicalSessionKey } from './encounter.js'
 import { Notice } from './components.jsx'
 import React, { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { ClinicProvider, useClinic } from './store.jsx'
@@ -95,6 +97,8 @@ function RefDataUnavailable({ onRetry }) {
 
 function AppBody() {
   const store=useClinic()
+  const clinicalNav=useClinicalNavigation(clinicalSessionKey(store.session))
+  const clinicalNavRef=useRef(clinicalNav);clinicalNavRef.current=clinicalNav
   const [authPhase,setAuthPhase]=useState('checking')
   const [authError,setAuthError]=useState('')
   const [page,setPageState]=useState('dashboard')
@@ -109,7 +113,7 @@ function AppBody() {
   const showRegister=publicView==='register'
   const setShowRegister=value=>{window.location.hash=value?'create-account':'sign-in';setPublicView(value?'register':'login')}
   useEffect(()=>{
-    const navigate=()=>{
+    const navigate=()=>clinicalNavRef.current.request(()=>{
       const hash=window.location.hash
       setPublicView(publicViewFromHash(hash))
       setVerification(null)
@@ -118,7 +122,7 @@ function AppBody() {
         if(publicSections.has(section))document.getElementById(section)?.scrollIntoView()
         else {window.scrollTo(0,0);document.getElementById('public-main')?.focus({preventScroll:true})}
       })
-    }
+    })
     window.addEventListener('hashchange',navigate)
     return()=>window.removeEventListener('hashchange',navigate)
   },[])
@@ -273,7 +277,7 @@ function AppBody() {
     }finally{revalidating.current=false}
   }),[])
 
-  const setPage=(next,record=null)=>{if(role&&canAccessPage(store.state,store.session,next)){setContext(record);setPageState(next)}}
+  const setPage=(next,record=null)=>{if(role&&canAccessPage(store.state,store.session,next)){clinicalNav.request(()=>{setContext(record);setPageState(next)})}}
 
   // F1–F3 one-time email links work without signing in (and whether or not someone is signed in on this browser).
   if(publicView==='respond')return <RespondLink hash={typeof window==='undefined'?'':window.location.hash}/>
@@ -331,13 +335,13 @@ function AppBody() {
     case 'queue': content=<QueuePage {...props}/>; break
     case 'capacity': content=<CapacityPage {...props}/>; break
     case 'patients': content=<PatientsPage {...props}/>; break
-    case 'treatment': content=<TreatmentPage key={context?.queueEntryId||'none'} {...props}/>; break
+    case 'treatment': content=<TreatmentPage {...props}/>; break
     case 'billing': content=<BillingPage role={role} store={store} context={context}/>; break
     case 'hmo': content=<HmoPage {...props}/>; break
     case 'inquiries': content=<InquiriesPage store={store}/>; break
     case 'messages': content=<MessagesPage {...props}/>; break
-    case 'prescriptions': content=role==='patient'?<PatientPrescriptionsPage toast={store.toast}/>:<PrescriptionsPage role={role} store={store}/>; break
-    case 'followups': content=role==='patient'?<Notice title="Follow-up visits">When your dentist asks to see you again, the clinic contacts you, or book it yourself in Book a visit.</Notice>:<FollowupsPage role={role} store={store}/>; break
+    case 'prescriptions': content=role==='patient'?<PatientPrescriptionsPage toast={store.toast}/>:<PrescriptionsPage {...props}/>; break
+    case 'followups': content=role==='patient'?<Notice title="Follow-up visits">When your dentist asks to see you again, the clinic contacts you, or book it yourself in Book a visit.</Notice>:<FollowupsPage {...props}/>; break
     case 'branches': content=<BranchesPage store={store}/>; break
     case 'team': content=<TeamPage store={store}/>; break
     case 'analytics': content=<AnalyticsPage activeBranch={activeBranch} store={store}/>; break
@@ -345,7 +349,7 @@ function AppBody() {
     case 'pricing': content=<ServicesPricingPage store={store}/>; break
     case 'automations': content=<AutomationsPage store={store} setPage={setPage}/>; break
     case 'closures': content=<ClosedDatesPage store={store} role={role}/>; break
-    case 'chart': content=<DentalChartPage store={store}/>; break
+    case 'chart': content=<DentalChartPage {...props}/>; break
     case 'schedules': content=<WorkSchedulesPage store={store} role={role}/>; break
     case 'leave': content=<LeavePage store={store} role={role}/>; break
     case 'handovers': content=<HandoversPage store={store} role={role}/>; break
@@ -363,7 +367,7 @@ function AppBody() {
   }
 
   return <>
-    <Shell role={role} page={page} setPage={setPage} onLogout={logout} activeBranch={branch} setActiveBranch={setActiveBranch} store={store}>{storageWarnings.length>0&&<Notice tone="warning">{[...new Set(storageWarnings)].join(" ")}</Notice>}<ChunkBoundary key={page}><Suspense fallback={<StartupLoading compact label="Loading this page…"/>}>{content}</Suspense></ChunkBoundary></Shell>
+    <ClinicalNavigation.Provider value={clinicalNav.register}><Shell role={role} page={page} setPage={setPage} onLogout={()=>clinicalNav.request(logout)} activeBranch={branch} setActiveBranch={setActiveBranch} store={store}>{storageWarnings.length>0&&<Notice tone="warning">{[...new Set(storageWarnings)].join(" ")}</Notice>}<ChunkBoundary key={page}><Suspense fallback={<StartupLoading compact label="Loading this page…"/>}>{content}</Suspense></ChunkBoundary></Shell>{clinicalNav.dialog}</ClinicalNavigation.Provider>
     <ToastStack toasts={store.toasts}/>
   </>
 }

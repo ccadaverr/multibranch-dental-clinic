@@ -1,0 +1,66 @@
+{
+  "results": [
+    {
+      "width": 390,
+      "home": "pass",
+      "schedule": "pass",
+      "keyboard": "pass",
+      "overflow": "pass",
+      "detailsAndFocus": "pass"
+    },
+    {
+      "width": 768,
+      "home": "pass",
+      "schedule": "pass",
+      "keyboard": "pass",
+      "overflow": "pass",
+      "detailsAndFocus": "pass"
+    },
+    {
+      "width": 1440,
+      "home": "pass",
+      "schedule": "pass",
+      "keyboard": "pass",
+      "overflow": "pass",
+      "detailsAndFocus": "pass"
+    },
+    {
+      "width": 375,
+      "home": "pass",
+      "schedule": "pass",
+      "keyboard": "pass",
+      "overflow": "pass",
+      "detailsAndFocus": "pass"
+    },
+    {
+      "width": 430,
+      "home": "pass",
+      "schedule": "pass",
+      "keyboard": "pass",
+      "overflow": "pass",
+      "detailsAndFocus": "pass"
+    },
+    {
+      "width": 1024,
+      "home": "pass",
+      "schedule": "pass",
+      "keyboard": "pass",
+      "overflow": "pass",
+      "detailsAndFocus": "pass"
+    }
+  ],
+  "additionalStates": [
+    "loading",
+    "empty appointments and clinical work",
+    "manual Home refresh including follow-ups",
+    "HTTP error and retry",
+    "clinical error",
+    "unauthorized details",
+    "revoked branch",
+    "reduced motion"
+  ],
+  "pageErrors": [],
+  "mutations": [],
+  "requestCount": 81,
+  "authenticatedAcceptance": false
+}

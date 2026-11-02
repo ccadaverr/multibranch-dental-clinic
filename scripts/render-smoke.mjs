@@ -36,9 +36,15 @@ renderToString(React.createElement(m.ClinicProvider,{initialReferenceData},React
 const pages={dashboard:'DashboardPage',book:'BookingPage',appointments:'AppointmentsPage',schedule:'SchedulePage',calendar:'StaffDayCalendar',checkin:'CheckInPage',queue:'QueuePage',capacity:'CapacityPage',patients:'PatientsPage',treatment:'TreatmentPage',billing:'BillingPage',hmo:'HmoPage',inquiries:'InquiriesPage',messages:'MessagesPage',prescriptions:'PrescriptionsServerPage',followups:'FollowupsServerPage',chart:'DentalChartPage',branches:'BranchesPage',team:'TeamPage',analytics:'AnalyticsPage',users:'UsersPage',pricing:'ServicesPricingPage',automations:'AutomationsPage',closures:'ClosedDatesPage',schedules:'WorkSchedulesPage',leave:'LeavePage',handovers:'HandoversPage',hmos:'AcceptedHmosPage',wording:'WordingApprovalsPage',automation:'AutomationPage',audit:'AuditTrailPage',branding:'ClinicBrandingPage',assistant:'AssistantAnswersPage',engagement:'EngagementPage',loyalty:'PatientLoyaltyPage',feedback:'PatientFeedbackPage',me:'PatientMePage',archives:'ArchivesPage'}
 let count=0
 function render(page,role='staff',context=null){
-  const session=m.sessionForRole(role,store.state)
+  const session={...m.sessionForRole(role,store.state),...(role==='dentist'?{serverUserId:'synthetic-smoke-dentist'}:{})}
   const activeBranch=store.state.branches.find(b=>b.id===session.branchId)?.name||'All Branches'
   return renderToString(React.createElement(m.Shell,{role,page,setPage:()=>{},onLogout:()=>{},activeBranch,setActiveBranch:()=>{},store:{...store,session}},React.createElement(m[pages[page]],{role,activeBranch,store:{...store,session},context,setPage:()=>{}})))
+}
+// DEN-UI-02 clinical screens require a server-authenticated projection. These records are synthetic.
+function renderClinical(context){
+  const state={...store.state,patients:store.state.patients.map(p=>({...p,serverProjection:true}))}
+  const session={...m.sessionForRole('dentist',state),serverUserId:'synthetic-smoke-dentist'}
+  return renderToString(React.createElement(m.TreatmentPage,{store:{...store,state,session,appointmentsStatus:'ready'},context,setPage:()=>{}}))
 }
 for(const [role,nav] of Object.entries(m.NAV))for(const [page] of nav){render(page,role);count++}
 renderToString(React.createElement(m.Login,{onLogin:()=>{}}))
@@ -102,11 +108,11 @@ assert.ok(render('queue').includes('PhaseOne Patient'))
 assert.ok(!render('queue','dentist').includes('Finish queue step'))
 session=m.sessionForRole('dentist',state)
 assert.equal(actions.updateQueue(arrival.record.id,'Called').ok,true)
-assert.ok(render('treatment','dentist',arrival.context).includes('PhaseOne Patient'))
+assert.ok(renderClinical(arrival.context).includes('PhaseOne Patient'))
 assert.equal(actions.saveTreatment({queueEntryId:arrival.record.id,procedure:'Consultation'}).ok,true)
-assert.ok(render('treatment','dentist',arrival.context).includes('Save Treatment Progress'))
+assert.ok(renderClinical(arrival.context).includes('Save Treatment Progress'))
 assert.equal(actions.completeTreatment({queueEntryId:arrival.record.id,procedure:'Consultation',procedures:[{serviceId:'svc1',quantity:1}]}).ok,true)
-assert.ok(render('treatment','dentist',arrival.context).includes('read-only'))
+assert.ok(renderClinical(arrival.context).includes('read-only'))
 assert.ok(render('billing').includes('Draft'))
 console.log('PASS: created-patient chart, booking/check-in visibility, exact queue treatment, completion, billing renders')
 

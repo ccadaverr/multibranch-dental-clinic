@@ -136,17 +136,18 @@ export function createAppointmentFlow({ getState, getSession, getActions, refres
 
     // Atomic start (Queue Served + Visit/appointment In Treatment + Treatment created). When the Dentist already filled in
     // the form, it is then saved as the first documentation revision (a separate command with its own key).
-    async startTreatment(entry, form = null, key = api.commandKey()) {
+    async startTreatment(entry, form = null, key = api.commandKey(), documentKey = api.commandKey(), visitIntent = null) {
       const issue = entry ? encounterIssue(getState(), entry) : 'Open your exact encounter from today’s queue.'
       if (issue) return { ok: false, message: issue }
-      const visit = visitFor(entry.visitId)
+      const visit = visitIntent?.id === entry.visitId ? visitIntent : visitFor(entry.visitId)
       if (!visit) return { ok: false, message: 'This visit is not loaded from the clinic server. Refresh the worklist and try again.' }
       const result = await treatments.startTreatment(visit, key)
       if (!result.ok) return afterServerCommand(result)
       await refresh()
       const started = this.treatmentFor(visit.id)
-      if (!form || !hasDocumentation(form) || !started) return { ok: true, record: started }
-      const saved = await this.saveTreatment(started, form)
+      if (!started) return { ok: false, uncertain: true, message: 'The start command was accepted, but the treatment could not be refreshed. Check the encounter before retrying.' }
+      if (!form || !hasDocumentation(form)) return { ok: true, record: started }
+      const saved = await this.saveTreatment(started, form, documentKey)
       return saved.ok ? saved : { ...saved, ok: false, partial: true, record: started, message: `Treatment started, but the documentation was not saved: ${saved.message}` }
     },
 
@@ -157,24 +158,25 @@ export function createAppointmentFlow({ getState, getSession, getActions, refres
       const result = await treatments.documentTreatment(treatment, form, key)
       if (!result.ok) return afterServerCommand(result)
       await refresh()
-      return { ok: true, record: this.treatmentFor(treatment.visitId) }
+      const record = this.treatmentFor(treatment.visitId)
+      return record && record.revision >= result.row.revision ? { ok: true, record } : { ok: false, uncertain: true, message: 'The save was accepted, but the current record could not be refreshed. Your editor is retained; check the encounter before retrying.' }
     },
 
     // Saves unsaved documentation first (if any), then completes. Completion Completes the Visit and a scheduled
     // appointment in the same server transaction; the queue entry stays Served.
-    async completeTreatment(treatment, form = null, { dirty = false } = {}) {
+    async completeTreatment(treatment, form = null, { dirty = false, saveKey = api.commandKey(), completeKey = api.commandKey() } = {}) {
       if (!treatment?.server || !treatment.author) return { ok: false, message: 'Only the treating Dentist can complete this treatment.' }
       const issue = this.encounterProblem(treatment)
       if (issue) return { ok: false, message: issue }
       let current = treatment
       let savedNow = false
       if (dirty && form) {
-        const saved = await this.saveTreatment(current, form)
+        const saved = await this.saveTreatment(current, form, saveKey)
         if (!saved.ok) return saved
         current = saved.record
         savedNow = true
       }
-      const result = await treatments.completeTreatment(current, api.commandKey())
+      const result = await treatments.completeTreatment(current, completeKey)
       if (!result.ok) {
         await afterServerCommand(result)
         // Two separate commands: the documentation save stays recorded; only completion was refused.
@@ -183,6 +185,8 @@ export function createAppointmentFlow({ getState, getSession, getActions, refres
           : result
       }
       await refresh()
+      const confirmed = this.treatmentFor(current.visitId)
+      if (!confirmed || confirmed.status !== 'Completed') return { ok: false, uncertain: true, message: 'Completion was accepted, but the closed record could not be refreshed. Check its status before continuing.' }
       const handoffs = getActions().reconcileTreatmentHandoffs()
       return { ok: true, record: this.treatmentFor(current.visitId), warnings: handoffs.ok ? handoffs.warnings || [] : [handoffs.message] }
     },

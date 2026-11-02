@@ -50,7 +50,7 @@ export const NAV = {
     ['patients','Patient Records'], ['handovers','Handovers'], ['prescriptions','Prescriptions'], ['schedules','Work Schedules'], ['leave','Leave'], ['billing','Billing & Payments'], ['hmo','HMO Management'], ['inquiries','Social Inquiries'], ['messages','Messages'], ['followups','Follow-Up Tasks'], ['engagement','Engagement'], ['archives','Archives & Records']
   ],
   dentist: [
-    ['dashboard','Clinical Home'], ['schedule','My Schedule'], ['queue','My Queue'], ['patients','Patient Records'], ['chart','Dental Chart'], ['handovers','Handovers'], ['schedules','My Work Hours'], ['leave','My Leave'], ['treatment','Treatment'],
+    ['dashboard','Home'], ['schedule','My Schedule'], ['queue','My Queue'], ['patients','Patient Records'], ['chart','Dental Chart'], ['handovers','Handovers'], ['schedules','My Work Hours'], ['leave','My Leave'], ['treatment','Treatment'],
     ['prescriptions','Prescriptions'], ['followups','Follow-Up Care'], ['messages','Messages'], ['wording','Wording to Approve'], ['archives','Archives & Records']
   ],
   owner: [
