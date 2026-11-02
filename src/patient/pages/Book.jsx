@@ -7,11 +7,13 @@ import { BookingCalendar, TimeSlots } from '../BookingCalendar.jsx'
 import { dateLong, downloadIcs, hoursSummary, time12 } from '../format.js'
 import { EmptyState, ErrorState, PageHead, Skeleton, useLoad } from '../ui.jsx'
 
-const STEPS = ['Service', 'Branch', 'Dentist', 'Date', 'Time', 'Review']
+import { bookingFeedback, createBookingAttempt, resolveBookingService } from '../booking-flow.js'
+
+const STEPS = ['Service', 'Branch', 'Date & time', 'Review']
 
 /**
- * One booking flow (Section 22: Pay-at-Booking via PayMongo with 15-minute slot hold; refundable >= 24h). Suggestions fill the choices (nearest branch with the earliest slot,
- * any available Dentist), and the Patient can change every one. Choices are kept when going back. Real data only.
+ * One server-authoritative booking flow. Online initiation stays unavailable until
+ * a reviewed payment-capability/fee quote is integrated. Choices survive Back.
  */
 export function BookPage({ prefill = null, onDone, onNavigate, toast }) {
   const [fullDay, setFullDay] = useState(null) // a fully booked day the patient may wait for (A5)
@@ -19,6 +21,13 @@ export function BookPage({ prefill = null, onDone, onNavigate, toast }) {
   const [choice, setChoice] = useState({ service: null, branch: null, dentist: null, date: '', slot: null, wanted: null })
   useEffect(() => { setFullDay(null) }, [step, choice.branch?.id, choice.service?.id, choice.dentist?.id])
   const [done, setDone] = useState(null)
+  const [paymentMode, setPaymentMode] = useState('')
+  const [busy, setBusy] = useState(false), [error, setError] = useState('')
+  const [prefillError, setPrefillError] = useState('')
+  const attempt = useRef(null)
+  if (!attempt.current) attempt.current = createBookingAttempt(createAppointment, commandKey)
+  const locked = busy || attempt.current.uncertain
+
   const services = useLoad(() => listServices(), [])
   // A guardian books for a dependent (intake, R2-12): "Booking for: Me / Ana (daughter)".
   const family = useLoad(() => myDependents(), [])
@@ -27,24 +36,54 @@ export function BookPage({ prefill = null, onDone, onNavigate, toast }) {
   const headRef = useRef(null)
   useEffect(() => { headRef.current?.focus({ preventScroll: false }) }, [step])
 
-  // An assistant button may pre-fill the service (and branch): the matching choices are applied once the services load.
+  // External prefills use exactly the same resolution as manual selection.
+  const appliedPrefill = useRef(null)
   useEffect(() => {
-    if (!prefill?.service || services.status !== 'ready' || choice.service) return
-    const s = (services.data || []).find(x => x.id === prefill.service && x.status === 'Active')
-    if (s) { setChoice(c => ({ ...c, service: s })); setStep(1) }
-  }, [services.status])
+    if (!prefill?.service || services.status !== 'ready' || appliedPrefill.current === prefill.service) return
+    appliedPrefill.current = prefill.service
+    const resolved = resolveBookingService(services.data, prefill.service)
+    if (!resolved.ok) { setPrefillError(resolved.message); return }
+    setChoice(c => ({ ...c, service: resolved.service, wanted: resolved.wanted, branch: null, dentist: null, date: '', slot: null }))
+    setStep(1)
+  }, [services.status, prefill?.service])
 
-  const set = patch => setChoice(c => ({ ...c, ...patch }))
+  const set = patch => {
+    if (locked) return
+    setPrefillError(''); setError('')
+    setChoice(c => ({ ...c, ...patch }))
+  }
+  const confirm = async () => {
+    if (attempt.current.busy) return
+    // No verified pre-booking capability/fee quote exists in this checkout.
+    // Never send an online intent to a server that can silently create it unpaid.
+    if (paymentMode !== 'cash') { setError('Online booking payment is not available here yet. Choose pay at the clinic explicitly, or contact the front desk.'); return }
+    if (forId !== 'self' && !forPerson) { setError('Please select an available dependent before booking.'); return }
+    const submittedChoice = choice, submittedPerson = forPerson
+    const payload = { branchId: choice.branch.id, serviceId: choice.service.id, date: choice.date, start: choice.slot.start_time, dentistId: null, forPatientId: forPerson?.id || null, payAtClinic: true }
+    setBusy(true); setError('')
+    const result = await attempt.current.run(payload)
+    setBusy(false)
+    if (!result.ok) { setError(result.message || 'This time could not be booked. Choose another time.'); return }
+    const appointment = { ...result.row, serviceName: submittedChoice.service.name, branchName: submittedChoice.branch.name, branchAddress: submittedChoice.branch.address, forName: submittedPerson?.first_name || null }
+    setDone(appointment)
+    const feedback = bookingFeedback(appointment)
+    toast?.(feedback.title, feedback.tone)
+    onDone?.(appointment)
+  }
   const go = n => setStep(Math.max(0, Math.min(STEPS.length - 1, n)))
 
-  if (done) return <Success appointment={done} forName={forPerson?.first_name || null} onNavigate={onNavigate}/>
+  if (done) return <Success appointment={done} forName={done.forName} onNavigate={onNavigate}/>
 
   return <div className="pp-page pp-book">
-    <PageHead eyebrow="Book a visit" title="Book an appointment" text="Only real open times are shown. Online payment via GCash, Maya, or Card holds your slot."/>
+    <PageHead eyebrow="Book a visit" title="Book an appointment" text="Choose a service, branch and available time. Payment options are explained before you confirm."/>
     {(family.data || []).length > 0 && <label className="pp-for"><span>Booking for</span>
-      <select value={forId} onChange={e => setForId(e.target.value)} aria-label="Booking for">
+      <select disabled={locked} value={forId} onChange={e => { setForId(e.target.value); setError('') }} aria-label="Booking for">
         <option value="self">Me</option>{(family.data || []).map(d => <option key={d.id} value={d.id}>{d.first_name} ({d.relationship.toLowerCase()})</option>)}
       </select></label>}
+    {prefillError && <p className="pp-error-text" role="alert">{prefillError}</p>}
+    {busy && <p role="status">Checking your booking. You can go Back; another booking cannot be submitted while this request is in progress.</p>}
+    {attempt.current.uncertain && <p className="pp-note">The last booking response could not be verified. Return to Review and retry the same booking to check its status, or <button className="link-button" onClick={() => onNavigate('visits')}>open My visits</button>. Booking details are kept until the status is known.</p>}
+    {error && <p className="pp-error-text" role="alert">{error}</p>}
     <ol className="pp-steps" aria-label="Booking progress">
       {STEPS.map((label, i) => <li key={label} className={i < step ? 'is-done' : i === step ? 'is-current' : ''} aria-current={i === step ? 'step' : undefined}>
         <span className="pp-step-dot">{i < step ? <Icon name="check" size={14}/> : i + 1}</span><span className="pp-step-label">{label}</span>
@@ -53,31 +92,21 @@ export function BookPage({ prefill = null, onDone, onNavigate, toast }) {
     <div className="pp-progress" aria-hidden="true"><span style={{ width: `${(step / (STEPS.length - 1)) * 100}%` }}/></div>
 
     <section className="pp-card pp-step pp-slide" key={step} aria-labelledby="pp-step-title">
-      <h2 id="pp-step-title" tabIndex={-1} ref={headRef}>{['Choose a service', 'Choose a branch', 'Choose a dentist', 'Choose a day', 'Choose a time', 'Review and confirm'][step]}</h2>
+      <h2 id="pp-step-title" tabIndex={-1} ref={headRef}>{['Choose a service', 'Choose a branch', 'Choose a date and time', 'Review and confirm'][step]}</h2>
+      <fieldset disabled={locked} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
       {step === 0 && <ServiceStep services={services} value={choice.service} onPick={(s, wanted = null) => { set({ service: s, wanted, branch: choice.service?.id === s.id ? choice.branch : null, dentist: null, date: '', slot: null }); go(1) }}/>}
       {step > 0 && choice.wanted && <p className="pp-note"><Icon name="alert" size={18}/> {choice.wanted.name} starts with a consultation, so you are booking {choice.service.name}. Your dentist plans the next steps with you.</p>}
       {step === 1 && <BranchStep service={choice.service} value={choice.branch} preferred={prefill?.branch} onPick={b => { set({ branch: b, dentist: choice.branch?.id === b.id ? choice.dentist : null, date: '', slot: null }); go(2) }}/>}
-      {step === 2 && <DentistStep service={choice.service} branch={choice.branch} value={choice.dentist} onPick={d => { set({ dentist: d, date: '', slot: null }); go(3) }}/>}
-      {step === 3 && <>
-        <p className="pp-hint">{choice.branch.name} · {choice.service.name}{choice.dentist ? ` · ${choice.dentist.name}` : ' · any available dentist'}</p>
-        <BookingCalendar branchId={choice.branch.id} serviceId={choice.service.id} dentistId={choice.dentist?.id} value={choice.date} onChange={date => { set({ date, slot: null }); go(4) }} onFullDay={setFullDay}/>
+      {step === 2 && <>
+        <p className="pp-hint">{choice.branch.name} · {choice.service.name}. An eligible available dentist is assigned by the clinic.</p>
+        <BookingCalendar branchId={choice.branch.id} serviceId={choice.service.id} value={choice.date} onChange={date => set({ date, slot: null })} onFullDay={setFullDay}/>
         {fullDay && <WaitlistOffer key={fullDay} date={fullDay} choice={choice} toast={toast}/>}
+        {choice.date && <TimeSlots branchId={choice.branch.id} serviceId={choice.service.id} date={choice.date} value={choice.slot} onChange={slot => { set({ slot }); go(3) }}/>}
       </>}
-      {step === 4 && <>
-        <p className="pp-hint">{dateLong(choice.date)} at {choice.branch.name}</p>
-        <TimeSlots branchId={choice.branch.id} serviceId={choice.service.id} dentistId={choice.dentist?.id} date={choice.date} value={choice.slot} onChange={slot => { set({ slot }); go(5) }}/>
-      </>}
-      {step === 5 && <Review choice={choice} forPerson={forPerson} onEdit={go} onBooked={a => {
-        if (a.checkout_url) {
-          toast?.('Redirecting to PayMongo secure checkout…', 'info')
-          window.location.href = a.checkout_url
-          return
-        }
-        setDone(a)
-        toast?.('Your appointment is booked.', 'success')
-        onDone?.(a)
-      }}/>}
+      </fieldset>
+      {step === 3 && <Review choice={choice} forPerson={forPerson} onEdit={go} paymentMode={paymentMode} onPaymentChange={setPaymentMode} busy={busy} locked={locked} onConfirm={confirm}/>}
       <div className="pp-step-nav">
+        {(busy || attempt.current.uncertain) && step !== 3 && <Button variant="soft" onClick={() => go(3)}>Return to Review</Button>}
         {step > 0 && <Button variant="ghost" icon="chevronLeft" onClick={() => go(step - 1)}>Back</Button>}
       </div>
     </section>
@@ -89,8 +118,8 @@ function ServiceStep({ services, value, onPick }) {
   const all = services.data || []
   // F7 (R2-17): hidden services are not offered online; a consultation-first one books its consultation instead.
   const active = all.filter(s => s.status === 'Active' && s.online_booking !== 'hidden')
-  const consultationFor = s => (s.online_booking === 'consultation_first' ? all.find(x => x.id === s.consultation_service_id && x.status === 'Active') : null)
-  const pick = s => { const c = consultationFor(s); return c ? onPick(c, s) : onPick(s) }
+  const consultationFor = s => { const r = resolveBookingService(all, s.id); return r.ok && r.wanted ? r.service : null }
+  const pick = s => { const r = resolveBookingService(all, s.id); if (r.ok) onPick(r.service, r.wanted) }
   const filtered = active.filter(s => `${s.name} ${s.category} ${s.description || ''}`.toLowerCase().includes(q.trim().toLowerCase()))
   const groups = useMemo(() => [...new Set(filtered.map(s => s.category || 'Other'))].map(c => [c, filtered.filter(s => (s.category || 'Other') === c)]), [filtered])
   if (services.status === 'loading') return <Skeleton lines={4} card={false} label="Loading services"/>
@@ -99,24 +128,24 @@ function ServiceStep({ services, value, onPick }) {
   return <>
     <label className="pp-search"><Icon name="search" size={18}/><span className="sr-only">Search services</span><input type="search" value={q} onChange={e => setQ(e.target.value)} placeholder="Search services, e.g. cleaning"/></label>
     {!filtered.length && <p className="pp-hint">No service matches “{q}”.</p>}
-    {groups.map(([category, list]) => <div key={category} className="pp-group">
-      <h3 className="pp-group-title">{category}</h3>
+    {groups.map(([category, list]) => <details key={category} className="pp-group" open={q.trim() ? true : undefined}>
+      <summary className="pp-group-title">{category} ({list.length})</summary>
       <div className="pp-options">
-        {list.map(s => <button key={s.id} type="button" className={`pp-option ${value?.id === s.id ? 'is-selected' : ''}`} aria-pressed={value?.id === s.id} onClick={() => pick(s)}>
+        {list.map(s => <button key={s.id} type="button" className={`pp-option ${value?.id === s.id ? 'is-selected' : ''}`} aria-pressed={value?.id === s.id} disabled={!resolveBookingService(all, s.id).ok} onClick={() => pick(s)}>
           <span className="pp-option-icon" aria-hidden="true"><Icon name="tooth" size={20}/></span>
           <span className="pp-option-body"><b>{s.name}</b>{s.description && <small>{s.description}</small>}
-            {consultationFor(s) ? <em className="pp-consult"><Icon name="alert" size={14}/> Starts with a consultation: you book {consultationFor(s).name}</em> : <em><Icon name="clock" size={14}/> About {s.duration_minutes} minutes</em>}</span>
+            {!resolveBookingService(all, s.id).ok ? <em>{resolveBookingService(all, s.id).message}</em> : consultationFor(s) ? <em className="pp-consult"><Icon name="alert" size={14}/> Starts with a consultation: you book {consultationFor(s).name}</em> : <em><Icon name="clock" size={14}/> About {s.duration_minutes} minutes</em>}</span>
           {value?.id === s.id && <Icon name="check" size={18} className="pp-option-check"/>}
         </button>)}
       </div>
-    </div>)}
+    </details>)}
     <p className="pp-hint">Prices are confirmed by the clinic. You’ll receive your invoice after your visit.</p>
   </>
 }
 
 /** Branch step: asks for the browser location once (explained, never stored) to rank by distance and earliest slot. */
 function BranchStep({ service, value, preferred, onPick }) {
-  const [geo, setGeo] = useState(typeof navigator !== 'undefined' && navigator.geolocation ? 'asking' : 'unavailable')
+  const [geo, setGeo] = useState('idle')
   const [coords, setCoords] = useState(null)
   const [city, setCity] = useState('')
   const [state, setState] = useState({ status: 'loading', data: null, error: '' })
@@ -126,14 +155,14 @@ function BranchStep({ service, value, preferred, onPick }) {
     navigator.geolocation.getCurrentPosition(p => { setCoords({ latitude: p.coords.latitude.toFixed(4), longitude: p.coords.longitude.toFixed(4) }); setGeo('granted') },
       () => setGeo('denied'), { maximumAge: 600000, timeout: 8000, enableHighAccuracy: false })
   }
-  useEffect(() => { if (geo === 'asking') ask() }, [])
+  const [attempt, setAttempt] = useState(0)
   useEffect(() => {
     if (geo === 'asking') return undefined
     let live = true
     setState(s => ({ ...s, status: 'loading' }))
     bookingBranchOptions({ service_ref: service.id, ...(coords || {}) }).then(r => { if (live) setState(r.ok ? { status: 'ready', data: r.data, error: '' } : { status: 'error', data: null, error: r.message || 'Branches could not be loaded.' }) })
     return () => { live = false }
-  }, [geo, coords?.latitude, coords?.longitude])
+  }, [geo, coords?.latitude, coords?.longitude, attempt])
 
   const intro = <div className="pp-geo">
     <Icon name="pin" size={20}/>
@@ -141,10 +170,10 @@ function BranchStep({ service, value, preferred, onPick }) {
       : geo === 'asking' ? 'To suggest the closest branch, your browser will ask for your location. It is used once to sort branches and is never saved.'
         : geo === 'denied' ? 'Location is off, so branches are listed by the earliest open time. You can filter by city below.'
           : 'Branches are listed by the earliest open time.'}</p>
-    {(geo === 'denied' || geo === 'unavailable') && navigator?.geolocation && <Button size="sm" variant="soft" onClick={ask}>Find the best branch for me</Button>}
+    {geo !== 'asking' && typeof navigator !== 'undefined' && navigator.geolocation && <Button size="sm" variant="soft" onClick={ask}>Find the best branch for me</Button>}
   </div>
   if (geo === 'asking' || state.status === 'loading') return <>{intro}<Skeleton lines={3} card={false} label="Finding branches"/></>
-  if (state.status === 'error') return <>{intro}<ErrorState text={state.error} onRetry={() => setGeo(g => g)}/></>
+  if (state.status === 'error') return <>{intro}<ErrorState text={state.error} onRetry={() => setAttempt(a => a + 1)}/></>
   const branches = state.data.branches
   if (!branches.length) return <EmptyState icon="building" title="No branch offers this service online right now" text="Please message the front desk and they will help you book."/>
   const cities = [...new Set(branches.map(b => b.city).filter(Boolean))]
@@ -162,7 +191,7 @@ function BranchStep({ service, value, preferred, onPick }) {
   </button>
   return <>
     {intro}
-    {cities.length > 1 && geo !== 'granted' && <div className="pp-filter" role="group" aria-label="Filter by city">
+    {(cities.length > 1 || city) && <div className="pp-filter" role="group" aria-label="Filter by city">
       <button type="button" className={`pp-chip ${!city ? 'is-selected' : ''}`} aria-pressed={!city} onClick={() => setCity('')}>All</button>
       {cities.map(c => <button key={c} type="button" className={`pp-chip ${city === c ? 'is-selected' : ''}`} aria-pressed={city === c} onClick={() => setCity(c)}>{c}</button>)}
     </div>}
@@ -186,46 +215,22 @@ function DentistStep({ service, branch, value, onPick }) {
   </div>
 }
 
-function Review({ choice, forPerson, onEdit, onBooked }) {
+function Review({ choice, forPerson, onEdit, paymentMode, onPaymentChange, busy, locked, onConfirm }) {
   const [policy, setPolicy] = useState(null)
-  const [paymentMode, setPaymentMode] = useState('online') // 'online' | 'cash'
   useEffect(() => { publicFaq().then(r => { if (r.ok) setPolicy(r.meta?.cancellation_policy || null) }) }, [])
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-  const key = useRef(commandKey())
-  const confirm = async () => {
-    if (busy) return
-    setBusy(true); setError('')
-    const result = await createAppointment({ branchId: choice.branch.id, serviceId: choice.service.id, date: choice.date, start: choice.slot.start_time, dentistId: choice.dentist?.id || null, forPatientId: forPerson?.id || null, payAtClinic: paymentMode === 'cash' }, key.current)
-    setBusy(false)
-    if (!result.ok) { setError(result.message || 'This time could not be booked. Please choose another.'); return }
-    onBooked({ ...result.row, serviceName: choice.service.name, branchName: choice.branch.name, branchAddress: choice.branch.address })
-  }
   const rows = [...(forPerson ? [['Patient', `${forPerson.name} (${forPerson.relationship.toLowerCase()})`, 0]] : []), ['Service', choice.service.name, 0], ['Branch', <>{choice.branch.name}<small>{choice.branch.address}</small></>, 1],
-    ['Dentist', choice.slot?.dentist?.name || choice.dentist?.name || 'Assigned by the clinic', 2], ['Date', dateLong(choice.date), 3], ['Time', time12(choice.slot?.start_time), 4],
-    ['Payment method', paymentMode === 'online' ? 'Online payment via PayMongo (GCash, Maya, Cards)' : 'Cash settled at appointment on arrival', null]]
+    ['Dentist', 'Assigned by the clinic based on availability', null], ['Date', dateLong(choice.date), 2], ['Time', time12(choice.slot?.start_time), 2],
+    ['Payment method', paymentMode === 'cash' ? 'Pay at the clinic' : 'Choose a payment option below', null]]
   return <>
     <dl className="pp-summary">{rows.map(([k, v, s]) => <div key={k}><dt>{k}</dt><dd>{v}</dd>{s !== null && <button type="button" className="link-button" onClick={() => onEdit(s)} aria-label={`Change ${k.toLowerCase()}`}>Change</button>}</div>)}</dl>
-    <div className="pp-payment-options" style={{ marginTop: '14px', display: 'grid', gap: '8px' }}>
-      <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '12px', border: `1.5px solid ${paymentMode === 'online' ? 'var(--brand)' : 'var(--pp-edge)'}`, borderRadius: '12px', background: paymentMode === 'online' ? 'var(--brand-soft)' : '#fff', cursor: 'pointer' }}>
-        <input type="radio" name="paymentOption" value="online" checked={paymentMode === 'online'} onChange={() => setPaymentMode('online')} style={{ marginTop: '2px' }}/>
-        <div>
-          <b style={{ display: 'block', color: 'var(--ink)', fontSize: '0.9375rem' }}>Pay online now via PayMongo (Card, GCash, Maya)</b>
-          <small style={{ color: 'var(--text)', fontSize: '0.8125rem' }}>Secure checkout holds slot for 15 minutes. Deposit applies to visit bill.</small>
-        </div>
-      </label>
-      <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '12px', border: `1.5px solid ${paymentMode === 'cash' ? 'var(--brand)' : 'var(--pp-edge)'}`, borderRadius: '12px', background: paymentMode === 'cash' ? 'var(--brand-soft)' : '#fff', cursor: 'pointer' }}>
-        <input type="radio" name="paymentOption" value="cash" checked={paymentMode === 'cash'} onChange={() => setPaymentMode('cash')} style={{ marginTop: '2px' }}/>
-        <div>
-          <b style={{ display: 'block', color: 'var(--ink)', fontSize: '0.9375rem' }}>Pay Cash at Appointment</b>
-          <small style={{ color: 'var(--text)', fontSize: '0.8125rem' }}>No payment required now. Pay cash at the front desk when you arrive.</small>
-        </div>
-      </label>
-    </div>
-    {paymentMode === 'online' && <p className="pp-note" style={{ marginTop: '12px' }}><Icon name="wallet" size={18}/> Pay at booking via PayMongo (GCash, Maya, Cards). Slot held for 15 minutes. Cancellations at least 24h in advance are refunded.</p>}
+    <fieldset disabled={locked} className="pp-payment-options" style={{ border: 0, padding: 0, margin: '14px 0' }}>
+      <legend>Payment option</legend>
+      <p className="pp-hint">Pay at booking via PayMongo is not available here yet. No online payment will be started. You can choose to pay at the clinic or contact the front desk to arrange your visit.</p>
+      <label className="pp-for"><input type="radio" name="paymentOption" value="cash" checked={paymentMode === 'cash'} onChange={() => onPaymentChange('cash')}/> Pay at the clinic</label>
+      <p className="pp-hint">No payment is collected online with this choice. The clinic confirms your charges.</p>
+    </fieldset>
     {policy && <p className="pp-note pp-policy" style={{ marginTop: '8px' }}><Icon name="calendar" size={18}/> {policy}</p>}
-    {error && <p className="pp-error-text" role="alert">{error}</p>}
-    <Button width="full" className="pp-primary" disabled={busy} onClick={confirm}>{busy ? 'Processing…' : paymentMode === 'online' ? 'Confirm & pay online' : 'Confirm appointment (Cash)'}</Button>
+    <Button width="full" className="pp-primary" disabled={busy || paymentMode !== 'cash'} onClick={onConfirm}>{busy ? 'Checking booking…' : 'Submit booking · pay at clinic'}</Button>
   </>
 }
 
@@ -234,14 +239,16 @@ function Success({ appointment, forName = null, onNavigate }) {
     branchAddress: appointment.branchAddress, dentist: appointment.dentistName || appointment.dentist?.name, startsAt: appointment.startsAt || appointment.starts_at,
     endsAt: appointment.endsAt || appointment.ends_at, clinicName: clinic.name })
   const date = appointment.date, start = appointment.start || appointment.start_time
+  const feedback = bookingFeedback(appointment)
   return <div className="pp-page pp-success pp-fade">
     <div className="pp-card pp-success-card">
-      <span className="pp-success-mark" aria-hidden="true"><Icon name="check" size={34}/></span>
-      <h1>{forName ? `${forName} is booked!` : 'You’re booked!'}</h1>
+      <span className="pp-success-mark" aria-hidden="true"><Icon name={feedback.tone === 'success' ? 'check' : feedback.tone === 'warning' ? 'alert' : 'clock'} size={34}/></span>
+      <h1>{feedback.tone === 'success' && forName ? `${forName} is booked!` : feedback.title}</h1>
       <p className="pp-lead">{appointment.serviceName || appointment.service?.name} on <b>{dateLong(date)}</b> at <b>{time12(start)}</b>, {appointment.branchName || appointment.branch?.name}.</p>
-      <p className="pp-hint">{forName ? `The confirmation email, reminders and booking receipt come to you. Any remaining balance can be settled in Billing after the visit.` : 'A confirmation email and booking receipt are on their way. Any remaining balance can be settled in Billing after your visit.'}</p>
+      <p className="pp-hint">{feedback.text}</p>
+      {appointment.checkout_url && appointment.booking_payment_status === 'held' && <p><a href={appointment.checkout_url}>Continue the checkout issued for this booking</a></p>}
       <div className="pp-actions">
-        <Button icon="download" variant="soft" onClick={ics}>Add to calendar</Button>
+        {appointment.status === 'Confirmed' && appointment.booking_payment_status !== 'held' && <Button icon="download" variant="soft" onClick={ics}>Add to calendar</Button>}
         <Button onClick={() => onNavigate('visits')}>View my visits</Button>
         <Button variant="ghost" onClick={() => onNavigate('home')}>Back to home</Button>
       </div>

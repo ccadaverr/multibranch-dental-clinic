@@ -19,7 +19,7 @@ test('public website renders complete semantic sections and a single primary hea
   assert.match(page,/<header/);assert.match(page,/<main/);assert.match(page,/<footer/)
   for(const id of ['home','how-it-works','services','branches','features','faq'])assert.match(page,new RegExp(`id="${id}"`))
   assert.equal((page.match(/<h1[ >]/g)||[]).length,1)
-  for(const heading of ['From booking to receipt in four steps','Care you can book online','Find the branch near you','Questions patients ask','In an emergency'])assert.ok(page.includes(heading),heading)
+  for(const heading of ['From booking to receipt in four steps','Find the care you need','Find the branch near you','Questions patients ask','In an emergency'])assert.ok(page.includes(heading),heading)
 })
 test('public navigation has real anchors, account actions and an accessible mobile menu',()=>{
   const html=render(ui.PublicHeader)

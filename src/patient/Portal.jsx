@@ -21,7 +21,7 @@ const FamilyPage = lazy(() => import('./pages/Family.jsx').then(m => ({ default:
 const PatientMePage = lazy(() => import('../pages/PatientMe.jsx').then(m => ({ default: m.PatientMePage })))
 
 // Only screens backed by real clinic-server data (decision 5): no HMO, prescriptions, loyalty or follow-up placeholders.
-const NAV = [['home', 'home', 'Home'], ['book', 'plusCalendar', 'Book a visit'], ['visits', 'calendar', 'My visits'], ['messages', 'message', 'Messages'], ['billing', 'receipt', 'Billing'], ['prescriptions', 'file', 'Prescriptions'], ['teeth', 'star', 'My teeth'], ['archives', 'archive', 'Archives'], ['documents', 'file', 'Documents']]
+const NAV = [['home', 'home', 'Home'], ['book', 'plusCalendar', 'Book a visit'], ['visits', 'calendar', 'My visits'], ['messages', 'message', 'Messages'], ['billing', 'receipt', 'Billing'], ['prescriptions', 'file', 'Prescriptions'], ['teeth', 'star', 'My teeth'], ['archives', 'archive', 'Historical records'], ['documents', 'file', 'Documents']]
 export const NAV_SECTIONS = [
   {
     title: null,
@@ -43,13 +43,13 @@ export const NAV_SECTIONS = [
       ['billing', 'receipt', 'Billing'],
       ['prescriptions', 'file', 'Prescriptions'],
       ['teeth', 'star', 'My teeth'],
-      ['archives', 'archive', 'Archives'],
+      ['archives', 'archive', 'Historical records'],
       ['documents', 'file', 'Documents'],
     ],
   },
 ]
 const PHONE_NAV = [['home', 'home', 'Home'], ['book', 'plusCalendar', 'Book'], ['visits', 'calendar', 'Visits'], ['messages', 'message', 'Messages'], ['more', 'menu', 'More']]
-const TITLES = { home: 'Home', book: 'Book a visit', visits: 'My visits', messages: 'Messages', billing: 'Billing', prescriptions: 'Prescriptions', teeth: 'My teeth', archives: 'Archives', documents: 'Documents', profile: 'Profile', family: 'Family', security: 'Account security' }
+const TITLES = { home: 'Home', book: 'Book a visit', visits: 'My visits', messages: 'Messages', billing: 'Billing', prescriptions: 'Prescriptions', teeth: 'My teeth', archives: 'Historical records', documents: 'Documents', profile: 'Profile', family: 'Family', security: 'Account security' }
 export const PORTAL_PAGES = Object.keys(TITLES)
 
 /** The portal page named in the address (#p/visits), so a reload stays on the same page. */
@@ -152,7 +152,7 @@ export function PatientPortal({ me, store, initialPage = 'home', initialContext 
     {more && <div className="pp-sheet-backdrop" onClick={() => setMore(false)}>
       <div className="pp-sheet pp-pop" role="dialog" aria-label="More" onClick={e => e.stopPropagation()}>
         <div className="pp-sheet-me"><span className="pp-avatar" aria-hidden="true">{initials(me.name)}</span><span><b>{me.name}</b><small>{me.email}</small></span></div>
-        {[['billing', 'receipt', 'Billing'], ['prescriptions', 'file', 'Prescriptions'], ['teeth', 'star', 'My teeth'], ['archives', 'archive', 'Archives'], ['documents', 'file', 'Documents'], ['profile', 'user', 'Profile'], ['security', 'lock', 'Account security']].map(([key, icon, label]) =>
+        {[['billing', 'receipt', 'Billing'], ['prescriptions', 'file', 'Prescriptions'], ['teeth', 'star', 'My teeth'], ['archives', 'archive', 'Historical records'], ['documents', 'file', 'Documents'], ['profile', 'user', 'Profile']].map(([key, icon, label]) =>
           <button key={key} type="button" className="pp-sheet-item" onClick={() => navigate(key)}><Icon name={icon} size={20}/>{label}</button>)}
         <button type="button" className="pp-sheet-item pp-danger" onClick={() => { setMore(false); setLogoutConfirmOpen(true) }}><Icon name="logout" size={20}/>Sign out</button>
       </div>
@@ -182,7 +182,6 @@ function ProfileMenu({ onPick, onLogout, onClose }) {
   }, [])
   return <div ref={ref} className="pp-menu pp-pop" role="menu">
     <button type="button" role="menuitem" onClick={() => onPick('profile')}><Icon name="user" size={18}/>Profile</button>
-    <button type="button" role="menuitem" onClick={() => onPick('security')}><Icon name="lock" size={18}/>Account security</button>
     <button type="button" role="menuitem" className="pp-danger" onClick={onLogout}><Icon name="logout" size={18}/>Sign out</button>
   </div>
 }

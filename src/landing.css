@@ -222,3 +222,19 @@
 .lp-closures { margin-top:20px; border-left:4px solid #b26a00; }
 .lp-closures h3 { display:flex; align-items:center; gap:8px; margin:0 0 8px; }
 .lp-closures ul { margin:0; padding-left:18px; display:grid; gap:4px; }
+
+/* DEV-01: a quiet, full-height opening and an editorial sequence. */
+.lp-hero { min-height: calc(100svh - 80px); display: flex; align-items: end; background: var(--lp-mint, #f1f7f4); }
+.lp-hero-grid { width: 100%; padding-bottom: clamp(20px, 4vw, 64px); }
+.lp-hero h1 { font-size: clamp(2.8rem, 6vw, 5.6rem); line-height: 1.04; letter-spacing: -.045em; max-width: 13ch; }
+.lp-hero h1 span { display: block; font-size: .58em; letter-spacing: -.02em; margin-top: .3em; }
+.lp-hero-art { animation: none; }
+.lp-steps { grid-template-columns: 1fr; gap: 0; border-top: 1px solid var(--lp-edge, #d6e0e6); }
+.lp-steps .lp-step { display: grid; grid-template-columns: 5rem 1fr; gap: 8px 24px; padding: 28px 0; border: 0; border-bottom: 1px solid var(--lp-edge, #d6e0e6); border-radius: 0; box-shadow: none; background: transparent; }
+.lp-steps .lp-step-icon { display: none; }
+.lp-steps .lp-step-number { grid-row: span 2; margin-top: 8px; }
+.lp-steps .lp-step h3, .lp-steps .lp-step p { margin: 0; }
+.lp-service { box-shadow: none; border-radius: 8px; }
+.lp-branch-head h3 { font-size: 1.3rem; line-height: 1.3; }
+.lp-site :focus-visible { outline: 3px solid var(--lp-brand); outline-offset: 4px; }
+@media (min-width: 960px) { .lp-steps .lp-step { grid-template-columns: 6rem minmax(180px, .8fr) 1.2fr; align-items: baseline; } .lp-steps .lp-step-number { grid-row: auto; } }

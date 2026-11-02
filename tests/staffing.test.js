@@ -36,7 +36,7 @@ test('portal: a reload keeps the page (#p/<page>) and Archives is in the navigat
   const portal = read('src/patient/Portal.jsx')
   assert.match(portal, /window\.history\.replaceState\(null, '', `#p\/\$\{page\}`\)/)
   assert.match(portal, /useState\(\(\) => portalPageFromHash\(\) \|\|/)
-  assert.match(portal, /\['archives', 'archive', 'Archives'\]/)
+  assert.match(portal, /\['archives', 'archive', 'Historical records'\]/)
   assert.match(portal, /case 'archives':/)
   assert.doesNotMatch(read('src/patient/pages/Account.jsx'), /<Family\/>/)
 })
