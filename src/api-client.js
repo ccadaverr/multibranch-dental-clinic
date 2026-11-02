@@ -107,7 +107,7 @@ async function request(path, options = {}, { allowCsrfRetry = true } = {}) {
     if (allowCsrfRetry) return request(path, options, { allowCsrfRetry: false })
     return { ok: false, kind: 'network', message: 'Your session could not be verified. Please try again.' }
   }
-  if (failure.kind === 'unauthenticated' && /^\/api\/(users(?:\/|$)|login$|logout$)/.test(path)) reportSessionInvalidated()
+  if (failure.kind === 'unauthenticated' && /^\/api\/(users(?:\/|$)|prescriptions(?:\/|\?|$)|followups(?:\/|\?|$)|patients\/[^/]+\/(?:chart|followups)(?:\?|$)|login$|logout$)/.test(path)) reportSessionInvalidated()
   return failure
 }
 
@@ -454,7 +454,7 @@ export function patientFollowups(patientId) { return request(`/api/patients/${en
 export function createFollowup(body) { return json('/api/followups', 'POST', body) }
 export function updateFollowup(id, body) { return json(`/api/followups/${encodeURIComponent(id)}`, 'PATCH', body) }
 // M19 Prescriptions
-export function listPrescriptions() { return request('/api/prescriptions') }
+export function listPrescriptions(params = {}) { return request(`/api/prescriptions${query(params)}`) }
 export function myPrescriptions() { return request('/api/me/prescriptions') }
 export function prescription(id) { return request(`/api/prescriptions/${encodeURIComponent(id)}`) }
 export function prescriptionVisits() { return request('/api/prescriptions/visits') }

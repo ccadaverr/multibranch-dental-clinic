@@ -6,22 +6,21 @@ import { Button, Card, Icon, MetricRow, Notice, PageHeader, Progress, StatCard, 
 import { branchCapacity, dentistName, displayTime, patientName, peso } from '../logic.js'
 
 import { pendingHours } from '../phase3-contracts.js'
-import { prescriptionTasks } from '../phase2.js'
 import { loadInquirySummary } from '../inquiries-api.js'
 import { clinicDate } from '../clock.js'
-import { encounterContext, isTodayQueue, isActiveQueue, sessionForRole } from '../contracts.js'
+import { isTodayQueue } from '../contracts.js'
 import { countQueue } from '../queue-counts.js'
 import { QueueByBranch, useQueueVisibility } from './QueueCounts.jsx'
 import { clinicNow } from '../clock.js'
 import { fetchDailyRevenue, fetchWeeklyRevenueHistogram } from '../analytics-api.js'
-import '../dentist-dashboard.css'
+import { DentistHome } from './DentistHome.jsx'
 import { StaffOnDuty } from './StaffOnDuty.jsx'
 
 export function DashboardPage({ role, activeBranch, setPage, store }) {
   const { state }=store
   if (role==='patient') return <PatientHome store={store} setPage={setPage}/>
   if (role==='staff') return <StaffDashboard setPage={setPage} activeBranch={activeBranch} state={state} session={store.session} store={store}/>
-  if (role==='dentist') return <DentistDashboard setPage={setPage} state={state} session={store.session}/>
+  if (role==='dentist') return <DentistHome setPage={setPage} store={store}/>
   return <OwnerDashboard setPage={setPage} activeBranch={activeBranch} state={state} session={store.session} store={store}/>
 }
 
@@ -75,57 +74,6 @@ function StaffDashboard({ activeBranch, setPage, state, session, store }) {
     </div>
     {serverQueue?<div className="top-gap"><QueueByBranch store={store} activeBranch={activeBranch} vis={qvis} title="Live queue" actions={<button className="text-link" onClick={()=>setPage('queue')}>Open queue</button>}/></div>:<Card title="Capacity snapshot" subtitle="Live view of available chair-side capacity" className="top-gap"><div className="capacity-row-grid">{state.branches.filter(b=>activeBranch==='All Branches'||b.name===activeBranch).map(b=>{const c=branchCapacity(b.name,state);return <div key={b.id} className="capacity-tile"><div className="capacity-tile-head"><div><b>{b.name}</b><small>{b.city}</small></div><span className={c.overloaded?'risk':'healthy'}>{c.overloaded?'Attention':'Healthy'}</span></div><div className="capacity-main"><strong>{c.workload}%</strong><span>workload</span></div><Progress value={c.workload} threshold={c.threshold}/><div className="capacity-meta"><span>{c.activeDentists} dentists</span><span>{c.waiting} waiting</span><span>~{c.estimate} min</span></div></div>})}</div></Card>}
   </>
-}
-
-function DentistDashboard({ setPage, state, session }) {
-  const did=session?.dentistId||ROLE_INFO.dentist.dentistId
-  const today=state.appointments.filter(a=>a.date===clinicDate()&&a.dentistId===did&&a.status!=='Cancelled').sort((a,b)=>a.start.localeCompare(b.start))
-  const ownQueue=state.queue.filter(q=>q.dentistId===did&&isTodayQueue(q)&&isActiveQueue(q)&&q.status!=='Temporarily Away').sort((a,b)=>(a.position||99)-(b.position||99))
-  // M5: the server Treatment is the only active-treatment truth (one In Treatment per Dentist at a time, not per day).
-  const activeTreatment=state.treatments.find(t=>t.server&&t.dentistId===did&&t.status==='In Treatment')
-  const pendingRx=prescriptionTasks(state,session||sessionForRole('dentist',state)).length
-  const follow=liveRecords(state.followups).filter(f=>f.dentistId===did&&f.status==='Open').length
-  const next=ownQueue[0], currentDentist=state.dentists.find(d=>d.id===did), isDoctorOnDuty=currentDentist ? (currentDentist.on_duty_today !== undefined ? currentDentist.on_duty_today : currentDentist.available !== false) : true
-  return <section className="dentist-home" aria-label="Dentist Clinic Home">
-    <PageHeader kicker="Clinical workspace" title="Your day, without the clutter" text="See who is next, open the chart, document treatment and keep follow-up tasks moving." aside={<div style={{display:'flex',alignItems:'center',gap:'8px'}}><span className={`fd-badge ${isDoctorOnDuty?'is-ok':'is-muted'}`}>{isDoctorOnDuty?'Doctor is on duty today':'Off duty'}</span>{next?<Button onClick={()=>setPage('queue')} icon="queue">Open my queue</Button>:null}</div>}/>
-    {activeTreatment&&<div className="active-treatment-banner"><div className="pulse-dot"/><div><span>Active treatment</span><b>{patientName(activeTreatment.patientId,state.patients)}</b><small>{activeTreatment.procedure||activeTreatment.plan||'Treatment in progress'}</small></div><Button variant="soft" onClick={()=>setPage('treatment',encounterContext(state.queue.find(q=>q.id===activeTreatment.queueEntryId)))} icon="tooth">Continue treatment</Button></div>}
-    <div className="dentist-command-grid">
-      <Card className="next-patient-card" title="Ready for Treatment" subtitle="Current waiting queue at chair-side">
-        {next ? <>
-          <div className="next-patient-top">
-            <div className="avatar xl">{patientName(next.patientId,state.patients).split(' ').map(x=>x[0]).slice(0,2).join('')}</div>
-            <div>
-              <h2>{patientName(next.patientId,state.patients)}</h2>
-              <p>Checked in at {displayTime(next.checkedIn)} • Queue #{next.number || next.position || 1} {next.priority && next.priority !== 'Standard' ? `• ${next.priority}` : ''}</p>
-            </div>
-            <Status>{next.status}</Status>
-          </div>
-          <div className="next-patient-actions">
-            <Button onClick={()=>setPage('treatment',encounterContext(next))} icon="tooth">Start Treatment</Button>
-            <Button variant="soft" onClick={()=>setPage('patients',encounterContext(next))} icon="file">Open chart</Button>
-            <Button variant="ghost" onClick={()=>setPage('queue')} icon="queue">My queue</Button>
-          </div>
-        </> : <Notice tone="info" title="No patients currently waiting in queue">All checked-in patients have been seen, or no patient has arrived yet. See your upcoming schedule below.</Notice>}
-      </Card>
-      <div className="clinical-stat-stack"><div><span><Icon name="calendar" size={18}/></span><div><b>{today.length}</b><small>scheduled today</small></div></div><div><span><Icon name="pill" size={18}/></span><div><b>{pendingRx}</b><small>prescription tasks</small></div></div><div><span><Icon name="followup" size={18}/></span><div><b>{follow}</b><small>open follow-ups</small></div></div></div>
-    </div>
-    <div className="grid-2 top-gap">
-      <Card title="Upcoming Schedule Today" subtitle="Appointments scheduled for today (not yet checked in)" actions={<button className="text-link" onClick={()=>setPage('schedule')}>Open schedule</button>}>
-        <div className="day-list">
-          {today.filter(a => ['Confirmed', 'Pending'].includes(a.status)).length === 0 ? (
-            <p className="muted-copy">No more upcoming scheduled appointments waiting to arrive today.</p>
-          ) : (
-            today.filter(a => ['Confirmed', 'Pending'].includes(a.status)).slice(0,5).map(a => <div className="day-list-row" key={a.id}>
-              <div className="day-time">{displayTime(a.start)}</div>
-              <div><b>{patientName(a.patientId,state.patients)}</b><small>{a.service} • {a.duration} min</small></div>
-              <Status>{a.status}</Status>
-            </div>)
-          )}
-        </div>
-      </Card>
-      <Card title="Clinical task list" subtitle="Handoffs created by completed treatment"><div className="task-list"><button onClick={()=>setPage('prescriptions')}><span><Icon name="pill" size={18}/></span><div><b>Prescription tasks</b><small>{pendingRx?`${pendingRx} awaiting authorization`:'No outstanding prescription tasks'}</small></div><Icon name="chevron" size={16}/></button><button onClick={()=>setPage('followups')}><span><Icon name="followup" size={18}/></span><div><b>Follow-up care</b><small>{follow?`${follow} return-visit obligation${follow>1?'s':''}`:'No unscheduled follow-ups'}</small></div><Icon name="chevron" size={16}/></button><button onClick={()=>setPage('messages')}><span><Icon name="message" size={18}/></span><div><b>Patient messages</b><small>Clinical conversations assigned to you</small></div><Icon name="chevron" size={16}/></button></div></Card>
-    </div>
-  </section>
 }
 
 export function formatCurrencyPhp(value) {

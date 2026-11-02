@@ -1,0 +1,20 @@
+{
+  "results": [
+    {
+      "width": 390,
+      "flow": "passed"
+    },
+    {
+      "width": 768,
+      "flow": "passed"
+    },
+    {
+      "width": 1440,
+      "flow": "passed"
+    }
+  ],
+  "errors": [],
+  "requests": 154,
+  "mutations": 20,
+  "synthetic": true
+}

@@ -93,7 +93,7 @@ test('STF-25 & DEN-16: ArchivesPage View action has soft variant, file icon, and
 
 test('DEN-01, DEN-02 & DEN-12: Dentist Clinical Home text size, My Schedule date toolbar & slot layout, and My Work Hours UI', () => {
   const foundationCss = read('src/foundation.css')
-  const schedulingJsx = read('src/pages/Scheduling.jsx')
+  const schedulingJsx = read('src/pages/DentistSchedule.jsx')
   const staffingJsx = read('src/pages/Staffing.jsx')
 
   // DEN-01: Increased text sizes on Clinical Home for legibility
@@ -105,10 +105,10 @@ test('DEN-01, DEN-02 & DEN-12: Dentist Clinical Home text size, My Schedule date
   assert.match(foundationCss, /\.dentist-command-grid \.task-list b\s*\{\s*font-size:\s*14px;/)
 
   // DEN-02: A7 keeps one-click day navigation in the dedicated Manila-date toolbar.
-  assert.match(schedulingJsx, /aria-label="Previous day" onClick=\{\(\)=>setDate\(d=>addDays\(d,-1\)\)\}>Previous<\/Button>/)
-  assert.match(schedulingJsx, /<Button variant=\{date===clinicDate\(\)\?'soft':'ghost'\} onClick=\{\(\)=>setDate\(clinicDate\(\)\)\}>Today<\/Button>/)
-  assert.match(schedulingJsx, /aria-label="Next day" onClick=\{\(\)=>setDate\(d=>addDays\(d,1\)\)\}>Next<\/Button>/)
-  assert.match(schedulingJsx, /displayTime\(a\.start\)\} – \{displayTime\(addMinutes\(a\.start,a\.duration\)\)/)
+  assert.match(schedulingJsx, /aria-label="Previous day" onClick=\{\(\) => setDate\(d => addDays\(d, -1\)\)\}>Previous<\/Button>/)
+  assert.match(schedulingJsx, /<Button variant="soft" onClick=\{\(\) => setDate\(today\)\}>Today<\/Button>/)
+  assert.match(schedulingJsx, /aria-label="Next day" onClick=\{\(\) => setDate\(d => addDays\(d, 1\)\)\}>Next<\/Button>/)
+  assert.match(read('src/pages/DentistWorkspace.jsx'), /a\.end && <small>\{displayTime\(a\.end\)\}/)
   assert.match(foundationCss, /\.day-schedule \.schedule-slot\s*\{[^}]*grid-template-columns:\s*140px 24px minmax\(0, 1fr\);/s)
   assert.match(foundationCss, /\.day-schedule \.schedule-time\s*\{[^}]*text-align:\s*right;/s)
   assert.match(read('src/dentist-schedule.css'), /\.dentist-schedule \.day-schedule \.schedule-slot\s*\{\s*grid-template-columns:\s*180px 24px minmax\(0, 1fr\);/)
@@ -196,7 +196,7 @@ test('OWN-02 through OWN-06: Owner Branch Management UI upgrades', () => {
 
 test('STF-01, OWN-07, OWN-08, OWN-09: Appointment Calendar UI, shared component, past days, and details layout', () => {
   const staffCalJsx = read('src/pages/StaffDayCalendar.jsx')
-  const schedulingJsx = read('src/pages/Scheduling.jsx')
+  const schedulingJsx = read('src/pages/DentistSchedule.jsx')
   const appJsx = read('src/App.jsx')
   const foundationCss = read('src/foundation.css')
 
@@ -211,8 +211,8 @@ test('STF-01, OWN-07, OWN-08, OWN-09: Appointment Calendar UI, shared component,
   // OWN-08: Past days greyed out on shared calendar & dentist schedule
   assert.match(staffCalJsx, /past-day is-past/)
   assert.match(foundationCss, /\.daycal-cell\.past-day,\s*\.daycal-cell\.is-past\s*\{[^}]*opacity:\s*0\.75;/s)
-  assert.match(schedulingJsx, /const isPastDate = date < clinicDate\(\)/)
-  assert.match(schedulingJsx, /className=\{isPastDate \? 'schedule-past-day' : ''\}/)
+  assert.match(schedulingJsx, /date < today \? 'Past appointments'/)
+  assert.match(schedulingJsx, /<AppointmentAgenda rows=\{rows\}/)
   assert.match(foundationCss, /\.schedule-past-day\s*\{/)
 
   // OWN-09: Redesigned appointment details modal layout

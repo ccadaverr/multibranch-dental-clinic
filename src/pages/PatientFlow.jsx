@@ -1,3 +1,4 @@
+import { DentistQueue } from './DentistQueue.jsx'
 import React, { useEffect, useState, useRef } from 'react'
 import { Button, Card, Field, FilterBar, Icon, Modal, Notice, PageHeader, Progress, RefreshButton, SelectWithOther, Status, Table } from '../components.jsx'
 import { branchCapacity, dentistName, displayTime, patientName, queueWaitEstimate } from '../logic.js'
@@ -260,7 +261,10 @@ function QueueTable({ rows, columns, onOpen, nameOf }) {
   </table></div>
 }
 
-export function QueuePage({ role, activeBranch, store, setPage }) {
+export function QueuePage(props) {
+  return props.role==='dentist'?<DentistQueue {...props}/>:<OperationalQueuePage {...props}/>
+}
+function OperationalQueuePage({ role, activeBranch, store, setPage }) {
   const { state, toast }=store
   const session=store.session||sessionForRole(role,state)
   const [dentistFilter,setDentistFilter]=useState('All Dentists')

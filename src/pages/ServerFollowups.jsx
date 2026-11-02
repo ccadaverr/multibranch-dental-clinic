@@ -1,3 +1,5 @@
+import { useClinicalSession } from '../use-clinical-session.js'
+import { clinicalSessionKey, resolveEncounter } from '../encounter.js'
 import React, { useEffect, useState } from 'react'
 import { Button, Card, Field, FilterBar, Modal, Notice, PageHeader } from '../components.jsx'
 import { createFollowup, followups, patientFollowups, updateFollowup } from '../api-client.js'
@@ -13,26 +15,35 @@ const TONE = { Open: 'is-pending', Contacted: 'is-info', Booked: 'is-ok', Closed
  * or the front desk. "Book follow-up" opens the normal booking form with the patient, branch and service preselected; booking marks
  * the task Booked by itself. Closing without a booking needs a note. The Owner sees counts and dates only.
  */
-export function FollowupsServerPage({ store, role }) {
+export function FollowupsServerPage(props) {
+  const allowed=useClinicalSession(props.store)
+  if(props.role==='dentist'&&!allowed)return <Notice>Clinical session unavailable. Follow-up information is hidden.</Notice>
+  const linked=props.context?.returnEncounter?resolveEncounter(props.store.state,props.store.session,props.context.returnEncounter):null
+  if(linked&&!linked.ok)return <Notice>{linked.message}<Button onClick={()=>props.setPage('queue')}>My Queue</Button></Notice>
+  return <FollowupsBody key={clinicalSessionKey(props.store.session)+(props.context?.patientId||'all')} {...props}/>
+}
+function FollowupsBody({ store, role, context, setPage }) {
   const toast = store?.toast || (() => {})
   const owner = role === 'owner'
   const branches = (store?.state?.branches || []).filter(b => b.status !== 'Closed')
   const [rows, setRows] = useState(null), [meta, setMeta] = useState({}), [error, setError] = useState(''), [filters, setFilters] = useState({ status: 'active', due: 'all', branch_ref: '' })
-  const load = () => followups(filters).then(r => { if (r.ok) { setRows(r.data); setMeta(r.meta || {}); setError('') } else setError(r.message || 'Follow-ups could not be loaded.') })
+  const load = () => (context?.patientId?patientFollowups(context.patientPublicId||context.patientId):followups(filters)).then(r => { if (r.ok) { setRows(r.data); setMeta(r.meta || {}); setError('') } else setError(r.message || 'Follow-ups could not be loaded.') })
   useEffect(() => { load() }, [filters.status, filters.due, filters.branch_ref])
   const c = meta.counts || {}
   return <div className="st-page">
+    {context?.returnEncounter&&<Button variant="ghost" onClick={()=>setPage('treatment',context.returnEncounter)}>Return to encounter</Button>}
+    {context?.patientId&&<Notice>Patient follow-up tasks. A recommendation is not a booked appointment; tasks are not linked to a specific treatment in this response.</Notice>}
     <PageHeader kicker={owner ? 'Administration' : 'Patients'} title="Follow-ups"
       text={owner ? 'Follow-ups the dentists asked for: how many are open and overdue. The reasons are visible only to the branch teams.'
         : 'Patients the dentist asked to see again. Call or message them, then book the follow-up; booking marks the task as Booked.'}/>
-    <p className="fu-counts" aria-live="polite"><b>{c.open ?? '…'}</b> open · <b className={c.overdue ? 'is-bad' : ''}>{c.overdue ?? '…'}</b> overdue · <b>{c.due_today ?? '…'}</b> due today</p>
+    {!context?.patientId&&<p className="fu-counts" aria-live="polite"><b>{c.open ?? '…'}</b> open · <b className={c.overdue ? 'is-bad' : ''}>{c.overdue ?? '…'}</b> overdue · <b>{c.due_today ?? '…'}</b> due today</p>}
     {error && <Notice tone="warning" title="Unavailable">{error}</Notice>}
     <Card>
-      <FilterBar className="st-filters" ariaLabel="Follow-up filters" onClear={(filters.status !== 'active' || filters.due !== 'all' || filters.branch_ref) ? () => setFilters({ status: 'active', due: 'all', branch_ref: '' }) : null}>
+      {!context?.patientId&&<FilterBar className="st-filters" ariaLabel="Follow-up filters" onClear={(filters.status !== 'active' || filters.due !== 'all' || filters.branch_ref) ? () => setFilters({ status: 'active', due: 'all', branch_ref: '' }) : null}>
         <Field label="Status"><select value={filters.status} onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}><option value="active">Open and contacted</option>{['Open', 'Contacted', 'Booked', 'Closed'].map(s => <option key={s}>{s}</option>)}</select></Field>
         <Field label="Due"><select value={filters.due} onChange={e => setFilters(f => ({ ...f, due: e.target.value }))}><option value="all">Any date</option><option value="overdue">Overdue</option><option value="today">Today</option><option value="week">Within 7 days</option></select></Field>
         <Field label="Branch"><select value={filters.branch_ref} onChange={e => setFilters(f => ({ ...f, branch_ref: e.target.value }))}><option value="">All my branches</option>{branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>
-      </FilterBar>
+      </FilterBar>}
       {!rows ? <p className="au-muted" role="status">Loading…</p> : !rows.length ? <p className="au-muted">No follow-ups here.</p>
         : <ul className="fd-list">{rows.map(t => <FollowupRow key={t.id} t={t} owner={owner} role={role} store={store} toast={toast} onChanged={load}/>)}</ul>}
     </Card>

@@ -1,3 +1,5 @@
+import { useClinicalSession } from '../use-clinical-session.js'
+import { clinicalSessionKey, resolveEncounter } from '../encounter.js'
 import React, { useEffect, useState } from 'react'
 import { Button, Card, Field, Notice, PageHeader } from '../components.jsx'
 import { patientChart, prescriptionVisits, recordChartEntry, searchPatients } from '../api-client.js'
@@ -8,23 +10,32 @@ export { toothLabel } from '../components/odontogram/index.js'
 const firstError = r => (r.kind === 'validation' ? Object.values(r.errors || {})[0]?.[0] || r.message : r.message) || 'That did not work.'
 
 /** Unified ChartView (shared between Dentist page, Staff patient record, and drawer) */
-export function ChartView({ patientId, canRecord, toast, store }) {
-  const [data, setData] = useState(null), [error, setError] = useState(''), [picked, setPicked] = useState(null)
+export function ChartView(props) {
+  return <ChartRecord key={clinicalSessionKey(props.store?.session)+props.patientId} {...props}/>
+}
+function ChartRecord({ patientId, canRecord, toast, store }) {
+  const [data, setData] = useState(null), [error, setError] = useState(''), [picked, setPicked] = useState(null), [attempt,setAttempt]=useState(0)
+  const live=React.useRef(true), recording=React.useRef(false)
+  useEffect(()=>{live.current=true;return()=>{live.current=false}},[])
 
   useEffect(() => {
-    setData(null)
-    setPicked(null)
-    patientChart(patientId).then(r => (r.ok ? setData(r.data) : setError(r.message || 'The chart could not be loaded.')))
-  }, [patientId])
+    let current=true;setData(null);setError('');setPicked(null)
+    patientChart(patientId).then(r => {if(current){if(r.ok)setData(r.data);else setError(r.message || 'The chart could not be loaded.')}})
+    return()=>{current=false}
+  }, [patientId,attempt])
 
-  if (error) return <Notice tone="warning" title="Chart unavailable">{error}</Notice>
+  if (error) return <Notice tone="warning" title="Chart unavailable">{error}<Button variant="ghost" onClick={()=>setAttempt(attempt+1)}>Retry chart</Button></Notice>
   if (!data) return <p className="au-muted" role="status">Loading the chart…</p>
 
   const branches = store?.state?.branches || []
   const activeBranchId = store?.session?.branchId || null
 
   const handleRecord = async (payload) => {
+    if(!canRecord||recording.current)return {ok:false,message:'Recording is unavailable or already in progress.'}
+    recording.current=true
     const res = await recordChartEntry(patientId, payload)
+    recording.current=false
+    if(!live.current)return {ok:false,message:'The chart context changed.'}
     if (res.ok) {
       toast?.(`Tooth ${toothLabel(payload.tooth, data.settings?.numbering)} recorded.`, 'success')
       setData(res.data)
@@ -57,12 +68,15 @@ export function SearchablePatientPicker({ selectedPatient, onSelect, store }) {
   const [recentPatients, setRecentPatients] = useState([])
 
   useEffect(() => {
+    let live=true
     prescriptionVisits().then(r => {
+      if(!live)return
       if (r.ok && Array.isArray(r.data)) {
         const unique = [...new Map(r.data.map(v => [v.patient.id, v.patient])).values()]
         setRecentPatients(unique)
       }
     })
+    return()=>{live=false}
   }, [])
 
   useEffect(() => {
@@ -71,24 +85,20 @@ export function SearchablePatientPicker({ selectedPatient, onSelect, store }) {
       setLoading(false)
       return
     }
+    let live=true
     const timer = setTimeout(async () => {
       setLoading(true)
       const res = await searchPatients({ search: query.trim(), per_page: 25 })
+      if(!live)return
       setLoading(false)
       if (res.ok && Array.isArray(res.data)) {
         setResults(res.data)
       } else {
-        const q = query.trim().toLowerCase()
-        const local = (store?.state?.patients || []).filter(p =>
-          (p.name || '').toLowerCase().includes(q) ||
-          (p.patientCode || '').toLowerCase().includes(q) ||
-          (p.phone || '').includes(q)
-        )
-        setResults(local)
+        setResults([])
       }
     }, 300)
-    return () => clearTimeout(timer)
-  }, [query, store])
+    return () => {live=false;clearTimeout(timer)}
+  }, [query])
 
   const shown = query.trim().length >= 2 ? results : recentPatients
 
@@ -166,13 +176,23 @@ export function SearchablePatientPicker({ selectedPatient, onSelect, store }) {
   )
 }
 
-export function DentalChartPage({ store }) {
+export function DentalChartPage(props) {
+  const allowed=useClinicalSession(props.store)
+  if(!allowed)return <Notice>Clinical session unavailable. Chart information is hidden.</Notice>
+  return <DentistChart key={clinicalSessionKey(props.store.session)+JSON.stringify(props.context||{})} {...props}/>
+}
+function DentistChart({ store, context, setPage }) {
+  const linked=context?.returnEncounter?resolveEncounter(store.state,store.session,context.returnEncounter):null
+  if(linked&&!linked.ok)return <Notice title="Chart unavailable">{linked.message}<Button onClick={()=>setPage('queue')}>My Queue</Button></Notice>
+  return <DentistChartBody store={store} context={context} setPage={setPage} linked={linked}/>
+}
+function DentistChartBody({ store, context, setPage, linked }) {
   const toast = store?.toast || (() => {})
-  const [selectedPatient, setSelectedPatient] = useState(null)
+  const [selectedPatient, setSelectedPatient] = useState(linked?.patient||null)
   return <div className="st-page">
     <PageHeader kicker="Clinical" title="Dental chart" text="Record what you find per tooth and surface. Each entry is kept; the latest one is the current chart. The system makes no diagnosis or suggestion."/>
     <Card>
-      <SearchablePatientPicker selectedPatient={selectedPatient} onSelect={setSelectedPatient} store={store}/>
+      {linked?<><Button variant="ghost" onClick={()=>setPage('treatment',context.returnEncounter)}>Return to encounter</Button><h2>{linked.patient.name}</h2><p>This dental chart is separate from the treatment documentation.</p></>:<SearchablePatientPicker selectedPatient={selectedPatient} onSelect={setSelectedPatient} store={store}/>}
       {selectedPatient && <ChartView patientId={selectedPatient.id} canRecord toast={toast} store={store}/>}
     </Card>
   </div>
