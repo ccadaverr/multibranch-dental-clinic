@@ -169,12 +169,13 @@ class AppointmentController extends Controller
         $service = Service::where('legacy_ref', $request->validated('service_ref'))->firstOrFail();
         $isPatient = $user->role === Role::Patient;
         $patientId = $request->validated('patient_id');
-        $patient = $isPatient ? $user->patient : ($patientId ? Patient::where('public_id', $patientId)->first() : null);
+        $patient = $isPatient ? $this->bookingPatient($request) : ($patientId ? Patient::where('public_id', $patientId)->first() : null);
 
         $ignore = null;
         if ($publicId = $request->validated('appointment_id')) {
             $ignore = Appointment::where('public_id', $publicId)->firstOrFail();
             Gate::authorize('reschedule', $ignore);
+            $patient = $ignore->patient;
         }
 
         $date = $request->validated('date');
@@ -206,7 +207,7 @@ class AppointmentController extends Controller
         $lng = $request->validated('longitude');
 
         $outcome = $this->scheduling->recommend(
-            new SlotRequest($user->patient, $branch, $service, null, null, null, true),
+            new SlotRequest($this->bookingPatient($request), $branch, $service, null, null, null, true),
             $lat === null ? null : (float) $lat,
             $lng === null ? null : (float) $lng,
         );
@@ -240,13 +241,13 @@ class AppointmentController extends Controller
     {
         $data = $request->validate(['service_ref' => ['required', 'string', 'max:50'], 'latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:longitude'],
             'longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:latitude']]);
-        $user = $request->user();
+        $patient = $this->bookingPatient($request);
         $service = Service::where('legacy_ref', $data['service_ref'])->firstOrFail();
         $lat = isset($data['latitude']) ? (float) $data['latitude'] : null;
         $lng = isset($data['longitude']) ? (float) $data['longitude'] : null;
         [$first, $last] = $this->scheduling->patientWindow();
-        $options = $this->scheduling->branchesOffering($service)->map(function (Branch $branch) use ($service, $user, $lat, $lng, $first, $last) {
-            $earliest = $this->earliestSlot($branch, $service, $user->patient, $first, $last);
+        $options = $this->scheduling->branchesOffering($service)->map(function (Branch $branch) use ($service, $patient, $lat, $lng, $first, $last) {
+            $earliest = $this->earliestSlot($branch, $service, $patient, $first, $last);
             $distance = $lat !== null && $branch->latitude !== null && $branch->longitude !== null
                 ? round(SchedulingService::haversineKm($lat, $lng, (float) $branch->latitude, (float) $branch->longitude), 1) : null;
 
@@ -310,8 +311,9 @@ class AppointmentController extends Controller
         $start = \Carbon\CarbonImmutable::createFromFormat('!Y-m-d', $month.'-01', ClinicClock::TIMEZONE);
         $pool = $isPatient && $ignore ? collect([$ignore->dentist])
             : (! empty($data['dentist_ref']) ? collect([DentistProfile::where('legacy_ref', $data['dentist_ref'])->firstOrFail()]) : $this->scheduling->eligibleDentists($branch, $service));
-        $base = new SlotRequest($isPatient ? $user->patient : null, $branch, $service, null, null, null, $isPatient, $ignore?->id, requirePatient: false);
-        $busy = $pool->isEmpty() ? collect() : $this->scheduling->busyBetween($start, $start->addMonth(), $pool->pluck('id')->all(), $isPatient ? $user->patient?->id : null, $ignore?->id);
+        $patient = $isPatient ? ($ignore?->patient ?? $this->bookingPatient($request)) : null;
+        $base = new SlotRequest($patient, $branch, $service, null, null, null, $isPatient, $ignore?->id, requirePatient: false);
+        $busy = $pool->isEmpty() ? collect() : $this->scheduling->busyBetween($start, $start->addMonth(), $pool->pluck('id')->all(), $patient?->id, $ignore?->id);
         $today = ClinicClock::today();
         $days = [];
         for ($day = $start; $day->format('Y-m') === $month; $day = $day->addDay()) {
@@ -336,6 +338,38 @@ class AppointmentController extends Controller
             'branch' => ['id' => $branch->legacy_ref, 'name' => $branch->name, 'open_time' => substr((string) $branch->open_time, 0, 5),
                 'close_time' => substr((string) $branch->close_time, 0, 5), 'operating_days' => $branch->operating_days, 'weekly_hours' => $branch->weekHours()],
             'days' => $days,
+        ]]);
+    }
+
+    private function bookingPatient(Request $request): Patient
+    {
+        $data = $request->validate(['for_patient_id' => ['nullable', 'string', 'max:40']]);
+        $patient = ! empty($data['for_patient_id']) ? Patient::where('public_id', $data['for_patient_id'])->first() : $request->user()->patient;
+        abort_unless(\App\Services\Intake\Guardianship::canActFor($request->user(), $patient), 403, 'Forbidden.');
+
+        return $patient;
+    }
+
+    /** Read-only price/capability snapshot; never reserves a slot or contacts the provider. */
+    public function bookingOptions(AvailabilityRequest $request): JsonResponse
+    {
+        $this->bookingPatient($request);
+        $branch = Branch::where('legacy_ref', $request->validated('branch_ref'))->firstOrFail();
+        Gate::authorize('book', [Appointment::class, $branch]);
+        $service = Service::where('legacy_ref', $request->validated('service_ref'))->firstOrFail();
+        $bookable = $service->status === 'Active' && ($service->online_booking ?? 'bookable') === 'bookable'
+            && $this->scheduling->branchesOffering($service)->contains('id', $branch->id);
+        $price = app(\App\Services\Pricing\PriceResolver::class)->resolve($service, $branch, $request->validated('date'));
+        $gateway = app(PayMongoService::class);
+        $amount = $price->available() ? $price->amount() : null;
+        $reason = ! $bookable ? 'service_not_bookable_online' : (! $gateway->isConfigured() ? 'payment_not_configured'
+            : ($amount === null ? 'booking_price_unavailable' : (app(\App\Services\Billing\BillingService::class)->centavos($amount) < PayMongoService::MIN_CENTAVOS ? 'amount_too_small' : null)));
+
+        return response()->json(['data' => [
+            'branch_ref' => $branch->legacy_ref, 'service_ref' => $service->legacy_ref, 'date' => $request->validated('date'),
+            'currency' => 'PHP', 'booking_fee_php' => $amount, 'online_payment_available' => $reason === null,
+            'online_payment_unavailable_reason' => $reason, 'payment_methods' => $reason === null ? $gateway->acceptedMethodNames() : [],
+            'pay_at_clinic_available' => $bookable, 'hold_minutes' => 15, 'reserves_slot' => false,
         ]]);
     }
 

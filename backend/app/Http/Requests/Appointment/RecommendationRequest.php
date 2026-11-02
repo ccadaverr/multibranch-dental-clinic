@@ -17,6 +17,7 @@ class RecommendationRequest extends FormRequest
     {
         return [
             'service_ref' => ['required', 'string', 'exists:services,legacy_ref'],
+            'for_patient_id' => ['nullable', 'string', 'max:40'],
             'branch_ref' => ['nullable', 'string', 'exists:branches,legacy_ref'],
             'latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:longitude'],
             'longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:latitude'],

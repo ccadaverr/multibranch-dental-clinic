@@ -136,6 +136,9 @@ final class SchedulingService
         $check('branch-status', 'Branch is open', $branch?->status === 'Open');
         $check('branch-day', 'Branch is open on this day', $branch && ClinicClock::validDate($r->date) && self::openOn($branch, $r->date));
         $check('service-exists', 'Service is active', $service?->status === 'Active');
+        if ($r->patientRules && $r->ignoreAppointmentId === null) {
+            $check('service-online', 'Service can be booked online', ($service?->online_booking ?? 'bookable') === 'bookable');
+        }
         $check('service', 'Service available at branch', $assignment);
         $check('dentist', 'Dentist exists', $dentist);
         $check('dentist-branch', 'Dentist assigned to branch', $dentist && $branch && $dentist->branches->contains('id', $branch->id));

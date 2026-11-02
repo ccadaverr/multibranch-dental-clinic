@@ -585,6 +585,22 @@ class TreatmentTest extends TestCase
         $this->assertSame([$other], array_column($this->getJson('/api/treatments/mine')->json('data'), 'id'));
     }
 
+    public function test_same_day_treatments_with_equal_completion_times_keep_distinct_public_ids_across_pages(): void
+    {
+        $first = $this->completedTreatment('A');
+        $second = $this->completedTreatment('A');
+        $this->assertSame($first->completed_at->toIso8601String(), $second->completed_at->toIso8601String());
+        $this->assertSame($first->visit->clinic_date->format('Y-m-d'), $second->visit->clinic_date->format('Y-m-d'));
+        $this->actingAsUser('patientA');
+        $one = $this->getJson('/api/treatments/mine?per_page=1')->assertOk();
+        $two = $this->getJson('/api/treatments/mine?per_page=1&cursor='.$one->json('meta.next_cursor'))->assertOk();
+        $this->assertSame([$second->public_id, $first->public_id], [$one->json('data.0.id'), $two->json('data.0.id')]);
+        $this->assertNull($two->json('meta.next_cursor'));
+        foreach ([$one, $two] as $response) {
+            $this->assertSame(['id', 'date', 'procedure_summary', 'services', 'dentist'], array_keys($response->json('data.0')));
+        }
+    }
+
     public function test_only_the_responsible_dentist_starts_and_other_roles_and_identifiers_are_refused(): void
     {
         $visit = $this->scheduled();

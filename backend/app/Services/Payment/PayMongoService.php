@@ -123,6 +123,7 @@ class PayMongoService
         try {
             $this->secretKey();
             $this->live();
+            $this->webhookSecret();
             $types = $this->paymentMethodTypes();
         } catch (BillingException) {
             return [];
@@ -351,7 +352,10 @@ class PayMongoService
             if ($appointment->booking_payment_status === 'paid') {
                 return $appointment;
             }
-            if ($appointment->status === 'Cancelled') {
+            if ($appointment->booking_payment_ref) {
+                return $appointment->booking_payment_ref === $paid['id'] ? $appointment : null;
+            }
+            if (! in_array($appointment->status, ['Pending', 'Confirmed'], true) || $session->fresh()?->status !== 'Open') {
                 return null;
             }
 
@@ -408,7 +412,7 @@ class PayMongoService
 
     /**
      * Creates a hosted checkout session for an appointment booking fee (Section 22.3).
-     * The slot is held as Pending during checkout; only a verified webhook confirms it.
+     * The slot is held as Pending during checkout; verified provider reconciliation (webhook or polling) confirms it.
      */
     public function createAppointmentCheckoutSession(Appointment $appointment, User $actor, ?array $address = null): array
     {
@@ -430,8 +434,11 @@ class PayMongoService
                 $resolved = app(\App\Services\Pricing\PriceResolver::class)->resolve($targetService, $appointment->branch, $date);
                 $fee = ($resolved instanceof \App\Services\Pricing\ResolvedPrice)
                     ? $resolved->amount()
-                    : ((string) ($targetService->reference_fee_php ?? '500.00'));
+                    : null;
                 $appointment->booking_fee_php = $fee;
+            }
+            if ($fee === null) {
+                throw new BillingException(422, 'booking_price_unavailable', 'Online payment is unavailable because no confirmed booking price applies. Please contact the clinic.');
             }
 
             $centavos = $this->billing->centavos((string) $fee);
@@ -557,7 +564,12 @@ class PayMongoService
         $validReason = in_array($reason, ['duplicate', 'fraudulent', 'requested_by_customer', 'others'], true) ? $reason : 'requested_by_customer';
 
         try {
-            $response = Http::withBasicAuth($secret, '')->acceptJson()->asJson()->timeout(15)
+            $request = Http::withBasicAuth($secret, '')->acceptJson()->asJson()->timeout(15);
+            // A provider-acknowledged refund is reconciled by id, never created again. A lost creation response
+            // retries with the same key (provider idempotency retention is finite; unknown outcomes need review).
+            $response = $appointment->booking_refund_ref
+                ? $request->get($this->host().'/v1/refunds/'.rawurlencode($appointment->booking_refund_ref))
+                : $request->withHeaders(['Idempotency-Key' => 'booking-refund-'.substr(hash('sha256', $appointment->public_id.'|'.$appointment->booking_payment_ref), 0, 48)])
                 ->post($this->host().'/v1/refunds', [
                     'data' => [
                         'attributes' => [
@@ -573,19 +585,26 @@ class PayMongoService
         }
 
         if (! $response->successful()) {
-            report(new \RuntimeException('PayMongo refund refused with HTTP '.$response->status().': '.$response->body()));
+            report(new \RuntimeException('PayMongo refund refused with HTTP '.$response->status()));
             throw new BillingException(502, 'payment_gateway_error', 'The payment provider could not complete the refund.');
         }
 
         $refundId = $response->json('data.id');
+        $status = $response->json('data.attributes.status');
+        $amount = $response->json('data.attributes.amount');
+        if (! is_string($refundId) || $refundId === '' || ($appointment->booking_refund_ref && $refundId !== $appointment->booking_refund_ref)
+            || ! in_array($status, ['pending', 'processing', 'succeeded', 'failed'], true)
+            || ! (is_int($amount) || (is_string($amount) && ctype_digit($amount))) || (int) $amount !== $centavos) {
+            throw new BillingException(502, 'payment_gateway_invalid_response', 'The provider did not return verifiable refund confirmation. Please contact the clinic before retrying.');
+        }
         $appointment->update([
-            'booking_payment_status' => 'refunded',
+            'booking_payment_status' => $status === 'succeeded' ? 'refunded' : $appointment->booking_payment_status,
             'booking_refund_ref' => $refundId,
-            'booking_refunded_at' => ClinicClock::now(),
+            'booking_refunded_at' => $status === 'succeeded' ? ClinicClock::now() : null,
         ]);
 
         $this->audit->record([
-            'action' => 'billing.booking_payment_refunded',
+            'action' => $status === 'succeeded' ? 'billing.booking_payment_refunded' : 'billing.booking_payment_refund_requested',
             'category' => 'financial',
             'severity' => 'info',
             'actor' => null,
@@ -595,11 +614,12 @@ class PayMongoService
                 'appointment_code' => $appointment->appointment_code,
                 'fee' => (string) $appointment->booking_fee_php,
                 'refund_id' => $refundId,
+                'provider_status' => $status,
                 'reason' => $validReason,
             ],
         ]);
 
-        return ['refund_id' => $refundId, 'status' => 'refunded'];
+        return ['refund_id' => $refundId, 'status' => $status === 'succeeded' ? 'refunded' : $status];
     }
 
     /**
@@ -752,9 +772,20 @@ class PayMongoService
             // Section 22.3: Appointment booking settlement path
             if ($session->appointment_id) {
                 $appointment = Appointment::whereKey($session->appointment_id)->lockForUpdate()->firstOrFail();
+                // Provider event ids deduplicate deliveries, not payments: polling or a differently named event may
+                // already have settled this payment. Never replay its status/history/notifications over clinical care.
+                if ($appointment->booking_payment_ref) {
+                    if ($appointment->booking_payment_ref === $paid['id']) {
+                        return $this->finish($event, 'Duplicate', 'booking_payment_already_applied', 200, $appointment->public_id);
+                    }
+                    return $this->review($event, $session, 'booking_already_paid');
+                }
                 if ($appointment->status === 'Cancelled') {
                     // Captured by provider but appointment was already cancelled/expired: keep event for review
                     return $this->review($event, $session, 'appointment_already_cancelled', 'Needs review');
+                }
+                if (! in_array($appointment->status, ['Pending', 'Confirmed'], true) || $session->fresh()?->status !== 'Open') {
+                    return $this->review($event, $session, 'appointment_not_payable');
                 }
                 $from = $appointment->status;
                 $method = 'PayMongo ('.(self::METHOD_LABELS[$paid['method']] ?? 'ONLINE').')';

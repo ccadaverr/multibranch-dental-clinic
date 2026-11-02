@@ -47,6 +47,11 @@ class AppointmentBookingPaymentTest extends TestCase
         ]);
 
         $this->setUpSchedulingWorld();
+        // Booking charges, like invoices, require an authoritative price; reference fees are fixture metadata only.
+        ServicePrice::create([
+            'service_id' => $this->svc['svc1']->id, 'branch_id' => null, 'kind' => 'priced', 'amount' => '600.00',
+            'effective_from' => '2026-09-28', 'source' => 'owner_confirmed', 'created_by_user_id' => $this->u['owner']->id,
+        ]);
     }
 
     private function freshHttp(): void
@@ -543,5 +548,125 @@ class AppointmentBookingPaymentTest extends TestCase
         $this->assertNotNull($event, 'appointments:release-expired-holds must be registered in the Laravel scheduler');
         $this->assertSame('* * * * *', $event->expression);
         $this->assertTrue($event->withoutOverlapping);
+    }
+
+    public function test_rescheduling_a_payment_hold_does_not_confirm_it_or_extend_its_expiry(): void
+    {
+        $this->fakePayMongoCheckout('cs_reschedule_hold');
+        $this->actingAsUser('patientA');
+        $id = $this->book()->assertCreated()->json('data.id');
+        $appointment = Appointment::where('public_id', $id)->sole();
+        $expires = $appointment->booking_hold_expires_at->toIso8601String();
+
+        $this->postJson("/api/appointments/{$id}/reschedule", [
+            'expected_revision' => 1, 'date' => '2026-09-30', 'start_time' => '10:00',
+        ])->assertOk()->assertJsonPath('data.status', 'Pending')->assertJsonPath('data.booking_payment_status', 'held');
+        $this->assertSame($expires, $appointment->fresh()->booking_hold_expires_at->toIso8601String());
+        $this->travel(16)->minutes();
+        $this->assertSame(1, app(AppointmentService::class)->releaseExpiredHolds());
+        $this->assertSame('Cancelled', $appointment->fresh()->status);
+    }
+
+    public function test_staff_cannot_confirm_an_unpaid_online_hold_but_can_confirm_an_attendance_pending_booking(): void
+    {
+        $this->fakePayMongoCheckout('cs_manual_confirm');
+        $this->actingAsUser('patientA');
+        $id = $this->book()->assertCreated()->json('data.id');
+        $this->actingAsUser('staffB1');
+        $this->postJson("/api/appointments/{$id}/confirm", ['expected_revision' => 1])
+            ->assertStatus(422)->assertJsonPath('code', 'booking_payment_pending');
+        $manual = $this->existing('B', 'd2', 'b1', 'svc1', '2026-09-29', '10:00', 30, 'Pending');
+        $this->postJson("/api/appointments/{$manual->public_id}/confirm", ['expected_revision' => 1])
+            ->assertOk()->assertJsonPath('data.status', 'Confirmed');
+    }
+
+    public function test_a_different_event_id_for_the_same_paid_booking_does_not_reopen_completed_care(): void
+    {
+        $this->fakePayMongoCheckout('cs_duplicate_booking');
+        $this->actingAsUser('patientA');
+        $id = $this->book()->assertCreated()->json('data.id');
+        $appointment = Appointment::where('public_id', $id)->sole();
+        $this->fakePayMongoProvider('cs_duplicate_booking', 'pay_duplicate', $appointment);
+        $this->deliverWebhook($this->appointmentPaidWebhook('evt_first', 'cs_duplicate_booking', 'pay_duplicate', $appointment))->assertOk();
+        // Arrange an already completed appointment; no second payment may undo its terminal status.
+        $appointment->refresh()->update(['status' => 'Completed']);
+        $revision = $appointment->revision;
+        $this->deliverWebhook($this->appointmentPaidWebhook('evt_second', 'cs_duplicate_booking', 'pay_duplicate', $appointment))
+            ->assertOk()->assertJsonPath('status', 'Duplicate');
+        $this->assertSame('Completed', $appointment->fresh()->status);
+        $this->assertSame($revision, $appointment->fresh()->revision);
+        $this->assertSame(1, $appointment->history()->where('event', 'appointment.booking_paid')->count());
+    }
+
+    public function test_polling_then_webhook_does_not_apply_the_payment_twice(): void
+    {
+        $this->fakePayMongoCheckout('cs_poll_then_webhook');
+        $this->actingAsUser('patientA');
+        $id = $this->book()->assertCreated()->json('data.id');
+        $appointment = Appointment::where('public_id', $id)->sole();
+        $this->fakePayMongoProvider('cs_poll_then_webhook', 'pay_polled', $appointment);
+        app(\App\Services\Payment\PayMongoService::class)->syncSessionForAppointment($appointment);
+        $revision = $appointment->fresh()->revision;
+        $this->deliverWebhook($this->appointmentPaidWebhook('evt_after_poll', 'cs_poll_then_webhook', 'pay_polled', $appointment))
+            ->assertOk()->assertJsonPath('status', 'Duplicate');
+        $this->assertSame($revision, $appointment->fresh()->revision);
+        $this->assertSame(1, $appointment->history()->where('event', 'appointment.booking_paid')->count());
+    }
+
+    public function test_first_payment_after_no_show_is_kept_for_review_without_reopening_the_appointment(): void
+    {
+        $this->fakePayMongoCheckout('cs_closed_booking');
+        $this->actingAsUser('patientA');
+        $id = $this->book()->assertCreated()->json('data.id');
+        $appointment = Appointment::where('public_id', $id)->sole();
+        $appointment->update(['status' => 'No-show']);
+        $this->fakePayMongoProvider('cs_closed_booking', 'pay_late', $appointment);
+        $this->assertNull(app(\App\Services\Payment\PayMongoService::class)->syncSessionForAppointment($appointment));
+        $this->deliverWebhook($this->appointmentPaidWebhook('evt_closed', 'cs_closed_booking', 'pay_late', $appointment))
+            ->assertOk()->assertJsonPath('status', 'Needs review');
+        $this->assertSame('No-show', $appointment->fresh()->status);
+        $this->assertSame('held', $appointment->fresh()->booking_payment_status);
+    }
+
+    public function test_online_booking_never_charges_an_unconfirmed_reference_fee(): void
+    {
+        $this->fakePayMongoCheckout('cs_no_price');
+        $this->actingAsUser('patientA');
+        $this->book(['service_ref' => 'svc2'])->assertStatus(422)->assertJsonPath('code', 'booking_price_unavailable');
+        $this->assertSame(0, Appointment::count());
+        Http::assertNothingSent();
+    }
+
+    public function test_pay_at_clinic_remains_supported_when_no_booking_price_resolves(): void
+    {
+        Http::fake();
+        $this->actingAsUser('patientA');
+        $this->book(['service_ref' => 'svc2', 'pay_at_clinic' => true])->assertCreated()
+            ->assertJsonPath('data.status', 'Confirmed')->assertJsonPath('data.booking_payment_status', 'unpaid')
+            ->assertJsonPath('data.booking_fee_php', null)->assertJsonPath('data.checkout_url', null);
+        Http::assertNothingSent();
+    }
+
+    public function test_pending_refund_is_not_reported_as_refunded_and_reconciliation_does_not_create_another_refund(): void
+    {
+        $appointment = $this->existing('A', 'd1', 'b1', 'svc1', '2026-09-30', '09:00');
+        $appointment->update(['booking_payment_status' => 'paid', 'booking_payment_ref' => 'pay_refund_pending', 'booking_fee_php' => '600.00']);
+        $this->freshHttp();
+        Http::fake([
+            'https://api.paymongo.com/v1/refunds' => Http::response(['data' => ['id' => 'ref_pending', 'attributes' => ['status' => 'pending', 'amount' => 60000]]]),
+            'https://api.paymongo.com/v1/refunds/ref_pending' => Http::response(['data' => ['id' => 'ref_pending', 'attributes' => ['status' => 'succeeded', 'amount' => 60000]]]),
+        ]);
+        $service = app(\App\Services\Payment\PayMongoService::class);
+        $first = $service->refundAppointment($appointment);
+        $this->assertSame('pending', $first['status']);
+        $this->assertSame('paid', $appointment->fresh()->booking_payment_status);
+        $this->assertNull($appointment->fresh()->booking_refunded_at);
+        $this->assertSame('ref_pending', $appointment->fresh()->booking_refund_ref);
+        $second = $service->refundAppointment($appointment->fresh());
+        $this->assertSame('refunded', $second['status']);
+        $this->assertSame('refunded', $appointment->fresh()->booking_payment_status);
+        Http::assertSentCount(2);
+        Http::assertSent(fn ($request) => $request->method() === 'POST' && $request->hasHeader('Idempotency-Key'));
+        Http::assertSent(fn ($request) => $request->method() === 'GET' && str_ends_with($request->url(), '/ref_pending'));
     }
 }

@@ -10,10 +10,10 @@ use App\Support\ClinicClock;
 use Carbon\CarbonImmutable;
 
 /**
- * F4 cancellation policy (recommended; the 24 hours are from R2-13). Patients may cancel or reschedule online anytime so the time
- * can be reused. A Patient's own cancellation less than `late_hours` before the visit is a late cancellation. Late cancellations
+ * F4 attendance policy (recommended; the 24 hours are from R2-13). Appointment commands enforce cancellation/reschedule
+ * eligibility. A Patient's own cancellation less than `late_hours` before the visit is a late cancellation. Late cancellations
  * plus no-shows within `window_months` (counted since Staff last cleared the patient) reaching `limit` mean the patient's next
- * online bookings wait for front-desk confirmation (status Pending) until Staff clear the flag. No fees. A cancellation by the
+ * online bookings wait for front-desk confirmation (status Pending) until Staff clear the flag. Refund rules are separate. A cancellation by the
  * front desk is never counted (it may be the clinic's own change).
  */
 final class AttendancePolicy
@@ -64,9 +64,9 @@ final class AttendancePolicy
         $s = self::settings();
         if ($s === null) return null;
 
-        return "You can cancel or reschedule online anytime, so another patient can use the time. Please cancel at least {$s['late_hours']} hours before your visit: "
+        return "Online cancellation is available before your appointment starts and before check-in. You can reschedule while the appointment is pending or confirmed. Please cancel at least {$s['late_hours']} hours before your visit: "
             ."later cancellations are recorded as late. After {$s['limit']} late cancellations or missed visits within {$s['window_months']} months, new online bookings "
-            .'need the front desk to confirm them. There are no fees.';
+            .'need the front desk to confirm them. Booking payments and refunds are handled separately; cancellation does not guarantee a refund.';
     }
 
     public static function needsConfirmation(?Patient $patient): bool
