@@ -344,6 +344,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
     // commands only (no generic status PATCH); per-record access is decided by AppointmentPolicy. Dentists may read
     // their own assigned appointments but cannot book, reschedule or cancel.
     Route::prefix('appointments')->group(function () {
+        Route::get('/booking-options', [AppointmentController::class, 'bookingOptions'])->middleware('role:patient');
         Route::get('/', [AppointmentController::class, 'index'])->middleware('role:patient,staff,dentist,owner');
         Route::get('/availability', [AppointmentController::class, 'availability'])->middleware('role:patient,staff,owner');
         Route::get('/recommendation', [AppointmentController::class, 'recommendation'])->middleware('role:patient');

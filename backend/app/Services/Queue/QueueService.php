@@ -86,7 +86,7 @@ final class QueueService
         if (! $entry) {
             throw VisitCommandException::rule('not_in_queue', 'This visit is not in a queue, so treatment cannot start from it.', 'queue');
         }
-        if (! in_array($entry->status, ['In Queue', 'Waiting', 'Called', 'Treatment Ready'], true)) {
+        if (! in_array($entry->status, ['Called', 'Treatment Ready'], true)) {
             throw VisitCommandException::rule('queue_not_ready', 'Call this patient before starting treatment.', 'queue');
         }
         $from = $entry->status;

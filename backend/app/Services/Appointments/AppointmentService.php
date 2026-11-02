@@ -77,10 +77,18 @@ final class AppointmentService
             $resolved = app(\App\Services\Pricing\PriceResolver::class)->resolve($targetService, $branch, $result->startsAt->toDateString());
             $fee = ($resolved instanceof \App\Services\Pricing\ResolvedPrice)
                 ? $resolved->amount()
-                : ((string) ($targetService->reference_fee_php ?? '500.00'));
+                : null;
 
             $payMongo = app(\App\Services\Payment\PayMongoService::class);
+            // An explicit online choice must never silently become an unpaid booking. Omitted legacy choices retain compatibility.
+            if ($isPatient && array_key_exists('pay_at_clinic', $input) && $input['pay_at_clinic'] !== null
+                && ! $input['pay_at_clinic'] && ! $payMongo->isConfigured()) {
+                throw AppointmentCommandException::rule('payment_not_configured', 'Online payment is unavailable. Please choose pay at clinic or contact the clinic.', 'pay_at_clinic');
+            }
             $payOnline = $isPatient && $payMongo->isConfigured() && empty($input['pay_at_clinic']);
+            if ($payOnline && $fee === null) {
+                throw AppointmentCommandException::rule('booking_price_unavailable', 'Online payment is unavailable because no confirmed booking price applies. Please contact the clinic or choose pay at clinic.', 'service_ref');
+            }
 
             $appointment = Appointment::create([
                 'patient_id' => $patient->id,
@@ -94,7 +102,7 @@ final class AppointmentService
                 'booking_payment_status' => $payOnline ? 'held' : 'unpaid',
                 'booking_hold_expires_at' => $payOnline ? ClinicClock::now()->addMinutes(15) : null,
                 // F4: a patient over the late-cancellation/no-show limit books as Pending until the front desk confirms.
-                // Section 22.3: Online payment at booking holds slot as Pending until verified webhook confirms.
+                // Online payment holds the slot as Pending until the server verifies payment with the provider.
                 'status' => $payOnline || ($isPatient && \App\Services\Automations\AttendancePolicy::needsConfirmation($patient)) ? 'Pending' : 'Confirmed',
                 'source' => $isPatient ? 'patient_portal' : 'front_desk',
                 'assignment_method' => $method,
@@ -156,7 +164,7 @@ final class AppointmentService
                 'ends_at' => $result->endsAt,
                 'duration_minutes' => $result->duration,
                 'dentist_profile_id' => $dentist->id,
-                'status' => 'Confirmed',
+                // Changing a time is not payment confirmation or clearance of an attendance-policy hold.
                 'revision' => $current->revision + 1,
                 'updated_by_user_id' => $actor->id,
             ]);
@@ -286,6 +294,9 @@ final class AppointmentService
             }
             if (! in_array($current->status, $from, true)) {
                 throw AppointmentCommandException::rule('invalid_transition', "An appointment that is {$current->status} cannot move to {$to}.", 'status');
+            }
+            if ($command === 'confirm' && $current->booking_payment_status === 'held') {
+                throw AppointmentCommandException::rule('booking_payment_pending', 'This booking is awaiting verified payment confirmation.', 'booking_payment_status');
             }
             if ($command === 'no-show') {
                 $this->assertNoShowAllowed($current);
@@ -434,7 +445,7 @@ final class AppointmentService
             }
 
             $result = app(\App\Services\Payment\PayMongoService::class)->refundAppointment($locked, $reason);
-            $this->record($locked, $actor, 'appointment.booking_refunded', $locked->status);
+            $this->record($locked, $actor, $result['status'] === 'refunded' ? 'appointment.booking_refunded' : 'appointment.booking_refund_requested', $locked->status);
 
             return $result;
         });

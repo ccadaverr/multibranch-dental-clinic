@@ -22,6 +22,7 @@ class AvailabilityRequest extends FormRequest
             'branch_ref' => ['required', 'string', 'exists:branches,legacy_ref'],
             'service_ref' => ['required', 'string', 'exists:services,legacy_ref'],
             'date' => ['required', 'date_format:Y-m-d'],
+            'for_patient_id' => $patient ? ['nullable', 'string', 'max:40'] : ['prohibited'],
             'patient_id' => $patient ? ['prohibited'] : ['nullable', 'string', 'exists:patients,public_id'],
             'patient_code' => ['prohibited'],
             'appointment_id' => ['nullable', 'string', 'exists:appointments,public_id'],
