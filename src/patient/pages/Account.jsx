@@ -74,7 +74,7 @@ function AvatarUpload({ me, toast }) {
 export function ProfilePage({ me, onNavigate, toast }) {
   const record = useLoad(() => getPatientRecord(me.patient.id), [me.patient.id])
   const r = record.data
-  const rows = r ? [['Patient number', r.code], ['Date of birth', r.date_of_birth ? dateLong(r.date_of_birth) : null], ['Mobile number', r.phone], ['Address', r.address],
+  const rows = r ? [['Date of birth', r.date_of_birth ? dateLong(r.date_of_birth) : null], ['Mobile number', r.phone], ['Address', r.address],
     ['Emergency contact', typeof r.emergency_contact === 'string' ? r.emergency_contact : [r.emergency_contact?.name, r.emergency_contact?.phone].filter(Boolean).join(' · ') || null],
     ['Preferred branch', r.preferred_branch?.name]] : []
   return <div className="pp-page">

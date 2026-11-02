@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { publicViewFromHash } from '../src/public-route.js'
+import { resolveBookingService } from '../src/patient/booking-flow.js'
 
 const read = p => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8')
 
@@ -36,7 +37,11 @@ test('new pages are reachable only by their roles, and only with the clinic serv
 test('booking: consultation-first services book the consultation, hidden ones are not offered, and the policy shows in review', () => {
   const book = read('src/patient/pages/Book.jsx')
   assert.match(book, /s\.online_booking !== 'hidden'/)
-  assert.match(book, /s\.online_booking === 'consultation_first' \? all\.find\(x => x\.id === s\.consultation_service_id/)
+  assert.match(book, /resolveBookingService\(all, s\.id\)/)
+  const consultation = { id: 'consultation', status: 'Active', online_booking: 'bookable' }
+  const treatment = { id: 'treatment', status: 'Active', online_booking: 'consultation_first', consultation_service_id: consultation.id }
+  assert.equal(resolveBookingService([consultation, treatment], treatment.id).service.id, consultation.id)
+  assert.equal(resolveBookingService([treatment], treatment.id).ok, false)
   assert.match(book, /Starts with a consultation/)
   assert.match(book, /r\.meta\?\.cancellation_policy/)
 })

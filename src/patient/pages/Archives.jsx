@@ -1,3 +1,4 @@
+import { loadPatientAppointments, loadTreatmentHistory, treatmentSummaries } from '../visit-history.js'
 import React, { useEffect, useState } from 'react'
 import { Button, Icon } from '../../components.jsx'
 import { downloadAppointmentReceiptPdf, downloadBillingPdf, downloadPrescriptionPdf, listAppointments, myBillingInvoices, myPrescriptions, myTreatments } from '../../api-client.js'
@@ -17,41 +18,26 @@ export function ArchivesPage({ toast = () => {} }) {
     const today = todayManila()
     // Load completed past visits and treatments
     Promise.allSettled([
-      listAppointments({ from: addDays(today, -180), to: today, per_page: 50 }),
-      myTreatments({ per_page: 50 }),
+      loadPatientAppointments(listAppointments),
+      loadTreatmentHistory(myTreatments),
     ]).then(([apptSettled, trtSettled]) => {
       const apptRes = apptSettled.status === 'fulfilled' ? apptSettled.value : null
       const trtRes = trtSettled.status === 'fulfilled' ? trtSettled.value : null
 
       const apptList = (apptRes && apptRes.ok && Array.isArray(apptRes.data))
-        ? apptRes.data.filter(a => ['Completed', 'Served'].includes(a.status) || a.date < today)
+        ? apptRes.data.filter(a => a.status === 'Completed')
         : []
 
-      const trtList = (trtRes && trtRes.ok && Array.isArray(trtRes.data))
-        ? trtRes.data.map(t => ({
-            id: t.id,
-            date: t.date,
-            service: { name: t.procedure_summary || t.services?.[0]?.name || 'Dental Treatment' },
-            dentist: t.dentist,
-            branch: { name: 'Dr. Dana Roxas Dental Clinic' },
-            code: (t.id || '').slice(-8).toUpperCase(),
-            status: 'Completed',
-          }))
-        : []
-
-      // Merge and deduplicate by date
-      const merged = [...apptList]
-      for (const t of trtList) {
-        if (!merged.some(m => m.date === t.date)) {
-          merged.push(t)
-        }
-      }
+      const trtList = trtRes?.ok ? treatmentSummaries(trtRes.data) : []
+      // These safe patient summaries expose no appointment link. Preserve both
+      // record types and identify summaries instead of guessing by calendar day.
+      const merged = [...apptList, ...trtList]
 
       setVisits({
         loading: false,
         data: merged,
-        error: (merged.length === 0 && apptRes && !apptRes.ok && (!trtRes || !trtRes.ok))
-          ? (apptRes.message || 'Could not load past visits.')
+        error: (!apptRes?.ok || !trtRes?.ok)
+          ? (apptRes?.message || trtRes?.message || 'Some historical records could not be loaded.')
           : '',
       })
     }).catch(() => setVisits({ loading: false, data: [], error: 'Could not load past visits.' }))
@@ -129,18 +115,18 @@ export function ArchivesPage({ toast = () => {} }) {
   }
 
   return (
-    <div className="pp-page pp-fade" aria-label="Archives & Historical Records">
+    <div className="pp-page pp-fade" aria-label="Historical records">
       <PageHead
         eyebrow="Medical Records"
-        title="Archives"
+        title="Historical records"
         text="Historical records of your care, past completed appointments, digital prescriptions, and settled receipts."
       />
 
-      <div className="pp-tabs" role="tablist" aria-label="Archive categories">
+      <div className="pp-tabs" role="tablist" aria-label="History categories">
         {[
-          ['visits', `Completed Visits (${visits.data.length})`],
+          ['visits', `Care records (${visits.data.length})`],
           ['prescriptions', `Past Prescriptions (${prescriptions.data.length})`],
-          ['receipts', `Archived Receipts (${invoices.data.filter(i => i.receipt).length})`],
+          ['receipts', `Past Receipts (${invoices.data.filter(i => i.receipt).length})`],
         ].map(([key, label]) => (
           <button
             key={key}
@@ -161,7 +147,7 @@ export function ArchivesPage({ toast = () => {} }) {
           {visits.loading && <Skeleton lines={4} label="Loading visit records"/>}
           {visits.error && <ErrorState text={visits.error} />}
           {!visits.loading && !visits.error && !visits.data.length && (
-            <EmptyState icon="calendar" title="No archived visits" text="Completed and past visits will be safely preserved here."/>
+            <EmptyState icon="calendar" title="No historical visits" text="Completed and past visits will be safely preserved here."/>
           )}
           {!visits.loading && visits.data.length > 0 && (
             <ul className="pp-list" aria-label="Completed visits archive">
@@ -172,10 +158,10 @@ export function ArchivesPage({ toast = () => {} }) {
                     <span>{v.date ? new Date(`${v.date}T00:00:00Z`).toLocaleDateString('en-PH', { month: 'short', timeZone: 'UTC' }) : ''}</span>
                   </div>
                   <div className="pp-visit-body">
-                    <h3>{v.service?.name || 'Dental Treatment'}</h3>
+                    <h3>{v.isTreatmentSummary && <span className="pp-badge">Treatment summary </span>}{v.service?.name || 'Dental Treatment'}</h3>
                     <p>{dateLong(v.date)} · {time12(v.start_time)}</p>
                     <p className="pp-muted"><Icon name="pin" size={14}/> {v.branch?.name}{v.dentist?.name ? ` · Dr. ${v.dentist.name}` : ''}</p>
-                    <p className="pp-muted">Ref. {v.code} <Pill tone="neutral">{v.status}</Pill></p>
+                    <p className="pp-muted">{v.code && <>Ref. {v.code} </>}<Pill tone="neutral">{v.status}</Pill></p>
                   </div>
                 </li>
               ))}
@@ -190,7 +176,7 @@ export function ArchivesPage({ toast = () => {} }) {
           {prescriptions.loading && <Skeleton lines={4} label="Loading prescriptions"/>}
           {prescriptions.error && <ErrorState text={prescriptions.error} />}
           {!prescriptions.loading && !prescriptions.error && !prescriptions.data.length && (
-            <EmptyState icon="pill" title="No archived prescriptions" text="Past prescriptions issued by your dentist appear here."/>
+            <EmptyState icon="pill" title="No past prescriptions" text="Past prescriptions issued by your dentist appear here."/>
           )}
           {!prescriptions.loading && prescriptions.data.length > 0 && (
             <ul className="pp-rx-list" aria-label="Prescriptions archive">

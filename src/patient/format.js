@@ -29,12 +29,12 @@ export function greeting(now = new Date()) {
 
 export const initials = name => String(name || '').split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0].toUpperCase()).join('') || '•'
 
-const ACTIVE = ['Confirmed', 'Pending']
+const ACTIVE = ['Confirmed', 'Pending', 'Checked In', 'In Treatment']
 /** Upcoming = an active appointment that starts in the future, soonest first. */
 export function splitAppointments(rows, now = new Date()) {
   const list = Array.isArray(rows) ? rows : []
-  const upcoming = list.filter(a => ACTIVE.includes(a.status) && new Date(a.starts_at) > now).sort((a, b) => a.starts_at.localeCompare(b.starts_at))
-  const past = list.filter(a => !upcoming.includes(a)).sort((a, b) => b.starts_at.localeCompare(a.starts_at))
+  const upcoming = list.filter(a => ACTIVE.includes(a.status) && (new Date(a.starts_at) > now || a.date === todayManila(now) || ['Checked In', 'In Treatment'].includes(a.status))).sort((a, b) => String(a.starts_at || a.date || '').localeCompare(String(b.starts_at || b.date || '')))
+  const past = list.filter(a => !upcoming.includes(a)).sort((a, b) => String(b.starts_at || b.date || '').localeCompare(String(a.starts_at || a.date || '')))
   return { upcoming, past }
 }
 

@@ -66,7 +66,7 @@ final class AttendancePolicy
 
         return "You can cancel or reschedule online anytime, so another patient can use the time. Please cancel at least {$s['late_hours']} hours before your visit: "
             ."later cancellations are recorded as late. After {$s['limit']} late cancellations or missed visits within {$s['window_months']} months, new online bookings "
-            .'need the front desk to confirm them. There are no fees.';
+            .'need the front desk to confirm them. Booking payments and refund eligibility are handled separately.';
     }
 
     public static function needsConfirmation(?Patient $patient): bool

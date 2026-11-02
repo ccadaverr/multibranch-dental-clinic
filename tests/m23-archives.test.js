@@ -230,7 +230,7 @@ test('Patient portal: Family tab is removed and Archives tab is active', () => {
   const portalCode = readFileSync('src/patient/Portal.jsx', 'utf8')
   assert.doesNotMatch(portalCode, /\['family',\s*'user',\s*'Family'\]/)
   assert.doesNotMatch(portalCode, /\['feedback',\s*'star',\s*'Feedback'\]/)
-  assert.match(portalCode, /\['archives',\s*'archive',\s*'Archives'\]/)
+  assert.match(portalCode, /\['archives',\s*'archive',\s*'Historical records'\]/)
   assert.match(portalCode, /case 'archives':/)
 })
 

@@ -53,7 +53,7 @@ function HeroIllustration() {
 const STEPS = [
   ['user', 'Create your account', 'Sign up with your email. We send a 6-digit code to confirm it is yours.'],
   ['calendar', 'Book a visit', 'Choose a service, a branch near you and a time on the calendar. Only real open times are shown.'],
-  ['wallet', 'Pay appointment fee', 'Pay the appointment fee online securely with PayMongo (GCash or card) to hold your slot. Full refund if cancelled 24+ hours before.'],
+  ['wallet', 'Pay appointment fee', 'Choose to pay at the clinic when booking. Online booking payment is currently unavailable here.'],
   ['receipt', 'Visit & receipt', 'Complete your treatment at the clinic; any remaining balance is billed after your visit with an itemized payment receipt.'],
 ]
 
@@ -68,8 +68,8 @@ const FEATURES = [
 // portal really works; no clinic fact (hours, prices, policies) is stated here.
 const PORTAL_FAQ = [
   ['How do I create an account?', 'Choose “Create account”, fill in your details and the email you use. We send a 6-digit code to that email; enter it, then sign in with your email and password.'],
-  ['How do I book a visit?', 'After signing in, choose “Book a visit”, pick the service, a branch and a day on the calendar, then a time. Pay the appointment fee securely through PayMongo (GCash or card). If you cancel at least 24 hours before, your payment is refunded.'],
-  ['How do I pay?', 'You pay the appointment fee online when booking. After your visit, any remaining balance on your invoice can be paid online in Billing through PayMongo or in person at the clinic.'],
+  ['How do I book a visit?', 'After signing in, choose “Book a visit”, pick the service, a branch and a day on the calendar, then a time. Choose pay at the clinic before submitting. Online booking payment is currently unavailable here. Contact the front desk about cancellation and refund eligibility.'],
+  ['How do I pay?', 'You can choose to pay at the clinic when booking. Online booking payment is currently unavailable here. After your visit, any remaining balance on your invoice can be paid online in Billing through PayMongo or in person at the clinic.'],
   ['How do I message the clinic?', 'Open Messages in the portal and write to the front desk of your branch. They reply in the same conversation.'],
 ]
 
@@ -94,14 +94,14 @@ function Hero() {
   return <section id="home" className="lp-hero" aria-labelledby="lp-hero-title">
     <div className="lp-container lp-hero-grid">
       <div className="lp-hero-copy">
-        <p className="lp-eyebrow">{clinic.name}</p>
-        <h1 id="lp-hero-title">Your dental visits, <span>simpler online.</span></h1>
-        <p className="lp-lead">Book a visit at the branch near you, pay your invoice online and message the clinic, all in one place.</p>
+        <p className="lp-eyebrow">Your next visit starts here</p>
+        <h1 id="lp-hero-title">Dr. Dana E. Roxas <span>Dental Clinic</span></h1>
+        <p className="lp-lead">Choose your care. Find your branch. Book a time that works for you.</p>
         <div className="lp-cta">
           <a className="lp-btn lp-btn-primary lp-btn-lg" href="#create-account"><Icon name="plusCalendar" size={20}/>Book a visit</a>
-          <a className="lp-btn lp-btn-soft lp-btn-lg" href="#branches"><Icon name="pin" size={20}/>See branches</a>
+          <a className="lp-link" href="#branches"><Icon name="pin" size={20}/>See branches</a>
         </div>
-        <p className="lp-hero-note"><Icon name="lock" size={16}/> Secure PayMongo payments (GCash &amp; Cards). Full refund if cancelled 24+ hours before.</p>
+        <p className="lp-hero-note"><Icon name="lock" size={16}/> Book online. Keep your visits, messages and payments together.</p>
       </div>
       <div className="lp-hero-visual"><HeroIllustration/></div>
     </div>
@@ -127,7 +127,7 @@ function Services() {
   const shown = rows.filter(s => !category || (s.category || 'Other') === category)
   return <section id="services" className="lp-section lp-tint" aria-labelledby="lp-services-title">
     <div className="lp-container">
-      <div className="lp-heading lp-reveal"><p className="lp-eyebrow">Services</p><h2 id="lp-services-title">Care you can book online</h2><p>Prices are confirmed by the clinic; you receive your invoice after your visit.</p></div>
+      <div className="lp-heading lp-reveal"><p className="lp-eyebrow">Services</p><h2 id="lp-services-title">Find the care you need</h2><p>Some services start with a consultation. Your dentist confirms the next steps.</p></div>
       {status === 'loading' && <div className="lp-grid-3" role="status" aria-label="Loading services">{[0, 1, 2].map(i => <div key={i} className="lp-card lp-skeleton"><span/><span/><span/></div>)}</div>}
       {status === 'error' && <p className="lp-fallback">The list of services can’t be shown right now. Create an account to see what you can book, or call <a href={telHref(clinic.phoneDisplay)}>{clinic.phoneDisplay}</a>.</p>}
       {status === 'ready' && !rows.length && <p className="lp-fallback">No services are open for online booking yet. Please contact the clinic.</p>}
@@ -135,11 +135,11 @@ function Services() {
         {['', ...categories].map(c => <button key={c || 'all'} type="button" className={`lp-chip ${category === c ? 'is-active' : ''}`} aria-pressed={category === c} onClick={() => setCategory(c)}>{c || 'All'}</button>)}
       </div>}
       {status === 'ready' && <ul className="lp-grid-3">{shown.map(s => <li key={s.id} className="lp-card lp-service">
-        <div className="lp-service-top"><span className="lp-service-icon" aria-hidden="true"><Icon name="tooth" size={22}/></span><span className="lp-tag">{s.category || 'Other'}</span></div>
+        <div className="lp-service-top"><span className="lp-tag">{s.category || 'Other'}</span></div>
         <h3>{s.name}</h3>
         {s.description && <p>{s.description}</p>}
         <p className="lp-muted"><Icon name="clock" size={14}/> About {s.duration_minutes} minutes</p>
-        <a className="lp-link" href="#create-account" aria-label={`Book ${s.name}`}>Book this <Icon name="arrow" size={16}/></a>
+        <a className="lp-link" href="#create-account" aria-label={`${s.starts_with_consultation ? 'Book a consultation for' : 'Book'} ${s.name}`}>{s.starts_with_consultation ? 'Start with a consultation' : 'Book this service'} <Icon name="arrow" size={16}/></a>
       </li>)}</ul>}
     </div>
   </section>
