@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useRef, useState } from 'react'
+import { ConfirmDialog } from '../../components.jsx'
 import {
   ADULT_FRONT_ROWS,
   ADULT_LOWER,
@@ -23,9 +24,29 @@ export function Odontogram({
   branches = [],
   activeBranchId = null,
   defaultView = 'top',
+  recordingPending = false,
+  onDirtyChange,
 }) {
   const [view, setView] = useState(defaultView) // 'top' | 'front'
   const [set, setSet] = useState('adult') // 'adult' | 'primary'
+  const [pendingSelection, setPendingSelection] = useState(null)
+  const dirty = useRef(false), selectionGeneration = useRef(0), selection = useRef(selected)
+  selection.current = selected
+  const generation = selectionGeneration.current
+  const reportDirty = value => { dirty.current = value; onDirtyChange?.(value) }
+  const applySelection = target => {
+    // Invalidate before React commits, including a rapid A -> B -> A selection.
+    selectionGeneration.current++
+    selection.current = target.tooth
+    reportDirty(false)
+    setSet(target.set); onSelect(target.tooth); setPendingSelection(null)
+  }
+  const requestSelection = (tooth, dentition = tooth ? (PRIMARY_UPPER.includes(tooth) || PRIMARY_LOWER.includes(tooth) ? 'primary' : 'adult') : set) => {
+    if (tooth === selection.current && dentition === set) return
+    const target = { tooth, set: dentition }
+    if (canRecord && dirty.current) setPendingSelection(target)
+    else applySelection(target)
+  }
 
   const currentMap = useMemo(() => {
     const map = {}
@@ -59,11 +80,11 @@ export function Odontogram({
         tabIndex={0}
         className={`od-tooth ${isSelected ? 'is-selected' : ''} ${hasFinding ? 'has-finding' : ''}`}
         transform={`translate(${coords.x}, ${coords.y})`}
-        onClick={() => onSelect(t)}
+        onClick={() => requestSelection(t)}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault()
-            onSelect(t)
+            requestSelection(t)
           }
         }}
         aria-label={`Tooth ${label}${statusLabel ? `: ${statusLabel}` : ''}`}
@@ -154,11 +175,11 @@ export function Odontogram({
                 tabIndex={0}
                 className={`od-tooth ${isSelected ? 'is-selected' : ''} ${hasFinding ? 'has-finding' : ''}`}
                 transform={`translate(${i * W + 3}, 4)`}
-                onClick={() => onSelect(t)}
+                onClick={() => requestSelection(t)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault()
-                    onSelect(t)
+                    requestSelection(t)
                   }
                 }}
                 aria-label={`Tooth ${label}${statusLabel ? `: ${statusLabel}` : ''}`}
@@ -189,6 +210,9 @@ export function Odontogram({
 
   return (
     <div className="od-wrap">
+      <ConfirmDialog open={!!pendingSelection} title="Leave this tooth?" cancelLabel="Stay" confirmLabel="Discard changes and continue" onCancel={() => setPendingSelection(null)} onConfirm={() => applySelection(pendingSelection)}>
+        <p>Unsaved changes for Tooth {selected ? toothLabel(selected, numbering) : ''} will be discarded. A submitted request keeps its original tooth.</p>
+      </ConfirmDialog>
       {/* Top control bar: View Switcher and Teeth Set Switcher */}
       <div className="od-top-bar">
         <div className="od-segmented" role="tablist" aria-label="Dental Chart View">
@@ -218,7 +242,7 @@ export function Odontogram({
             role="tab"
             aria-selected={set === 'adult'}
             className={`od-segmented-btn ${set === 'adult' ? 'is-active' : ''}`}
-            onClick={() => setSet('adult')}
+            onClick={() => { if (set !== 'adult') requestSelection(null, 'adult') }}
           >
             Permanent (32)
           </button>
@@ -227,7 +251,7 @@ export function Odontogram({
             role="tab"
             aria-selected={set === 'primary'}
             className={`od-segmented-btn ${set === 'primary' ? 'is-active' : ''}`}
-            onClick={() => setSet('primary')}
+            onClick={() => { if (set !== 'primary') requestSelection(null, 'primary') }}
           >
             Primary (20)
           </button>
@@ -277,9 +301,13 @@ export function Odontogram({
         <aside className="od-side-panel">
           {selected ? (
             <ToothTimeline
+              key={selected + ':' + generation}
               tooth={selected}
+              isCurrent={() => selectionGeneration.current === generation && selection.current === selected}
+              onDirtyChange={reportDirty}
+              recordingPending={recordingPending}
               data={data}
-              onBack={() => onSelect(null)}
+              onBack={() => requestSelection(null)}
               canRecord={canRecord}
               onRecord={onRecord}
               branches={branches}
@@ -288,7 +316,7 @@ export function Odontogram({
           ) : (
             <ChartSummary
               data={data}
-              onSelectTooth={onSelect}
+              onSelectTooth={requestSelection}
             />
           )}
         </aside>

@@ -1,7 +1,7 @@
 import { useClinicalSession } from '../use-clinical-session.js'
 import { clinicalSessionKey, resolveEncounter } from '../encounter.js'
 import React, { useEffect, useState } from 'react'
-import { Button, Card, Field, Notice, PageHeader } from '../components.jsx'
+import { Button, Card, ConfirmDialog, Field, Notice, PageHeader } from '../components.jsx'
 import { patientChart, prescriptionVisits, recordChartEntry, searchPatients } from '../api-client.js'
 import { Odontogram, toothLabel } from '../components/odontogram/index.js'
 
@@ -13,9 +13,10 @@ const firstError = r => (r.kind === 'validation' ? Object.values(r.errors || {})
 export function ChartView(props) {
   return <ChartRecord key={clinicalSessionKey(props.store?.session)+props.patientId} {...props}/>
 }
-function ChartRecord({ patientId, canRecord, toast, store }) {
+function ChartRecord({ patientId, canRecord, toast, store, onDirtyChange }) {
   const [data, setData] = useState(null), [error, setError] = useState(''), [picked, setPicked] = useState(null), [attempt,setAttempt]=useState(0)
   const live=React.useRef(true), recording=React.useRef(false)
+  const [recordingPending, setRecordingPending] = useState(false)
   useEffect(()=>{live.current=true;return()=>{live.current=false}},[])
 
   useEffect(() => {
@@ -30,18 +31,25 @@ function ChartRecord({ patientId, canRecord, toast, store }) {
   const branches = store?.state?.branches || []
   const activeBranchId = store?.session?.branchId || null
 
-  const handleRecord = async (payload) => {
+  const handleRecord = async (payload, ownsEditor = () => true) => {
     if(!canRecord||recording.current)return {ok:false,message:'Recording is unavailable or already in progress.'}
-    recording.current=true
-    const res = await recordChartEntry(patientId, payload)
-    recording.current=false
-    if(!live.current)return {ok:false,message:'The chart context changed.'}
-    if (res.ok) {
-      toast?.(`Tooth ${toothLabel(payload.tooth, data.settings?.numbering)} recorded.`, 'success')
-      setData(res.data)
-      return { ok: true }
-    } else {
+    recording.current=true; setRecordingPending(true)
+    try {
+      const res = await recordChartEntry(patientId, payload)
+      if(!live.current)return {ok:false,message:'The chart context changed.'}
+      if (res.ok) {
+        // Authoritative data belongs to this patient; transient feedback also
+        // requires the original tooth-selection lifetime to remain current.
+        setData(res.data)
+        if (ownsEditor()) toast?.('Tooth ' + toothLabel(payload.tooth, data.settings?.numbering) + ' recorded.', 'success')
+        return { ok: true }
+      }
       return { ok: false, message: firstError(res) }
+    } catch {
+      return { ok: false, message: 'The finding could not be confirmed. Check the chart before retrying.' }
+    } finally {
+      recording.current=false
+      if(live.current)setRecordingPending(false)
     }
   }
 
@@ -55,6 +63,8 @@ function ChartRecord({ patientId, canRecord, toast, store }) {
         onRecord={handleRecord}
         branches={branches}
         activeBranchId={activeBranchId}
+        recordingPending={recordingPending}
+        onDirtyChange={onDirtyChange}
       />
     </div>
   )
@@ -189,11 +199,20 @@ function DentistChart({ store, context, setPage }) {
 function DentistChartBody({ store, context, setPage, linked }) {
   const toast = store?.toast || (() => {})
   const [selectedPatient, setSelectedPatient] = useState(linked?.patient||null)
+  const dirty = React.useRef(false)
+  const [pendingPatient, setPendingPatient] = useState(null)
+  const selectPatient = patient => {
+    if (dirty.current) setPendingPatient({ patient })
+    else setSelectedPatient(patient)
+  }
   return <div className="st-page">
+    <ConfirmDialog open={!!pendingPatient} title="Leave this patient's chart?" cancelLabel="Stay" confirmLabel="Discard changes and continue" onCancel={() => setPendingPatient(null)} onConfirm={() => { dirty.current = false; setSelectedPatient(pendingPatient.patient); setPendingPatient(null) }}>
+      <p>Unsaved findings for {selectedPatient?.name} will be discarded. A submitted request keeps its original patient.</p>
+    </ConfirmDialog>
     <PageHeader kicker="Clinical" title="Dental chart" text="Record what you find per tooth and surface. Each entry is kept; the latest one is the current chart. The system makes no diagnosis or suggestion."/>
     <Card>
-      {linked?<><Button variant="ghost" onClick={()=>setPage('treatment',context.returnEncounter)}>Return to encounter</Button><h2>{linked.patient.name}</h2><p>This dental chart is separate from the treatment documentation.</p></>:<SearchablePatientPicker selectedPatient={selectedPatient} onSelect={setSelectedPatient} store={store}/>}
-      {selectedPatient && <ChartView patientId={selectedPatient.id} canRecord toast={toast} store={store}/>}
+      {linked?<><Button variant="ghost" onClick={()=>setPage('treatment',context.returnEncounter)}>Return to encounter</Button><h2>{linked.patient.name}</h2><p>This dental chart is separate from the treatment documentation.</p></>:<SearchablePatientPicker selectedPatient={selectedPatient} onSelect={selectPatient} store={store}/>}
+      {selectedPatient && <ChartView patientId={selectedPatient.id} canRecord toast={toast} store={store} onDirtyChange={value => { dirty.current = value }}/>}
     </Card>
   </div>
 }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Button, Field } from '../../components.jsx'
 import { SurfaceDiagram } from './SurfaceDiagram.jsx'
 import { getToothFullName, toothLabel } from './toothShapes.js'
@@ -14,6 +14,9 @@ export function ToothTimeline({
   onRecord,
   branches = [],
   activeBranchId = null,
+  isCurrent = () => true,
+  onDirtyChange,
+  recordingPending = false,
 }) {
   const numbering = data?.settings?.numbering || 'fdi'
   const label = toothLabel(tooth, numbering)
@@ -36,33 +39,39 @@ export function ToothTimeline({
   })
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
+  const mounted = useRef(true), saving = useRef(false), edits = useRef(0)
+  const draftKey = value => JSON.stringify({ ...value, branch_id: String(value.branch_id || '') })
+  const form = useRef(f), cleanForm = useRef(draftKey(f))
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
+  const ownsEditor = () => mounted.current && isCurrent()
+  const changeForm = patch => {
+    const next = { ...form.current, ...patch }
+    form.current = next; edits.current++; setF(next)
+    onDirtyChange?.(draftKey(next) !== cleanForm.current)
+  }
 
   const handleSave = async (e) => {
     e.preventDefault()
-    if (!canRecord || !onRecord) return
-    setBusy(true)
-    setErr('')
-    const payload = {
-      tooth,
-      status: f.status,
-      surfaces: f.surfaces,
-      note: f.note.trim() || null,
-      recorded_on: f.recorded_on,
-    }
-    if (f.branch_id) {
-      payload.branch_id = Number(f.branch_id)
-    }
+    if (!canRecord || !onRecord || saving.current || recordingPending) return
+    saving.current = true
+    const revision = edits.current, submitted = form.current
+    setBusy(true); setErr('')
+    const payload = { tooth, status: submitted.status, surfaces: [...submitted.surfaces], note: submitted.note.trim() || null, recorded_on: submitted.recorded_on }
+    if (submitted.branch_id) payload.branch_id = Number(submitted.branch_id)
     try {
-      const res = await onRecord(payload)
-      setBusy(false)
+      const res = await onRecord(payload, ownsEditor)
+      if (!ownsEditor() || edits.current !== revision) return
       if (res?.ok) {
+        form.current = { ...form.current, surfaces: [], note: '' }
+        cleanForm.current = draftKey(form.current)
         setF(x => ({ ...x, surfaces: [], note: '' }))
-      } else {
-        setErr(res?.message || 'Failed to record entry.')
-      }
-    } catch (ex) {
-      setBusy(false)
-      setErr(ex?.message || 'An unexpected error occurred.')
+        onDirtyChange?.(false)
+      } else setErr(res?.message || 'Failed to record entry.')
+    } catch {
+      if (ownsEditor() && edits.current === revision) setErr('The finding could not be confirmed. Check the chart before retrying.')
+    } finally {
+      saving.current = false
+      if (ownsEditor()) setBusy(false)
     }
   }
 
@@ -87,7 +96,7 @@ export function ToothTimeline({
       <div className="od-surface-section">
         <SurfaceDiagram
           surfaces={canRecord ? f.surfaces : allActiveSurfaces}
-          onChange={canRecord ? (surfaces => setF(x => ({ ...x, surfaces }))) : undefined}
+          onChange={canRecord ? (surfaces => changeForm({ surfaces })) : undefined}
           readOnly={!canRecord}
           fdi={tooth}
         />
@@ -101,7 +110,7 @@ export function ToothTimeline({
           <Field label="Status" required>
             <select
               value={f.status}
-              onChange={e => setF(x => ({ ...x, status: e.target.value }))}
+              onChange={e => changeForm({ status: e.target.value })}
             >
               {statuses.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
@@ -112,7 +121,7 @@ export function ToothTimeline({
             <Field label="Clinic Branch" hint="Branch where this finding was observed">
               <select
                 value={f.branch_id}
-                onChange={e => setF(x => ({ ...x, branch_id: e.target.value }))}
+                onChange={e => changeForm({ branch_id: e.target.value })}
               >
                 <option value="">Choose branch…</option>
                 {branches.map(b => (
@@ -129,10 +138,7 @@ export function ToothTimeline({
                 <input
                   type="checkbox"
                   checked={f.surfaces.includes(s)}
-                  onChange={e => setF(x => ({
-                    ...x,
-                    surfaces: e.target.checked ? [...x.surfaces, s] : x.surfaces.filter(y => y !== s)
-                  }))}
+                  onChange={e => changeForm({ surfaces: e.target.checked ? [...form.current.surfaces, s] : form.current.surfaces.filter(y => y !== s) })}
                 /> {s}
               </label>
             ))}
@@ -143,7 +149,7 @@ export function ToothTimeline({
               type="date"
               max={today()}
               value={f.recorded_on}
-              onChange={e => setF(x => ({ ...x, recorded_on: e.target.value }))}
+              onChange={e => changeForm({ recorded_on: e.target.value })}
             />
           </Field>
 
@@ -152,13 +158,14 @@ export function ToothTimeline({
               maxLength={1000}
               placeholder="Add clinical observation or monitoring notes…"
               value={f.note}
-              onChange={e => setF(x => ({ ...x, note: e.target.value }))}
+              onChange={e => changeForm({ note: e.target.value })}
             />
           </Field>
 
+          {recordingPending && !busy && <p role="status">A submitted finding is still saving. You can keep editing this tooth.</p>}
           {err && <p className="au-error" role="alert">{err}</p>}
 
-          <Button type="submit" size="sm" disabled={busy || !f.status}>
+          <Button type="submit" size="sm" disabled={busy || recordingPending || !f.status}>
             {busy ? 'Saving…' : 'Record finding'}
           </Button>
         </form>
