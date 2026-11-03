@@ -168,9 +168,13 @@ class AccountRecoveryTest extends TestCase
         $this->postJson('/api/register', $this->payload())->assertCreated();
         $this->travel(61)->seconds();
         $this->postJson('/api/register/resend', ['email' => 'jamie@example.com'])->assertOk();
-        $this->artisan('queue:work', ['connection' => 'database', '--queue' => 'mail', '--stop-when-empty' => true]);
+        // The worker shares PHPUnit's process: its default 128 MB budget can stop it
+        // after the first job in the full suite. Match phpunit.xml's process budget.
+        $this->artisan('queue:work', ['connection' => 'database', '--queue' => 'mail', '--stop-when-empty' => true, '--memory' => 1024])->assertSuccessful();
         $this->assertSame(['superseded', 'logged_only'], MailDispatch::orderBy('id')->pluck('status')->all());
         Mail::assertSent(OneTimeCodeMail::class, 1);
+        $this->assertSame(0, DB::table('jobs')->count());
+        $this->assertSame(0, DB::table('failed_jobs')->count());
     }
 
     public function test_a_rolled_back_registration_queues_nothing(): void

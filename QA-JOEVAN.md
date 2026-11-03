@@ -1,5 +1,21 @@
 # QA SLICE: JOEVAN (Backend)
 
+## JOE-QA-02 integration acceptance (2026-11-02, Asia/Manila)
+
+Full evidence, transition matrix, failure ledger and Developer B handoff: [JOE_QA_02_BACKEND_ACCEPTANCE_REPORT.md](docs/JOE_QA_02_BACKEND_ACCEPTANCE_REPORT.md).
+
+- Original branch/HEAD preserved: `qa/joevan-backend-20261102`, `a6a0de5bf36c77a43d948b98f821940bac41df3d`. Integrated backend equals A commit `cc5e8f6`; DEV-A-01/R1 was not reimplemented. No frontend changes, migrations added, commits, pushes, merges or deployments.
+- New clinical, booking/session, refund and notification regressions: **26 passed / 241 assertions**. Focused Treatment/Appointment/Payment/Auth/Notification run: **306 passed / 2,639 assertions**, including real PostgreSQL concurrency. Tests used only a newly created, independently verified tmpfs PostgreSQL scratch container; no clinic/shared database or live payment operation.
+- AccountRecovery full-suite discrepancy reproduced with controlled memory pressure: default 128 MB worker stops after one job. Test-only correction supplies PHPUnit's 1024 MB worker budget and adds successful-exit/empty-queue assertions; original mail assertions retained. No authentication or mail application behavior changed.
+- Original full suite: **963 tests, 40 failures, 1 error**. Independent untouched-baseline exact-name replay reproduced **39 of those 41 cases**. Final full suite: **989 tests / 10,741 assertions, 950 passed, 38 failures, 1 error**; every remaining failure/error is in that baseline set. Account recovery and owner summary pass in the final full run; the earlier intermittent summary failure remains documented. No green full-suite claim.
+- Frontend verification: **1,025 passed / 5 existing skips / 0 failures**, render smoke and production build passed. Deployment preflight: **9 FAIL / 3 WARN** for absent hosted services/provider/mail/demo setup. These do not establish authenticated browser acceptance.
+- **STF-14 current acceptance is blocked by an actual contradiction:** retained Waiting/Called/Ready states are required by the clinical contract despite the historical Done/removal wording below. STF-15 FIFO also conflicts with old priority tests/frozen wording. Preserve historical evidence; Yzhekiel must approve reconciliation before state/data changes. OWN-13 inherits this vocabulary dependency.
+- **GEN-10 remains Partial:** account-bound retrieval/read/read-all and deduplication tested; archive/restore, historical branch/role revocation semantics and operational-shell persistence remain dependencies. Do not complete GEN-11 implicitly.
+- Developer B dependencies: propagate dependent identity through every availability search, preserve explicit `pay_at_clinic:false`, and consume the booking quotation before online activation. No backend frontend-compatibility or deployment sign-off is implied by source identity or unit results.
+- Previously unchecked STF-05/STF-23/OWN-01/OWN-02/03 support rows below are reconciled to existing endpoint evidence only. Their primary owners' UI/deployment acceptance and original seven-day-plan checkboxes remain unchanged. Staff schedule support is existing basic shifts, not new weekly/leave policy.
+
+**Disposition:** evidence prepared for technical-lead review; overall integration acceptance remains blocked by the documented contract, historical-suite and cross-developer dependencies.
+
 ## Batch A1 — Gemini API authorization (2026-10-29, Asia/Manila)
 
 ### Acceptance follow-up (supersedes the initial database-test pending status below)
@@ -228,10 +244,10 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
 
 **Support tasks**
 - [ ] GEN-10 (support Celin): notifications grouped-by-date and soft-delete endpoints
-- [ ] STF-05 (support Yzhekiel): aggregated dental chart summary endpoint
-- [ ] STF-23 (support Richmon): message search endpoint
-- [ ] OWN-01 (support Richmon): daily revenue and weekly summary endpoints
-- [ ] OWN-02 / OWN-03 (support Richmon): branch code list and coordinates storage
+- [x] STF-05 (support Yzhekiel): aggregated dental chart summary endpoint — existing chart `summary` verified by DentalChartTest; JOE-QA-02 report records role limits.
+- [x] STF-23 (support Richmon): message search endpoint — existing scoped search verified by MessageSearchTest; preserves Rapid A2 evidence.
+- [x] OWN-01 (support Richmon): daily revenue and weekly summary endpoints — existing on-demand endpoints verified; does not certify a scheduled Saturday artifact.
+- [x] OWN-02 / OWN-03 (support Richmon): branch code list and coordinates storage — existing Owner update/validation verified by OwnerBranchAcceptanceTest; no new backend preset whitelist.
 </task_list>
 
 <batch id="JOE-1" name="Kiosk removal" priority="high">
