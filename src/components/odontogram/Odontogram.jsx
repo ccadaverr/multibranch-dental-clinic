@@ -1,9 +1,12 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react'
+import './odontogram.css'
+import { ConfirmDialog } from '../../components.jsx'
 import {
   ADULT_FRONT_ROWS,
   ADULT_LOWER,
   ADULT_UPPER,
   ARCH_COORDS,
+  getToothFullName,
   getToothType,
   PRIMARY_FRONT_ROWS,
   PRIMARY_LOWER,
@@ -23,9 +26,50 @@ export function Odontogram({
   branches = [],
   activeBranchId = null,
   defaultView = 'top',
+  recordingPending = false,
+  onDirtyChange,
 }) {
   const [view, setView] = useState(defaultView) // 'top' | 'front'
   const [set, setSet] = useState('adult') // 'adult' | 'primary'
+  const [pendingSelection, setPendingSelection] = useState(null)
+  const pendingTarget = useRef(null), toothNodes = useRef(new Map()), restoreTooth = useRef(null)
+  const [focusedTooth, setFocusedTooth] = useState(selected || ADULT_UPPER[0])
+  const chartId = useId()
+  const dirty = useRef(false), selectionGeneration = useRef(0), selection = useRef(selected)
+  selection.current = selected
+  const generation = selectionGeneration.current
+  const reportDirty = value => { dirty.current = value; onDirtyChange?.(value) }
+  const applySelection = target => {
+    const previous = selection.current
+    // Invalidate before React commits, including a rapid A -> B -> A selection.
+    selectionGeneration.current++
+    selection.current = target.tooth
+    reportDirty(false)
+    // Back/summary controls can disappear. Restore to the surviving diagram
+    // button; native selectors and dentition buttons keep their own focus.
+    if (!target.trigger?.matches('select, .od-segmented-btn')) restoreTooth.current = target.tooth || previous
+    if (target.tooth) setFocusedTooth(target.tooth)
+    setSet(target.set); onSelect(target.tooth); setPendingSelection(null)
+  }
+  const cancelSelection = () => { pendingTarget.current = null; setPendingSelection(null) }
+  const confirmSelection = () => {
+    const target = pendingTarget.current
+    if (!target) return
+    // Consume before React commits so repeated activation cannot apply twice.
+    pendingTarget.current = null
+    applySelection(target)
+  }
+  const requestSelection = (tooth, dentition = tooth ? (PRIMARY_UPPER.includes(tooth) || PRIMARY_LOWER.includes(tooth) ? 'primary' : 'adult') : set) => {
+    if (tooth === selection.current && dentition === set) return
+    const target = { tooth, set: dentition, trigger: document.activeElement }
+    if (canRecord && dirty.current) { pendingTarget.current = target; setPendingSelection(target) }
+    else applySelection(target)
+  }
+  useEffect(() => {
+    const tooth = restoreTooth.current
+    restoreTooth.current = null
+    if (tooth) toothNodes.current.get(tooth)?.focus()
+  }, [selected, set, generation])
 
   const currentMap = useMemo(() => {
     const map = {}
@@ -40,6 +84,36 @@ export function Odontogram({
   const upperTeeth = set === 'adult' ? ADULT_UPPER : PRIMARY_UPPER
   const lowerTeeth = set === 'adult' ? ADULT_LOWER : PRIMARY_LOWER
   const frontRows = set === 'adult' ? ADULT_FRONT_ROWS : PRIMARY_FRONT_ROWS
+  const visibleTeeth = [...upperTeeth, ...lowerTeeth]
+  const tabTooth = visibleTeeth.includes(focusedTooth) ? focusedTooth : upperTeeth[0]
+  const toothDescription = t => `${getToothFullName(t)}; patient's ${[1, 4, 5, 8].includes(Number(t[0])) ? 'right' : 'left'}; FDI ${t}.`
+  const toothKeyboard = (e, t) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      if (!e.repeat) requestSelection(t)
+      return
+    }
+    const index = visibleTeeth.indexOf(t), rowLength = upperTeeth.length
+    let next
+    if (e.key === 'ArrowRight') next = Math.min(index + 1, visibleTeeth.length - 1)
+    if (e.key === 'ArrowLeft') next = Math.max(index - 1, 0)
+    if (e.key === 'ArrowDown') next = index < rowLength ? index + rowLength : index
+    if (e.key === 'ArrowUp') next = index >= rowLength ? index - rowLength : index
+    if (e.key === 'Home') next = 0
+    if (e.key === 'End') next = visibleTeeth.length - 1
+    if (next !== undefined) {
+      e.preventDefault()
+      toothNodes.current.get(visibleTeeth[next])?.focus()
+    }
+  }
+  const toothAccessibility = t => ({
+    ref: node => { if (node) toothNodes.current.set(t, node); else toothNodes.current.delete(t) },
+    tabIndex: tabTooth === t ? 0 : -1,
+    'aria-pressed': selected === t,
+    'aria-describedby': `${chartId}-${t}`,
+    onFocus: () => setFocusedTooth(t),
+    onKeyDown: e => toothKeyboard(e, t),
+  })
 
   const renderTopTooth = (t) => {
     const coords = ARCH_COORDS[t]
@@ -56,18 +130,13 @@ export function Odontogram({
         key={t}
         data-tooth={t}
         role="button"
-        tabIndex={0}
+        {...toothAccessibility(t)}
         className={`od-tooth ${isSelected ? 'is-selected' : ''} ${hasFinding ? 'has-finding' : ''}`}
         transform={`translate(${coords.x}, ${coords.y})`}
-        onClick={() => onSelect(t)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            onSelect(t)
-          }
-        }}
+        onClick={() => requestSelection(t)}
         aria-label={`Tooth ${label}${statusLabel ? `: ${statusLabel}` : ''}`}
       >
+        <desc id={`${chartId}-${t}`}>{toothDescription(t)}</desc>
         {/* Inner rotated group for anatomical crown orientation */}
         <g transform={`rotate(${coords.rotDeg})`}>
           {type === 'molar' && (
@@ -151,18 +220,13 @@ export function Odontogram({
                 key={t}
                 data-tooth={t}
                 role="button"
-                tabIndex={0}
+                {...toothAccessibility(t)}
                 className={`od-tooth ${isSelected ? 'is-selected' : ''} ${hasFinding ? 'has-finding' : ''}`}
                 transform={`translate(${i * W + 3}, 4)`}
-                onClick={() => onSelect(t)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    onSelect(t)
-                  }
-                }}
+                onClick={() => requestSelection(t)}
                 aria-label={`Tooth ${label}${statusLabel ? `: ${statusLabel}` : ''}`}
               >
+                <desc id={`${chartId}-${t}`}>{toothDescription(t)}</desc>
                 <rect
                   width={W - 6}
                   height={H - 10}
@@ -189,13 +253,15 @@ export function Odontogram({
 
   return (
     <div className="od-wrap">
+      <ConfirmDialog open={!!pendingSelection} title="Leave this tooth?" cancelLabel="Stay" confirmLabel="Discard changes and continue" onCancel={cancelSelection} onConfirm={confirmSelection}>
+        <p>Unsaved changes for Tooth {selected ? toothLabel(selected, numbering) : ''} will be discarded. A submitted request keeps its original tooth.</p>
+      </ConfirmDialog>
       {/* Top control bar: View Switcher and Teeth Set Switcher */}
       <div className="od-top-bar">
-        <div className="od-segmented" role="tablist" aria-label="Dental Chart View">
+        <div className="od-segmented" role="group" aria-label="Dental Chart View">
           <button
             type="button"
-            role="tab"
-            aria-selected={view === 'top'}
+            aria-pressed={view === 'top'}
             className={`od-segmented-btn ${view === 'top' ? 'is-active' : ''}`}
             onClick={() => setView('top')}
           >
@@ -203,8 +269,7 @@ export function Odontogram({
           </button>
           <button
             type="button"
-            role="tab"
-            aria-selected={view === 'front'}
+            aria-pressed={view === 'front'}
             className={`od-segmented-btn ${view === 'front' ? 'is-active' : ''}`}
             onClick={() => setView('front')}
           >
@@ -212,22 +277,20 @@ export function Odontogram({
           </button>
         </div>
 
-        <div className="od-segmented" role="tablist" aria-label="Dentition Set">
+        <div className="od-segmented" role="group" aria-label="Dentition Set">
           <button
             type="button"
-            role="tab"
-            aria-selected={set === 'adult'}
+            aria-pressed={set === 'adult'}
             className={`od-segmented-btn ${set === 'adult' ? 'is-active' : ''}`}
-            onClick={() => setSet('adult')}
+            onClick={() => { if (set !== 'adult') requestSelection(null, 'adult') }}
           >
             Permanent (32)
           </button>
           <button
             type="button"
-            role="tab"
-            aria-selected={set === 'primary'}
+            aria-pressed={set === 'primary'}
             className={`od-segmented-btn ${set === 'primary' ? 'is-active' : ''}`}
-            onClick={() => setSet('primary')}
+            onClick={() => { if (set !== 'primary') requestSelection(null, 'primary') }}
           >
             Primary (20)
           </button>
@@ -237,11 +300,20 @@ export function Odontogram({
       {/* Main 2-column layout: Canvas on Left, Panel on Right */}
       <div className="od-main-layout">
         <div className="od-canvas-container">
+          <label className="od-tooth-chooser">
+            Choose tooth
+            <select tabIndex={0} value={selected || ''} onChange={e => requestSelection(e.target.value || null)}>
+              <option value="">All findings</option>
+              {visibleTeeth.map(t => <option key={t} value={t}>Tooth {toothLabel(t, numbering)} — {getToothFullName(t)}{numbering === 'universal' ? ` (FDI ${t})` : ''}</option>)}
+            </select>
+          </label>
+          <p id={`${chartId}-keys`} className="od-key-help">Diagram: Left/Right moves between teeth; Up/Down changes arch; Home/End moves to first/last. Enter or Space opens details; Tab leaves the diagram.</p>
+          <div className="od-diagram" role="toolbar" aria-label="Tooth selection" aria-describedby={`${chartId}-keys`}>
           {view === 'top' ? (
             <svg
               className="od-arch-svg"
               viewBox="0 0 540 500"
-              role="img"
+              role="group"
               aria-label={`Dental arch diagram (${set === 'adult' ? '32 Permanent teeth' : '20 Primary teeth'})`}
             >
               {/* Faint Center Crosshair */}
@@ -267,6 +339,7 @@ export function Odontogram({
               {frontRows.map((teeth, qi) => renderFrontQuadrant(teeth, qi))}
             </div>
           )}
+          </div>
 
           <div style={{ marginTop: '12px', fontSize: '12px', color: 'var(--muted, #64748b)' }}>
             Numbering: <b>{numbering === 'universal' ? 'Universal' : 'FDI'}</b> · Teeth with findings highlighted in indigo.
@@ -277,9 +350,13 @@ export function Odontogram({
         <aside className="od-side-panel">
           {selected ? (
             <ToothTimeline
+              key={selected + ':' + generation}
               tooth={selected}
+              isCurrent={() => selectionGeneration.current === generation && selection.current === selected}
+              onDirtyChange={reportDirty}
+              recordingPending={recordingPending}
               data={data}
-              onBack={() => onSelect(null)}
+              onBack={() => requestSelection(null)}
               canRecord={canRecord}
               onRecord={onRecord}
               branches={branches}
@@ -288,7 +365,7 @@ export function Odontogram({
           ) : (
             <ChartSummary
               data={data}
-              onSelectTooth={onSelect}
+              onSelectTooth={requestSelection}
             />
           )}
         </aside>
