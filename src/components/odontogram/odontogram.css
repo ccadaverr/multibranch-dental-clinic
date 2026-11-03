@@ -51,6 +51,45 @@
   align-items: start;
 }
 
+.od-main-layout > * { min-width: 0; }
+
+.od-tooth-chooser {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink, #1e293b);
+}
+
+.od-tooth-chooser select {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+}
+
+.od-key-help {
+  width: 100%;
+  margin: 8px 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted, #64748b);
+}
+
+.od-diagram { width: 100%; }
+
+.od-tooth:focus-visible {
+  outline: 2px solid var(--brand, #1865ac);
+  outline-offset: 3px;
+}
+
+.od-tooth:focus-visible .od-tooth-shape {
+  stroke: var(--brand, #1865ac);
+  stroke-width: 3;
+}
+
 /* SVG Chart Canvas */
 .od-canvas-container {
   background: #ffffff;
