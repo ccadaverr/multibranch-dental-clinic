@@ -1,21 +1,50 @@
-import React, { useMemo, useState } from 'react'
-import { Button, Card, Field, FilterBar, Icon, Modal, Notice, PageHeader, Status, Table, Tabs } from '../components.jsx'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { Button, Card, FilterBar, Modal, Notice, PageHeader, Status, Table, Tabs } from '../components.jsx'
 import { makeCsv, peso } from '../logic.js'
 import { clinicDate } from '../clock.js'
-import { inScope, sessionForRole } from '../contracts.js'
+import { inScope } from '../contracts.js'
+import { canAccessPage, permitted } from '../safeguards.js'
+
+const branchIdOf = item => {
+  const nested = typeof item.branch === 'object' && item.branch !== null ? item.branch.id : null
+  return nested && item.branchId && nested !== item.branchId ? null : nested || item.branchId || null
+}
+const patientIdOf = item => item.patientId || item.patientPublicId || item.patient?.id || null
 
 export function ArchivesPage({ store, role: propRole, activeBranch = 'All Branches' }) {
-  const { state, actions, toast } = store
+  const { state } = store
   const role = propRole || store.session?.role || 'owner'
-  const session = store.session || sessionForRole(role, state)
+  const session = store.session
+  const account = state.users?.find(user => user.id === session?.userId)
+  const scopes = Array.isArray(session?.branchScopes) ? [...new Set(session.branchScopes)].sort()
+    : !session?.serverUserId && session?.branchId ? [session.branchId] : []
+  const enabled = role === session?.role && ['staff', 'dentist', 'owner'].includes(role) && canAccessPage(state, session, 'archives')
+  // A keyed lifetime discards old selections, filters and event handlers on identity,
+  // permission or scope replacement, including A→B→A. Names never grant Staff access.
+  const accessKey = JSON.stringify([session?.serverUserId, session?.userId, role, session?.active, session?.branchId,
+    scopes, session?.dentistId, account?.accountStatus || account?.status, [...(account?.permissions || [])].sort(), enabled])
+  return <ArchiveLifetime key={accessKey} store={store} role={role} session={session} scopes={scopes} enabled={enabled} activeBranch={activeBranch}/>
+}
+
+function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }) {
+  const { state, actions, toast } = store
+  const live = useRef(false)
+  const layoutEffect = typeof window === 'undefined' ? useEffect : React.useLayoutEffect
+  layoutEffect(() => { live.current = true; return () => { live.current = false } }, [])
   const [tab, setTab] = useState('visits')
   const [query, setQuery] = useState('')
   const [selectedBranch, setSelectedBranch] = useState(
     role === 'owner' ? (activeBranch || 'All Branches') : (activeBranch && activeBranch !== 'All Branches' ? activeBranch : 'All Branches')
   )
-  const [viewRecord, setViewRecord] = useState(null)
-  const [restoreTarget, setRestoreTarget] = useState(null)
-  const [restoreReason, setRestoreReason] = useState('')
+  const [recordSelection, setRecordSelection] = useState(null)
+  const setViewRecord = selection => setRecordSelection(selection ? {
+    ...selection, id: selection.record.id, patientId: patientIdOf(selection.record),
+  } : null)
+  const noStaffScope = role === 'staff' && scopes.length === 0
+  const branchLabel = item => {
+    const canonical = (state.branches || []).find(branch => branch.id === branchIdOf(item))
+    return canonical?.name || (typeof item.branch === 'object' && item.branch ? item.branch.name : item.branch || item.branchName) || 'Branch unavailable'
+  }
 
   // Authorized branches by role and branch access policy
   const branches = useMemo(() => {
@@ -24,11 +53,9 @@ export function ArchivesPage({ store, role: propRole, activeBranch = 'All Branch
       return ['All Branches', ...allBranches.map(b => b.name)]
     }
     if (role === 'staff') {
-      const scopedIds = Array.isArray(session?.branchScopes) && session.branchScopes.length
-        ? session.branchScopes
-        : (session?.branchId ? [session.branchId] : [])
-      const allowed = allBranches.filter(b => scopedIds.includes(b.id) || b.name === session?.branch).map(b => b.name)
-      return allowed.length > 1 ? ['All Branches', ...allowed] : (allowed.length ? allowed : [activeBranch || 'All Branches'])
+      if (!scopes.length) return []
+      const allowed = allBranches.filter(b => scopes.includes(b.id)).map(b => b.name)
+      return allowed.length === 1 ? allowed : ['All Branches', ...allowed]
     }
     if (role === 'dentist') {
       const dentist = (state.dentists || []).find(d => d.id === session?.dentistId || d.userId === session?.userId)
@@ -36,23 +63,21 @@ export function ArchivesPage({ store, role: propRole, activeBranch = 'All Branch
       return allowed.length > 1 ? ['All Branches', ...allowed] : allowed
     }
     return ['All Branches']
-  }, [state.branches, state.dentists, role, session, activeBranch])
+  }, [state.branches, state.dentists, role, session, activeBranch, scopes])
 
   const effectiveBranch = branches.includes(selectedBranch) ? selectedBranch : (branches[0] || 'All Branches')
+  useEffect(() => {
+    if (!branches.includes(selectedBranch)) setSelectedBranch(branches[0] || 'All Branches')
+  }, [branches, selectedBranch])
 
   // Filter helper enforcing both role/branch access scope and the selected branch dropdown
   const branchAndRoleFilter = item => {
+    if (!enabled || noStaffScope) return false
     const bName = typeof item.branch === 'object' && item.branch !== null
       ? (item.branch.name || item.branch.id)
       : (item.branch || item.branchName)
-    const bId = typeof item.branch === 'object' && item.branch !== null
-      ? item.branch.id
-      : item.branchId
     if (role === 'staff') {
-      const scopedIds = Array.isArray(session?.branchScopes) && session.branchScopes.length
-        ? session.branchScopes
-        : (session?.branchId ? [session.branchId] : [])
-      const inStaffBranch = (bId && scopedIds.includes(bId)) || (bName && branches.includes(bName)) || inScope(item, session, state)
+      const inStaffBranch = !!branchIdOf(item) && scopes.includes(branchIdOf(item))
       if (!inStaffBranch) return false
     } else if (role === 'dentist') {
       const inDentistBranch = (bName && branches.includes(bName)) || inScope(item, session, state)
@@ -60,10 +85,10 @@ export function ArchivesPage({ store, role: propRole, activeBranch = 'All Branch
       if (!inDentistBranch || !isDentistRecord) return false
     }
     if (effectiveBranch === 'All Branches') return true
-    return bName === effectiveBranch
+    return (role === 'staff' ? branchLabel(item) : bName) === effectiveBranch
   }
 
-  // 1. Archived completed visits
+  // 1. Historical appointments: preserve the existing past-or-terminal eligibility.
   const archivedVisits = useMemo(() => {
     const list = (state.appointments || []).filter(a => {
       const isPastOrDone = ['Completed', 'Served', 'Cancelled', 'No-Show'].includes(a.status) || a.date <= clinicDate()
@@ -77,7 +102,7 @@ export function ArchivesPage({ store, role: propRole, activeBranch = 'All Branch
       (a.dentistName || a.dentist?.name || '').toLowerCase().includes(q) ||
       (a.code || '').toLowerCase().includes(q)
     )
-  }, [state.appointments, effectiveBranch, query, role, branches])
+  }, [state.appointments, effectiveBranch, query, role, branches, enabled])
 
   // 2. Archived prescriptions
   const archivedPrescriptions = useMemo(() => {
@@ -89,10 +114,10 @@ export function ArchivesPage({ store, role: propRole, activeBranch = 'All Branch
       (p.patientName || '').toLowerCase().includes(q) ||
       (p.dentistName || '').toLowerCase().includes(q)
     )
-  }, [state.prescriptions, effectiveBranch, query, role, branches])
+  }, [state.prescriptions, effectiveBranch, query, role, branches, enabled])
 
   // 3. Archived receipts / settled invoices (Staff and Owner only; Dentists do not view financial records)
-  const canViewFinancials = role !== 'dentist'
+  const canViewFinancials = role !== 'dentist' && enabled && (role === 'owner' || role === 'staff' && permitted(state, session, 'billing'))
   const archivedInvoices = useMemo(() => {
     if (!canViewFinancials) return []
     const list = (state.invoices || []).filter(i => {
@@ -108,6 +133,19 @@ export function ArchivesPage({ store, role: propRole, activeBranch = 'All Branch
     )
   }, [state.invoices, effectiveBranch, query, canViewFinancials, role, branches])
 
+  // Resolve details from the CURRENT authorized projection, never the stored object.
+  // Reused IDs with a different Patient also invalidate the previous selection.
+  const detailRows = recordSelection?.kind === 'visit' ? archivedVisits
+    : recordSelection?.kind === 'prescription' ? archivedPrescriptions : canViewFinancials ? archivedInvoices : []
+  const currentRecord = recordSelection && detailRows.find(record => record.id === recordSelection.id &&
+    (patientIdOf(record) ? patientIdOf(record) === recordSelection.patientId : !recordSelection.patientId && record === recordSelection.record))
+  const viewRecord = currentRecord ? { kind: recordSelection.kind, record: currentRecord } : null
+  useEffect(() => { if (recordSelection && !currentRecord) setViewRecord(null) }, [recordSelection, currentRecord])
+  const recordsForTab = tab === 'visits' ? archivedVisits : tab === 'prescriptions' ? archivedPrescriptions : canViewFinancials ? archivedInvoices : []
+  const emptyMessage = (collection, label) => !Array.isArray(collection) ? `${label} are unavailable in this view.`
+    : query.trim() || collection.length > 0 ? `No matching ${label.toLowerCase()} in the current scope.`
+      : `No ${label.toLowerCase()} are available in this archive view.`
+
   const logArchiveAudit = (actionName, targetId, detail) => {
     actions?.logAudit?.({
       action: actionName,
@@ -118,27 +156,28 @@ export function ArchivesPage({ store, role: propRole, activeBranch = 'All Branch
   }
 
   const handleExportCsv = () => {
+    if (!live.current || !enabled || noStaffScope || !recordsForTab.length) return
     const scopeSlug = effectiveBranch.toLowerCase().replace(/[^a-z0-9]+/g, '-')
     if (tab === 'visits') {
       const rows = archivedVisits.map(v => ({
         'Visit Date': v.date || '',
         'Reference Code': v.code || v.id || '',
         'Patient Name': v.patientName || v.patient?.name || 'Patient',
-        'Service': v.serviceName || v.service?.name || v.service || 'General Treatment',
+        'Service': v.serviceName || v.service?.name || v.service || 'Service unavailable',
         'Dentist': v.dentistName || v.dentist?.name || '',
-        'Branch': typeof v.branch === 'object' && v.branch ? v.branch.name : (v.branch || v.branchName || 'Main'),
-        'Outcome Status': v.status || 'Completed',
+        'Branch': branchLabel(v),
+        'Outcome Status': v.status || 'Status unavailable',
       }))
-      makeCsv(`archives-completed-visits-${scopeSlug}.csv`, rows)
+      makeCsv(`archives-historical-appointments-${scopeSlug}.csv`, rows)
       logArchiveAudit('archive.exported', `visits:${scopeSlug}`, `Exported ${rows.length} archived visit(s) for ${effectiveBranch}`)
-      toast?.('Completed visits archive exported to CSV.', 'success')
+      toast?.('Historical appointments exported to CSV.', 'success')
     } else if (tab === 'prescriptions') {
       const rows = archivedPrescriptions.map(p => ({
         'Rx Number': p.number || '',
         'Issued Date': p.issued_at || p.date || '',
         'Patient Name': p.patientName || (typeof p.patient === 'object' ? p.patient?.name : p.patient) || '',
         'Prescribing Doctor': p.dentistName || (typeof p.dentist === 'object' ? p.dentist?.name : p.dentist) || '',
-        'Branch': typeof p.branch === 'object' && p.branch ? p.branch.name : (p.branch || p.branchName || 'Main'),
+        'Branch': branchLabel(p),
         'Medicines': role === 'owner'
           ? 'Protected clinical details (Dentist/Staff/Patient only)'
           : (p.lines || []).map(l => `${l.medicine || ''} (${[l.dosage, l.frequency, l.duration].filter(Boolean).join(', ')})`).join('; '),
@@ -155,7 +194,7 @@ export function ArchivesPage({ store, role: propRole, activeBranch = 'All Branch
         'Issued Date': i.issued_at || i.date || '',
         'Gross Amount': i.gross_amount || i.total || 0,
         'Paid Amount': i.paid_amount || i.total || 0,
-        'Branch': typeof i.branch === 'object' && i.branch ? i.branch.name : (i.branch || 'Main'),
+        'Branch': branchLabel(i),
         'Settlement Status': i.status || 'Paid',
       }))
       makeCsv(`archives-financial-receipts-${scopeSlug}.csv`, rows)
@@ -164,22 +203,8 @@ export function ArchivesPage({ store, role: propRole, activeBranch = 'All Branch
     }
   }
 
-  const handleConfirmRestore = e => {
-    e.preventDefault()
-    if (!restoreTarget || restoreReason.trim().length < 3) return
-    const ref = restoreTarget.code || restoreTarget.number || restoreTarget.invoiceNumber || restoreTarget.id
-    logArchiveAudit(
-      'archive.restored_for_followup',
-      ref,
-      `Retrieved/restored archived ${restoreTarget.kind} (${ref}) — Reason: ${restoreReason.trim()}`
-    )
-    toast?.(`Archived record ${ref} retrieved for active follow-up (reason logged in Audit Trail).`, 'success')
-    setRestoreTarget(null)
-    setRestoreReason('')
-  }
-
   const availableTabs = [
-    { key: 'visits', label: `Completed Visits (${archivedVisits.length})` },
+    { key: 'visits', label: `Historical Appointments (${archivedVisits.length})` },
     { key: 'prescriptions', label: `Prescriptions (${archivedPrescriptions.length})` },
     ...(canViewFinancials ? [{ key: 'financials', label: `Settled Invoices & Receipts (${archivedInvoices.length})` }] : []),
   ]
@@ -189,12 +214,18 @@ export function ArchivesPage({ store, role: propRole, activeBranch = 'All Branch
       <PageHeader
         kicker="Compliance & Record Retention"
         title="Archives & Historical Records Management"
-        text="Role- and branch-scoped repository for completed visit logs, past prescriptions, and settled financial records."
+        text="Role- and branch-scoped history of past or terminal appointments, prescriptions, and settled financial records."
       />
 
-      <Notice tone="info" title="Retention, viewing, retrieval, and non-deletion policy">
-        <b>Viewing</b> inspects historical records read-only within your role and branch scope. <b>Retrieving / Restoring</b> flags a historical record for active follow-up and requires a mandatory audit reason. <b>Permanent deletion</b> of clinical, prescription, or financial records is prohibited by clinic retention and medical data regulations.
+      <Notice tone="info" title="History viewing and restoration availability">
+        <b>Viewing</b> inspects historical records read-only within your role and branch scope.
+        <br/><span id="archive-restore-unavailable" tabIndex={0}>Retrieval / restoration is unavailable on this screen. Viewing a record does not restore it or flag it for active follow-up.</span><br/>
+        <b>Permanent deletion</b> is not available on this screen.
       </Notice>
+
+      {!enabled || noStaffScope ? <Notice tone="warning" title={noStaffScope && enabled ? 'No authorized archive branches' : 'Archive access unavailable'}>
+        {noStaffScope && enabled ? 'This account has no authorized branches for archive viewing or export.' : 'These records are unavailable to the current account.'}
+      </Notice> : <>
 
       <FilterBar
         search={query}
@@ -213,7 +244,7 @@ export function ArchivesPage({ store, role: propRole, activeBranch = 'All Branch
             <option key={b} value={b}>{b}</option>
           ))}
         </select>
-        <Button size="sm" variant="secondary" icon="download" onClick={handleExportCsv}>
+        <Button size="sm" variant="secondary" icon="download" disabled={!recordsForTab.length} onClick={handleExportCsv}>
           Export Archive CSV
         </Button>
       </FilterBar>
@@ -225,17 +256,17 @@ export function ArchivesPage({ store, role: propRole, activeBranch = 'All Branch
       />
 
       {tab === 'visits' && (
-        <Card title="Historical Completed Encounters" subtitle="Visit records preserved for patient history and regulatory continuity.">
+        <Card title="Historical Appointments" subtitle="Past or terminal appointments; inclusion here does not confirm completed care.">
           <Table
             rows={archivedVisits}
-            emptyMessage="No archived visits matching your criteria."
+            emptyMessage={emptyMessage(state.appointments, 'Historical appointments')}
             columns={[
               { key: 'date', label: 'Date', render: r => <b>{r.date}</b> },
               { key: 'code', label: 'Ref Code', render: r => <code>{r.code || r.id}</code> },
               { key: 'patientName', label: 'Patient', render: r => r.patientName || r.patient?.name || 'Patient' },
-              { key: 'serviceName', label: 'Service / Procedure', render: r => r.serviceName || r.service?.name || r.service || 'General Treatment' },
-              { key: 'dentistName', label: 'Attending Dentist', render: r => r.dentistName || r.dentist?.name || 'Dr. Reyes' },
-              { key: 'branch', label: 'Branch', render: r => (typeof r.branch === 'object' && r.branch ? r.branch.name : (r.branch || r.branchName || 'Main')) },
+              { key: 'serviceName', label: 'Service / Procedure', render: r => r.serviceName || r.service?.name || r.service || 'Service unavailable' },
+              { key: 'dentistName', label: 'Attending Dentist', render: r => r.dentistName || r.dentist?.name || 'Dentist unavailable' },
+              { key: 'branch', label: 'Branch', render: branchLabel },
               { key: 'status', label: 'Outcome Status', render: r => <Status tone={r.status === 'Completed' || r.status === 'Served' ? 'success' : 'neutral'}>{r.status}</Status> },
               { key: 'actions', label: 'Actions', render: r => (
                 <div className="row-actions">
@@ -243,10 +274,7 @@ export function ArchivesPage({ store, role: propRole, activeBranch = 'All Branch
                     logArchiveAudit('archive.viewed', r.code || r.id, `Viewed archived visit ${r.code || r.id}`)
                     setViewRecord({ kind: 'visit', record: r })
                   }}>View details</Button>
-                  <Button size="sm" variant="soft" onClick={() => {
-                    setRestoreTarget({ kind: 'visit', ...r })
-                    setRestoreReason('')
-                  }}>Retrieve / Restore</Button>
+                  <Button size="sm" variant="soft" disabled aria-describedby="archive-restore-unavailable">Retrieve / Restore (unavailable)</Button>
                 </div>
               ) },
             ]}
@@ -258,13 +286,13 @@ export function ArchivesPage({ store, role: propRole, activeBranch = 'All Branch
         <Card title="Archived Digital Prescriptions" subtitle="Historical prescriptions issued to patients, scoped by role and branch.">
           <Table
             rows={archivedPrescriptions}
-            emptyMessage="No archived prescriptions found."
+            emptyMessage={emptyMessage(state.prescriptions, 'Prescriptions')}
             columns={[
               { key: 'number', label: 'Rx Number', render: r => <b>{r.number}</b> },
               { key: 'issued_at', label: 'Issued Date', render: r => r.issued_at || r.date || '—' },
               { key: 'patientName', label: 'Patient', render: r => r.patientName || (typeof r.patient === 'object' ? r.patient?.name : r.patient) || 'Patient' },
               { key: 'dentistName', label: 'Prescribing Doctor', render: r => r.dentistName || (typeof r.dentist === 'object' ? r.dentist?.name : r.dentist) || 'Dentist' },
-              { key: 'branch', label: 'Branch', render: r => (typeof r.branch === 'object' && r.branch ? r.branch.name : (r.branch || r.branchName || 'Main')) },
+              { key: 'branch', label: 'Branch', render: branchLabel },
               { key: 'medicines', label: 'Medicines', render: r => role === 'owner' ? <span className="au-muted">Metadata only (clinical privacy)</span> : ((r.lines || []).map(l => l.medicine).join(', ') || 'Medication list') },
               { key: 'status', label: 'Status', render: r => <Status tone={r.status === 'Void' ? 'danger' : 'neutral'}>{r.status || 'Issued'}</Status> },
               { key: 'actions', label: 'Actions', render: r => (
@@ -284,14 +312,14 @@ export function ArchivesPage({ store, role: propRole, activeBranch = 'All Branch
         <Card title="Settled Billing & Receipt Records" subtitle="Archived invoices and receipts settled via PayMongo or front-desk cash.">
           <Table
             rows={archivedInvoices}
-            emptyMessage="No settled financial records matching filter."
+            emptyMessage={emptyMessage(state.invoices, 'Settled financial records')}
             columns={[
               { key: 'invoiceNumber', label: 'Invoice #', render: r => <b>{r.invoiceNumber || r.invoice_number || r.id}</b> },
               { key: 'patientName', label: 'Patient', render: r => r.patientName || 'Patient' },
               { key: 'date', label: 'Issued Date', render: r => r.issued_at || r.date || '—' },
               { key: 'total', label: 'Gross Total', render: r => peso.format(r.gross_amount || r.total || 0) },
               { key: 'paid', label: 'Paid Amount', render: r => peso.format(r.paid_amount || r.total || 0) },
-              { key: 'branch', label: 'Branch', render: r => (typeof r.branch === 'object' && r.branch ? r.branch.name : (r.branch || 'Main')) },
+              { key: 'branch', label: 'Branch', render: branchLabel },
               { key: 'status', label: 'Settlement Status', render: r => <Status tone="success">{r.status || 'Paid'}</Status> },
               { key: 'actions', label: 'Actions', render: r => (
                 <div className="row-actions">
@@ -317,7 +345,7 @@ export function ArchivesPage({ store, role: propRole, activeBranch = 'All Branch
             <p><b>Record Type:</b> {viewRecord.kind.toUpperCase()}</p>
             <p><b>Reference:</b> <code>{viewRecord.record.code || viewRecord.record.number || viewRecord.record.invoiceNumber || viewRecord.record.id}</code></p>
             <p><b>Patient:</b> {viewRecord.record.patientName || viewRecord.record.patient?.name || 'Patient'}</p>
-            <p><b>Branch:</b> {typeof viewRecord.record.branch === 'object' && viewRecord.record.branch ? viewRecord.record.branch.name : (viewRecord.record.branch || viewRecord.record.branchName || 'Main')}</p>
+            <p><b>Branch:</b> {branchLabel(viewRecord.record)}</p>
             <p><b>Date:</b> {viewRecord.record.date || viewRecord.record.issued_at || '—'}</p>
             <p><b>Status:</b> {viewRecord.record.status || 'Archived'}</p>
           </div>
@@ -326,38 +354,7 @@ export function ArchivesPage({ store, role: propRole, activeBranch = 'All Branch
           </div>
         </Modal>
       )}
-
-      {restoreTarget && (
-        <Modal
-          open
-          title="Retrieve / Restore Archived Record"
-          subtitle="Retrieving a record for active follow-up requires a documented reason and is logged in the Audit Trail."
-          onClose={() => setRestoreTarget(null)}
-        >
-          <form onSubmit={handleConfirmRestore}>
-            <Notice tone="info">
-              Restoring flags <b>{restoreTarget.code || restoreTarget.number || restoreTarget.id}</b> for active operational follow-up without altering or deleting original historical records.
-            </Notice>
-            <div style={{ marginTop: '12px' }}>
-              <Field label="Reason for retrieval / restoration" required hint="Minimum 3 characters. Recorded in the clinic audit trail.">
-                <input
-                  type="text"
-                  required
-                  minLength={3}
-                  value={restoreReason}
-                  onChange={e => setRestoreReason(e.target.value)}
-                  placeholder="e.g. Patient requested follow-up continuity review"
-                  autoFocus
-                />
-              </Field>
-            </div>
-            <div className="row-actions" style={{ marginTop: '16px' }}>
-              <Button variant="ghost" onClick={() => setRestoreTarget(null)}>Cancel</Button>
-              <Button type="submit" disabled={restoreReason.trim().length < 3}>Confirm Retrieval</Button>
-            </div>
-          </form>
-        </Modal>
-      )}
+      </>}
     </div>
   )
 }

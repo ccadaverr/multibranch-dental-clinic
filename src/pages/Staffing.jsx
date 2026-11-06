@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Card, ConfirmDialog, Field, FilterBar, Notice, PageHeader } from '../components.jsx'
 import {
   addScheduleException, cancelLeave, copyProfileHours, decideLeave, leaveCalendar, leaveConflicts, leaveRequests, myLeave, notifyLeaveAffected,
@@ -54,7 +54,7 @@ export function AffectedAppointments({ rows, wordingApproved, onNotify, onChange
 
 export function WorkSchedulesPage({ store, role }) {
   const toast = store?.toast || (() => {})
-  const [data, setData] = useState(null), [error, setError] = useState(''), [selected, setSelected] = useState(''), [affected, setAffected] = useState(null), [approved, setApproved] = useState(true), [scheduleRole, setScheduleRole] = useState('dentist'), [selectedStaff, setSelectedStaff] = useState(''), [staffEditing, setStaffEditing] = useState(false), [staffStart, setStaffStart] = useState('09:00'), [staffEnd, setStaffEnd] = useState('18:00'), [staffBranch, setStaffBranch] = useState(''), [staffSaving, setStaffSaving] = useState(false)
+  const [data, setData] = useState(null), [error, setError] = useState(''), [selected, setSelected] = useState(''), [affected, setAffected] = useState(null), [approved, setApproved] = useState(true), [scheduleRole, setScheduleRole] = useState('dentist')
   const load = () => workSchedules().then(r => { if (r.ok) { setData(r.data); setError(''); setApproved(r.data.wording_approved); const ownDentist = role === 'dentist' ? (r.data.dentists.find(d => d.id === store?.session?.dentistId || d.userId === store?.session?.userId)) : null; setSelected(s => s || ownDentist?.id || r.data.dentists[0]?.id || '') } else setError(r.message || 'Work schedules could not be loaded.') })
   useEffect(() => { load() }, [])
   const dentist = data?.dentists.find(d => d.id === selected)
@@ -66,55 +66,12 @@ export function WorkSchedulesPage({ store, role }) {
   const after = r => { if (r.data?.affected) setAffected(r.data.affected); load() }
   const editable = dentist?.branches.some(b => b.editable)
   const canEdit = role === 'owner' && editable
-  const ownStaffProfile = role === 'staff'
-    ? (store?.state?.staff || []).find(s => s.userId === store?.session?.userId || s.id === store?.session?.staffId)
-    : null
-  const rawStaff = (data?.staff && data.staff.length > 0) ? data.staff : (store?.state?.staff || [])
-  const staffList = rawStaff.map(s => {
-    const rawBranchName = s.branch?.name || s.branch || 'Dr. Dana Roxas Dental Clinic'
-    const foundBranch = store?.state?.branches?.find(b => b.name === rawBranchName || b.id === s.branch?.id || b.id === s.branchId)
-    return { id: s.id, name: s.name || s.fullName || s.id, title: s.title || s.staffType || s.role || 'Staff', branch: foundBranch ? foundBranch.name : rawBranchName, branchRef: foundBranch ? foundBranch.id : (s.branch?.id || 'b1'), shiftStart: s.shift_start || s.shiftStart || '09:00', shiftEnd: s.shift_end || s.shiftEnd || '18:00', available: s.available !== false }
-  })
-  const currentStaff = staffList.find(s => s.id === (selectedStaff || staffList[0]?.id)) || staffList[0]
-
-  useEffect(() => {
-    if (currentStaff) {
-      setStaffStart(currentStaff.shiftStart || '09:00')
-      setStaffEnd(currentStaff.shiftEnd || '18:00')
-      setStaffBranch(currentStaff.branchRef || '')
-    }
-  }, [currentStaff?.id])
-
-  const handleSaveStaffShift = async (e) => {
-    e.preventDefault()
-    if (!currentStaff) return
-    setStaffSaving(true)
-    const payload = {
-      shift_start: staffStart,
-      shift_end: staffEnd,
-      branch_ref: staffBranch || currentStaff.branchRef
-    }
-    const r = await updateStaffProfile(currentStaff.id, payload)
-    setStaffSaving(false)
-    if (!r.ok) {
-      toast(firstError(r) || 'Could not update staff schedule', 'warning')
-      return
-    }
-    toast(`Updated shift for ${currentStaff.name}: ${t12(staffStart)}–${t12(staffEnd)}.`, 'success')
-    setStaffEditing(false)
-    load()
-  }
+  const staffSessionKey = JSON.stringify([store?.session?.serverUserId, store?.session?.userId, store?.session?.role, store?.session?.active, store?.session?.branchScopes])
 
   return <div className="st-page">
     <PageHeader kicker={role === 'dentist' ? 'My hours' : role === 'owner' ? 'Administration' : 'Team'} title={role === 'dentist' ? 'My work hours' : 'Work schedules'}
       text="Each dentist’s weekly hours per branch, and dated exceptions. Online booking, the front desk, walk-ins and the calendar use only these hours, inside the branch’s opening hours and minus approved leave. A change never cancels an appointment."/>
-    {role === 'staff' && (
-      <Notice tone="info" title="My assigned staff shift (read-only)">
-        {ownStaffProfile
-          ? `Your assigned shift at ${ownStaffProfile.branch || 'your branch'} is ${t12(ownStaffProfile.shiftStart)}–${t12(ownStaffProfile.shiftEnd)} (${ownStaffProfile.staffType || ownStaffProfile.title || 'Staff'}). Staff cannot edit their own assigned work schedule; only the Clinic Owner or an authorized administrator can update staff shifts.`
-          : 'Staff cannot edit their own assigned work schedule; only the Clinic Owner or an authorized administrator can update staff shifts. To request time off, submit a request under Leave.'}
-      </Notice>
-    )}
+    {role === 'staff' && <Notice tone="info" title="Staff shift profiles are read-only">Only the Clinic Owner can change Staff shift profiles. A profile's hours do not confirm weekday coverage. Request time off under Leave.</Notice>}
     {error && <Notice tone="warning" title="Unavailable">{error}</Notice>}
     {role !== 'dentist' && (
       <div className="st-role-toggle" role="tablist" aria-label="Schedule role selector" style={{display:'flex',gap:'8px',marginBottom:'12px'}}>
@@ -122,74 +79,8 @@ export function WorkSchedulesPage({ store, role }) {
         <Button variant={scheduleRole === 'staff' ? 'primary' : 'soft'} size="sm" onClick={() => setScheduleRole('staff')} role="tab" aria-selected={scheduleRole === 'staff'}>Staff schedules</Button>
       </div>
     )}
-    {scheduleRole === 'staff' ? (
-      !staffList.length ? <Notice>No staff members found for your branch.</Notice> : (
-        <>
-          <Card title="Staff work schedules">
-            <Field label="Staff member">
-              <select value={selectedStaff || currentStaff?.id || ''} onChange={e => { setSelectedStaff(e.target.value); setStaffEditing(false) }} aria-label="Select staff member">
-                {staffList.map(s => <option key={s.id} value={s.id}>{s.name} ({s.title} · {s.branch})</option>)}
-              </select>
-            </Field>
-            {currentStaff && (
-              <div style={{marginTop:'12px',padding:'12px',borderRadius:'6px',background:'var(--surface-subtle, #f8fafc)',border:'1px solid var(--line)'}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:'8px'}}>
-                  <div>
-                    <b style={{fontSize:'15px',display:'block'}}>{currentStaff.name}</b>
-                    <span className="au-muted" style={{fontSize:'13px'}}>{currentStaff.title} · Branch: {currentStaff.branch}</span>
-                    <div style={{marginTop:'4px',fontSize:'13px'}}>
-                      <span><b>Assigned shift:</b> {t12(currentStaff.shiftStart)}–{t12(currentStaff.shiftEnd)}</span>
-                      <span style={{marginLeft:'12px'}} className={`fd-badge ${currentStaff.available ? 'is-ok' : 'is-bad'}`}>
-                        {currentStaff.available ? 'Marked available' : 'Marked unavailable'}
-                      </span>
-                    </div>
-                  </div>
-                  {role === 'owner' && !staffEditing && (
-                    <Button size="sm" variant="soft" onClick={() => setStaffEditing(true)}>Change shift</Button>
-                  )}
-                </div>
-                {role === 'owner' && staffEditing && (
-                  <form onSubmit={handleSaveStaffShift} className="au-form" style={{marginTop:'12px',paddingTop:'12px',borderTop:'1px solid var(--line)'}}>
-                    <div className="st-pair">
-                      <Field label="Shift start"><input type="time" value={staffStart} onChange={e => setStaffStart(e.target.value)} required/></Field>
-                      <Field label="Shift end"><input type="time" value={staffEnd} onChange={e => setStaffEnd(e.target.value)} required/></Field>
-                    </div>
-                    <Field label="Assigned branch">
-                      <select value={staffBranch || currentStaff.branchRef} onChange={e => setStaffBranch(e.target.value)}>
-                        {(store?.state?.branches || []).filter(b => b.status !== 'Closed').map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                      </select>
-                    </Field>
-                    <div className="ns-actions" style={{marginTop:'8px'}}>
-                      <Button type="submit" size="sm" disabled={staffSaving}>{staffSaving ? 'Saving…' : 'Save shift'}</Button>
-                      <Button type="button" size="sm" variant="ghost" onClick={() => setStaffEditing(false)}>Cancel</Button>
-                    </div>
-                  </form>
-                )}
-              </div>
-            )}
-          </Card>
-          {currentStaff && (
-            <Card title="Weekly roster coverage" subtitle="Assigned operational shifts across operating days.">
-              <ul className="st-week">
-                {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((dayName, idx) => {
-                  const isDayOff = idx === 6
-                  return (
-                    <li key={dayName}>
-                      <b className="st-day">{dayName}</b>
-                      <div className="st-cells">
-                        <div className={`st-cell ${!isDayOff ? 'is-on' : ''}`}>
-                          <span className="st-branch">{currentStaff.branch}</span>
-                          <span>{!isDayOff ? `${t12(currentStaff.shiftStart)}–${t12(currentStaff.shiftEnd)}` : 'Day off'}</span>
-                        </div>
-                      </div>
-                    </li>
-                  )
-                })}
-              </ul>
-            </Card>
-          )}
-        </>
-      )
+    {scheduleRole === 'staff' && role !== 'dentist' ? (
+      <StaffScheduleProfiles key={staffSessionKey} role={role} session={store?.session}/>
     ) : (
       !data ? <p className="au-muted" role="status">Loading…</p> : !data.dentists.length ? <Notice>No dentists to show for your branches.</Notice> : <>
         <Card>
@@ -214,6 +105,108 @@ export function WorkSchedulesPage({ store, role }) {
         <Exceptions data={data} dentist={dentist} toast={toast} onSaved={after} canEdit={canEdit}/>
       </>
     )}
+  </div>
+}
+
+export function staffScheduleProfiles(data, session, role) {
+  if (!session?.serverUserId || !session.active || session.role !== role || !['owner', 'staff'].includes(role)) return []
+  const rows = Array.isArray(data?.staff) ? data.staff : []
+  if (role === 'owner') return rows
+  const scopes = Array.isArray(session.branchScopes) ? session.branchScopes : []
+  return rows.filter(row => row.branch?.id && scopes.includes(row.branch.id))
+}
+
+export function staffShiftSummary(row) {
+  const time = value => typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/.test(value) ? value.slice(0, 5) : ''
+  return { id: row.id, name: row.name || 'Staff member', title: row.title || 'Staff',
+    branch: typeof row.branch === 'object' ? row.branch?.name || 'No branch recorded' : row.branch || 'No branch recorded',
+    branchRef: typeof row.branch === 'object' ? row.branch?.id || '' : row.branchId || '',
+    start: time(row.shift_start ?? row.shiftStart), end: time(row.shift_end ?? row.shiftEnd),
+    available: typeof row.available === 'boolean' ? row.available : null }
+}
+
+const useStaffLayoutEffect = typeof window === 'undefined' ? useEffect : React.useLayoutEffect
+
+export function StaffScheduleProfiles({ role, session }) {
+  const [snapshot, setSnapshot] = useState(null), [error, setError] = useState(''), [selected, setSelected] = useState(''), [saving, setSaving] = useState(false)
+  const live = useRef(false), generation = useRef(0)
+  const authorized = !!session?.serverUserId && session.active && session.role === role && ['owner', 'staff'].includes(role)
+  const load = async () => {
+    if (!live.current || !authorized) return
+    const request = ++generation.current
+    try {
+      const result = await workSchedules()
+      if (!live.current || generation.current !== request) return
+      if (!result.ok || !Array.isArray(result.data?.staff)) {
+        if (['unauthenticated', 'forbidden'].includes(result.kind)) setSnapshot(null)
+        setError(result.message || 'Staff shift profiles could not be loaded.'); return
+      }
+      setSnapshot(result.data); setError('')
+    } catch { if (live.current && generation.current === request) setError('Staff shift profiles could not be loaded.') }
+  }
+  useStaffLayoutEffect(() => { live.current = true; load(); return () => { live.current = false; generation.current++ } }, [])
+  const staff = staffScheduleProfiles(snapshot, session, role)
+  const current = staff.find(s => s.id === selected) || staff[0]
+  const summary = current ? staffShiftSummary(current) : null
+  if (!authorized) return <Notice title="Clinic server required">Staff shift profiles require an active Staff or Owner server session. Historical workspace profiles are not shown as live schedules.</Notice>
+  return <Card title="Staff shift profiles" subtitle="Profile hours and assignment; weekday coverage is not provided.">
+    {error && <div role="alert" tabIndex={0}><p>{error} {snapshot && 'Showing the last loaded profiles.'}</p><Button variant="ghost" onClick={load}>Retry staff profiles</Button></div>}
+    {!snapshot ? !error && <p role="status">Loading Staff profiles…</p> : !staff.length ? <p>No Staff shift profiles are available in your branch scope.</p> : <>
+      <Field label="Staff member"><select value={summary.id} disabled={saving} onChange={e => setSelected(e.target.value)}>{staff.map(s => <option key={s.id} value={s.id}>{s.name || 'Staff member'} · {s.branch?.name || 'No branch recorded'}</option>)}</select></Field>
+      <StaffShiftProfile key={summary.id} staff={summary} role={role} branches={snapshot.branches || []} canEdit={role === 'owner' && !error}
+        onPending={setSaving} onSaved={record => {
+          // Adopt only this profile's authoritative response, never the currently selected row.
+          generation.current++
+          setSnapshot(previous => ({ ...previous, staff: previous.staff.map(row => row.id === record.id ? { ...row, branch: record.branchId ? { id: record.branchId, name: record.branch } : null, shift_start: record.shiftStart, shift_end: record.shiftEnd, available: record.available } : row) }))
+        }}/>
+    </>}
+  </Card>
+}
+
+export function StaffShiftProfile({ staff, role, branches, canEdit, onPending = () => {}, onSaved = () => {} }) {
+  const [editing, setEditing] = useState(false), [start, setStart] = useState(staff.start), [end, setEnd] = useState(staff.end), [branch, setBranch] = useState(staff.branchRef)
+  const [saving, setSaving] = useState(false), [error, setError] = useState(''), [success, setSuccess] = useState('')
+  const live = useRef(false), pending = useRef(false), allowed = useRef(false), controls = useRef(null), restoreFocus = useRef(false)
+  allowed.current = role === 'owner' && canEdit
+  useStaffLayoutEffect(() => { live.current = true; return () => { live.current = false } }, [])
+  useStaffLayoutEffect(() => { if (restoreFocus.current && !editing) { controls.current?.querySelector('button')?.focus(); restoreFocus.current = false } }, [editing])
+  const save = async event => {
+    event.preventDefault()
+    if (!allowed.current || !live.current || pending.current) return
+    const id = staff.id, payload = { shift_start: start, shift_end: end, branch_ref: branch || null }
+    pending.current = true; setSaving(true); onPending(true); setError(''); setSuccess('')
+    try {
+      const result = await updateStaffProfile(id, payload)
+      if (!live.current || !allowed.current) return
+      if (!result.ok) { setError(firstError(result)); return }
+      if (result.data?.id !== id) { setError('The saved profile could not be confirmed. Close and reopen Staff schedules to reload.'); return }
+      onSaved(result.data)
+      restoreFocus.current = true; setEditing(false); setSuccess(`Shift profile saved for ${staff.name}. Weekly coverage remains unavailable.`)
+    } catch { if (live.current && allowed.current) setError('Could not save this shift profile. Your changes are still in the form.') }
+    finally { pending.current = false; if (live.current) { setSaving(false); onPending(false) } }
+  }
+  return <div className="st-gap">
+    <h3>{staff.name}</h3><p className="au-muted">{staff.title}</p>
+    <dl><dt>Assigned branch</dt><dd>{staff.branch}</dd><dt>Shift hours returned by the server</dt><dd>{staff.start && staff.end ? `${t12(staff.start)}–${t12(staff.end)}` : 'Shift hours unavailable'}</dd>
+      <dt>Profile availability</dt><dd>{staff.available === true ? 'Marked available' : staff.available === false ? 'Marked unavailable' : 'Availability not provided'}</dd></dl>
+    <p>The schedule response may substitute 09:00–18:00 when stored shift hours are missing. It does not identify which values are defaults. These hours do not confirm attendance or coverage.</p>
+    <Notice title="Weekly Staff roster unavailable">No per-weekday Staff duty roster is provided. Working days, days off and weekly coverage cannot be determined from this shift interval.</Notice>
+    {success && <p role="status">{success}</p>}
+    {error && <p id="staff-shift-error" role="alert" tabIndex={0}>{error}</p>}
+    {role === 'owner' && canEdit && <div ref={controls}><Button variant="soft" onClick={() => {
+      setStart(staff.start); setEnd(staff.end); setBranch(staff.branchRef); setError(''); setSuccess(''); setEditing(true)
+    }} disabled={saving || editing}>Change shift profile</Button></div>}
+    {role === 'owner' && canEdit && editing && <form onSubmit={save} className="au-form" aria-label={`Edit shift for ${staff.name}`} aria-describedby={error ? 'staff-shift-error' : undefined} aria-busy={saving}>
+      <fieldset disabled={saving} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+        <div className="st-pair"><Field label="Shift start"><input autoFocus type="time" value={start} onChange={e => setStart(e.target.value)} required/></Field><Field label="Shift end"><input type="time" value={end} onChange={e => setEnd(e.target.value)} required/></Field></div>
+        <Field label="Assigned branch"><select value={branch} onChange={e => setBranch(e.target.value)}>
+          <option value="" disabled>No assigned branch</option>
+          {staff.branchRef && !branches.some(b => b.id === staff.branchRef) && <option value={staff.branchRef}>{staff.branch}</option>}
+          {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+        </select></Field>
+        <div className="ns-actions"><Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save shift profile'}</Button><Button variant="ghost" onClick={() => { restoreFocus.current = true; setEditing(false); setError('') }}>Cancel</Button></div>
+      </fieldset>
+    </form>}
   </div>
 }
 

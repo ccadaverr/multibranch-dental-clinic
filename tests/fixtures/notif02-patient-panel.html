@@ -1,0 +1,28 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NOTIF-02 synthetic Patient fixture</title></head><body><div id="root"></div><script type="module">
+import React,{useRef,useState} from 'react'
+import {createRoot} from 'react-dom/client'
+import {useNotifications,NotificationPanel,patientNotificationDestination} from '/src/patient/Portal.jsx'
+import '/src/styles.css'
+import '/src/foundation.css'
+import '/src/patient/portal.css'
+function Fixture(){
+ const [account,setAccount]=useState('a'),[mounted,setMounted]=useState(true)
+ window.notif02Account=setAccount
+ window.notif02Mount=setMounted
+ return mounted?React.createElement(Harness,{account}):React.createElement('p',null,'Unmounted')
+}
+function Harness({account}){
+ const me={id:`account-${account}`,patient:{id:`patient-${account}`},role:'patient',account_status:'Active'}
+ const session={serverUserId:me.id,role:'patient',active:true}
+ const notes=useNotifications(me,session)
+ const [open,setOpen]=useState(false),[navigation,setNavigation]=useState('')
+ const bell=useRef(null)
+ window.notif02Reload=notes.reload
+ window.notif02Snapshot={items:notes.items,unread:notes.unread,error:notes.error}
+ return React.createElement(React.Fragment,null,
+  React.createElement('button',{ref:bell,onClick:()=>setOpen(true)},'Open notifications'),
+  React.createElement('output',{'data-testid':'destination'},navigation),
+  open&&React.createElement(NotificationPanel,{key:notes.identity,notes,destination:n=>patientNotificationDestination(me,n),onClose:()=>{setOpen(false);bell.current.focus()},onOpen:async n=>{if(!await notes.markRead(n.id)||!notes.isCurrent())return;const target=patientNotificationDestination(me,n);if(target)setNavigation(JSON.stringify(target))}}))
+}
+createRoot(document.getElementById('root')).render(React.createElement(Fixture))
+</script></body></html>

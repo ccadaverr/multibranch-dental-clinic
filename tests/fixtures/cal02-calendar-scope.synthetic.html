@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CAL-02 synthetic calendar scope fixture</title></head>
+<body><main id="root"></main><script type="module">
+import React, { useState } from 'react'
+import { createRoot } from 'react-dom/client'
+import { flushSync } from 'react-dom'
+import { StaffDayCalendar } from '/src/pages/StaffDayCalendar.jsx'
+import { setClockSource } from '/src/clock.js'
+import '/src/styles.css'
+import '/src/foundation.css'
+import '/src/polish.css'
+
+// Synthetic only: no sign-in, database, live API or scheduling/attendance writes.
+setClockSource(() => new Date('2026-11-06T02:00:00Z'))
+const params = new URLSearchParams(location.search)
+const row = (id, branch) => ({
+  id, code: `SYNTHETIC-${id}`, revision: 1, status: 'Confirmed', source: 'staff',
+  date: '2026-11-06', start_time: '09:00', end_time: '09:30', duration_minutes: 30,
+  patient: { id: `patient-${id}`, code: `PAT-${id}`, name: `Synthetic Patient ${id}` },
+  branch: { id: branch, name: `Synthetic Branch ${branch}` },
+  service: { id: 'service', name: 'Synthetic service' },
+  dentist: { id: 'dentist', name: 'Synthetic Dentist' },
+})
+const fixture = window.cal02 = {
+  rows: [row('A', 'a'), row('B', 'b')], reads: [], commands: [], feedback: [],
+  holdLists: params.has('hold'), holdLoads: params.has('hold'), holdDetails: false,
+  listRequests: [], loadRequests: [], detailRequests: [], refreshes: 0,
+}
+if (params.has('missing')) {
+  fixture.rows[0].patient = null
+  fixture.rows[0].service = null
+  fixture.rows[0].dentist = { id: 'dentist-without-name' }
+}
+if (params.has('blank')) fixture.rows[0].patient.name = '   '
+if (params.has('many')) fixture.rows.push(row('C', 'a'), row('D', 'a'))
+
+async function reply(queue, hold, payload) {
+  const entry = { payload: structuredClone(payload), released: !hold, release: null }
+  const pending = new Promise(resolve => { entry.release = () => { entry.released = true; resolve() } })
+  queue.push(entry)
+  if (hold) await pending
+  return Response.json(entry.payload)
+}
+window.fetch = async (url, options = {}) => {
+  const parsed = new URL(url, location.href), method = (options.method || 'GET').toUpperCase()
+  fixture.reads.push({ path: parsed.pathname, query: parsed.search, method })
+  if (method !== 'GET') {
+    fixture.commands.push({ path: parsed.pathname, method })
+    return Response.json({ message: 'Synthetic fixture refuses all writes' }, { status: 403 })
+  }
+  if (parsed.pathname === '/api/appointments') {
+    // Deliberately return both branches: UI suppression must not trust cached rows.
+    return reply(fixture.listRequests, fixture.holdLists, { data: fixture.rows, meta: { current_page: 1, last_page: 1 } })
+  }
+  if (parsed.pathname === '/api/calendar/load') {
+    return reply(fixture.loadRequests, fixture.holdLoads, { data: { crowded_percent: 80, capacity_note: 'Synthetic current capacity', days: [{ date: '2026-11-06', percent: 25, appointments: 1, booked_minutes: 30, capacity_minutes: 120 }] } })
+  }
+  if (parsed.pathname.startsWith('/api/appointments/')) {
+    const selected = fixture.rows.find(r => r.id === decodeURIComponent(parsed.pathname.split('/').at(-1)))
+    return reply(fixture.detailRequests, fixture.holdDetails, { data: selected })
+  }
+  throw new Error(`Unexpected synthetic request: ${parsed.pathname}`)
+}
+
+const initial = { serverUserId: 'synthetic-staff', userId: 'synthetic-user', role: 'staff', active: true, branchId: 'a', branchScopes: ['a'] }
+if (params.has('owner')) Object.assign(initial, { role: 'owner', branchScopes: [] })
+if (params.has('all')) initial.branchScopes = ['a', 'b']
+if (params.has('empty')) initial.branchScopes = []
+if (params.has('absent')) delete initial.branchScopes
+function Fixture() {
+  const [session, setSession] = useState(initial)
+  fixture.setSession = patch => flushSync(() => setSession(previous => ({ ...previous, ...patch })))
+  const store = {
+    session,
+    state: { branches: [{ id: 'a', name: 'Synthetic Branch a' }, { id: 'b', name: 'Synthetic Branch b' }], appointments: [], patients: [], services: [], dentists: [] },
+    toast: (...args) => fixture.feedback.push(args),
+    appointmentFlow: {
+      refresh: () => { fixture.refreshes++; return Promise.resolve({ ok: true }) },
+      cancel: () => { fixture.commands.push({ action: 'cancel' }); return Promise.resolve({ ok: false, message: 'Synthetic refusal' }) },
+      noShow: () => { fixture.commands.push({ action: 'noShow' }); return Promise.resolve({ ok: false, message: 'Synthetic refusal' }) },
+    },
+  }
+  return React.createElement(StaffDayCalendar, { store })
+}
+createRoot(document.getElementById('root')).render(React.createElement(Fixture))
+</script></body>
+</html>

@@ -1,0 +1,66 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>HND-UI-01 synthetic handover fixture</title></head><body><div id="root"></div><script type="module">
+import React,{useState} from 'react'
+import {createRoot} from 'react-dom/client'
+import {HandoversPage,HandoverPanel} from '/src/pages/Handovers.jsx'
+import '/src/styles.css'
+import '/src/foundation.css'
+import '/src/automations.css'
+const makeRow=id=>({id:`handover-${id}`,patient:{id:`patient-${id}`,name:`Synthetic Patient ${id.toUpperCase()}`,code:id},from:{branch:{id:'b1',name:'Synthetic sending branch'},by:'Synthetic sender'},to:{branch:{id:'b2',name:'Synthetic receiving branch'},dentist:null},status:'Sent',created_at:'2026-11-06T08:00:00+08:00',summary:`PRIVATE SUMMARY ${id.toUpperCase()}`,pending_treatment:`PRIVATE TREATMENT ${id.toUpperCase()}`,notes:`PRIVATE NOTES ${id.toUpperCase()}`,documents:[{id:`doc-${id}`,title:`PRIVATE TITLE ${id.toUpperCase()}`,category:'Synthetic category',date:'2026-11-06'}]})
+const records=[makeRow('a'),makeRow('b')]
+const config=window.hndUi01={requests:[],feedback:[],heldLists:[],heldDetails:[],heldDocs:[],holdList:false,holdDetail:false,holdDocs:false,holdMutation:false,failList:false,release:null,rejectAck:false,rejectCancel:false,rejectCreate:false,role:'staff',side:'receiving'}
+const view=(record,content,actor={role:config.role,side:config.side})=>{
+ const data=structuredClone(record),clinical=actor.role!=='owner'
+ data.side=clinical?actor.side:null
+ data.can_acknowledge=clinical&&actor.side==='receiving'&&data.status==='Sent'
+ data.can_cancel=clinical&&actor.side==='sending'&&data.status==='Sent'
+ if(!content||!clinical)for(const field of ['summary','pending_treatment','notes','documents'])delete data[field]
+ return data
+}
+window.fetch=async(url,options={})=>{
+ const parsed=new URL(url,location.href),path=parsed.pathname
+ if(path==='/sanctum/csrf-cookie')return new Response(null,{status:204})
+ if((options.method||'GET')==='GET'){
+  let data
+  if(path==='/api/branches')data=[{id:'b1',name:'Synthetic sending branch',status:'Open'},{id:'b2',name:'Synthetic receiving branch',status:'Open'}]
+  else if(path==='/api/dentists')data=[{id:'dentist',name:'Synthetic Dentist',branch_ids:['b2']}]
+  else if(path==='/api/documents'){
+   const id=parsed.searchParams.get('patient_id');data=[{id:`doc-${id.slice(-1)}`,title:`PRIVATE TITLE ${id.slice(-1).toUpperCase()}`,category:'Synthetic category',status:'Active',patient:{id}}]
+   if(config.holdDocs)await new Promise(release=>config.heldDocs.push({id,release}))
+  }else if(path==='/api/handovers'){
+   if(config.failList)return Response.json({message:'Synthetic inbox retrieval failure'},{status:503})
+   const patient=parsed.searchParams.get('patient_id');data=records.filter(h=>!patient||h.patient.id===patient).map(h=>view(h,false))
+   if(config.holdList)await new Promise(release=>config.heldLists.push({patient,release}))
+  }else if(path.startsWith('/api/handovers/')){
+   const id=path.split('/')[3],record=records.find(h=>h.id===id)
+   if(!record)return Response.json({message:'Not available'},{status:404})
+   data=view(record,true)
+   if(config.holdDetail)await new Promise(release=>config.heldDetails.push({id,release}))
+  }else return Response.json({message:'Unexpected fixture request'},{status:500})
+  return Response.json({data})
+ }
+ const body=JSON.parse(options.body||'{}'),actor={role:config.role,side:config.side}
+ config.requests.push({path,body})
+ if(config.holdMutation)await new Promise(release=>{config.release=release})
+ if(path==='/api/handovers'){
+  if(config.rejectCreate)return Response.json({message:'Synthetic creation refusal',errors:{summary:['Synthetic validation failure']}},{status:422})
+  const record={...makeRow(`new-${config.requests.length}`),patient:{id:body.patient_id,name:'Synthetic created Patient',code:'new'},summary:body.summary,notes:body.notes,pending_treatment:body.pending_treatment,documents:[]}
+  records.push(record);return Response.json({data:view(record,true,actor)},{status:201})
+ }
+ const id=path.split('/')[3],record=records.find(h=>h.id===id)
+ if(!record)return Response.json({message:'Not available'},{status:404})
+ if(record.status!=='Sent'||(path.endsWith('/acknowledge')?config.rejectAck:config.rejectCancel))return Response.json({message:'Synthetic transition refusal',errors:{status:['Synthetic transition refusal']}},{status:422})
+ record.status=path.endsWith('/acknowledge')?'Acknowledged':'Cancelled'
+ return Response.json({data:view(record,true,actor)})
+}
+function Fixture(){
+ const [patient,setPatient]=useState('patient-a'),[role,setRole]=useState('staff'),[side,setSide]=useState('receiving'),[active,setActive]=useState(true),[mode,setMode]=useState('patient')
+ config.setPatient=setPatient;config.setRole=setRole;config.setSide=setSide;config.setActive=setActive;config.setMode=setMode
+ config.role=role;config.side=side
+ const branchId=side==='receiving'?'b2':'b1'
+ const session={serverUserId:'server-user',userId:'user',role,active,branchId,branchScopes:[branchId],dentistId:'dentist'}
+ const state={persons:[{id:'person'}],users:[{id:'user',personId:'person',role:role==='owner'?'Owner / Admin':role==='dentist'?'Dentist':'Staff',status:active?'Active':'Inactive',branchId,permissions:['all']}],staff:[{userId:'user',personId:'person',branchId}],dentists:[{id:'dentist',userId:'user',personId:'person',branchIds:[branchId]}]}
+ const store={state,session,toast:(message,tone)=>config.feedback.push({message,tone})}
+ return mode==='inbox'?React.createElement(HandoversPage,{store,role}):React.createElement(HandoverPanel,{store,patientId:patient,toast:store.toast})
+}
+createRoot(document.getElementById('root')).render(React.createElement(Fixture))
+</script></body></html>

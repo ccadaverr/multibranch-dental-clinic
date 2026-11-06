@@ -1,0 +1,34 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SCHED-01 synthetic Staff shift fixture</title></head><body><div id="root"></div><script type="module">
+import React,{useState} from 'react'
+import {createRoot} from 'react-dom/client'
+import {StaffScheduleProfiles} from '/src/pages/Staffing.jsx'
+import '/src/styles.css'
+import '/src/foundation.css'
+import '/src/automations.css'
+const staff=[{id:'s1',name:'Synthetic Staff A',title:'Receptionist',branch:{id:'b1',name:'Synthetic Branch A'},shift_start:'08:30',shift_end:'17:30',available:true},{id:'s2',name:'Synthetic Staff B',title:'Assistant',branch:{id:'b1',name:'Synthetic Branch A'},shift_start:'10:00',shift_end:'19:00',available:false},{id:'s3',name:'Synthetic foreign Staff',branch:{id:'b2',name:'Synthetic Branch B'},shift_start:null,shift_end:null}]
+const branches=[{id:'b1',name:'Synthetic Branch A'},{id:'b2',name:'Synthetic Branch B'}]
+window.sched01={requests:[],hold:false,fail:false,release:null}
+window.fetch=async (url,options={})=>{
+ const path=new URL(url,location.href).pathname
+ if(path==='/sanctum/csrf-cookie')return new Response(null,{status:204})
+ if(path==='/api/work-schedules')return Response.json({data:{staff,branches}})
+ if(path.startsWith('/api/staff/')&&options.method==='PATCH'){
+  const id=decodeURIComponent(path.split('/').at(-1)),body=JSON.parse(options.body)
+  window.sched01.requests.push({id,body})
+  if(window.sched01.hold)await new Promise(resolve=>{window.sched01.release=resolve})
+  if(window.sched01.fail)return Response.json({message:'Synthetic save refused',errors:{shift_end:['Synthetic validation refusal']}},{status:422})
+  const current=staff.find(row=>row.id===id)
+  if(!current)return Response.json({message:'Not found'},{status:404})
+  current.shift_start=body.shift_start;current.shift_end=body.shift_end;current.branch=branches.find(branch=>branch.id===body.branch_ref)||null
+  return Response.json({data:{id,name:current.name,title:current.title,branchId:current.branch?.id??null,branch:current.branch?.name??'All Branches',shiftStart:current.shift_start+':00',shiftEnd:current.shift_end+':00',available:current.available}})
+ }
+ return Response.json({message:'Unexpected fixture request'},{status:500})
+}
+function Fixture(){
+ const [role,setRole]=useState('owner'),[account,setAccount]=useState('a'),[mounted,setMounted]=useState(true)
+ window.sched01.setRole=setRole;window.sched01.setAccount=setAccount;window.sched01.setMounted=setMounted
+ const session={serverUserId:`server-${account}`,userId:`user-${account}`,role,active:true,branchScopes:['b1']}
+ return mounted?React.createElement(StaffScheduleProfiles,{key:JSON.stringify([account,role]),session,role}):React.createElement('p',null,'Fixture unmounted')
+}
+createRoot(document.getElementById('root')).render(React.createElement(Fixture))
+</script></body></html>
