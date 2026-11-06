@@ -147,10 +147,12 @@ final class BillingService {
     /** Payment + Receipt + invoice Paid + history + M22 audit, in the caller's transaction (full payment only). */
     private function settle(Invoice $i, User $actor, string $balance, string $method, ?string $reference, string $event, ?string $settlementType): void
     {
+        // Invoice paid_amount includes the booking credit already applied at issue. Payment/Receipt record only this collection.
+        $paid = $this->add((string) $i->paid_amount, $balance);
         $payment = Payment::create(['invoice_id' => $i->id, 'amount' => $balance, 'method' => $method, 'external_reference' => $reference, 'recorded_by_user_id' => $actor->id, 'recorded_at' => ClinicClock::now()]);
         $rn = DB::selectOne("select nextval('m11_receipt_number_seq') as n")->n;
         $receipt = Receipt::create(['received_from_name' => $i->billed_to_name ?? ($i->patient?->person ? trim($i->patient->person->first_name.' '.$i->patient->person->last_name) : null), 'payment_id' => $payment->id, 'invoice_id' => $i->id, 'receipt_number' => 'RCT-'.now()->format('Y').'-'.str_pad((string) $rn, 6, '0', STR_PAD_LEFT), 'amount' => $balance, 'method' => $method, 'external_reference' => $reference, 'issued_at' => ClinicClock::now()]);
-        $i->update(['status' => 'Paid', 'paid_amount' => $balance, 'paid_at' => ClinicClock::now(), 'revision' => $i->revision + 1, 'updated_by_user_id' => $actor->id]);
+        $i->update(['status' => 'Paid', 'paid_amount' => $paid, 'paid_at' => ClinicClock::now(), 'revision' => $i->revision + 1, 'updated_by_user_id' => $actor->id]);
         $this->history($i, $actor, $event, 'Issued', 'Paid', $settlementType);
         // Inside the transaction: a payment recorded by Staff and its audit event commit or roll back together. (The provider
         // path never undoes captured funds: the webhook handler stores the provider event first and reconciles from it.)

@@ -17,6 +17,7 @@ use App\Services\Notifications\NotificationCenter;
 use App\Support\ClinicClock;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -65,52 +66,98 @@ class HandoverController extends Controller
         $data = $request->validate(['patient_id' => ['required', 'string', 'max:40'], 'from_branch_ref' => ['required', 'string', 'max:50'], 'to_branch_ref' => ['required', 'string', 'max:50'],
             'to_dentist_ref' => ['nullable', 'string', 'max:50'], 'summary' => ['required', 'string', 'max:2000'], 'pending_treatment' => ['nullable', 'string', 'max:2000'],
             'notes' => ['nullable', 'string', 'max:2000'], 'document_ids' => ['nullable', 'array', 'max:10'], 'document_ids.*' => ['string', 'max:40']]);
-        $patient = Patient::where('public_id', $data['patient_id'])->firstOrFail();
-        $from = Branch::where('legacy_ref', $data['from_branch_ref'])->firstOrFail();
-        $to = Branch::where('legacy_ref', $data['to_branch_ref'])->where('status', 'Open')->firstOrFail();
-        $fromDentist = $user->role->value === 'dentist' ? DentistProfile::where('person_id', $user->person_id)->first() : null;
-        abort_unless($this->maySend($user, $patient, $from, $fromDentist), 403, 'You can hand over only a patient you are caring for at your branch.');
-        $toDentist = ! empty($data['to_dentist_ref']) ? DentistProfile::where('legacy_ref', $data['to_dentist_ref'])->firstOrFail() : null;
-        if ($toDentist && ! $toDentist->branches()->where('branches.id', $to->id)->exists()) throw ValidationException::withMessages(['to_dentist_ref' => ['That dentist does not work at the receiving branch.']]);
-        if ($from->id === $to->id && (! $toDentist || $toDentist->id === $fromDentist?->id)) throw ValidationException::withMessages(['to_branch_ref' => ['Choose another branch or another dentist.']]);
-        // Only existing documents of this patient that the sender can already see; the receiving side sees their titles only.
-        $documentIds = collect($data['document_ids'] ?? [])->unique()->values();
-        $docs = Document::visibleTo($user)->where('patient_id', $patient->id)->where('status', 'Active')->whereIn('public_id', $documentIds)->pluck('public_id');
-        if ($docs->count() !== $documentIds->count()) throw ValidationException::withMessages(['document_ids' => ['Attach only this patient’s existing documents.']]);
+        $handover = DB::transaction(function () use ($request, $data) {
+            // Match scope-replacement's User boundary first. NO KEY UPDATE still excludes its FOR UPDATE lock,
+            // while allowing audit/notification foreign-key KEY SHARE checks on this user (avoids a lock inversion).
+            $user = User::whereKey($request->user()->id)->lock('FOR NO KEY UPDATE')->firstOrFail();
+            abort_unless($user->account_status === 'Active', 403);
+            $patient = Patient::where('public_id', $data['patient_id'])->firstOrFail();
+            // Stable order for two opposite-direction handovers; shared locks exclude branch closure updates.
+            $branches = Branch::whereIn('legacy_ref', [$data['from_branch_ref'], $data['to_branch_ref']])->orderBy('id')->sharedLock()->get();
+            $from = $branches->firstWhere('legacy_ref', $data['from_branch_ref']);
+            $to = $branches->firstWhere('legacy_ref', $data['to_branch_ref']);
+            abort_unless($from && $to && $to->status === 'Open', 404);
+            $fromDentist = $user->role->value === 'dentist' ? DentistProfile::where('person_id', $user->person_id)->first() : null;
+            $toDentist = ! empty($data['to_dentist_ref']) ? DentistProfile::where('legacy_ref', $data['to_dentist_ref'])->firstOrFail() : null;
+            // Profile edits precede pivot sync in administration. Lock profiles in that same order before pivots,
+            // including combined profile/membership edits; branch-only edits still need the pivot locks below.
+            $dentists = DentistProfile::whereIn('id', array_values(array_filter([$fromDentist?->id, $toDentist?->id])))
+                ->orderBy('id')->sharedLock()->get();
+            $fromDentist = $fromDentist ? $dentists->firstWhere('id', $fromDentist->id) : null;
+            $toDentist = $toDentist ? $dentists->firstWhere('id', $toDentist->id) : null;
+            // Lock existing membership rows, not a new global/profile mutex: sync/detach DELETEs must wait for these
+            // shares even when a branch-only PATCH leaves the profile itself clean and emits no profile UPDATE.
+            $memberships = DB::table('dentist_branches')->whereIn('dentist_profile_id', array_values(array_filter([$fromDentist?->id, $toDentist?->id])))
+                ->whereIn('branch_id', [$from->id, $to->id])->orderBy('dentist_profile_id')->orderBy('branch_id')->sharedLock()->get();
+            // Authorize only memberships actually locked: a later insertion into an initially empty result is not protected.
+            $hasMembership = fn (DentistProfile $dentist, Branch $branch) => $memberships->contains(
+                fn ($row) => (int) $row->dentist_profile_id === $dentist->id && (int) $row->branch_id === $branch->id);
+            abort_if($fromDentist && ! $hasMembership($fromDentist, $from), 403, 'You can hand over only a patient you are caring for at your branch.');
+            abort_unless($this->maySend($user, $patient, $from, $fromDentist), 403, 'You can hand over only a patient you are caring for at your branch.');
+            if ($toDentist && ! $hasMembership($toDentist, $to)) throw ValidationException::withMessages(['to_dentist_ref' => ['That dentist does not work at the receiving branch.']]);
+            if ($from->id === $to->id && (! $toDentist || $toDentist->id === $fromDentist?->id)) throw ValidationException::withMessages(['to_branch_ref' => ['Choose another branch or another dentist.']]);
+            // Only existing documents of this patient that the sender can already see; the receiving side sees their titles only.
+            $documentIds = collect($data['document_ids'] ?? [])->unique()->values();
+            // Lock rows before evaluating the visibility subqueries. Retraction/metadata UPDATEs coordinate through
+            // PostgreSQL's row locks even though the document writer does not explicitly SELECT FOR UPDATE.
+            $lockedDocs = Document::whereIn('public_id', $documentIds)->orderBy('id')->sharedLock()->get();
+            if ($lockedDocs->count() !== $documentIds->count()) throw ValidationException::withMessages(['document_ids' => ['Attach only this patient’s existing documents.']]);
+            $docs = Document::visibleTo($user)->where('patient_id', $patient->id)->where('status', 'Active')->whereIn('public_id', $documentIds)->pluck('public_id');
+            if ($docs->count() !== $documentIds->count()) throw ValidationException::withMessages(['document_ids' => ['Attach only this patient’s existing documents.']]);
 
-        $handover = PatientHandover::create(['patient_id' => $patient->id, 'from_branch_id' => $from->id, 'to_branch_id' => $to->id, 'from_dentist_profile_id' => $fromDentist?->id,
-            'to_dentist_profile_id' => $toDentist?->id, 'created_by_user_id' => $user->id, 'summary' => $data['summary'], 'pending_treatment' => $data['pending_treatment'] ?? null,
-            'notes' => $data['notes'] ?? null, 'document_ids' => $docs->all(), 'status' => 'Sent']);
-        $this->audit($user, 'handover.created', $handover);
-        $title = 'Handover: '.($patient->person?->fullName() ?? 'a patient');
-        foreach ($this->receivers($handover) as $receiver) {
-            app(NotificationCenter::class)->staffNotice($receiver, 'handover_received', $title, 'From '.$from->name.'. Open it to acknowledge.', 'handovers', $handover->public_id, "handover:{$handover->public_id}:{$receiver->id}");
-        }
-        if ($patientUser = $patient->contactUser()) app(NotificationCenter::class)->recordShared($patientUser, $to->name, "record_shared:{$handover->public_id}");
+            $handover = PatientHandover::create(['patient_id' => $patient->id, 'from_branch_id' => $from->id, 'to_branch_id' => $to->id, 'from_dentist_profile_id' => $fromDentist?->id,
+                'to_dentist_profile_id' => $toDentist?->id, 'created_by_user_id' => $user->id, 'summary' => $data['summary'], 'pending_treatment' => $data['pending_treatment'] ?? null,
+                'notes' => $data['notes'] ?? null, 'document_ids' => $docs->all(), 'status' => 'Sent']);
+            $this->audit($user, 'handover.created', $handover);
+
+            // Notices are best-effort effects of a committed, audited handover, never proof of delivery.
+            DB::afterCommit(function () use ($handover, $patient, $from, $to) {
+                try {
+                    $title = 'Handover: '.($patient->person?->fullName() ?? 'a patient');
+                    foreach ($this->receivers($handover) as $receiver) {
+                        app(NotificationCenter::class)->staffNotice($receiver, 'handover_received', $title, 'From '.$from->name.'. Open it to acknowledge.', 'handovers', $handover->public_id, "handover:{$handover->public_id}:{$receiver->id}");
+                    }
+                    if ($patientUser = $patient->contactUser()) app(NotificationCenter::class)->recordShared($patientUser, $to->name, "record_shared:{$handover->public_id}");
+                } catch (\Throwable $e) {
+                    report($e); // A notification failure cannot roll back the already committed handover.
+                }
+            });
+
+            return $handover;
+        });
 
         return response()->json(['data' => $this->view($handover->fresh(['patient.person', 'fromBranch', 'toBranch', 'fromDentist.person', 'toDentist.person', 'creator.person']), $user, true)], 201);
     }
 
     public function acknowledge(Request $request, PatientHandover $patientHandover): JsonResponse
     {
-        $user = $request->user();
-        abort_unless($this->side($user, $patientHandover) === 'receiving', 403, 'Only the receiving branch or dentist acknowledges a handover.');
-        if ($patientHandover->status !== 'Sent') throw ValidationException::withMessages(['status' => ["This handover is already {$patientHandover->status}."]]);
-        $patientHandover->update(['status' => 'Acknowledged', 'acknowledged_by_user_id' => $user->id, 'acknowledged_at' => now()]);
-        $this->audit($user, 'handover.acknowledged', $patientHandover);
+        return DB::transaction(function () use ($request, $patientHandover) {
+            // Route binding may precede a competing transition. Recheck access and state after taking the row lock.
+            $current = PatientHandover::whereKey($patientHandover->id)->lockForUpdate()->firstOrFail();
+            $user = User::whereKey($request->user()->id)->firstOrFail();
+            abort_unless($user->account_status === 'Active', 403);
+            abort_unless($this->side($user, $current) === 'receiving', 403, 'Only the receiving branch or dentist acknowledges a handover.');
+            if ($current->status !== 'Sent') throw ValidationException::withMessages(['status' => ["This handover is already {$current->status}."]]);
+            $current->update(['status' => 'Acknowledged', 'acknowledged_by_user_id' => $user->id, 'acknowledged_at' => now()]);
+            $this->audit($user, 'handover.acknowledged', $current);
 
-        return response()->json(['data' => $this->view($patientHandover->fresh(['patient.person', 'fromBranch', 'toBranch', 'fromDentist.person', 'toDentist.person', 'creator.person', 'acknowledger.person']), $user, true)]);
+            return response()->json(['data' => $this->view($current->fresh(['patient.person', 'fromBranch', 'toBranch', 'fromDentist.person', 'toDentist.person', 'creator.person', 'acknowledger.person']), $user, true)]);
+        });
     }
 
     public function cancel(Request $request, PatientHandover $patientHandover): JsonResponse
     {
-        $user = $request->user();
-        abort_unless($this->side($user, $patientHandover) === 'sending', 403, 'Only the sending side cancels a handover.');
-        if ($patientHandover->status !== 'Sent') throw ValidationException::withMessages(['status' => ["This handover is already {$patientHandover->status}."]]);
-        $patientHandover->update(['status' => 'Cancelled', 'cancelled_by_user_id' => $user->id, 'cancelled_at' => now()]);
-        $this->audit($user, 'handover.cancelled', $patientHandover);
+        return DB::transaction(function () use ($request, $patientHandover) {
+            $current = PatientHandover::whereKey($patientHandover->id)->lockForUpdate()->firstOrFail();
+            $user = User::whereKey($request->user()->id)->firstOrFail();
+            abort_unless($user->account_status === 'Active', 403);
+            abort_unless($this->side($user, $current) === 'sending', 403, 'Only the sending side cancels a handover.');
+            if ($current->status !== 'Sent') throw ValidationException::withMessages(['status' => ["This handover is already {$current->status}."]]);
+            $current->update(['status' => 'Cancelled', 'cancelled_by_user_id' => $user->id, 'cancelled_at' => now()]);
+            $this->audit($user, 'handover.cancelled', $current);
 
-        return response()->json(['data' => $this->view($patientHandover->fresh(['patient.person', 'fromBranch', 'toBranch', 'creator.person']), $user, true)]);
+            return response()->json(['data' => $this->view($current->fresh(['patient.person', 'fromBranch', 'toBranch', 'creator.person']), $user, true)]);
+        });
     }
 
     /** "Request handover" from the duplicate guard: the front desk asks the branch that has the record to send a handover. */

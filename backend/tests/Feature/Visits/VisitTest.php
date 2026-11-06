@@ -112,6 +112,55 @@ class VisitTest extends TestCase
         $this->assertSame('Confirmed', $a->fresh()->status);
     }
 
+    public function test_ops02_payment_holds_block_pending_and_confirmed_admission_without_writes(): void
+    {
+        $this->actingAsUser('staffB1');
+        foreach (['A' => 'Pending', 'B' => 'Confirmed'] as $patient => $status) {
+            $appointment = $this->today($patient, $patient === 'A' ? 'd1' : 'd2');
+            $appointment->update(['status' => $status, 'booking_payment_status' => 'held']);
+            $before = $appointment->fresh()->getAttributes();
+            $this->checkIn($appointment, 1, 'ops02-held-'.$patient)->assertStatus(422)->assertJsonPath('code', 'booking_payment_pending')
+                ->assertJsonValidationErrors('booking_payment_status');
+            $this->assertSame($before, $appointment->fresh()->getAttributes());
+        }
+        $this->assertSame(0, Visit::count());
+        $this->assertSame(0, VisitHistory::count());
+        $this->assertSame(0, AppointmentHistory::count());
+        $this->assertSame(0, DB::table('queue_entries')->count());
+        $this->assertSame(0, DB::table('queue_entry_history')->count());
+        $this->assertSame(0, DB::table('command_keys')->where('command', 'visit.check_in')->count());
+    }
+
+    public function test_ops02_unpaid_pay_at_clinic_admission_is_preserved(): void
+    {
+        $this->actingAsUser('staffB1');
+        foreach (['A' => 'Pending', 'B' => 'Confirmed'] as $patient => $status) {
+            $appointment = $this->today($patient, $patient === 'A' ? 'd1' : 'd2');
+            $appointment->update(['status' => $status, 'booking_payment_status' => 'unpaid']);
+            $this->checkIn($appointment)->assertCreated()->assertJsonPath('data.status', 'Checked In');
+            $this->assertSame('unpaid', $appointment->fresh()->booking_payment_status);
+        }
+        $this->assertSame(2, Visit::count());
+        $this->assertSame(2, DB::table('queue_entries')->count());
+    }
+
+    public function test_ops02_refused_hold_can_retry_after_persisted_payment_confirmation_and_replays_once(): void
+    {
+        $this->actingAsUser('staffB1');
+        $appointment = $this->today();
+        $appointment->update(['status' => 'Pending', 'booking_payment_status' => 'held']);
+        $key = 'ops02-retry-after-confirmation';
+        $this->checkIn($appointment, 1, $key)->assertStatus(422)->assertJsonPath('code', 'booking_payment_pending');
+        // Fixture for an independently verified provider confirmation; this test makes no provider call.
+        $appointment->update(['status' => 'Confirmed', 'booking_payment_status' => 'paid', 'revision' => 2]);
+        $first = $this->checkIn($appointment, 2, $key)->assertCreated();
+        $this->checkIn($appointment, 2, $key)->assertCreated()->assertHeader('Idempotent-Replayed', 'true')
+            ->assertJsonPath('data.id', $first->json('data.id'));
+        $this->assertSame(1, Visit::count());
+        $this->assertSame(1, DB::table('queue_entries')->count());
+        $this->assertSame(1, AppointmentHistory::where('event', 'appointment.checked_in')->count());
+    }
+
     public function test_duplicate_check_in_replays_with_the_same_key_and_conflicts_with_another(): void
     {
         $a = $this->today();

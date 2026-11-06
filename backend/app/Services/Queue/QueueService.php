@@ -82,16 +82,25 @@ final class QueueService
      */
     public function serve(User $actor, Visit $visit): QueueEntry
     {
-        $entry = QueueEntry::where('visit_id', $visit->id)->lockForUpdate()->first();
-        if (! $entry) {
-            throw VisitCommandException::rule('not_in_queue', 'This visit is not in a queue, so treatment cannot start from it.', 'queue');
-        }
+        $entry = $this->forClinicalVisit($visit, true);
         if (! in_array($entry->status, ['Called', 'Treatment Ready'], true)) {
             throw VisitCommandException::rule('queue_not_ready', 'Call this patient before starting treatment.', 'queue');
         }
         $from = $entry->status;
         $entry->update(['status' => 'Served', 'closed_at' => ClinicClock::now(), 'revision' => $entry->revision + 1, 'updated_by_user_id' => $actor->id]);
         $this->history($entry, $actor, 'queue.served', $from, null);
+
+        return $entry;
+    }
+
+    /** Caller holds the Visit lock; take the queue lock before any Treatment lock. Never repair persisted links. */
+    public function forClinicalVisit(Visit $visit, bool $requireToday = false): QueueEntry
+    {
+        $entry = QueueEntry::where('visit_id', $visit->id)->lockForUpdate()->first();
+        if (! $entry) {
+            throw VisitCommandException::rule('not_in_queue', 'This visit has no queue entry. Clinic review is required.', 'queue');
+        }
+        $this->assertVisitLink($entry, $visit, $requireToday);
 
         return $entry;
     }
@@ -274,8 +283,32 @@ final class QueueService
     {
         $visit = Visit::whereKey($entry->visit_id)->lockForUpdate()->firstOrFail();
         $current = QueueEntry::whereKey($entry->id)->lockForUpdate()->firstOrFail();
+        if ($current->visit_id !== $visit->id || $current->dentist_queue_id !== $entry->dentist_queue_id) {
+            throw new VisitCommandException(409, 'conflict', 'The queue encounter changed. Reload before trying again.');
+        }
+        // Validate even same-target no-ops; a malformed or historical encounter is not a current success.
+        $this->assertVisitLink($current, $visit, true);
+        if ($visit->status !== 'Checked In' || $current->closed_at !== null
+            || in_array($current->status, ['Served', 'Done', 'Cancelled', 'No-show'], true)) {
+            throw VisitCommandException::rule('queue_closed', 'This patient has left the waiting queue.', 'status');
+        }
 
         return [$visit, $current];
+    }
+
+    private function assertVisitLink(QueueEntry $entry, Visit $visit, bool $requireToday): void
+    {
+        $queue = $entry->dentistQueue()->lockForUpdate()->first();
+        $date = $visit->clinic_date->format('Y-m-d');
+        if (! $queue || $entry->visit_id !== $visit->id || $queue->branch_id !== $visit->branch_id
+            || $visit->responsible_dentist_profile_id === null || $queue->dentist_profile_id !== $visit->responsible_dentist_profile_id
+            || $queue->clinic_date->format('Y-m-d') !== $date || ClinicClock::local($visit->arrived_at)->toDateString() !== $date) {
+            throw VisitCommandException::rule('queue_visit_mismatch', 'The queue and visit identities do not agree. Clinic review is required.', 'queue');
+        }
+        if ($requireToday && $date !== ClinicClock::today()) {
+            throw VisitCommandException::rule('not_today', 'This queue entry belongs to another clinic day.', 'status');
+        }
+        $entry->setRelation('dentistQueue', $queue);
     }
 
     private function assertCurrent(QueueEntry $current, Visit $visit, int $expectedRevision): void
