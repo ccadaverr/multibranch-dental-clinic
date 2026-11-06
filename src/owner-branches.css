@@ -11,3 +11,7 @@
   .owner-branches .form-grid { grid-template-columns: minmax(0, 1fr); }
   .owner-branches .hours-row { gap: 8px; }
 }
+
+.owner-branches .branch-coordinate-editor { min-width: 0; margin: 12px 0 0; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius); }
+.owner-branches .branch-coordinate-editor input { min-width: 0; width: 100%; }
+.owner-branches .branch-coordinate-editor :is(input, button):focus-visible { outline: var(--focus-ring); outline-offset: 2px; }

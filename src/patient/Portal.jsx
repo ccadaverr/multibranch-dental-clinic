@@ -72,8 +72,11 @@ export function PatientPortal({ me, store, initialPage = 'home', initialContext 
     window.addEventListener('patient-avatar-updated', handler)
     return () => window.removeEventListener('patient-avatar-updated', handler)
   }, [me?.patient?.id, me?.id])
-  const notes = useNotifications()
+  const notes = useNotifications(me, store.session)
   const main = useRef(null)
+  const bellButton = useRef(null)
+  const notificationAccount = useRef(me)
+  notificationAccount.current = me
   const toast = store.toast
 
   const navigate = (next, ctx = null) => {
@@ -133,7 +136,7 @@ export function PatientPortal({ me, store, initialPage = 'home', initialContext 
     <div className="pp-body">
       <header className="pp-top">
         <h1 className="pp-top-title">{TITLES[page]}</h1>
-        <button type="button" className="pp-icon-btn pp-bell" aria-label={notes.unread ? `Notifications, ${notes.unread} unread` : 'Notifications'} aria-expanded={bell} onClick={() => setBell(b => !b)}>
+        <button ref={bellButton} type="button" className="pp-icon-btn pp-bell" aria-haspopup="dialog" aria-label={notes.unread ? `Notifications, ${notes.unread} unread` : 'Notifications'} aria-expanded={bell} onClick={() => setBell(b => !b)}>
           <Icon name="bell" size={22}/>{notes.unread > 0 && <span className="pp-badge-count" aria-hidden="true">{notes.unread > 9 ? '9+' : notes.unread}</span>}
         </button>
       </header>
@@ -158,11 +161,10 @@ export function PatientPortal({ me, store, initialPage = 'home', initialContext 
       </div>
     </div>}
 
-    {bell && <NotificationPanel notes={notes} onClose={() => setBell(false)} onOpen={n => {
-      if (!n.read) notes.markRead(n.id)
-      const t = n.target
-      if (!t) return
-      navigate(t.page, t.page === 'billing' ? { invoiceId: t.id } : t.page === 'messages' ? { conversationId: t.id } : { appointmentId: t.id })
+    {bell && <NotificationPanel key={notes.identity} notes={notes} onClose={() => { setBell(false); bellButton.current?.focus() }} destination={n => patientNotificationDestination(me, n)} onOpen={async n => {
+      if (!await notes.markRead(n.id) || !notes.isCurrent()) return
+      const destination = patientNotificationDestination(notificationAccount.current, n)
+      if (destination) navigate(destination.page, destination.context)
     }}/>}
     <AssistantLauncher onNavigate={navigate}/>
     <ConfirmDialog open={logoutConfirmOpen} title="Sign out?" tone="default" confirmLabel="Sign out" cancelLabel="Cancel" className="patient-logout-dialog" onConfirm={() => { setLogoutConfirmOpen(false); onLogout() }} onCancel={() => setLogoutConfirmOpen(false)}>
@@ -186,36 +188,119 @@ function ProfileMenu({ onPick, onLogout, onClose }) {
   </div>
 }
 
-/** Notifications from real server events only; polled every minute while the tab is visible. */
-function useNotifications() {
-  const [state, setState] = useState({ status: 'loading', items: [], unread: 0, error: '' })
-  const load = async () => {
-    const r = await listNotifications()
-    setState(s => r.ok ? { status: 'ready', items: r.data || [], unread: r.meta?.unread ?? 0, error: '' } : { ...s, status: s.items.length ? 'ready' : 'error', error: r.message || 'Notifications could not be loaded.' })
-  }
-  useEffect(() => { load() }, [])
-  useVisibleRefresh(load, { active: true, intervalMs: 60000 })
-  const markRead = async id => {
-    setState(s => ({ ...s, items: s.items.map(n => n.id === id ? { ...n, read: true } : n), unread: Math.max(0, s.unread - 1) }))
-    const r = await readNotification(id)
-    if (r.ok && r.meta) setState(s => ({ ...s, unread: r.meta.unread }))
-  }
-  const markAll = async () => {
-    const r = await readAllNotifications()
-    if (r.ok) setState(s => ({ ...s, items: s.items.map(n => ({ ...n, read: true })), unread: 0 }))
-  }
-  return { ...state, reload: load, markRead, markAll }
+export function patientNotificationIdentity(me) {
+  return me?.role === 'patient' && me?.account_status === 'Active' && me?.id && me?.patient?.id
+    ? JSON.stringify([me.id, me.patient.id]) : null
 }
 
-function NotificationPanel({ notes, onClose, onOpen }) {
+export function patientNotificationDestination(me, notification) {
+  if (!patientNotificationIdentity(me)) return null
+  const target = notification?.target
+  if (!target || typeof target !== 'object' || !['visits', 'billing', 'messages', 'book'].includes(target.page)) return null
+  const id = typeof target.id === 'string' && target.id.trim() ? target.id : null
+  // NotificationCenter's prescription-ready target uses a prescription ID, not an appointment ID.
+  if (notification.kind === 'prescription_ready' && target.page === 'visits') return { page: 'prescriptions', context: null }
+  const appointmentKinds = ['appointment_booked', 'appointment_rescheduled', 'appointment_cancelled', 'appointment_reminder', 'late_check', 'move_up_offer', 'closure_notice', 'dentist_unavailable']
+  const context = id && target.page === 'visits' && appointmentKinds.includes(notification.kind) ? { appointmentId: id }
+    : id && target.page === 'billing' && ['invoice_issued', 'payment_received', 'invoice_overdue'].includes(notification.kind) ? { invoiceId: id }
+    : id && target.page === 'messages' && notification.kind === 'message_received' ? { conversationId: id } : null
+  return { page: target.page, context }
+}
+
+export function patientNotificationSnapshot(result) {
+  if (!result?.ok) throw new Error(result?.message || 'Notifications could not be updated. Try again.')
+  const items = result.data, unread = result.meta?.unread
+  if (!Array.isArray(items) || items.length > 50 || !Number.isInteger(unread) || unread < 0 ||
+      items.some(n => !n || typeof n.id !== 'string' || typeof n.read !== 'boolean' || typeof n.title !== 'string' || (n.body != null && typeof n.body !== 'string')) ||
+      new Set(items.map(n => n.id)).size !== items.length || unread < items.filter(n => !n.read).length) throw new Error('Notifications could not be loaded. Try again.')
+  return { items, unread }
+}
+
+// One instance per authenticated account epoch. Pure controller permits deferred race tests
+// without timers, network access, or real account records.
+export function createPatientNotificationFeed(api) {
+  let active = false, generation = 0, pending = null, listener = null
+  let state = { status: 'loading', items: [], unread: null, error: '', busy: false, refreshing: false, confirmed: false, failed: null }
+  const emit = next => { state = next; listener?.(state) }
+  const run = async operation => {
+    if (!active || pending?.type === 'read' || pending?.type === 'all' || (operation.type === 'load' && pending)) return false
+    if (operation.type === 'read' && !state.items.some(n => n.id === operation.id)) return false
+    if (operation.type === 'read' && state.items.find(n => n.id === operation.id)?.read) return true
+    const request = { ...operation, generation: ++generation }
+    pending = request
+    emit({ ...state, error: '', failed: null, busy: operation.type !== 'load', refreshing: true })
+    let result
+    try {
+      result = await (operation.type === 'read' ? api.read(operation.id) : operation.type === 'all' ? api.readAll() : api.list())
+      if (!active || generation !== request.generation) return false
+      const snapshot = patientNotificationSnapshot(result)
+      emit({ ...snapshot, status: 'ready', busy: false, refreshing: false, error: '', confirmed: true, failed: null })
+      return true
+    } catch (error) {
+      if (!active || generation !== request.generation) return false
+      const denied = ['unauthenticated', 'forbidden'].includes(result?.kind)
+      const retained = state.confirmed && !denied
+      emit({ ...state, ...(retained ? {} : { items: [], unread: null, confirmed: false }), status: retained ? 'ready' : 'error', busy: false, refreshing: false,
+        error: error?.message || 'Notifications are unavailable. Try again.', failed: denied ? { type: 'load' } : operation })
+      return false
+    } finally { if (pending === request) pending = null }
+  }
+  return {
+    snapshot: () => state,
+    start(callback) { active = true; listener = callback; return run({ type: 'load' }) },
+    stop() { active = false; generation++; pending = null; listener = null },
+    isActive: () => active,
+    reload: () => run({ type: 'load' }),
+    poll: () => state.failed && state.failed.type !== 'load' ? Promise.resolve(false) : run({ type: 'load' }),
+    markRead: id => run({ type: 'read', id }),
+    markAll: () => run({ type: 'all' }),
+    retry: () => run(state.failed || { type: 'load' }),
+  }
+}
+
+const useNotificationLayoutEffect = typeof window === 'undefined' ? useEffect : React.useLayoutEffect
+
+/** Server-only notifications, refreshed every minute while visible and authorized. */
+export function useNotifications(me, session) {
+  const identity = patientNotificationIdentity(me)
+  const eligible = !!identity && session?.serverUserId === me.id && session?.role === 'patient' && session?.active === true
+  const [snapshot, setSnapshot] = useState(null)
+  // A -> B -> A creates a fresh controller rather than reusing A's earlier epoch.
+  const feed = React.useMemo(() => createPatientNotificationFeed({ list: listNotifications, read: readNotification, readAll: readAllNotifications }), [identity, eligible])
+  const latest = useRef(null)
+  latest.current = eligible ? feed : null
+  useNotificationLayoutEffect(() => {
+    if (!eligible) return undefined
+    feed.start(value => setSnapshot({ feed, value }))
+    return () => feed.stop()
+  }, [feed, eligible])
+  useVisibleRefresh(() => feed.poll(), { active: eligible, intervalMs: 60000 })
+  const current = !eligible ? { status: 'error', items: [], unread: null, error: 'Notifications are unavailable for this account.', busy: false, refreshing: false }
+    : snapshot?.feed === feed ? snapshot.value : feed.snapshot()
+  return { ...current, identity, available: eligible, reload: () => feed.reload(), markRead: id => feed.markRead(id), markAll: () => feed.markAll(), retry: () => feed.retry(),
+    isCurrent: () => latest.current === feed && feed.isActive() }
+}
+
+export function NotificationPanel({ notes, onClose, onOpen, destination }) {
   const ref = useRef(null)
   useEffect(() => {
+    const previous = document.activeElement
     ref.current?.focus()
-    const key = e => { if (e.key === 'Escape') onClose() }
+    const key = e => {
+      if (e.key === 'Escape') onClose()
+      if (e.key === 'Tab') {
+        const controls = [...ref.current.querySelectorAll('button:not(:disabled), [tabindex="0"]')]
+        const first = controls[0], last = controls.at(-1)
+        if (!first) { e.preventDefault(); ref.current.focus(); return }
+        if (e.shiftKey && (document.activeElement === first || !controls.includes(document.activeElement))) { e.preventDefault(); last.focus() }
+        else if (!e.shiftKey && (document.activeElement === last || !controls.includes(document.activeElement))) { e.preventDefault(); first.focus() }
+      }
+    }
     document.addEventListener('keydown', key)
-    return () => document.removeEventListener('keydown', key)
+    return () => { document.removeEventListener('keydown', key); if (previous?.isConnected) previous.focus() }
   }, [])
   const when = iso => {
+    if (!iso || !Number.isFinite(Date.parse(iso))) return 'Date unavailable'
     const minutes = Math.round((Date.now() - new Date(iso).getTime()) / 60000)
     if (minutes < 1) return 'Just now'
     if (minutes < 60) return `${minutes} min ago`
@@ -223,16 +308,17 @@ function NotificationPanel({ notes, onClose, onOpen }) {
     return new Date(iso).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', timeZone: 'Asia/Manila' })
   }
   return <div className="pp-sheet-backdrop pp-notes-backdrop" onClick={onClose}>
-    <section ref={ref} tabIndex={-1} className="pp-notes pp-pop" role="dialog" aria-labelledby="pp-notes-title" onClick={e => e.stopPropagation()}>
+    <section ref={ref} tabIndex={-1} className="pp-notes pp-pop" role="dialog" aria-modal="true" aria-labelledby="pp-notes-title" aria-busy={notes.busy || notes.refreshing} onClick={e => e.stopPropagation()}>
       <header><h2 id="pp-notes-title">Notifications</h2>
-        <button type="button" className="link-button" disabled={!notes.unread} onClick={notes.markAll}>Mark all read</button>
+        <button type="button" className="link-button" disabled={!notes.unread || notes.busy || notes.refreshing || !!notes.error} onClick={notes.markAll}>Mark all read</button>
         <button type="button" className="pp-icon-btn" aria-label="Close notifications" onClick={onClose}><Icon name="x" size={20}/></button>
       </header>
+      <p role="status">{notes.busy ? 'Updating read status…' : notes.refreshing ? 'Loading notifications…' : notes.unread == null ? 'Unread count unavailable' : `${notes.unread} unread`}. Recent history: up to 50 notifications.</p>
+      {notes.error && <div className="pp-notes-empty" role="alert" tabIndex={0}>{notes.confirmed && 'Showing the last confirmed updates. '}{notes.error} <button type="button" className="link-button" disabled={!notes.available || notes.refreshing} onClick={notes.retry}>Retry {notes.failed?.type === 'read' ? 'mark read' : notes.failed?.type === 'all' ? 'mark all read' : 'notifications'}</button></div>}
       {notes.status === 'loading' && <div className="pp-notes-empty" role="status">Loading…</div>}
-      {notes.status === 'error' && <div className="pp-notes-empty" role="alert">{notes.error} <button type="button" className="link-button" onClick={notes.reload}>Try again</button></div>}
-      {notes.status === 'ready' && !notes.items.length && <div className="pp-notes-empty"><Icon name="check" size={22}/><p>You’re all caught up</p></div>}
+      {notes.status === 'ready' && !notes.error && !notes.items.length && <div className="pp-notes-empty"><Icon name="check" size={22}/><p>No recent notifications</p></div>}
       <ul>{notes.items.map(n => <li key={n.id}>
-        <button type="button" className={`pp-nitem ${n.read ? '' : 'is-unread'}`} onClick={() => onOpen(n)}>
+        <button type="button" className={`pp-nitem ${n.read ? '' : 'is-unread'}`} disabled={notes.busy || !!notes.error || (!destination(n) && n.read)} aria-label={`${destination(n) ? 'View update' : n.read ? 'No linked page' : 'Mark read'}: ${n.title}`} onClick={() => onOpen(n)}>
           <span className="pp-nitem-dot" aria-hidden="true"/>
           <span><b>{!n.read && <span className="sr-only">Unread: </span>}{n.title}</b>{n.body && <small>{n.body}</small>}<em>{when(n.created_at)}</em></span>
         </button></li>)}</ul>

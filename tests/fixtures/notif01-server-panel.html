@@ -1,0 +1,21 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NOTIF-01 synthetic notification fixture</title></head><body><div id="root"></div><script type="module">
+import React,{useState} from 'react'
+import {createRoot} from 'react-dom/client'
+import {Shell} from '/src/layout.jsx'
+import '/src/styles.css'
+import '/src/foundation.css'
+function Fixture(){
+ const [config,setConfig]=useState({account:'a',role:'staff',active:true,permissions:['all']})
+ const [destination,setDestination]=useState('')
+ window.notif01Configure=patch=>{setConfig(c=>({...c,...patch}));setDestination('')}
+ const {account,role,active,permissions}=config
+ const userId=`user-${account}`,personId=`person-${account}`,patientId=`patient-${account}`,dentistId=`dentist-${account}`
+ const session={serverUserId:`server-${account}`,userId,role,active,branchId:'b1',patientId,dentistId}
+ const state={persons:[{id:personId}],users:[{id:userId,personId,name:'Synthetic account '+account,role:role==='owner'?'Owner / Admin':role==='patient'?'Patient':role==='dentist'?'Dentist':'Staff',status:active?'Active':'Inactive',branchId:'b1',permissions:role==='patient'?['patient-portal']:permissions}],staff:[{userId,personId,branchId:'b1'}],dentists:[{id:dentistId,userId,personId,branchIds:['b1']}],patients:[{id:patientId,userId,personId}],branches:[{id:'b1',name:'Synthetic branch'}],notifications:[{id:'demo',title:'LOCAL DEMO MUST NOT APPEAR',recipientUserId:userId,branchId:'b1',patientId,dentistId,read:false}],appointments:[],queue:[],treatments:[],prescriptions:[],invoices:[],hmo:[],conversations:[]}
+ const actions={markNotificationRead(){throw Error('Local read used in server mode')},markAllNotificationsRead(){throw Error('Local read-all used in server mode')}}
+ return React.createElement(React.Fragment,null,
+  React.createElement('output',{'data-testid':'destination'},destination),
+  React.createElement(Shell,{role,page:'dashboard',activeBranch:'Synthetic branch',setActiveBranch(){},onLogout(){window.notif01Configure({active:false})},store:{state,session,actions,toast(){}},setPage:(page,context)=>setDestination(JSON.stringify({page,context}))},'Synthetic notification fixture'))
+}
+createRoot(document.getElementById('root')).render(React.createElement(Fixture))
+</script></body></html>

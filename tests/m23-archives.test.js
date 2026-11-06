@@ -575,6 +575,40 @@ test('Archives component source contracts: verify PDF triggers, empty states, an
   assert.match(staffPage, /archivedPrescriptions/)
   assert.match(staffPage, /archivedInvoices/)
   assert.match(staffPage, /archive\.viewed/)
-  assert.match(staffPage, /archive\.restored_for_followup/)
   assert.match(staffPage, /Permanent deletion/)
+})
+
+// ARC-01 source guards. These do not establish rendered or backend authorization acceptance.
+test('ARC-01: unsupported restoration has no confirmation, success event or local restore state', () => {
+  const page = readFileSync('src/pages/ArchivesPage.jsx', 'utf8')
+  assert.doesNotMatch(page, /handleConfirmRestore|restoreTarget|restoreReason|setRestore|archive\.restored_for_followup/)
+  assert.doesNotMatch(page, /Confirm Retrieval|retrieved for active follow-up|Restoring flags|flags a historical record/)
+  assert.doesNotMatch(page, /<form|type="submit"|fetch\(|\b(?:restore|retrieve|delete|remove|archive)Record\s*\(/)
+  // Remaining success messages are exports, never restoration.
+  const successCalls = page.match(/toast\?\.\([^\n]+, 'success'\)/g) || []
+  assert.equal(successCalls.length, 3)
+  for (const call of successCalls) assert.match(call, /exported to CSV/)
+})
+
+test('ARC-01: disabled restore explains unavailability in visible keyboard-focusable text', () => {
+  const page = readFileSync('src/pages/ArchivesPage.jsx', 'utf8')
+  const button = page.match(/<Button[^>]*aria-describedby="archive-restore-unavailable"[^>]*>[^<]*<\/Button>/)?.[0]
+  assert.ok(button, 'Restore control references its explanation')
+  assert.match(button, /\bdisabled\b/)
+  assert.doesNotMatch(button, /onClick|type="submit"/)
+  assert.match(button, /Retrieve \/ Restore \(unavailable\)/)
+  assert.match(page, /<span id="archive-restore-unavailable" tabIndex=\{0\}>Retrieval \/ restoration is unavailable on this screen\. Viewing a record does not restore it or flag it for active follow-up\.<\/span>/)
+})
+
+test('ARC-01: read-only viewing and existing role restrictions remain in place', () => {
+  const page = readFileSync('src/pages/ArchivesPage.jsx', 'utf8')
+  for (const kind of ['visit', 'prescription', 'financial']) {
+    assert.ok(page.includes(`setViewRecord({ kind: '${kind}', record: r })`))
+  }
+  assert.equal((page.match(/logArchiveAudit\('archive\.viewed'/g) || []).length, 3)
+  assert.match(page, /title="Archived Record Details \(Read-Only\)"/)
+  assert.match(page, /const canViewFinancials = role !== 'dentist'/)
+  assert.match(page, /if \(!inStaffBranch\) return false/)
+  assert.match(page, /if \(!inDentistBranch \|\| !isDentistRecord\) return false/)
+  assert.match(page, /role === 'owner' \? <span className="au-muted">Metadata only \(clinical privacy\)/)
 })

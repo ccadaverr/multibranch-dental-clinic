@@ -22,6 +22,15 @@ import { OwnerRevenueCharts } from './OwnerRevenueCharts.jsx'
 
 export const ALLOWED_BRANCH_CODES = ['BRC-A', 'BRC-B', 'BRC-C', 'BRC-D', 'BRC-E', 'BRC-F', 'MNL', 'QC', 'MKTI', 'BGC', 'ORT', 'ALB', 'CEB', 'DVO', 'PAS']
 
+// Match UpdateBranchRequest's paired, nullable coordinates and existing branch bounds.
+export function branchPinError(latitude, longitude) {
+  const empty = value => value == null || String(value).trim() === ''
+  if (empty(latitude) && empty(longitude)) return ''
+  if (empty(latitude) || !Number.isFinite(Number(latitude)) || Number(latitude) < 4 || Number(latitude) > 22) return 'Enter a latitude from 4 to 22 and a longitude from 114 to 128.'
+  if (empty(longitude) || !Number.isFinite(Number(longitude)) || Number(longitude) < 114 || Number(longitude) > 128) return 'Enter a latitude from 4 to 22 and a longitude from 114 to 128.'
+  return ''
+}
+
 export function BranchMapPicker({ latitude, longitude, onChange }) {
   const mapRef = useRef(null)
   const mapControl = useRef(null)
@@ -38,7 +47,7 @@ export function BranchMapPicker({ latitude, longitude, onChange }) {
       import('../branch-map.js').then(({ mountBranchPinMap }) => {
         if (!active) return
         cleanup = mountBranchPinMap(mapRef.current, {
-          ...latest.current,
+          ...(branchPinError(latest.current.latitude, latest.current.longitude) ? {} : latest.current),
           onChange: value => latest.current.onChange(value),
         })
         mapControl.current = cleanup
@@ -55,13 +64,18 @@ export function BranchMapPicker({ latitude, longitude, onChange }) {
       mapControl.current = null
     }
   }, [])
-  React.useEffect(() => { mapControl.current?.setCoordinates?.(latitude, longitude) }, [latitude, longitude])
+  React.useEffect(() => {
+    // Keep the last valid preview while a coordinate pair is being typed.
+    if (!branchPinError(latitude, longitude)) mapControl.current?.setCoordinates?.(latitude, longitude)
+  }, [latitude, longitude])
 
   return (
     <div className="branch-map-picker-container">
       <div
         ref={mapRef}
         className="branch-map-canvas"
+        role="region"
+        aria-label="Branch location map preview; coordinate controls follow"
         style={{ width: '100%', height: '240px', borderRadius: '8px', border: '1px solid var(--line, #e2e8f0)', background: '#f8fafc', position: 'relative' }}
       >
         {!mapLoaded && (
@@ -70,7 +84,7 @@ export function BranchMapPicker({ latitude, longitude, onChange }) {
           </div>
         )}
       </div>
-      {mapError && <Notice tone="warning">The location map could not load. Reopen the Details tab to retry. Your existing coordinates have not changed.</Notice>}
+      {mapError && <Notice tone="warning">The location map could not load. Reopen the Details tab to retry. You can still edit the coordinates below; Publish Branch Changes saves them.</Notice>}
     </div>
   )
 }
@@ -81,6 +95,10 @@ export function BranchesPage({ store }) {
   const branch=state.branches.find(b=>b.id===selected)
   const [form,setForm]=useState(branch||{})
   const [configTab,setConfigTab]=useState('details')
+  const coordinateInputRef = useRef(null)
+  const coordinateError = branchPinError(form.latitude, form.longitude)
+  const coordinateValue = value => value == null || value === '' ? null : Number(value)
+  const locationChanged = coordinateValue(form.latitude) !== coordinateValue(branch?.latitude) || coordinateValue(form.longitude) !== coordinateValue(branch?.longitude)
   React.useEffect(()=>setForm(branch||{}),[branch])
 
   const codesInUse = useMemo(() => new Set(state.branches.filter(b => b.id !== selected).map(b => b.branchCode)), [state.branches, selected])
@@ -95,6 +113,7 @@ export function BranchesPage({ store }) {
   // server). See adoptBranchFromServer/adoptBranchServiceFromServer (administration.js) and the Phase 2A
   // plan, section J/point 8.
   const save=async()=>{
+    if (coordinateError) return toast(coordinateError, 'warning')
     if (codesInUse.has(form.branchCode)) {
       return toast(`Branch code ${form.branchCode} is already assigned to another branch.`, 'warning')
     }
@@ -189,16 +208,39 @@ export function BranchesPage({ store }) {
           <Field label="Email (optional)"><input type="email" value={form.email||''} onChange={e=>setForm({...form,email:e.target.value})}/></Field>
           <Field label="Address"><textarea value={form.address||''} onChange={e=>setForm({...form,address:e.target.value})}/></Field>
           <div className="branch-map-field" style={{ gridColumn: '1 / -1', marginTop: '6px' }}>
-            <label className="field-label">Branch location map <small>Click the map or drag the pin to set the exact branch coordinates</small></label>
+            <p className="field-label">Branch location map <small>Click the map, drag the pin, or enter coordinates below.</small></p>
             <BranchMapPicker
               latitude={form.latitude}
               longitude={form.longitude}
               onChange={({ latitude, longitude }) => setForm(f => ({ ...f, latitude, longitude }))}
             />
+            <fieldset className="branch-coordinate-editor" aria-describedby="branch-coordinate-help">
+              <legend>Draft pin coordinates</legend>
+              <p id="branch-coordinate-help">Enter the branch’s known coordinates using the keyboard. Tab moves between controls. Valid pairs update the preview; edits are saved only with Publish Branch Changes.</p>
+              <div className="form-grid">
+                <Field label="Draft latitude" hint="4 to 22 degrees">
+                  <input ref={coordinateInputRef} type="number" min="4" max="22" step="any" value={form.latitude ?? ''}
+                    aria-invalid={!!coordinateError} aria-describedby="branch-coordinate-help branch-coordinate-status"
+                    onChange={e => setForm(f => ({ ...f, latitude: e.target.value }))}/>
+                </Field>
+                <Field label="Draft longitude" hint="114 to 128 degrees">
+                  <input type="number" min="114" max="128" step="any" value={form.longitude ?? ''}
+                    aria-invalid={!!coordinateError} aria-describedby="branch-coordinate-help branch-coordinate-status"
+                    onChange={e => setForm(f => ({ ...f, longitude: e.target.value }))}/>
+                </Field>
+              </div>
+              <Button variant="ghost" disabled={!locationChanged} onClick={() => {
+                setForm(f => ({ ...f, latitude: branch.latitude, longitude: branch.longitude }))
+                coordinateInputRef.current?.focus()
+              }}>Reset location to saved coordinates</Button>
+            </fieldset>
+            <p id="branch-coordinate-status" role={coordinateError ? 'alert' : 'status'}>
+              {coordinateError || (locationChanged ? 'Unsaved location changes. Publish Branch Changes to save.' : 'Location matches the saved branch record.')}
+            </p>
             <div className="branch-coords-readout">
               <span>Latitude: <b className="coord-value">{form.latitude != null && form.latitude !== '' ? Number(form.latitude).toFixed(6) : 'Not pinned'}</b></span>
               <span>Longitude: <b className="coord-value">{form.longitude != null && form.longitude !== '' ? Number(form.longitude).toFixed(6) : 'Not pinned'}</b></span>
-              <small style={{ color: 'var(--muted)' }}>The pin updates this form. Select Publish Branch Changes to save.{form.latitude == null || form.longitude == null ? ' No location is saved; the starting map view is not a branch location.' : ''}</small>
+              <small style={{ color: 'var(--muted)' }}>The pin updates this form. Select Publish Branch Changes to save.{branch.latitude == null || branch.longitude == null ? ' This branch has no saved location; the starting map view is not a branch location.' : ''}</small>
             </div>
           </div>
         </div>}
@@ -228,8 +270,9 @@ export function BranchesPage({ store }) {
           <label className="field-label">Available services <small>Branch services • scheduling reads this catalog directly</small></label>
           <div className="branch-services-grid">{state.services.filter(s=>s.status==='Active').map(service=>{const active=serviceActive(service.id);return <label className={`branch-service-item ${active?'is-active':''}`} key={service.id}><input type="checkbox" checked={active} onChange={()=>toggleService(service.id)}/><div><b>{service.name}</b><small style={{display:'block',color:'var(--muted)'}}>{service.category} • {service.duration} min</small></div></label>})}</div>
         </div>}
+        {configTab !== 'details' && <p id="branch-coordinate-status" role={coordinateError ? 'alert' : 'status'}>{coordinateError || (locationChanged ? 'Unsaved location changes. Publish Branch Changes to save.' : 'Location matches the saved branch record.')}</p>}
         <div style={{marginTop:'16px',display:'flex',justifyContent:'flex-end'}}>
-          <Button onClick={save}>Publish Branch Changes</Button>
+          <Button onClick={save} disabled={!!coordinateError} aria-describedby="branch-coordinate-status">Publish Branch Changes</Button>
         </div>
       </Card>}
     </div>

@@ -1,0 +1,42 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ARC-02 synthetic archive fixture</title></head>
+<body><main id="root"></main><script type="module">
+import React, { useState } from 'react'
+import { createRoot } from 'react-dom/client'
+import { flushSync } from 'react-dom'
+import { ArchivesPage } from '/src/pages/ArchivesPage.jsx'
+import { setClockSource } from '/src/clock.js'
+import '/src/styles.css'
+import '/src/foundation.css'
+setClockSource(() => new Date('2026-11-06T02:00:00Z'))
+const fixture = window.arc02 = { downloads: [], audits: [], feedback: [], requests: [] }
+const blobs = new Map()
+URL.createObjectURL = blob => { const id = `blob:arc02-${blobs.size}`; blobs.set(id, blob); return id }
+URL.revokeObjectURL = () => {}
+HTMLAnchorElement.prototype.click = function () { fixture.downloads.push({ filename: this.download, blob: blobs.get(this.href) }) }
+window.fetch = async (...args) => { fixture.requests.push(args); throw Error('ARC-02 fixture refuses all API operations') }
+const patient = id => ({ id: `patient-${id}`, name: `Synthetic Patient ${id.toUpperCase()}` })
+const record = id => ({ id: `appointment-${id}`, code: `APT-${id}`, date: '2026-11-05', status: 'Confirmed', patientId: patient(id).id, patientName: patient(id).name, dentistId: 'dentist', dentistName: 'Synthetic Dentist', branchId: id, branchName: `Synthetic Branch ${id}`, serviceName: 'Synthetic service' })
+const initial = {
+  branches: ['a','b'].map(id => ({ id, name: `Synthetic Branch ${id}` })),
+  persons: ['staff','owner','dentist','patient'].map(id => ({ id: `person-${id}` })),
+  users: ['staff','owner','dentist','patient'].map(id => ({ id, personId: `person-${id}`, role: id === 'owner' ? 'Owner / Admin' : id[0].toUpperCase()+id.slice(1), status: 'Active', branchId: 'a', permissions: ['all'] })),
+  staff: [{ userId: 'staff', personId: 'person-staff', branchId: 'a' }],
+  dentists: [{ id: 'dentist', userId: 'dentist', personId: 'person-dentist', branchIds: ['a','b'], branches: ['Synthetic Branch a','Synthetic Branch b'] }],
+  patients: [], appointments: ['a','b'].map(record),
+  prescriptions: ['a','b'].map(id => ({ ...record(id), id: `rx-${id}`, number: `RX-${id}`, status: 'Issued', lines: [{ medicine: `PRIVATE MEDICINE ${id}` }] })),
+  invoices: ['a','b'].map(id => ({ ...record(id), id: `invoice-${id}`, invoiceNumber: `INV-${id}`, receiptNumber: `RCPT-${id}`, status: 'Paid', total: 100 })),
+}
+const actor = (role, scopes = ['a']) => ({ userId: role, serverUserId: `server-${role}`, role, active: true, branchId: 'a', branchScopes: scopes, dentistId: 'dentist' })
+function Fixture() {
+  const [state, setState] = useState(initial), [session, setSession] = useState(actor('staff')), [activeBranch, setActiveBranch] = useState('All Branches')
+  fixture.setSession = patch => flushSync(() => setSession(previous => ({ ...previous, ...patch })))
+  fixture.logout = () => flushSync(() => setSession(null))
+  fixture.setActor = (role, scopes) => flushSync(() => setSession(actor(role, scopes)))
+  fixture.patchState = patch => flushSync(() => setState(previous => ({ ...previous, ...patch })))
+  fixture.setBranch = value => flushSync(() => setActiveBranch(value))
+  fixture.state = state
+  const store = { state, session, actions: { logAudit: event => fixture.audits.push(event) }, toast: (...args) => fixture.feedback.push(args) }
+  return React.createElement(ArchivesPage, { store, role: session?.role, activeBranch })
+}
+createRoot(document.getElementById('root')).render(React.createElement(Fixture))
+</script></body></html>

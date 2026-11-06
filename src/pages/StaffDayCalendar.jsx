@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Card, ConfirmDialog, Modal, Notice, PageHeader, RefreshButton, Status } from '../components.jsx'
-import { displayTime, patientName, dateLabel } from '../logic.js'
+import { displayTime, dateLabel } from '../logic.js'
 import { clinicNow, clinicDate } from '../clock.js'
 import { useVisibleRefresh } from '../use-visible-refresh.js'
 import { calendarLoad, getAppointment } from '../api-client.js'
@@ -37,7 +37,8 @@ function useClinicToday() {
 
 // F6: a stable avatar colour per patient (from the record id) and the patient's initials.
 const AVATAR = ['#1865ac', '#0c7f75', '#8a4baf', '#b26a00', '#c2412b', '#2f6f3e', '#5b6b7f', '#a33a6b']
-const initials = name => (name || 'P').split(/\s+/).filter(Boolean).map(p => p[0]).slice(0, 2).join('').toUpperCase()
+const appointmentName = a => typeof a.patientName === 'string' && a.patientName.trim() ? a.patientName : 'Patient name unavailable'
+const initials = name => (typeof name === 'string' && name.trim() ? name : '?').split(/\s+/).filter(Boolean).map(p => p[0]).slice(0, 2).join('').toUpperCase()
 const avatarColour = id => AVATAR[[...String(id || '')].reduce((n, c) => (n * 31 + c.charCodeAt(0)) % 997, 7) % AVATAR.length]
 
 /** F6 (R2-02): how full a day is — booked minutes against the dentists' minutes — as a number and a band, never colour alone. */
@@ -60,13 +61,13 @@ function AppointmentButton({ a, onSelect, showDentist = false }) {
   return <button type="button" className="daycal-chip" aria-haspopup="dialog" onClick={e => { e.stopPropagation(); onSelect(a.id) }}>
     <span className="daycal-avatar" aria-hidden="true" style={{ background: avatarColour(a.patientId || a.patientCode) }}>{initials(a.patientName)}</span>
     <span className="daycal-chip-time">{displayTime(a.start)}</span>
-    <span className="daycal-chip-name">{a.patientName || 'Patient'}{a.serviceName ? <small> · {a.serviceName}</small> : null}</span>
+    <span className="daycal-chip-name">{appointmentName(a)}{a.serviceName ? <small> · {a.serviceName}</small> : null}</span>
     <span className="daycal-chip-status">{a.status}{showDentist && a.dentistName ? ` · ${a.dentistName}` : ''}</span>
   </button>
 }
 
 function AppointmentAvatarButton({ a, onSelect }) {
-  const name = patientName(a.patientName)
+  const name = appointmentName(a)
   const tooltip = `${name} · ${displayTime(a.start)} · ${a.serviceName || a.service || 'Appointment'}`
   return (
     <button
@@ -74,7 +75,8 @@ function AppointmentAvatarButton({ a, onSelect }) {
       className="daycal-avatar-badge"
       style={{ background: avatarColour(a.patientId || a.patientCode) }}
       title={tooltip}
-      aria-label={tooltip}
+      aria-label={`View appointment details: ${tooltip}`}
+      aria-haspopup="dialog"
       onClick={e => { e.stopPropagation(); onSelect(a.id) }}
     >
       {initials(a.patientName)}
@@ -84,10 +86,28 @@ function AppointmentAvatarButton({ a, onSelect }) {
 
 export function StaffDayCalendar({ store }) {
   const session = store.session
+  // /api/me scopes are authorization, not the operational branch assignment. Canonical
+  // membership avoids reloads for reordered scopes; a keyed mount gives A→B→A a fresh
+  // loader/cache/detail lifetime, even when A's old requests are still pending.
+  const scopes = Array.isArray(session?.branchScopes)
+    ? [...new Set(session.branchScopes.filter(id => typeof id === 'string' && id))].sort()
+    : []
+  const authorizationKey = JSON.stringify([session?.serverUserId ?? null, session?.role ?? null, session?.active !== false, session?.role === 'owner' ? null : scopes])
+  return <CalendarSession key={authorizationKey} store={store} scopes={scopes} authorizationKey={authorizationKey}/>
+}
+
+function CalendarSession({ store, scopes, authorizationKey }) {
+  const session = store.session
   const role = session?.role || 'staff'
   const toast = store.toast || (() => {})
   const serverSession = !!session?.serverUserId
-  const sessionKey = serverSession ? `${session.serverUserId}:${session.role}` : null
+  const hasAccess = session?.active !== false && (session?.role === 'owner' || (session?.role === 'staff' && scopes.length > 0))
+  const sessionKey = serverSession && hasAccess ? authorizationKey : null
+  const live = useRef(false)
+  useEffect(() => {
+    live.current = true
+    return () => { live.current = false }
+  }, [])
   const today = useClinicToday()
   const [date, setDate] = useState(defaultCalendarDate)
   const [branchId, setBranchId] = useState('all')
@@ -98,10 +118,20 @@ export function StaffDayCalendar({ store }) {
   const [cancelling, setCancelling] = useState(null)
   const [missed, setMissed] = useState(null)
   const [snapshot, setSnapshot] = useState({ status: 'idle', date: null, key: null, rows: [], complete: false, error: '', stale: false })
+  const calendarRef = useRef(null)
+  const pendingFocusDate = useRef(null)
   const loaderRef = useRef(null)
   if (!loaderRef.current) loaderRef.current = createDayLoader({ onChange: setSnapshot })
   const loader = loaderRef.current
   const target = periodTarget('month', date)
+
+  // Adjacent-month buttons are replaced by in-month controls after navigation.
+  // Restore requested date focus; Previous/Next and the month input keep their focus.
+  useEffect(() => {
+    if (!pendingFocusDate.current) return
+    calendarRef.current?.querySelector(`[data-calendar-date="${pendingFocusDate.current}"]`)?.focus()
+    pendingFocusDate.current = null
+  }, [date])
 
   // One request per month session. Leaving the effect invalidates every in-flight response.
   useEffect(() => {
@@ -110,22 +140,21 @@ export function StaffDayCalendar({ store }) {
     loader.load(target, sessionKey)
     return () => loader.invalidate()
   }, [target, date, sessionKey, loader])
-  useVisibleRefresh(() => loader.refresh(), { active: !!sessionKey, intervalMs: 60000 })
+  useVisibleRefresh(() => { if (live.current && sessionKey) loader.refresh() }, { active: !!sessionKey, intervalMs: 60000 })
 
   // Staff reach only the branches scoped to them (/api/me branch_scopes); the Owner sees every open branch.
   const branches = useMemo(() => {
     if (session?.role === 'owner') return store.state.branches
-    const scopes = Array.isArray(session?.branchScopes) ? session.branchScopes : []
     return store.state.branches.filter(b => scopes.includes(b.id))
-  }, [store.state.branches, session?.branchScopes, session?.role])
+  }, [store.state.branches, authorizationKey])
 
   const [load, setLoad] = useState({ key: null, days: {}, crowded: 80 })
   const loadParams = useMemo(() => {
     const branch = branches.length > 1 && branches.some(b => b.id === branchId) ? branchId : null
     const cells = monthCells(date)
     const r = { from: cells[0]?.date, to: cells[cells.length - 1]?.date }
-    return { key: `${r.from}:${r.to}:${branch || 'all'}`, from: r.from, to: r.to, branch }
-  }, [date, branchId, branches])
+    return { key: `${sessionKey}:${r.from}:${r.to}:${branch || 'all'}`, from: r.from, to: r.to, branch }
+  }, [date, branchId, branches, sessionKey])
 
   useEffect(() => {
     if (!sessionKey || !loadParams?.from || !loadParams?.to) return undefined
@@ -136,14 +165,22 @@ export function StaffDayCalendar({ store }) {
     return () => { live = false }
   }, [sessionKey, loadParams?.key])
 
+  const [dayStatusFilter, setDayStatusFilter] = useState('All')
+  useEffect(() => { setDayStatusFilter('All') }, [selectedDate])
+
   if (!serverSession) return <>
     <PageHeader kicker="Scheduling" title="Appointment Calendar" text="A read-only calendar of appointments from the clinic server."/>
     <Notice tone="info" title="Clinic server required">The Appointment Calendar reads appointments from the clinic server and isn’t available in the offline demo.</Notice>
   </>
 
+  if (!hasAccess) return <>
+    <PageHeader kicker="Scheduling" title="Appointment Calendar" text="Appointment access follows your current clinic permissions."/>
+    <Notice tone="info" title="Calendar access unavailable">No authorized calendar branches are available for this account. Contact the clinic administrator to review access.</Notice>
+  </>
+
   const current = snapshot.date === target && snapshot.key === sessionKey ? snapshot : null
   const status = current?.status ?? 'loading'
-  const rows = status === 'ready' ? current.rows : []
+  const rows = status === 'ready' ? current.rows.filter(r => role === 'owner' || scopes.includes(r.branchId)) : []
   const complete = status === 'ready' && current.complete
   const activeBranch = branches.length > 1 && branches.some(b => b.id === branchId) ? branchId : null
   const filtered = activeBranch ? rows.filter(r => r.branchId === activeBranch) : rows
@@ -153,8 +190,9 @@ export function StaffDayCalendar({ store }) {
   const selected = rows.find(r => r.id === selectedId) || null
   const containsToday = periodContains('month', date, today)
 
-  const goto = next => {
+  const goto = (next, focusDate = null) => {
     if (isValidClinicDate(next)) {
+      pendingFocusDate.current = focusDate
       setDate(next)
       setSelectedDate(null)
       setSelectedId(null)
@@ -166,6 +204,7 @@ export function StaffDayCalendar({ store }) {
   const canManage = session?.role === 'staff' || session?.role === 'owner'
 
   const handleRefresh = () => {
+    if (!live.current || !sessionKey) return
     loader.refresh()
     store.appointmentFlow?.refresh()
   }
@@ -195,22 +234,26 @@ export function StaffDayCalendar({ store }) {
 
   const onStartReschedule = async a => {
     const full = await resolveAppointment(a)
+    if (!live.current || !(role === 'owner' || scopes.includes(full.branchId))) return
     setReschedule(full)
   }
 
   const onStartCancel = async a => {
     const full = await resolveAppointment(a)
+    if (!live.current || !(role === 'owner' || scopes.includes(full.branchId))) return
     setCancelling(full)
   }
 
   const onStartNoShow = async a => {
     const full = await resolveAppointment(a)
+    if (!live.current || !(role === 'owner' || scopes.includes(full.branchId))) return
     setMissed(full)
   }
 
   const cancel = async () => {
     const a = cancelling; setCancelling(null)
     const result = await store.appointmentFlow.cancel(a, commandKey())
+    if (!live.current) return
     if (result.ok && result.warning) toast(result.warning, 'warning')
     toast(result.ok ? 'Appointment cancelled.' : result.message, result.ok ? 'success' : 'warning')
     if (result.ok) handleRefresh()
@@ -219,13 +262,12 @@ export function StaffDayCalendar({ store }) {
   const markNoShow = async () => {
     const a = missed; setMissed(null)
     const result = await store.appointmentFlow.noShow(a, commandKey())
+    if (!live.current) return
     if (result.ok && result.warning) toast(result.warning, 'warning')
     toast(result.ok ? 'Marked as No-show.' : result.message, result.ok ? 'success' : 'warning')
     if (result.ok) handleRefresh()
   }
 
-  const [dayStatusFilter, setDayStatusFilter] = useState('All')
-  useEffect(() => { setDayStatusFilter('All') }, [selectedDate])
   const selectedRows = selectedDate ? rowsOn(selectedDate) : []
   const selectedLoad = selectedDate ? loadOf(selectedDate) : null
   const visibleDayRows = selectedRows.filter(a => {
@@ -256,7 +298,7 @@ export function StaffDayCalendar({ store }) {
           />
         </label>
         <Button variant="ghost" onClick={() => goto(shiftPeriod('month', date, 1))}>Next month</Button>
-        <Button variant="soft" disabled={containsToday} onClick={() => goto(today)}>Today</Button>
+        <Button variant="soft" disabled={containsToday} onClick={() => goto(today, today)}>Today</Button>
         {branches.length > 1 && <label className="daycal-branch">
           <span>Branch</span>
           <select value={activeBranch ?? 'all'} onChange={e => setBranchId(e.target.value)}>
@@ -277,7 +319,7 @@ export function StaffDayCalendar({ store }) {
       {load.note && <small className="daycal-estimate" role="note">{load.note}</small>}
     </p>
 
-    <h2 id="daycal-heading" className="daycal-heading" tabIndex={-1}>
+    <h2 id="daycal-heading" className="daycal-heading" tabIndex={-1} aria-live="polite" aria-atomic="true">
       {monthTitle(date)}{containsToday && <span className="daycal-today"> · This month</span>}
     </h2>
 
@@ -291,10 +333,15 @@ export function StaffDayCalendar({ store }) {
 
     <div className="daycal-master-detail">
       <div className="daycal-calendar-pane">
-        <div className="daycal-month-grid" role="grid" aria-label={`${monthTitle(date)} by day`}>
+        <div ref={calendarRef} className="daycal-month-grid" role="grid" aria-label={`${monthTitle(date)} by day`}>
           {WEEKDAYS.map(w => <div key={w} className="daycal-weekday" aria-hidden="true">{w.slice(0, 3)}</div>)}
           {monthCells(date).map(c => {
-            if (!c.fetched) return <div key={c.date} className="daycal-cell is-outside" onClick={() => goto(c.date)} role="gridcell"><span className="daycal-cell-date">{Number(c.date.slice(8))}</span><span className="daycal-none daycal-unverified">Not loaded</span></div>
+            if (!c.fetched) return <div key={c.date} className="daycal-cell is-outside" role="gridcell">
+              <button type="button" className="daycal-daylink" data-calendar-date={c.date}
+                aria-label={`Show calendar for ${longDate(c.date)}`}
+                onClick={() => goto(c.date, c.date)}>{Number(c.date.slice(8))}</button>
+              <span className="daycal-none daycal-unverified">Not loaded</span>
+            </div>
             const list = rowsOn(c.date)
             const shown = list.slice(0, 3)
             const band = loadBand(loadOf(c.date), load.crowded)
@@ -304,18 +351,23 @@ export function StaffDayCalendar({ store }) {
             return <div
               key={c.date}
               className={`daycal-cell${c.date === today ? ' is-today' : ''}${isPrior ? ' past-day is-past' : ''}${isSelected ? ' is-selected' : ''}${band ? ` load-${band.band}` : ''}`}
-              onClick={() => setSelectedDate(prev => prev === c.date ? null : c.date)}
+              onClick={e => {
+                e.currentTarget.querySelector('.daycal-daylink')?.focus()
+                setSelectedDate(prev => prev === c.date ? null : c.date)
+              }}
               role="gridcell"
               aria-selected={isSelected}
-              tabIndex={0}
-              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedDate(prev => prev === c.date ? null : c.date) } }}
             >
               <div className="daycal-cell-head">
                 <button
                   type="button"
                   className="daycal-daylink"
+                  data-calendar-date={c.date}
+                  aria-expanded={isSelected}
+                  aria-controls="daycal-day-details"
+                  aria-current={c.date === today ? 'date' : undefined}
                   onClick={e => { e.stopPropagation(); setSelectedDate(prev => prev === c.date ? null : c.date) }}
-                  aria-label={`Select ${longDate(c.date)}`}
+                  aria-label={`${isSelected ? 'Hide' : 'Show'} appointments for ${longDate(c.date)}`}
                 >
                   {Number(c.date.slice(8))}
                 </button>
@@ -335,14 +387,14 @@ export function StaffDayCalendar({ store }) {
 
               <div className="daycal-cell-chips daycal-avatars-row" aria-label={`${list.length} appointments`}>
                 {shown.map(a => <AppointmentAvatarButton key={a.id} a={a} onSelect={setSelectedId}/>)}
-                {totals && list.length > shown.length && <button type="button" className="daycal-avatar-badge daycal-more-avatar" title={`+${list.length - shown.length} more appointments`} aria-label={`+${list.length - shown.length} more appointments`} onClick={e => { e.stopPropagation(); setSelectedDate(c.date) }}>+{list.length - shown.length}</button>}
+                {totals && list.length > shown.length && <button type="button" className="daycal-avatar-badge daycal-more-avatar" title={`+${list.length - shown.length} more appointments`} aria-label={`Show ${list.length - shown.length} more appointments for ${longDate(c.date)}`} aria-controls="daycal-day-details" aria-expanded={isSelected} onClick={e => { e.stopPropagation(); setSelectedDate(c.date) }}>+{list.length - shown.length}</button>}
               </div>
             </div>
           })}
         </div>
       </div>
 
-      <aside className="daycal-details-pane">
+      <aside id="daycal-day-details" className="daycal-details-pane">
         {selectedDate ? (
           <Card className="daycal-expanded-day" aria-labelledby="daycal-selected-heading">
             <div className="daycal-expanded-header">
@@ -359,7 +411,10 @@ export function StaffDayCalendar({ store }) {
                 </p>
               </div>
               <div className="row-actions">
-                <Button size="sm" variant="ghost" onClick={() => setSelectedDate(null)}>Close</Button>
+                <Button size="sm" variant="ghost" onClick={() => {
+                  calendarRef.current?.querySelector(`[data-calendar-date="${selectedDate}"]`)?.focus()
+                  setSelectedDate(null)
+                }}>Close</Button>
               </div>
             </div>
 
@@ -396,7 +451,7 @@ export function StaffDayCalendar({ store }) {
                   <span className="daycal-avatar" aria-hidden="true" style={{ background: avatarColour(a.patientId || a.patientCode) }}>{initials(a.patientName)}</span>
                   <div className="daycal-expanded-info">
                     <div className="daycal-expanded-patient">
-                      <strong>{a.patientName || 'Patient'}</strong>
+                      <strong>{appointmentName(a)}</strong>
                       {a.patientCode && <small className="block-muted">{a.patientCode}</small>}
                     </div>
                     <div className="daycal-expanded-time">
@@ -404,9 +459,9 @@ export function StaffDayCalendar({ store }) {
                       {a.duration && <small className="block-muted">({a.duration} min)</small>}
                     </div>
                     <div className="daycal-expanded-details">
-                      <span className="daycal-service-name">{a.serviceName || 'Consultation'}</span>
+                      <span className="daycal-service-name">{a.serviceName || 'Service unavailable'}</span>
                       <span className="daycal-meta-dot" aria-hidden="true">·</span>
-                      <span className="daycal-dentist-name">{a.dentistName || 'Unassigned Dentist'}</span>
+                      <span className="daycal-dentist-name">{a.dentistName || (a.dentistId ? 'Dentist name unavailable' : 'Unassigned Dentist')}</span>
                       {branches.length > 1 && a.branchName && <>
                         <span className="daycal-meta-dot" aria-hidden="true">·</span>
                         <span className="daycal-branch-name">{a.branchName}</span>
@@ -437,8 +492,12 @@ export function StaffDayCalendar({ store }) {
               </div>
             </div>
             <div className="daycal-expanded-empty">
-              <p className="muted-copy">Click any calendar date to inspect scheduled appointments and dentist capacity.</p>
-              <Button size="sm" variant="soft" onClick={() => setSelectedDate(today)}>View Today ({shortDay(today)})</Button>
+              <p className="muted-copy">Select a calendar date to inspect scheduled appointments and dentist capacity.</p>
+              <Button size="sm" variant="soft" onClick={() => {
+                if (!containsToday) goto(today, today)
+                else calendarRef.current?.querySelector(`[data-calendar-date="${today}"]`)?.focus()
+                setSelectedDate(today)
+              }}>View Today ({shortDay(today)})</Button>
             </div>
           </Card>
         )}
@@ -454,11 +513,11 @@ export function StaffDayCalendar({ store }) {
     </Modal>
 
     <ConfirmDialog open={!!cancelling} title="Cancel this appointment?" confirmLabel="Cancel appointment" cancelLabel="Keep appointment" tone="danger" onConfirm={cancel} onCancel={() => setCancelling(null)}>
-      {cancelling && <p>{cancelling.code || cancelling.appointmentNo} • {dateLabel(cancelling.date)} at {displayTime(cancelling.start)} • {cancelling.patientName}. The reserved time will be released.</p>}
+      {cancelling && <p>{cancelling.code || cancelling.appointmentNo} • {dateLabel(cancelling.date)} at {displayTime(cancelling.start)} • {appointmentName(cancelling)}. The reserved time will be released.</p>}
     </ConfirmDialog>
 
     <ConfirmDialog open={!!missed} title="Mark as No-show?" confirmLabel="Mark No-show" cancelLabel="Keep appointment" tone="danger" onConfirm={markNoShow} onCancel={() => setMissed(null)}>
-      {missed && <p>{missed.code || missed.appointmentNo} • today at {displayTime(missed.start)} • {missed.patientName}. Use this only when the patient did not arrive; no visit is created. A patient who has already checked in can’t be marked No-show.</p>}
+      {missed && <p>{missed.code || missed.appointmentNo} • today at {displayTime(missed.start)} • {appointmentName(missed)}. Use this only when the patient did not arrive; no visit is created. A patient who has already checked in can’t be marked No-show.</p>}
     </ConfirmDialog>
 
     <Modal open={!!selected} title="Appointment details" subtitle="Clinic appointment record from the clinic server." wide onClose={() => setSelectedId(null)}>
@@ -470,7 +529,7 @@ export function StaffDayCalendar({ store }) {
                 {initials(selected.patientName)}
               </span>
               <div>
-                <h3 className="appt-detail-patient-name" style={{ margin: '0 0 2px', fontSize: '17px', fontWeight: 700 }}>{selected.patientName || 'Patient'}</h3>
+                <h3 className="appt-detail-patient-name" style={{ margin: '0 0 2px', fontSize: '17px', fontWeight: 700 }}>{appointmentName(selected)}</h3>
                 <div className="appt-detail-meta-row" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--muted)' }}>
                   {selected.patientCode && <span className="appt-detail-code">{selected.patientCode}</span>}
                   <span className="appt-detail-code-badge" style={{ padding: '1px 6px', background: 'var(--surface-2, #e2e8f0)', borderRadius: '4px', fontWeight: 600 }}>{selected.code || selected.appointmentNo || '—'}</span>

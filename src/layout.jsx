@@ -13,6 +13,7 @@ import { AuthShell } from './pages/AuthShell.jsx'
 import { PasswordField } from './pages/PasswordField.jsx'
 import { ClinicAssistant } from './assistant-panel.jsx'
 import { loadConversationSummary, sendPresence } from './messaging-api.js'
+import { listNotifications, readNotification, readAllNotifications } from './api-client.js'
 export { Brand } from './Brand.jsx'
 import { Brand } from './Brand.jsx'
 
@@ -83,37 +84,141 @@ export function Login({ onLogin, onShowRegister, onForgotPassword, initialEmail 
     </div></AuthShell>
 }
 
-export function NotificationPanel({role,store,onClose,setPage}){
+// A backend target is a page hint, not a legacy entity/action or a record-access grant.
+// IDs have different meanings even within one target page (e.g. handovers).
+export function serverNotificationDestination(state, session, notification) {
+  if (!session?.serverUserId || !notification?.target || typeof notification.target !== 'object') return null
+  const page = { visits: 'appointments', billing: 'billing', messages: 'messages', book: 'book', handovers: 'handovers', leave: 'leave' }[notification.target.page]
+  return page && canAccessPage(state, session, page) ? { page, context: null } : null
+}
+
+export function notificationFeedKey(session) {
+  return JSON.stringify([session?.serverUserId || null, session?.userId || null, session?.role || null, session?.active === true])
+}
+
+export function serverNotificationSnapshot(result) {
+  if (!result?.ok) throw new Error(result?.message || 'Notifications could not be loaded. Try again.')
+  if (!Array.isArray(result.data) || !Number.isInteger(result.meta?.unread) || result.meta.unread < 0 || result.data.length > 50 ||
+      result.data.some(n => !n || typeof n.id !== 'string' || typeof n.read !== 'boolean' || typeof n.title !== 'string' || (n.body != null && typeof n.body !== 'string'))) {
+    throw new Error('Notifications could not be loaded. Try again.')
+  }
+  if (new Set(result.data.map(n => n.id)).size !== result.data.length || result.meta.unread < result.data.filter(n => !n.read).length) throw new Error('Notifications could not be loaded. Try again.')
+  return { items: result.data.map(n => ({ id: n.id, title: n.title, body: n.body, read: n.read, target: n.target, createdAt: n.created_at, channel: 'In-app' })), unread: result.meta.unread }
+}
+
+// Render-keyed snapshots hide old-account data before effects run. Epoch objects also
+// reject A -> B -> A responses, and cleanup invalidates in-flight work on unmount.
+function useServerNotificationFeed(session, enabled = true) {
+  const key = notificationFeedKey(session)
+  const epoch = React.useRef(null)
+  if (epoch.current?.key !== key) epoch.current = { key }
+  const token = epoch.current
+  const mounted = React.useRef(false)
+  const generation = React.useRef(0)
+  const pending = React.useRef(null)
+  const [snapshot, setSnapshot] = React.useState(null)
+  const run = React.useCallback(async (operation = listNotifications, mutation = false) => {
+    if (!enabled || !session?.serverUserId || !session.active || pending.current === token || epoch.current !== token || !mounted.current) return false
+    const requestId = ++generation.current
+    pending.current = token
+    setSnapshot(previous => ({ ...(previous?.token === token ? previous : { items: [], unread: null }), token, loading: !mutation, busy: mutation, error: '' }))
+    try {
+      const result = await operation()
+      if (!mounted.current || epoch.current !== token || generation.current !== requestId) return false
+      const data = serverNotificationSnapshot(result)
+      setSnapshot({ ...data, token, loading: false, busy: false, error: '' })
+      return true
+    } catch (error) {
+      if (!mounted.current || epoch.current !== token || generation.current !== requestId) return false
+      // Never show stale feed contents as a successful empty result after failure.
+      setSnapshot({ token, items: [], unread: null, loading: false, busy: false, error: error.message || 'Notifications are unavailable. Try again.' })
+      return false
+    } finally {
+      if (pending.current === token && generation.current === requestId) pending.current = null
+    }
+  }, [enabled, token, session?.serverUserId, session?.active])
+  useLayoutEffectSafe(() => {
+    mounted.current = true
+    run()
+    return () => {
+      mounted.current = false
+      generation.current += 1
+      if (pending.current === token) pending.current = null
+    }
+  }, [run, token])
+  const current = !enabled || !session?.active ? { items: [], unread: null, loading: false, busy: false, error: 'Notifications are unavailable for this session.' } : snapshot?.token === token ? snapshot : { items: [], unread: null, loading: true, busy: false, error: '' }
+  return { ...current, key, refresh: () => run(), mark: id => run(() => readNotification(id), true), markAll: () => run(readAllNotifications, true) }
+}
+
+export function NotificationPanel(props) {
+  const session = props.store.session || sessionForRole(props.role, props.store.state)
+  return <NotificationPanelContent key={notificationFeedKey(session)} {...props}/>
+}
+
+function NotificationPanelContent({role,store,onClose,setPage,serverFeed}){
   const {state,actions,toast}=store
   const session=store.session||sessionForRole(role,state)
-  const items=sortNotificationsNewestFirst(visibleNotifications(state,session))
+  const server=!!session?.serverUserId
+  const ownFeed=useServerNotificationFeed(session,server&&!serverFeed&&canAccessPage(state,session,'dashboard'))
+  const feed=serverFeed||ownFeed
+  const key=notificationFeedKey(session)
+  const feedCurrent=feed.key===key
+  const loading=server&&(!feedCurrent||feed.loading)
+  const feedError=server&&feedCurrent?feed.error:''
+  const items=sortNotificationsNewestFirst(server?(feedCurrent?feed.items:[]):visibleNotifications(state,session))
   const [all,setAll]=React.useState(false)
   const visible=all?items:items.slice(0,8)
   const dateGroups=groupNotificationsByDate(visible,clinicDate())
   const [busy,setBusy]=React.useState(false)
   const [failure,setFailure]=React.useState('')
   const pending=React.useRef(false)
-  const unread=items.filter(n=>!n.read).length
-  const latest=React.useRef({state,session})
-  latest.current={state,session}
+  const scrollRegion=React.useRef(null)
+  const focusOrigin=React.useRef(null)
+  useLayoutEffectSafe(()=>{
+    if(focusOrigin.current&&!focusOrigin.current.isConnected){scrollRegion.current?.focus({preventScroll:true});focusOrigin.current=null}
+  })
+  const live=React.useRef(true)
+  useLayoutEffectSafe(()=>{live.current=true;return()=>{live.current=false}},[])
+  const unread=server?(feedCurrent?feed.unread:null):items.filter(n=>!n.read).length
+  const latest=React.useRef({state,session,key})
+  latest.current={state,session,key}
+  const destination=n=>server?serverNotificationDestination(state,session,n):notificationDestination(state,session,n)
   const perform=async command=>{
-    if(pending.current)return false
+    if(pending.current||loading||feedError)return false
     pending.current=true
+    focusOrigin.current=typeof document==='undefined'?null:document.activeElement
     setBusy(true);setFailure('')
-    try {const result=await command();if(!result?.ok){const message=result?.message||'Notifications could not be updated. Try again.';setFailure(message);toast(message,'warning');return false}return true}
-    catch {const message='Notifications could not be updated. Try again.';setFailure(message);toast(message,'warning');return false}
-    finally {pending.current=false;setBusy(false)}
+    try {
+      const result=await command()
+      if(!live.current||latest.current.key!==key)return false
+      if(!(server?result:result?.ok)){
+        const message=result?.message||'Notifications could not be updated. Try again.'
+        setFailure(message);toast?.(message,'warning');return false
+      }
+      return true
+    } catch {
+      if(!live.current||latest.current.key!==key)return false
+      const message='Notifications could not be updated. Try again.'
+      setFailure(message);toast?.(message,'warning');return false
+    } finally {pending.current=false;if(live.current)setBusy(false)}
   }
-  const mark=id=>perform(()=>actions.markNotificationRead(id))
-  const open=async n=>{const destination=notificationDestination(state,session,n);if(destination&&await mark(n.id)){const current=notificationDestination(latest.current.state,latest.current.session,n);if(current){setPage(current.page,current.context);onClose()}}}
-  return <Modal open title="Notifications" subtitle="Your updates and reminders" onClose={onClose} className="notification-dialog a12-notifications"><div className="notification-popover">
-    <div className="notification-summary"><span>{unread?`${unread} unread`:'No unread updates'}</span><span role="status">{busy?'Updating read status…':`Showing ${visible.length} of ${items.length}`}</span></div>
-    <div className="notification-toolbar"><button type="button" onClick={()=>perform(()=>actions.markAllNotificationsRead())} disabled={busy||!unread}>Mark my notifications read</button><button type="button" aria-pressed={all} onClick={()=>setAll(v=>!v)}>{all?'Recent only':`View all (${items.length})`}</button></div>
-    {failure&&<p className="notification-failure" role="alert" tabIndex={0}><b>Read status wasn’t updated.</b> {failure}</p>}
-    <div className="notification-scroll" role="region" aria-label="Notification history" tabIndex={0} aria-busy={busy}>{visible.length?dateGroups.map(group=><section key={group.key}>
+  const mark=id=>perform(()=>server?feed.mark(id):actions.markNotificationRead(id))
+  const open=async n=>{
+    if(!destination(n)||!await mark(n.id)||!live.current||latest.current.key!==key)return
+    const current=server?serverNotificationDestination(latest.current.state,latest.current.session,n):notificationDestination(latest.current.state,latest.current.session,n)
+    if(current){setPage(current.page,current.context);onClose()}
+  }
+  const updating=busy||(server&&feed.busy)
+  return <Modal open title="Notifications" subtitle={server?'Your latest 50 notifications':'Your updates and reminders'} onClose={onClose} className="notification-dialog a12-notifications"><div className="notification-popover">
+    <div className="notification-summary"><span>{unread===null?'Unread count unavailable':unread?`${unread} unread`:'No unread updates'}</span><span role="status">{loading?'Loading notifications…':updating?'Updating read status…':feedError?'Notifications unavailable':`Showing ${visible.length} of ${items.length}${server?' recent records':''}`}</span></div>
+    <div className="notification-toolbar"><button type="button" onClick={()=>perform(()=>server?feed.markAll():actions.markAllNotificationsRead())} disabled={updating||loading||!!feedError||!unread}>Mark my notifications read</button><button type="button" disabled={loading||!!feedError} aria-pressed={all} onClick={()=>setAll(v=>!v)}>{all?'Recent only':server?`Show loaded history (${items.length})`:`View all (${items.length})`}</button></div>
+    {server&&<p>This is recent history, limited to 50 records. The unread count includes older notifications.</p>}
+    {feedError&&<p className="notification-failure" role="alert" tabIndex={0}>{feedError} <button type="button" onClick={()=>{setFailure('');feed.refresh()}}>Retry notifications</button></p>}
+    {!feedError&&failure&&<p className="notification-failure" role="alert" tabIndex={0}><b>Read status wasn’t updated.</b> {failure}</p>}
+    <div ref={scrollRegion} className="notification-scroll" role="region" aria-label={server?'Recent notification history':'Notification history'} tabIndex={0} aria-busy={loading||updating}>{loading?<p role="status">Loading notifications…</p>:feedError?null:visible.length?dateGroups.map(group=><section key={group.key}>
       <h3 className="notification-date-heading">{group.label}</h3>
-      <ul className="notification-list">{group.items.map(n=><li className={`notification-row ${n.read?'':'unread'}`} key={n.id}><span className="notification-dot" aria-hidden="true"/><div><b>{!n.read&&<><span className="sr-only">Unread: </span><span className="notification-unread-label" aria-hidden="true">Unread</span></>}{n.title}</b><p>{n.body}</p><small>{n.createdAt||'Date unavailable'} • {n.legacy?'Historical demo record':n.channel}</small><div className="row-actions">{!n.read&&<button type="button" disabled={busy} onClick={()=>mark(n.id)}>Mark read</button>}{notificationDestination(state,session,n)&&<button type="button" className="notification-view" disabled={busy} onClick={()=>open(n)}>View update</button>}</div></div></li>)}</ul>
-    </section>):<div className="notification-empty"><Icon name="bell" size={28}/><b>You're all caught up.</b><p>No updates to show in this workspace.</p></div>}</div>
+      <ul className="notification-list">{group.items.map(n=><li className={`notification-row ${n.read?'':'unread'}`} key={n.id}><span className="notification-dot" aria-hidden="true"/><div><b>{!n.read&&<><span className="sr-only">Unread: </span><span className="notification-unread-label" aria-hidden="true">Unread</span></>}{n.title}</b><p>{n.body}</p><small>{n.createdAt||'Date unavailable'} • {n.legacy?'Historical demo record':n.channel}</small><div className="row-actions">{!n.read&&<button type="button" disabled={updating} onClick={()=>mark(n.id)}>Mark read</button>}{destination(n)&&<button type="button" className="notification-view" disabled={updating} onClick={()=>open(n)}>View update</button>}</div></div></li>)}</ul>
+    </section>):<div className="notification-empty"><Icon name="bell" size={28}/><b>{server?'No recent notifications.':"You're all caught up."}</b><p>{server?'No records were returned for your account.':'No updates to show in this workspace.'}</p></div>}</div>
   </div></Modal>
 }
 
@@ -163,7 +268,9 @@ export function Shell({ role, page, setPage, onLogout, activeBranch, setActiveBr
   const account=store.state.users.find(u=>u.id===session?.userId)
   const name=account?.name||session?.name||info.label
   const initials=name.split(' ').map(x=>x[0]).filter(Boolean).slice(0,2).join('')
-  const unread=visibleNotifications(store.state,session).filter(n=>!n.read).length
+  const notificationFeed=useServerNotificationFeed(session,!!session?.serverUserId&&canAccessPage(store.state,session,'dashboard'))
+  const unread=session?.serverUserId?notificationFeed.unread:visibleNotifications(store.state,session).filter(n=>!n.read).length
+  React.useEffect(()=>{if(notificationsOpen&&session?.serverUserId)notificationFeed.refresh()},[notificationsOpen,session?.serverUserId])
   const groups=navGroups(role,!!session?.serverUserId).map(([title,items])=>[title,items.filter(([key])=>canAccessPage(store.state,session,key))]).filter(([,items])=>items.length)
   const currentPage=canAccessPage(store.state,session,page)?(groups.flatMap(([,items])=>items).find(([key])=>key===page)?.[1]||NAV[role].find(([key])=>key===page)?.[1]):null
   // M17: in a clinic-server session the unread badge comes ONLY from the server (null = not known yet / unavailable: no badge, never a number).
@@ -228,7 +335,7 @@ export function Shell({ role, page, setPage, onLogout, activeBranch, setActiveBr
       </header>
       <main id="main-content" tabIndex={-1} className="content">{children}</main>
     </div>
-    {notificationsOpen&&<NotificationPanel role={role} store={store} setPage={setPage} onClose={()=>setNotificationsOpen(false)}/>}
+    {notificationsOpen&&<NotificationPanel role={role} store={store} serverFeed={notificationFeed} setPage={setPage} onClose={()=>setNotificationsOpen(false)}/>}
     {role==='patient'&&<nav className="patient-mobile-nav" aria-label="Patient shortcuts">
       {mobilePatientNav.map(([key,label])=><button key={key} aria-current={page===key?'page':undefined} className={page===key?'active':''} onClick={()=>selectPage(key)}><Icon name={NAV_ICONS[key]||'home'} size={20}/><span>{label}</span>{key==='messages'&&unreadMessages>0&&<span className="pt-nav-badge"><span aria-hidden="true">{unreadMessages}</span><span className="sr-only">, {unreadMessages} unread</span></span>}</button>)}
       <button type="button" aria-haspopup="dialog" aria-expanded={patientMenuOpen} onClick={()=>setPatientMenuOpen(true)}><Icon name="menu" size={20}/><span>Menu</span>{unreadMessages>0&&<span className="pt-nav-badge"><span aria-hidden="true">{unreadMessages}</span><span className="sr-only">, {unreadMessages} unread</span></span>}</button>
