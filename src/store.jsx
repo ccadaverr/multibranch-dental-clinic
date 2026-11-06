@@ -1,5 +1,5 @@
 import { readCollection, writeCollection } from './persistence.js'
-import React, { createContext, useContext, useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react'
 import {
   INITIAL_PERSONS,
   INITIAL_PATIENTS,
@@ -22,9 +22,61 @@ import * as treatmentsApi from './treatments-api.js'
 import * as hmoApi from './hmo-api.js'
 import { buildServerProjection, classifyLegacy, reanchorLocalEvidence } from './appointment-projection.js'
 import { createAppointmentFlow } from './appointment-flow.js'
+import { onSessionInvalidated } from './api-client.js'
 
 const ClinicContext=createContext(null)
 const STORAGE_PREFIX='dentalops-v4-'
+
+// CLIN-11: runtime-only continuity, never a credential or a server session ID.
+// Keep the controller private to ClinicProvider; consumers receive only its reader.
+const clin11SetKey = values => Array.isArray(values) ? [...new Set(values)].sort() : null
+function clin11AuthContext(session, state, referenceReady) {
+  const user = state?.users?.find(u => u.id === session?.userId)
+  const identity = session?.serverUserId ? JSON.stringify([
+    session.serverUserId, session.role, session.userId, session.dentistId, session.staffId,
+    session.patientId, session.patientPublicId, session.branchId, session.scopeBranchId, clin11SetKey(session.branchScopes),
+  ]) : null
+  const authority = JSON.stringify([user?.personId, user?.roleName || user?.role, user?.accountStatus || user?.status,
+    user?.branchId, clin11SetKey(user?.permissions)])
+  // Initial reference hydration and refresh loading are not authentication changes.
+  // Once known, changed profile scopes invalidate old continuations, including ABA.
+  const scope = !referenceReady ? null : JSON.stringify(session?.role === 'dentist'
+    ? clin11SetKey(state?.dentists?.find(d => d.id === session.dentistId)?.branchIds)
+    : session?.role === 'staff' ? state?.staff?.find(s => s.userId === session.userId)?.branchId ?? null : null)
+  return {identity, authority, scope, usable: !!identity && (user?.accountStatus || user?.status) === 'Active'}
+}
+function createClin11AuthLifetime(readContext) {
+  let generation = 0, context = null, invalidated = true
+  const observe = () => {
+    const next = readContext()
+    if (next.scope === null && context?.identity === next.identity) next.scope = context.scope
+    const changed = context ? next.identity !== context.identity || next.authority !== context.authority
+      || context.scope !== null && next.scope !== null && next.scope !== context.scope : !!next.identity
+    if (changed) generation++
+    context = next
+    if (!next.identity) invalidated = true
+    return changed
+  }
+  return {
+    adopt() {
+      const wasInvalidated = invalidated, changed = observe()
+      if (wasInvalidated && !changed && context.identity) generation++
+      invalidated = !context.identity
+    },
+    rederive() {
+      const previousIdentity = context?.identity
+      observe()
+      // Re-derivation cannot authenticate a different actor or restore an
+      // invalidated lifetime. Only the existing explicit adoption path can.
+      if (context.identity !== previousIdentity) invalidated = true
+    },
+    invalidate() { generation++; invalidated = true },
+    getGeneration() {
+      observe()
+      return invalidated || !context.usable ? null : generation
+    },
+  }
+}
 
 function usePersist(key, initial, report, recoveryBlocked) {
   const blocked=useRef(false)
@@ -144,11 +196,33 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
   const [session,setSessionState]=useState(null)
   const sessionRef=useRef(null)
   const stateRef=useRef(null)
+  const referenceReadyRef=useRef(false), authOwnerLive=useRef(true), authLifetime=useRef(null)
+  referenceReadyRef.current=refDataStatus==='ready'
+  if(!authLifetime.current)authLifetime.current=createClin11AuthLifetime(()=>clin11AuthContext(sessionRef.current,stateRef.current,referenceReadyRef.current))
+  // Stable closure over provider refs, so an old page/store snapshot reads the
+  // CURRENT lifetime even after that page unmounts. No caller can advance it.
+  const getAuthGeneration=useCallback(()=>authOwnerLive.current?authLifetime.current.getGeneration():null,[])
+  useEffect(()=>{
+    authOwnerLive.current=true
+    const stop=onSessionInvalidated(()=>authLifetime.current.invalidate())
+    // Effect replay is not a login/logout. A disposed provider's old reader
+    // stays unavailable; StrictMode's synchronous setup restores the same owner.
+    return()=>{authOwnerLive.current=false;stop()}
+  },[])
   const actionsRef=useRef(null)
   const [clock,setClock]=useState(clinicNow)
   useEffect(()=>{const timer=setInterval(()=>{setClock(clinicNow());if(sessionRef.current?.role==='staff'){actionsRef.current?.evaluateOperationalReminders()}},15000);return ()=>clearInterval(timer)},[])
   // Server-provided identity fields (Patient public_id, Staff branch scopes from /api/me) survive local re-derivation.
-  const setSession=role=>{const derived=role?(sessionRef.current?.employeeBridge&&sessionRef.current.role===role?sessionForEmployee(stateRef.current,sessionRef.current):sessionForRole(role,stateRef.current)):null;const next=derived&&sessionRef.current?.role===role?{...derived,serverUserId:sessionRef.current.serverUserId??null,patientPublicId:sessionRef.current.patientPublicId??null,branchScopes:sessionRef.current.branchScopes}:derived;sessionRef.current=next;setSessionState(next);if(next?.role==='staff'){actionsRef.current?.evaluateOperationalReminders()}return next}
+  const setSession=role=>{
+    const previous=sessionRef.current
+    const derived=role?(previous?.employeeBridge&&previous.role===role?sessionForEmployee(stateRef.current,previous):sessionForRole(role,stateRef.current)):null
+    const next=derived&&previous?.role===role?{...derived,serverUserId:previous.serverUserId??null,patientPublicId:previous.patientPublicId??null,branchScopes:previous.branchScopes}:derived
+    sessionRef.current=next
+    authLifetime.current.rederive()
+    setSessionState(next)
+    if(next?.role==='staff')actionsRef.current?.evaluateOperationalReminders()
+    return next
+  }
 
   // Phase 2A reference-data bootstrap (plan section H/J). Fires once a session exists, role-aware (Patient
   // never triggers a /api/staff call — see fetchReferenceData). A logged-out session clears back to idle so
@@ -236,6 +310,9 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
     visitsProjected:!!initialServerVisits||['staff','dentist','owner'].includes(session?.role)
   })}
   stateRef.current=state
+  // Observe committed permission/scope changes even while no clinical page is
+  // mounted. Equivalent data refreshes leave the generation unchanged.
+  useLayoutEffect(()=>{authLifetime.current.getGeneration()},[session,users,dentists,staff,refDataStatus])
   const migrationDone=useRef(false)
   useEffect(()=>{
     // Phase 2A: this effect re-derives branchId/serviceId cross-references on still-local records using
@@ -288,6 +365,7 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
     const {appointments:_ignored,visits:_ignoredVisits,queue:_ignoredQueue,myQueue:_ignoredMyQueue,treatments:_ignoredTreatments,hmo:_ignoredHmo,claimDecisions:_ignoredClaimDecisions,...patch}=rawPatch
     // Advance immediately so repeated clicks before React renders see the commit.
     stateRef.current=normalizeClinicState({...stateRef.current,...patch})
+    authLifetime.current.getGeneration()
     for(const [key,value] of Object.entries(patch))setters[`set${key[0].toUpperCase()}${key.slice(1)}`]?.(persistableCollection(key,value))
   }
 
@@ -309,7 +387,7 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
   // Adopts an already-resolved session object as-is (Backend Foundation 1B: the identity-bridge's Patient path
   // produces an arbitrary sessionForUser()-shaped session, not one of the four fixed ROLE_INFO keys setSession
   // understands). Staff/Dentist/Owner keep using setSession(role) unchanged.
-  const adoptSession=session=>{sessionRef.current=session;setSessionState(session)}
+  const adoptSession=session=>{sessionRef.current=session;authLifetime.current.adopt();setSessionState(session)}
 
   // ---- M6 server appointments ------------------------------------------------------------------------------------
   // Applies fresh server rows to the in-memory projection immediately (so a local adapter command that follows a server
@@ -453,7 +531,7 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
     actionsRef.current?.reconcileTreatmentHandoffs()
   },[appointmentsStatus,serverTreatmentRows,serverVisitRows,session?.role])
 
-  const value=useMemo(()=>({state,setters,actions,appointmentFlow,appointmentsStatus,appointmentsError,appointmentsTruncated,queueSnapshot,myTreatmentsCursor,loadOlderTreatments,directoryPatients,toast,log,workflow,toasts,session,setSession,adoptSession,persistenceErrors,refDataStatus,retryReferenceData}),[queueSnapshot,persons,services,branchServices,dentistServiceAssignments,branches,dentists,staff,patients,serverAppointmentRows,serverVisitRows,serverQueueRows,myQueue,serverTreatmentRows,myTreatmentRows,serverHmoRows,myHmoRows,claimDecisionRows,directoryPatients,appointmentsStatus,appointmentsError,appointmentsTruncated,treatments,invoices,inquiries,conversations,notifications,prescriptions,followups,users,automations,workflowLog,campaigns,loyalty,audit,toasts,bookingDrafts,session,clock,persistenceErrors,refDataStatus])
+  const value=useMemo(()=>({state,setters,actions,appointmentFlow,appointmentsStatus,appointmentsError,appointmentsTruncated,queueSnapshot,myTreatmentsCursor,loadOlderTreatments,directoryPatients,toast,log,workflow,toasts,session,setSession,adoptSession,getAuthGeneration,persistenceErrors,refDataStatus,retryReferenceData}),[queueSnapshot,persons,services,branchServices,dentistServiceAssignments,branches,dentists,staff,patients,serverAppointmentRows,serverVisitRows,serverQueueRows,myQueue,serverTreatmentRows,myTreatmentRows,serverHmoRows,myHmoRows,claimDecisionRows,directoryPatients,appointmentsStatus,appointmentsError,appointmentsTruncated,treatments,invoices,inquiries,conversations,notifications,prescriptions,followups,users,automations,workflowLog,campaigns,loyalty,audit,toasts,bookingDrafts,session,clock,persistenceErrors,refDataStatus,getAuthGeneration])
   return <ClinicContext.Provider value={value}>{children}</ClinicContext.Provider>
 }
 

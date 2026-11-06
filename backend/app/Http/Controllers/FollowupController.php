@@ -58,19 +58,23 @@ class FollowupController extends Controller
         $user = $request->user();
         $data = $request->validate(['patient_id' => ['required', 'string', 'max:40'], 'branch_ref' => ['required', 'string', 'max:50'], 'reason' => ['required', 'string', 'max:500'],
             'due_on' => ['required', 'date_format:Y-m-d'], 'service_ref' => ['nullable', 'string', 'max:50'], 'assign_to_me' => ['sometimes', 'boolean']]);
-        $patient = Patient::where('public_id', $data['patient_id'])->firstOrFail();
-        $branch = Branch::where('legacy_ref', $data['branch_ref'])->firstOrFail();
-        abort_unless(in_array($branch->id, $this->branchIds($user), true), 403, 'You can add follow-ups for your own branches only.');
-        if ($user->role->value === 'staff') abort_unless($user->can('viewProfile', $patient), 403);
-        if ($data['due_on'] < ClinicClock::addDays(ClinicClock::today(), -365)) throw ValidationException::withMessages(['due_on' => ['Choose a date within the last year or later.']]);
-        $task = FollowupTask::create(['patient_id' => $patient->id, 'branch_id' => $branch->id, 'reason' => $data['reason'], 'due_on' => $data['due_on'],
-            'service_id' => ! empty($data['service_ref']) ? Service::where('legacy_ref', $data['service_ref'])->value('id') : null,
-            'dentist_profile_id' => $user->role->value === 'dentist' ? DentistProfile::where('person_id', $user->person_id)->value('id') : null,
-            'assignee_user_id' => ! empty($data['assign_to_me']) ? $user->id : null, 'source' => $user->role->value === 'dentist' ? 'dentist' : 'front_desk',
-            'status' => 'Open', 'created_by_user_id' => $user->id, 'updated_by_user_id' => $user->id]);
-        $this->audit($user, 'followup.created', $task);
+        $task = DB::transaction(function () use ($data, $user) {
+            $patient = Patient::where('public_id', $data['patient_id'])->firstOrFail();
+            $branch = Branch::where('legacy_ref', $data['branch_ref'])->firstOrFail();
+            abort_unless(in_array($branch->id, $this->branchIds($user), true), 403, 'You can add follow-ups for your own branches only.');
+            if ($user->role->value === 'staff') abort_unless($user->can('viewProfile', $patient), 403);
+            if ($data['due_on'] < ClinicClock::addDays(ClinicClock::today(), -365)) throw ValidationException::withMessages(['due_on' => ['Choose a date within the last year or later.']]);
+            $task = FollowupTask::create(['patient_id' => $patient->id, 'branch_id' => $branch->id, 'reason' => $data['reason'], 'due_on' => $data['due_on'],
+                'service_id' => ! empty($data['service_ref']) ? Service::where('legacy_ref', $data['service_ref'])->value('id') : null,
+                'dentist_profile_id' => $user->role->value === 'dentist' ? DentistProfile::where('person_id', $user->person_id)->value('id') : null,
+                'assignee_user_id' => ! empty($data['assign_to_me']) ? $user->id : null, 'source' => $user->role->value === 'dentist' ? 'dentist' : 'front_desk',
+                'status' => 'Open', 'created_by_user_id' => $user->id, 'updated_by_user_id' => $user->id]);
+            $this->audit($user, 'followup.created', $task);
 
-        return response()->json(['data' => $this->view($task->fresh(['patient.person', 'branch', 'service', 'assignee.person']), $user)], 201);
+            return $task->fresh(['patient.person', 'branch', 'service', 'assignee.person']);
+        });
+
+        return response()->json(['data' => $this->view($task, $user)], 201);
     }
 
     /** contacted: the patient was called or messaged. close: done (a note is required unless an appointment was booked). */
@@ -78,9 +82,11 @@ class FollowupController extends Controller
     {
         $user = $request->user();
         $data = $request->validate(['action' => ['required', 'in:contacted,close'], 'note' => ['nullable', 'string', 'max:500']]);
-        abort_unless(in_array($followupTask->branch_id, $this->branchIds($user), true), 403);
-        DB::transaction(function () use ($followupTask, $data, $user) {
-            $t = FollowupTask::whereKey($followupTask->id)->lockForUpdate()->first();
+        $task = DB::transaction(function () use ($followupTask, $data, $user) {
+            $t = FollowupTask::whereKey($followupTask->id)->lockForUpdate()->firstOrFail();
+            // The route snapshot may predate a state/branch change. Authorize
+            // and audit the locked row within the same transaction as its write.
+            abort_unless(in_array($t->branch_id, $this->branchIds($user), true), 403);
             if ($data['action'] === 'contacted') {
                 if ($t->status !== 'Open') throw ValidationException::withMessages(['action' => ["This follow-up is already {$t->status}."]]);
                 $t->update(['status' => 'Contacted', 'contacted_at' => now(), 'updated_by_user_id' => $user->id, 'revision' => $t->revision + 1]);
@@ -90,9 +96,10 @@ class FollowupController extends Controller
                 if (! $t->appointment_id && $note === '') throw ValidationException::withMessages(['note' => ['Say why it is closed without a booking.']]);
                 $t->update(['status' => 'Closed', 'close_note' => $note ?: null, 'closed_at' => now(), 'updated_by_user_id' => $user->id, 'revision' => $t->revision + 1]);
             }
+            $this->audit($user, 'followup.'.($data['action'] === 'close' ? 'closed' : 'contacted'), $t);
+
+            return $t->load(['patient.person', 'branch', 'service', 'assignee.person', 'appointment']);
         });
-        $task = $followupTask->fresh(['patient.person', 'branch', 'service', 'assignee.person', 'appointment']);
-        $this->audit($user, 'followup.'.($data['action'] === 'close' ? 'closed' : 'contacted'), $task);
 
         return response()->json(['data' => $this->view($task, $user)]);
     }

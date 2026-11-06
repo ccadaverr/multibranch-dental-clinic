@@ -1,5 +1,6 @@
 import { useClinicalSession } from '../use-clinical-session.js'
 import { clinicalSessionKey, resolveEncounter } from '../encounter.js'
+import { ClinicalNavigation } from '../clinical-navigation.jsx'
 import React, { useEffect, useState } from 'react'
 import { Button, Card, ConfirmDialog, Field, Notice, PageHeader } from '../components.jsx'
 import { patientChart, prescriptionVisits, recordChartEntry, searchPatients } from '../api-client.js'
@@ -13,15 +14,42 @@ const firstError = r => (r.kind === 'validation' ? Object.values(r.errors || {})
 export function ChartView(props) {
   return <ChartRecord key={clinicalSessionKey(props.store?.session)+props.patientId} {...props}/>
 }
-function ChartRecord({ patientId, canRecord, toast, store, onDirtyChange }) {
+function ChartRecord({ patientId, canRecord, toast, store, onDirtyChange, isCurrent = () => true }) {
   const [data, setData] = useState(null), [error, setError] = useState(''), [picked, setPicked] = useState(null), [attempt,setAttempt]=useState(0)
   const live=React.useRef(true), recording=React.useRef(false)
+  const dirty=React.useRef(false), editGeneration=React.useRef(0)
+  const scope=React.useRef({canRecord,isCurrent})
+  scope.current={canRecord,isCurrent}
+  const ownsChart=()=>live.current&&scope.current.isCurrent()
+  const register=React.useContext(ClinicalNavigation)
+  // Match the shared navigation ref contract, with synchronous reads of the
+  // current patient/editor. Tooth edits need not wait for a React state update.
+  const protection=React.useRef({
+    get dirty(){return !!scope.current.canRecord&&ownsChart()&&dirty.current},
+    get busy(){return !!scope.current.canRecord&&ownsChart()&&recording.current},
+  })
   const [recordingPending, setRecordingPending] = useState(false)
-  useEffect(()=>{live.current=true;return()=>{live.current=false}},[])
+  React.useLayoutEffect(()=>{live.current=true;return()=>{live.current=false}},[])
+  React.useLayoutEffect(()=>{
+    if(canRecord)return register?.(protection)
+  },[canRecord,register])
+  useEffect(()=>{
+    if(!canRecord)return
+    const warn=event=>{
+      if(protection.current.dirty||protection.current.busy){event.preventDefault();event.returnValue=''}
+    }
+    window.addEventListener('beforeunload',warn)
+    return()=>window.removeEventListener('beforeunload',warn)
+  },[canRecord])
+  const reportDirty=value=>{
+    if(!canRecord||!ownsChart())return
+    dirty.current=!!value;editGeneration.current++
+    onDirtyChange?.(!!value)
+  }
 
   useEffect(() => {
     let current=true;setData(null);setError('');setPicked(null)
-    patientChart(patientId).then(r => {if(current){if(r.ok)setData(r.data);else setError(r.message || 'The chart could not be loaded.')}})
+    patientChart(patientId).then(r => {if(current&&ownsChart()){if(r.ok)setData(r.data);else setError(r.message || 'The chart could not be loaded.')}})
     return()=>{current=false}
   }, [patientId,attempt])
 
@@ -32,16 +60,17 @@ function ChartRecord({ patientId, canRecord, toast, store, onDirtyChange }) {
   const activeBranchId = store?.session?.branchId || null
 
   const handleRecord = async (payload, ownsEditor = () => true) => {
-    if(!canRecord||recording.current)return {ok:false,message:'Recording is unavailable or already in progress.'}
+    if(!scope.current.canRecord||!ownsChart()||recording.current)return {ok:false,message:'Recording is unavailable or already in progress.'}
+    const submittedGeneration=editGeneration.current
     recording.current=true; setRecordingPending(true)
     try {
       const res = await recordChartEntry(patientId, payload)
-      if(!live.current)return {ok:false,message:'The chart context changed.'}
+      if(!scope.current.canRecord||!ownsChart())return {ok:false,message:'The chart context changed.'}
       if (res.ok) {
         // Authoritative data belongs to this patient; transient feedback also
-        // requires the original tooth-selection lifetime to remain current.
+        // requires the original tooth selection and edit generation to remain current.
         setData(res.data)
-        if (ownsEditor()) toast?.('Tooth ' + toothLabel(payload.tooth, data.settings?.numbering) + ' recorded.', 'success')
+        if (ownsEditor()&&editGeneration.current===submittedGeneration) toast?.('Tooth ' + toothLabel(payload.tooth, data.settings?.numbering) + ' recorded.', 'success')
         return { ok: true }
       }
       return { ok: false, message: firstError(res) }
@@ -49,7 +78,7 @@ function ChartRecord({ patientId, canRecord, toast, store, onDirtyChange }) {
       return { ok: false, message: 'The finding could not be confirmed. Check the chart before retrying.' }
     } finally {
       recording.current=false
-      if(live.current)setRecordingPending(false)
+      if(ownsChart())setRecordingPending(false)
     }
   }
 
@@ -64,14 +93,14 @@ function ChartRecord({ patientId, canRecord, toast, store, onDirtyChange }) {
         branches={branches}
         activeBranchId={activeBranchId}
         recordingPending={recordingPending}
-        onDirtyChange={onDirtyChange}
+        onDirtyChange={reportDirty}
       />
     </div>
   )
 }
 
 /** Dentist: Dental chart page with 100k+ scalable searchable patient picker (Rule 3.4). */
-export function SearchablePatientPicker({ selectedPatient, onSelect, store }) {
+export function SearchablePatientPicker({ selectedPatient, onSelect, store, inputRef }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(false)
@@ -117,6 +146,7 @@ export function SearchablePatientPicker({ selectedPatient, onSelect, store }) {
       <Field label="Select or search patient" hint="Search 100,000+ clinic patients by name, code (PAT-0001), or mobile number">
         <div style={{ position: 'relative' }}>
           <input
+            ref={inputRef}
             type="text"
             value={query}
             placeholder="Search patient by name, patient code, or phone number…"
@@ -200,19 +230,40 @@ function DentistChartBody({ store, context, setPage, linked }) {
   const toast = store?.toast || (() => {})
   const [selectedPatient, setSelectedPatient] = useState(linked?.patient||null)
   const dirty = React.useRef(false)
+  const patientGeneration=React.useRef(0), patientId=React.useRef(selectedPatient?.id||null)
+  const pendingTarget=React.useRef(null), patientSearch=React.useRef(null), restoreSearch=React.useRef(false)
+  const generation=patientGeneration.current
+  const ownsPatient=()=>patientGeneration.current===generation&&patientId.current===(selectedPatient?.id||null)
   const [pendingPatient, setPendingPatient] = useState(null)
-  const selectPatient = patient => {
-    if (dirty.current) setPendingPatient({ patient })
-    else setSelectedPatient(patient)
+  const cancelPatient=()=>{pendingTarget.current=null;setPendingPatient(null)}
+  const applyPatient=patient=>{
+    // Invalidate old chart reads, completions and dirty reports before React
+    // remounts it, including a rapid A -> B -> A return.
+    patientGeneration.current++;patientId.current=patient?.id||null;dirty.current=false
+    cancelPatient();restoreSearch.current=true;setSelectedPatient(patient)
   }
+  const confirmPatient=()=>{
+    const target=pendingTarget.current
+    if(!target)return
+    pendingTarget.current=null
+    applyPatient(target.patient)
+  }
+  const selectPatient = patient => {
+    if((patient?.id||null)===patientId.current)return
+    if (dirty.current) {const target={patient};pendingTarget.current=target;setPendingPatient(target)}
+    else applyPatient(patient)
+  }
+  React.useLayoutEffect(()=>{
+    if(restoreSearch.current){restoreSearch.current=false;patientSearch.current?.focus()}
+  },[selectedPatient?.id])
   return <div className="st-page">
-    <ConfirmDialog open={!!pendingPatient} title="Leave this patient's chart?" cancelLabel="Stay" confirmLabel="Discard changes and continue" onCancel={() => setPendingPatient(null)} onConfirm={() => { dirty.current = false; setSelectedPatient(pendingPatient.patient); setPendingPatient(null) }}>
-      <p>Unsaved findings for {selectedPatient?.name} will be discarded. A submitted request keeps its original patient.</p>
+    <ConfirmDialog open={!!pendingPatient} title="Leave this patient's chart?" cancelLabel="Stay" confirmLabel="Discard changes and continue" onCancel={cancelPatient} onConfirm={confirmPatient}>
+      <p>Unsaved findings for {selectedPatient?.name} will be discarded. A submitted request keeps its original patient. Unsaved changes are kept only on this screen and cannot be recovered after leaving or reloading.</p>
     </ConfirmDialog>
     <PageHeader kicker="Clinical" title="Dental chart" text="Record what you find per tooth and surface. Each entry is kept; the latest one is the current chart. The system makes no diagnosis or suggestion."/>
     <Card>
-      {linked?<><Button variant="ghost" onClick={()=>setPage('treatment',context.returnEncounter)}>Return to encounter</Button><h2>{linked.patient.name}</h2><p>This dental chart is separate from the treatment documentation.</p></>:<SearchablePatientPicker selectedPatient={selectedPatient} onSelect={selectPatient} store={store}/>}
-      {selectedPatient && <ChartView patientId={selectedPatient.id} canRecord toast={toast} store={store} onDirtyChange={value => { dirty.current = value }}/>}
+      {linked?<><Button variant="ghost" onClick={()=>setPage('treatment',context.returnEncounter)}>Return to encounter</Button><h2>{linked.patient.name}</h2><p>This dental chart is separate from the treatment documentation. Unsaved findings are kept only on this screen.</p></>:<SearchablePatientPicker selectedPatient={selectedPatient} onSelect={selectPatient} store={store} inputRef={patientSearch}/>}
+      {selectedPatient && <ChartView patientId={selectedPatient.id} canRecord toast={toast} store={store} isCurrent={ownsPatient} onDirtyChange={value => { if(ownsPatient())dirty.current=value }}/>}
     </Card>
   </div>
 }
