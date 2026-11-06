@@ -53,11 +53,21 @@ export function ToothTimeline({
   const handleSave = async (e) => {
     e.preventDefault()
     if (!canRecord || !onRecord || saving.current || recordingPending) return
-    saving.current = true
     const revision = edits.current, submitted = form.current
+    // Production IDs are legacy refs; a native select also stringifies numeric
+    // IDs supplied by internal callers. Recover only that original value type.
+    const branch = branches.find(b => String(b.id) === String(submitted.branch_id))?.id ?? submitted.branch_id
+    if (typeof branch === 'number' && (!Number.isSafeInteger(branch) || branch <= 0)) {
+      setErr('Choose a valid clinic branch.')
+      return
+    }
+    saving.current = true
     setBusy(true); setErr('')
     const payload = { tooth, status: submitted.status, surfaces: [...submitted.surfaces], note: submitted.note.trim() || null, recorded_on: submitted.recorded_on }
-    if (submitted.branch_id) payload.branch_id = Number(submitted.branch_id)
+    if (submitted.branch_id) {
+      if (typeof branch === 'number') payload.branch_id = branch
+      else payload.branch_ref = String(submitted.branch_id)
+    }
     try {
       const res = await onRecord(payload, ownsEditor)
       if (!ownsEditor() || edits.current !== revision) return

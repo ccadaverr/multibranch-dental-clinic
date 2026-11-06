@@ -86,12 +86,12 @@ class PrescriptionController extends Controller
             $p = Prescription::create(['patient_id' => $visit->patient_id, 'branch_id' => $visit->branch_id, 'visit_id' => $visit->id, 'treatment_id' => $visit->treatment?->id,
                 'dentist_profile_id' => $dentist->id, 'created_by_user_id' => $user->id, 'status' => 'Draft', 'note' => $data['note'] ?? null]);
             $this->writeLines($p, $data['lines']);
+            $this->audit($user, 'prescription.created', $p);
 
-            return $p;
+            return $p->fresh(['patient.person', 'branch', 'dentist.person', 'lines']);
         });
-        $this->audit($user, 'prescription.created', $p);
 
-        return response()->json(['data' => $this->view($p->fresh(['patient.person', 'branch', 'dentist.person', 'lines']), $user, true)], 201);
+        return response()->json(['data' => $this->view($p, $user, true)], 201);
     }
 
     public function update(Request $request, Prescription $prescription): JsonResponse
@@ -99,16 +99,19 @@ class PrescriptionController extends Controller
         $user = $request->user();
         $data = $request->validate(['expected_revision' => ['required', 'integer']] + self::LINE_RULES);
         $this->dentistAt($user, $prescription->branch_id);
-        DB::transaction(function () use ($prescription, $data) {
+        $accepted = DB::transaction(function () use ($prescription, $data, $user) {
             $p = Prescription::whereKey($prescription->id)->lockForUpdate()->first();
             if ($p->status !== 'Draft') throw ValidationException::withMessages(['status' => ['An issued prescription cannot be changed. Void it and write a new one.']]);
             if ($p->revision !== (int) $data['expected_revision']) throw ValidationException::withMessages(['expected_revision' => ['This draft changed. Reload it.']]);
             $p->lines()->delete();
             $this->writeLines($p, $data['lines']);
             $p->update(['note' => $data['note'] ?? null, 'revision' => $p->revision + 1]);
+            // Materialize the complete accepted response while this row is locked.
+            // A post-commit fresh() could adopt a later editor's unreviewed revision.
+            return $this->view($p->fresh(['patient.person', 'branch', 'dentist.person', 'lines', 'visit']), $user, true);
         });
 
-        return response()->json(['data' => $this->view($prescription->fresh(['patient.person', 'branch', 'dentist.person', 'lines']), $user, true)]);
+        return response()->json(['data' => $accepted]);
     }
 
     /** Issue: lock it and give it the next number of the year (a locked counter row: concurrent issues never leave a gap). */
@@ -117,7 +120,7 @@ class PrescriptionController extends Controller
         $user = $request->user();
         $data = $request->validate(['expected_revision' => ['required', 'integer']]);
         $dentist = $this->dentistAt($user, $prescription->branch_id);
-        DB::transaction(function () use ($prescription, $data, $user, $dentist) {
+        $p = DB::transaction(function () use ($prescription, $data, $user, $dentist) {
             $p = Prescription::whereKey($prescription->id)->lockForUpdate()->first();
             if ($p->status !== 'Draft') throw ValidationException::withMessages(['status' => ['This prescription was already issued.']]);
             if ($p->revision !== (int) $data['expected_revision']) throw ValidationException::withMessages(['expected_revision' => ['This draft changed. Reload it.']]);
@@ -128,18 +131,23 @@ class PrescriptionController extends Controller
             DB::table('prescription_counters')->where('year', $year)->update(['last_number' => $n]);
             $p->update(['status' => 'Issued', 'number' => sprintf('RX-%d-%06d', $year, $n), 'issued_at' => now(), 'issued_by_user_id' => $user->id,
                 'license_no' => $dentist->rx_license_no, 'revision' => $p->revision + 1]);
+            $this->audit($user, 'prescription.issued', $p);
+            $p->load(['patient.person', 'branch', 'dentist.person', 'lines']);
+            // No patient/guardian notice for an uncommitted or rolled-back
+            // issuance, including when this command has an outer transaction.
+            DB::afterCommit(function () use ($p, $user) {
+                if ($to = $p->patient?->contactUser()) {
+                    app(NotificationCenter::class)->staffNotice($to, 'prescription_ready', 'A prescription is ready', 'A prescription from your visit is ready in the portal.', 'visits', $p->public_id, "prescription_ready:{$p->public_id}");
+                    try {
+                        app(MailOutbox::class)->queue('prescription_ready', "prescription_ready:{$p->public_id}", $p, null, $to, $user);
+                    } catch (\Throwable $e) {
+                        report($e);
+                    }
+                }
+            });
+
+            return $p;
         });
-        $p = $prescription->fresh(['patient.person', 'branch', 'dentist.person', 'lines']);
-        $this->audit($user, 'prescription.issued', $p);
-        // The patient (or guardian) is told it is ready, never what is in it.
-        if ($to = $p->patient?->contactUser()) {
-            app(NotificationCenter::class)->staffNotice($to, 'prescription_ready', 'A prescription is ready', 'A prescription from your visit is ready in the portal.', 'visits', $p->public_id, "prescription_ready:{$p->public_id}");
-            try {
-                app(MailOutbox::class)->queue('prescription_ready', "prescription_ready:{$p->public_id}", $p, null, $to, $user);
-            } catch (\Throwable $e) {
-                report($e);
-            }
-        }
 
         return response()->json(['data' => $this->view($p, $user, true)]);
     }
@@ -149,13 +157,14 @@ class PrescriptionController extends Controller
         $user = $request->user();
         $data = $request->validate(['reason' => ['required', 'string', 'min:3', 'max:300']]);
         $this->dentistAt($user, $prescription->branch_id);
-        DB::transaction(function () use ($prescription, $data, $user) {
+        $p = DB::transaction(function () use ($prescription, $data, $user) {
             $p = Prescription::whereKey($prescription->id)->lockForUpdate()->first();
             if ($p->status !== 'Issued') throw ValidationException::withMessages(['status' => [$p->status === 'Void' ? 'This prescription is already void.' : 'Only an issued prescription is voided; a draft is just not issued.']]);
             $p->update(['status' => 'Void', 'voided_at' => now(), 'voided_by_user_id' => $user->id, 'void_reason' => $data['reason'], 'revision' => $p->revision + 1]);
+            $this->audit($user, 'prescription.voided', $p);
+
+            return $p->load(['patient.person', 'branch', 'dentist.person', 'lines']);
         });
-        $p = $prescription->fresh(['patient.person', 'branch', 'dentist.person', 'lines']);
-        $this->audit($user, 'prescription.voided', $p);
 
         return response()->json(['data' => $this->view($p, $user, true)]);
     }

@@ -1,6 +1,7 @@
 import { useClinicalSession } from '../use-clinical-session.js'
+import { useClinicalProtection } from '../clinical-navigation.jsx'
 import { clinicalSessionKey, resolveEncounter } from '../encounter.js'
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Button, Card, ConfirmDialog, Field, FilterBar, Modal, Notice, PageHeader } from '../components.jsx'
 import { createPrescription, downloadPrescriptionPdf, issuePrescription, listPrescriptions, prescription, prescriptionVisits, savePrescriptionLicense, updatePrescription, voidPrescription } from '../api-client.js'
 import '../dentist-clinical.css'
@@ -14,6 +15,10 @@ const CUSTOM_FIELDS = ['medicine', 'dosage', 'frequency', 'duration']
 const selectedOption = (line, field, catalog) => line[`${field}Other`] || (line[field] && !catalog.includes(line[field])) ? OTHER_OPTION : line[field]
 const chooseOption = (line, field, option) => ({ ...line, [field]: option === OTHER_OPTION ? '' : option, [`${field}Other`]: option === OTHER_OPTION })
 const apiLine = line => Object.fromEntries(LINE_FIELDS.map(field => [field, line[field]]))
+const draftSnapshot = ({lines, note}) => JSON.stringify({lines: lines.map(line => ({
+  ...Object.fromEntries(LINE_FIELDS.map(field => [field, line[field] ?? ''])),
+  ...Object.fromEntries(CUSTOM_FIELDS.map(field => [`${field}Other`, !!line[`${field}Other`]])),
+})), note})
 const TONE = { Draft: 'is-late', Issued: 'is-ok', Void: 'is-bad' }
 
 // Medicine name autocomplete list only. Dosing, frequency, duration, and instructions are never pre-filled or presented as clinic-approved defaults.
@@ -43,7 +48,7 @@ export function PrescriptionsServerPage(props) {
   if(props.role==='dentist'&&!allowed)return <Notice>Clinical session unavailable. Prescription information is hidden.</Notice>
   const linked=props.context?.returnEncounter?resolveEncounter(props.store.state,props.store.session,props.context.returnEncounter):null
   if(linked&&!linked.ok)return <Notice>{linked.message}<Button onClick={()=>props.setPage('queue')}>My Queue</Button></Notice>
-  return <PrescriptionsBody key={clinicalSessionKey(props.store.session)+(props.context?.visitId||'all')} {...props}/>
+  return <PrescriptionsBody key={JSON.stringify([clinicalSessionKey(props.store.session), props.store.getAuthGeneration?.(), props.context?.visitId||'all'])} {...props}/>
 }
 function PrescriptionsBody({ store, role, context, setPage }) {
   const toast = store?.toast || (() => {})
@@ -52,11 +57,18 @@ function PrescriptionsBody({ store, role, context, setPage }) {
   // Invalidate UI completions synchronously when selection changes. The server
   // command still finishes for its original prescription, even after unmount.
   const editorGeneration = useRef(0)
+  const editorLeave = useRef(null)
   const generation = editorGeneration.current
-  const selectDraft = id => {
+  const applyDraft = id => {
     if(id===writing)return
     editorGeneration.current++
     setWriting(id)
+  }
+  const selectDraft = (id, closeDetail = false) => {
+    if (id === writing) { if (closeDetail) setOpenId(null); return }
+    const change = () => { if (closeDetail) setOpenId(null); applyDraft(id) }
+    if (editorLeave.current) editorLeave.current(change)
+    else change()
   }
   const load = () => listPrescriptions().then(r => { if (r.ok) { setRows(r.data); setError('') } else setError(r.message || 'Prescriptions could not be loaded.') })
   useEffect(() => { load() }, [])
@@ -80,7 +92,7 @@ function PrescriptionsBody({ store, role, context, setPage }) {
       text={owner ? 'Prescriptions issued at the clinic: number, date, dentist and branch. The medicines are visible only to the dentists, the branch front desk and the patient.'
         : dentist ? 'Write a prescription for a recent visit. Issuing locks it; a mistake is voided with a reason and a new one is issued. There is no drug list and no interaction check: you decide what to prescribe.'
           : 'Prescriptions issued at your branch, to view and print. Only a dentist writes or changes them.'}/>
-    {dentist && <WriteCard key={writing || 'new'} context={context} toast={toast} onDone={id => { load(); setOpenId(id) }} editing={writing} onEdited={() => selectDraft(null)} isCurrent={() => editorGeneration.current===generation}/>}
+    {dentist && <WriteCard key={writing || 'new'} getAuthGeneration={store.getAuthGeneration} context={context} toast={toast} onDone={id => { load(); setOpenId(id) }} editing={writing} onEdited={() => applyDraft(null)} leaveRef={editorLeave} isCurrent={() => editorGeneration.current===generation}/>}
     {dentist && <LicenseCard toast={toast}/>}
     {error && <Notice tone="warning" title="Unavailable">{error}</Notice>}
     <Card title={owner ? 'Issued prescriptions' : 'Prescriptions'}>
@@ -113,24 +125,78 @@ function PrescriptionsBody({ store, role, context, setPage }) {
           </div>
         </li>)}</ul>}
     </Card>
-    {openId && <PrescriptionDialog id={openId} toast={toast} onClose={() => setOpenId(null)} onChanged={load} onEdit={dentist ? id => { setOpenId(null); selectDraft(id) } : undefined}/>}
+    {openId && <PrescriptionDialog id={openId} toast={toast} onClose={() => setOpenId(null)} onChanged={load} onEdit={dentist ? id => selectDraft(id, true) : undefined}/>}
   </div>
 }
 
-function WriteCard({ toast, onDone, editing, onEdited, context, isCurrent }) {
+function WriteCard({ toast, onDone, editing, onEdited, context, isCurrent, leaveRef, getAuthGeneration }) {
   const mounted=useRef(true)
   const visitGeneration=useRef(0)
+  const saving=useRef(null), pendingLeave=useRef(null), pendingCompletion=useRef(null)
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false}},[])
   const [visits, setVisits] = useState(null), [meta, setMeta] = useState({}), [visitId, setVisitId] = useState(context?.visitId||'')
-  const [lines, setLines] = useState([{ ...EMPTY_LINE }]), [note, setNote] = useState(''), [draft, setDraft] = useState(null)
+  const [lines, renderLines] = useState([{ ...EMPTY_LINE }]), [note, renderNote] = useState(''), [draft, setDraft] = useState(null)
   const [err, setErr] = useState(''), [busy, setBusy] = useState(''), [confirmIssue, setConfirmIssue] = useState(false)
-  useEffect(() => { let live=true; prescriptionVisits().then(r => { if (live && r.ok) { setVisits(context?.visitId?r.data.filter(v=>v.id===context.visitId&&v.patient?.id===(context.patientPublicId||context.patientId)):r.data); setMeta(r.meta || {}) } }); return()=>{live=false} }, [])
+  const [leaving, setLeaving] = useState(false)
+  const [visitError, setVisitError] = useState(''), [visitAttempt, setVisitAttempt] = useState(0)
+  const form = useRef({lines, note}), cleanForm = useRef(draftSnapshot(form.current))
+  useClinicalProtection(draftSnapshot(form.current) !== cleanForm.current, !!busy)
+  const replaceForm = (nextLines, nextNote) => {
+    form.current = {lines: nextLines, note: nextNote}
+    cleanForm.current = draftSnapshot(form.current)
+    renderLines(nextLines); renderNote(nextNote)
+  }
+  // Lock only this editor's submitted version, not the Visit selector or other
+  // draft selectors. Synchronous guards also reject same-tick duplicate submits.
+  const setLines = update => {
+    if (saving.current) return
+    const next = typeof update === 'function' ? update(form.current.lines) : update
+    form.current = {...form.current, lines: next}; renderLines(next)
+  }
+  const setNote = value => {
+    if (saving.current) return
+    form.current = {...form.current, note: value}; renderNote(value)
+  }
+  const requestLeave = action => {
+    if (draftSnapshot(form.current) === cleanForm.current) return action()
+    pendingLeave.current = action; setLeaving(true)
+  }
+  useLayoutEffect(() => {
+    leaveRef.current = requestLeave
+    return () => { if (leaveRef.current === requestLeave) leaveRef.current = null }
+  }, [leaveRef])
+  const stay = () => {
+    pendingLeave.current = null; setLeaving(false)
+    const complete = pendingCompletion.current; pendingCompletion.current = null
+    complete?.()
+  }
+  const discard = () => {
+    const action = pendingLeave.current
+    // Consume before React commits. A late result must not replace this choice.
+    pendingLeave.current = null; pendingCompletion.current = null; setLeaving(false)
+    action?.()
+  }
+  useEffect(() => {
+    let live = true
+    setVisitError(''); setVisits(null)
+    const loadVisits = async () => {
+      let r
+      try { r = await prescriptionVisits() }
+      catch { r = {ok: false, message: 'Visits could not be loaded. Try again.'} }
+      if (!live) return
+      if (!r.ok) { setVisitError(firstError(r)); return }
+      setVisits(context?.visitId ? r.data.filter(v => v.id === context.visitId && v.patient?.id === (context.patientPublicId || context.patientId)) : r.data)
+      setMeta(r.meta || {})
+    }
+    loadVisits()
+    return () => { live = false }
+  }, [visitAttempt])
   useEffect(() => {
     if (!editing) return
     let live=true
     prescription(editing).then(r => {
       if(!live)return
-      if (r.ok && r.data.id===editing && r.data.status==='Draft' && r.data.can_edit) { setDraft(r.data); setVisitId(r.data.visit); setLines(r.data.lines.map(l => ({ ...EMPTY_LINE, ...l }))); setNote(r.data.note || '') }
+      if (r.ok && r.data.id===editing && r.data.status==='Draft' && r.data.can_edit) { setDraft(r.data); setVisitId(r.data.visit); replaceForm(r.data.lines.map(l => ({ ...EMPTY_LINE, ...l })), r.data.note || '') }
       else setErr(r.ok ? 'This prescription is no longer an editable draft.' : firstError(r))
     })
     return()=>{live=false}
@@ -140,30 +206,66 @@ function WriteCard({ toast, onDone, editing, onEdited, context, isCurrent }) {
   const choose = (i, field, option) => setLines(ls => ls.map((l, j) => j === i ? chooseOption(l, field, option) : l))
   const missingCustomValue = lines.some(line => CUSTOM_FIELDS.some(field => line[`${field}Other`] && !line[field].trim()))
   const changeVisit = id => {
-    // A new selection starts a blank editor. Invalidate synchronously, including
-    // A -> B -> A; comparing only the Visit ID would revive A's old completion.
-    visitGeneration.current++
-    setVisitId(id); setLines([{ ...EMPTY_LINE }]); setNote(''); setErr(''); setBusy(''); setConfirmIssue(false)
+    if (id === visitId) return
+    requestLeave(() => {
+      // A new selection starts a blank editor. Invalidate synchronously, including
+      // A -> B -> A; comparing only the Visit ID would revive A's old completion.
+      visitGeneration.current++
+      saving.current = null
+      setVisitId(id); replaceForm([{ ...EMPTY_LINE }], ''); setErr(''); setBusy(''); setConfirmIssue(false)
+    })
   }
-  const reset = () => { setDraft(null); setVisitId(''); setLines([{ ...EMPTY_LINE }]); setNote(''); onEdited() }
+  const reset = () => { visitGeneration.current++; saving.current = null; setDraft(null); setVisitId(''); replaceForm([{ ...EMPTY_LINE }], ''); onEdited() }
   const save = async issue => {
+    if (saving.current) return
     if (missingCustomValue) return setErr('Specify the selected Other values before saving.')
+    const authGeneration = getAuthGeneration?.()
+    if (issue && !Number.isSafeInteger(authGeneration)) return setErr('Your authentication could not be confirmed. Sign in again before issuing. No issuance was started.')
     const generation=visitGeneration.current
+    const request = {generation, authGeneration}
+    saving.current = request
     setBusy(issue ? 'issue' : 'save'); setErr('')
     const body = { lines: lines.filter(l => l.medicine.trim()).map(apiLine), note: note.trim() || null }
-    let r = draft ? await updatePrescription(draft.id, { ...body, expected_revision: draft.revision }) : await createPrescription({ visit_id: visitId, ...body })
-    if (r.ok && issue) r = await issuePrescription(r.data.id, r.data.revision)
+    let r, savedDraft
+    try {
+      r = draft ? await updatePrescription(draft.id, { ...body, expected_revision: draft.revision }) : await createPrescription({ visit_id: visitId, ...body })
+      if (r.ok && issue) {
+        savedDraft = r.data
+        // Only authentication continuity gates the next command. Visit/editor
+        // changes and page unmount do not revoke confirmed original-Visit intent.
+        if (getAuthGeneration() !== request.authGeneration) {
+          r = {ok: false, kind: 'auth_changed', message: 'The Draft was saved. Issuance was not started because your session changed. Review the Draft after signing in.'}
+        } else r = await issuePrescription(savedDraft.id, savedDraft.revision)
+      }
+    } catch {
+      r = {ok: false, message: 'The prescription result could not be confirmed. Check the prescription list before retrying.'}
+    }
     // A transmitted Save/explicit Issue retains its original identity. Only its
     // current editor may consume the result, report feedback or navigate.
-    if(!mounted.current||!isCurrent()||visitGeneration.current!==generation)return
-    setBusy('')
-    if (!r.ok) return setErr(firstError(r))
-    toast(issue ? `Issued ${r.data.number}. The patient was told it is ready in the portal.` : 'Draft saved. Only dentists at this branch can see it.', 'success')
-    reset(); onDone(r.data.id)
+    const complete = () => {
+      if(!mounted.current||!isCurrent()||visitGeneration.current!==generation||saving.current!==request)return
+      if (getAuthGeneration && getAuthGeneration() !== request.authGeneration) return
+      saving.current = null; setBusy('')
+      if (!r.ok) {
+        // A confirmed create/update followed by failed Issue is still a saved
+        // Draft. Retain its ID/revision so an explicit retry cannot create a copy.
+        if (savedDraft?.status === 'Draft' && savedDraft.can_edit) { setDraft(savedDraft); cleanForm.current = draftSnapshot(form.current) }
+        return setErr(firstError(r))
+      }
+      toast(issue ? `Issued ${r.data.number}. Patient notification delivery is not confirmed.` : 'Draft saved. Only dentists at this branch can see it.', 'success')
+      reset(); onDone(r.data.id)
+    }
+    if(!mounted.current||!isCurrent()||visitGeneration.current!==generation||saving.current!==request)return
+    if (pendingLeave.current) pendingCompletion.current = complete
+    else complete()
   }
   if(editing&&!draft)return <Card title="Open prescription draft">{err?<Notice tone="warning" title="Draft unavailable">{err}</Notice>:<p role="status">Loading prescription draft…</p>}<Button variant="ghost" onClick={onEdited}>Cancel</Button></Card>
   return <Card title={draft ? `Edit draft for ${draft.patient?.name}` : 'Write a prescription'}>
-    {!visits ? <p className="au-muted" role="status">Loading visits…</p> : <form className="au-form" onSubmit={e => { e.preventDefault(); save(false) }}>
+    <ConfirmDialog open={leaving} title="Leave this prescription?" cancelLabel="Stay" confirmLabel="Discard changes and continue" onCancel={stay} onConfirm={discard}>
+      <p>Unsaved medicines and notes for {draft?.patient?.name || visit?.patient.name || 'this prescription'} will be discarded. A submitted request continues for its original Visit; its result is shown here only if you stay.</p>
+    </ConfirmDialog>
+    {visitError ? <Notice tone="warning" title="Visits unavailable"><p role="alert">{visitError}</p><Button variant="soft" onClick={() => setVisitAttempt(a => a + 1)}>Retry loading visits</Button></Notice> : !visits ? <p className="au-muted" role="status">Loading visits…</p> : <form className="au-form" onSubmit={e => { e.preventDefault(); save(false) }}>
+      {!visits.length && <p role="status">No eligible visits found.</p>}
       {!draft && <Field label="Visit" required hint="Visits at your branches in the last 30 days."><select value={visitId} onChange={e => changeVisit(e.target.value)} required>
         <option value="">Choose a visit…</option>{visits.map(v => <option key={v.id} value={v.id}>{day(v.date)} · {v.patient.name}{v.patient.age !== null ? ` (${v.patient.age})` : ''} · {v.branch}</option>)}</select></Field>}
       {(visit || draft) && <Notice tone="warning" title="Check allergies before prescribing">{meta.allergies?.length ? meta.allergies.join(', ') : meta.allergy_notice}</Notice>}
@@ -175,7 +277,7 @@ function WriteCard({ toast, onDone, editing, onEdited, context, isCurrent }) {
         const freqSelect = selectedOption(l, 'frequency', COMMON_FREQUENCIES)
         const durationSelect = selectedOption(l, 'duration', COMMON_DURATIONS)
 
-        return <fieldset key={i} className="rx-line"><legend>Medicine {i + 1}</legend>
+        return <fieldset key={i} className="rx-line" disabled={!!busy}><legend>Medicine {i + 1}</legend>
           <Field label="Medicine" required hint="Choose standard medicine or Other to specify">
             <select
               aria-label={`Select medicine ${i + 1}`}
@@ -264,13 +366,14 @@ function WriteCard({ toast, onDone, editing, onEdited, context, isCurrent }) {
           {lines.length > 1 && <Button size="sm" variant="danger" onClick={() => setLines(ls => ls.filter((_, j) => j !== i))}>Remove medicine {i + 1}</Button>}
         </fieldset>
       })}
-      <Button size="sm" variant="soft" onClick={() => setLines(ls => [...ls, { ...EMPTY_LINE }])}>Add another medicine</Button>
-      <Field label="Note (optional)"><textarea value={note} maxLength={1000} onChange={e => setNote(e.target.value)}/></Field>
+      <Button size="sm" variant="soft" disabled={!!busy} onClick={() => setLines(ls => [...ls, { ...EMPTY_LINE }])}>Add another medicine</Button>
+      <Field label="Note (optional)"><textarea value={note} maxLength={1000} disabled={!!busy} onChange={e => setNote(e.target.value)}/></Field>
+      {busy && <p role="status">The submitted medicines and notes are locked while the request is pending. You can still choose another Visit or draft; unsaved work requires confirmation.</p>}
       {err && <p className="au-error" role="alert">{err}</p>}
       <div className="ns-actions">
         <Button type="submit" variant="soft" disabled={!!busy || (!draft && !visitId) || missingCustomValue || !lines.some(l => l.medicine.trim())}>{busy === 'save' ? 'Saving…' : 'Save draft'}</Button>
         <Button disabled={!!busy || (!draft && !visitId) || missingCustomValue || !lines.some(l => l.medicine.trim())} onClick={() => setConfirmIssue(true)}>{busy === 'issue' ? 'Issuing…' : 'Issue prescription'}</Button>
-        {draft && <Button variant="ghost" onClick={reset}>Cancel</Button>}
+        {draft && <Button variant="ghost" onClick={() => requestLeave(reset)}>Cancel</Button>}
       </div>
       <p className="au-muted">Issuing locks the prescription and gives it a number. It cannot be edited afterwards, only voided.</p>
       <ConfirmDialog
@@ -326,7 +429,7 @@ export function PrescriptionDialog({ id, toast, onClose, onChanged, onEdit }) {
       {voiding && <Field label="Reason for voiding" required><input value={reason} maxLength={300} onChange={e => setReason(e.target.value)}/></Field>}
       <div className="ns-actions">
         {onEdit && p.status === 'Draft' && p.can_edit && <Button variant="soft" onClick={() => onEdit(p.id)}>Edit draft</Button>}
-        {p.status !== 'Draft' && <Button variant="soft" icon="download" onClick={async () => { const r = await downloadPrescriptionPdf(p.id, p.number); if (!r.ok&&mounted.current&&currentId.current===id) toast(r.message || 'The PDF could not be downloaded.', 'warning') }}>Download PDF</Button>}
+        {p.status !== 'Draft' && Array.isArray(p.lines) && <Button variant="soft" icon="download" onClick={async () => { const r = await downloadPrescriptionPdf(p.id, p.number); if (!r.ok&&mounted.current&&currentId.current===id) toast(r.message || 'The PDF could not be downloaded.', 'warning') }}>Download PDF</Button>}
         {p.can_void && !voiding && <Button variant="ghost" onClick={() => setVoiding(true)}>Void…</Button>}
         {voiding && <Button disabled={busy || reason.trim().length < 3} onClick={doVoid}>{busy ? 'Voiding…' : 'Void this prescription'}</Button>}
         <Button variant="ghost" onClick={onClose}>Close</Button>
