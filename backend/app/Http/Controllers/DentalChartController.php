@@ -15,6 +15,7 @@ use App\Services\Intake\Guardianship;
 use App\Support\ClinicClock;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -125,21 +126,29 @@ class DentalChartController extends Controller
             $treatment = Treatment::where('public_id', $data['treatment_id'])->where('dentist_profile_id', $me->id)->whereHas('visit', fn ($v) => $v->where('patient_id', $patient->id))->first();
             if (! $treatment) throw ValidationException::withMessages(['treatment_id' => ['Link only a treatment of this patient that you performed.']]);
         }
-        if (! empty($data['surfaces'])) {
-            $currentChart = $this->chart($patient, false, false);
-            $activeEntries = collect($currentChart['current'])->where('tooth', $data['tooth']);
-            $isAbsent = $activeEntries->contains(fn ($e) => self::statusCategory($e['status'], $e['surfaces'] ?? []) === self::CATEGORY_ABSENT);
-            if ($isAbsent) {
-                throw ValidationException::withMessages([
-                    'status' => ['Tooth is marked Extracted/Missing. Record a whole-tooth status first.'],
-                ]);
-            }
-        }
         $branchId = $this->resolveBranchId($me, $patient, $treatment, $data, $on);
-        $entry = ToothChartEntry::create(['patient_id' => $patient->id, 'tooth' => $data['tooth'], 'surfaces' => array_values(array_unique($data['surfaces'] ?? [])),
-            'status' => $status, 'recorded_on' => $on, 'note' => $data['note'] ?? null, 'treatment_id' => $treatment?->id,
-            'branch_id' => $branchId, 'dentist_profile_id' => $me->id, 'created_by_user_id' => $user->id]);
-        app(AuditService::class)->recordAdministrative('chart.recorded', $user, $patient, ['entry' => $entry->public_id, 'tooth' => $entry->tooth]); // no status text, no note
+        DB::transaction(function () use ($patient, $data, $status, $on, $treatment, $branchId, $me, $user) {
+            // This is the only runtime chart-entry writer. Serialize even the first finding (there may be no row to
+            // lock) by patient + tooth, without locking unrelated teeth or append-only historical rows. No other
+            // runtime writer acquires this advisory lock, and no encounter row lock precedes it here. Hash collisions
+            // only add contention; tooth is a validated FDI integer. PostgreSQL releases it on commit or rollback.
+            DB::select('SELECT pg_advisory_xact_lock(hashtext(?), ?)', ['dental-chart:'.$patient->id, (int) $data['tooth']]);
+            // Read AFTER acquiring the lock: a waiting writer must validate against the preceding committed finding.
+            if (! empty($data['surfaces'])) {
+                $currentChart = $this->chart($patient, false, false);
+                $activeEntries = collect($currentChart['current'])->where('tooth', $data['tooth']);
+                $isAbsent = $activeEntries->contains(fn ($e) => self::statusCategory($e['status'], $e['surfaces'] ?? []) === self::CATEGORY_ABSENT);
+                if ($isAbsent) {
+                    throw ValidationException::withMessages([
+                        'status' => ['Tooth is marked Extracted/Missing. Record a whole-tooth status first.'],
+                    ]);
+                }
+            }
+            $entry = ToothChartEntry::create(['patient_id' => $patient->id, 'tooth' => $data['tooth'], 'surfaces' => array_values(array_unique($data['surfaces'] ?? [])),
+                'status' => $status, 'recorded_on' => $on, 'note' => $data['note'] ?? null, 'treatment_id' => $treatment?->id,
+                'branch_id' => $branchId, 'dentist_profile_id' => $me->id, 'created_by_user_id' => $user->id]);
+            app(AuditService::class)->recordAdministrative('chart.recorded', $user, $patient, ['entry' => $entry->public_id, 'tooth' => $entry->tooth]); // no status text, no note
+        });
 
         return response()->json(['data' => $this->chart($patient, true, true)], 201);
     }

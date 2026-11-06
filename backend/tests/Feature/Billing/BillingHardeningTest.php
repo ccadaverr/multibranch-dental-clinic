@@ -3,11 +3,15 @@
 namespace Tests\Feature\Billing;
 
 use App\Enums\Role;
-use App\Models\{AuditLog,HmoCase,Invoice,PatientHmoMembership,Payment,Receipt,ServicePrice,Treatment,TreatmentProcedure,Visit};
+use App\Models\{AuditLog,HmoCase,Invoice,InvoiceHistory,PatientHmoMembership,Payment,Receipt,ServicePrice,Treatment,TreatmentProcedure,Visit};
 use App\Services\Audit\AuditService;
+use App\Services\Billing\BillingException;
+use App\Services\Billing\BillingService;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
 use Tests\Feature\Appointments\SchedulingFixture;
 use Tests\TestCase;
 
@@ -69,6 +73,154 @@ class BillingHardeningTest extends TestCase
         $this->postJson("/api/invoices/{$invoice->public_id}/issue", ['expected_revision' => 2], ['Idempotency-Key' => $this->key()])->assertOk();
 
         return $invoice->fresh();
+    }
+
+    /** A verified booking deposit is fixture evidence; exercise the real invoice-issue command to apply its credit. */
+    private function issuedWithBookingDeposit(string $deposit = '300.00'): Invoice
+    {
+        Http::preventStrayRequests();
+        Mail::fake();
+        $this->price('svc1', 'b1', '500.00'); // The existing completed-treatment fixture has quantity two.
+        $treatment = $this->completed();
+        $appointment = $this->existing('A', 'd1', 'b1', 'svc1', '2026-09-28', '09:00', 30, 'Completed');
+        $appointment->update([
+            'booking_payment_status' => 'paid', 'booking_fee_php' => $deposit,
+            'booking_payment_ref' => 'fin01-booking-fixture', 'booking_payment_method' => 'PayMongo (GCASH)',
+            'booking_paid_at' => now()->subDay(),
+        ]);
+        $treatment->visit->update(['source' => 'appointment', 'appointment_id' => $appointment->id]);
+        $invoice = Invoice::where('public_id', $this->createInvoice($treatment)->assertCreated()->json('data.id'))->firstOrFail();
+        $this->postJson("/api/invoices/{$invoice->public_id}/review", ['expected_revision' => 1], ['Idempotency-Key' => $this->key()])->assertOk();
+        $this->postJson("/api/invoices/{$invoice->public_id}/issue", ['expected_revision' => 2], ['Idempotency-Key' => $this->key()])->assertOk();
+
+        return $invoice->fresh(['visit.appointment', 'payment', 'receipt']);
+    }
+
+    public function test_booking_deposit_plus_cash_remainder_preserves_credit_and_replays_once(): void
+    {
+        $invoice = $this->issuedWithBookingDeposit();
+        $this->assertSame(['Issued', '300.00', '700.00', 'partial_booking_deposit'], [
+            $invoice->status, (string) $invoice->paid_amount, $invoice->balance(), $invoice->settlement_type,
+        ]);
+        $this->assertSame([0, 0], [Payment::count(), Receipt::count()]);
+        $key = $this->key();
+        $payload = ['expected_revision' => 3, 'method' => 'Cash', 'amount' => '700.00'];
+        $this->postJson("/api/invoices/{$invoice->public_id}/payment", $payload, ['Idempotency-Key' => $key])
+            ->assertOk()->assertJsonPath('data.status', 'Paid')->assertJsonPath('data.paid_amount', '1000.00')
+            ->assertJsonPath('data.balance', '0.00')->assertJsonPath('data.payment.amount', '700.00')
+            ->assertJsonPath('data.receipt.amount', '700.00');
+        $this->postJson("/api/invoices/{$invoice->public_id}/payment", $payload, ['Idempotency-Key' => $key])
+            ->assertOk()->assertHeader('Idempotent-Replayed', 'true')->assertJsonPath('data.paid_amount', '1000.00');
+        $this->postJson("/api/invoices/{$invoice->public_id}/payment", $payload, ['Idempotency-Key' => $this->key()])
+            ->assertStatus(409)->assertJsonPath('code', 'stale_revision');
+        $this->assertSame([1, 1, 1], [Payment::count(), Receipt::count(), AuditLog::where('action', 'billing.payment_recorded')->count()]);
+        $this->assertSame('1000.00', InvoiceHistory::where('invoice_id', $invoice->id)->where('event', 'invoice.paid')->sole()->snapshot['paid_amount']);
+        $this->assertSame('700.00', AuditLog::where('action', 'billing.payment_recorded')->sole()->payload['amount']);
+        $this->assertSame('300.00', (string) $invoice->visit->appointment->fresh()->booking_fee_php);
+    }
+
+    public function test_booking_deposit_plus_verified_online_remainder_preserves_credit_and_provider_replay(): void
+    {
+        $invoice = $this->issuedWithBookingDeposit();
+        $billing = app(BillingService::class);
+        // This service boundary receives an already-verified capture; no provider HTTP call is made by this test.
+        $paid = $billing->payOnline($invoice, 'PayMongo (CARD)', 'fin01-remainder-fixture', $this->u['patientA'], '700.00');
+        $this->assertSame(['Paid', '1000.00', '0.00'], [$paid->status, (string) $paid->paid_amount, $paid->balance()]);
+        $this->assertSame(['700.00', 'fin01-remainder-fixture'], [(string) $paid->payment->amount, $paid->payment->external_reference]);
+        $this->assertSame('700.00', (string) $paid->receipt->amount);
+        $replayed = $billing->payOnline($paid, 'PayMongo (CARD)', 'fin01-remainder-fixture', $this->u['patientA'], '700.00');
+        $this->assertSame($paid->id, $replayed->id);
+        $this->assertSame([1, 1, 1], [Payment::count(), Receipt::count(), InvoiceHistory::where('event', 'invoice.paid')->count()]);
+    }
+
+    public function test_booking_credit_and_remainder_keep_exact_centavos(): void
+    {
+        $invoice = $this->issuedWithBookingDeposit('300.01');
+        $this->assertSame('699.99', $invoice->balance());
+        $this->postJson("/api/invoices/{$invoice->public_id}/payment", [
+            'expected_revision' => 3, 'method' => 'Cash', 'amount' => '699.99',
+        ], ['Idempotency-Key' => $this->key()])->assertOk()->assertJsonPath('data.paid_amount', '1000.00')
+            ->assertJsonPath('data.balance', '0.00')->assertJsonPath('data.receipt.amount', '699.99');
+    }
+
+    public function test_booking_remainder_refuses_a_mismatched_verified_capture_without_writes(): void
+    {
+        $invoice = $this->issuedWithBookingDeposit();
+        try {
+            app(BillingService::class)->payOnline($invoice, 'PayMongo (CARD)', 'fin01-wrong-capture-fixture', $this->u['patientA'], '1000.00');
+            $this->fail('The captured amount must equal the remainder, not the full responsibility.');
+        } catch (BillingException $e) {
+            $this->assertSame('amount_mismatch', $e->responseBody()['code']);
+        }
+        $this->assertSame([0, 0, 'Issued', '300.00', 3], [Payment::count(), Receipt::count(), $invoice->fresh()->status, (string) $invoice->fresh()->paid_amount, $invoice->fresh()->revision]);
+        $this->assertSame(0, InvoiceHistory::where('event', 'invoice.paid')->count());
+    }
+
+    public function test_full_booking_deposit_settles_at_issue_and_cannot_collect_again(): void
+    {
+        $invoice = $this->issuedWithBookingDeposit('1000.00');
+        $this->assertSame(['Paid', '1000.00', '0.00', 'booking_deposit'], [
+            $invoice->status, (string) $invoice->paid_amount, $invoice->balance(), $invoice->settlement_type,
+        ]);
+        $this->assertSame('1000.00', (string) $invoice->payment->amount);
+        $this->assertSame('1000.00', (string) $invoice->receipt->amount);
+        $this->postJson("/api/invoices/{$invoice->public_id}/payment", [
+            'expected_revision' => 3, 'method' => 'Cash', 'amount' => '0.00',
+        ], ['Idempotency-Key' => $this->key()])->assertStatus(422)->assertJsonPath('code', 'already_paid');
+        $this->assertSame([1, 1], [Payment::count(), Receipt::count()]);
+    }
+
+    public function test_zero_remaining_balance_does_not_create_a_zero_payment_on_an_issued_invoice(): void
+    {
+        $invoice = $this->issuedWithBookingDeposit();
+        // Deliberately inconsistent lifecycle fixture: a fully credited invoice still marked Issued.
+        $invoice->update(['paid_amount' => '1000.00']);
+        $this->postJson("/api/invoices/{$invoice->public_id}/payment", [
+            'expected_revision' => 3, 'method' => 'Cash', 'amount' => '0.00',
+        ], ['Idempotency-Key' => $this->key()])->assertStatus(422)->assertJsonPath('code', 'already_paid');
+        $this->assertSame([0, 0, 'Issued', 3], [Payment::count(), Receipt::count(), $invoice->fresh()->status, $invoice->fresh()->revision]);
+    }
+
+    public function test_booking_remainder_rejects_wrong_amount_reference_revision_and_branch_without_writes(): void
+    {
+        $invoice = $this->issuedWithBookingDeposit();
+        $path = "/api/invoices/{$invoice->public_id}/payment";
+        foreach (['1000.00', '699.99', '0.00'] as $amount) {
+            $this->postJson($path, ['expected_revision' => 3, 'method' => 'Cash', 'amount' => $amount], ['Idempotency-Key' => $this->key()])
+                ->assertStatus(422)->assertJsonPath('code', 'invalid_payment_amount');
+        }
+        $this->postJson($path, ['expected_revision' => 3, 'method' => 'Card/POS', 'amount' => '700.00'], ['Idempotency-Key' => $this->key()])
+            ->assertStatus(422)->assertJsonPath('code', 'invalid_payment_reference');
+        $this->postJson($path, ['expected_revision' => 2, 'method' => 'Cash', 'amount' => '700.00'], ['Idempotency-Key' => $this->key()])
+            ->assertStatus(409)->assertJsonPath('code', 'stale_revision');
+        $this->actingAsUser('staffB2');
+        $this->postJson($path, ['expected_revision' => 3, 'method' => 'Cash', 'amount' => '700.00'], ['Idempotency-Key' => $this->key()])->assertForbidden();
+        $this->assertSame([0, 0, 'Issued', '300.00', 3], [Payment::count(), Receipt::count(), $invoice->fresh()->status, (string) $invoice->fresh()->paid_amount, $invoice->fresh()->revision]);
+        $this->assertSame(0, InvoiceHistory::where('event', 'invoice.paid')->count());
+        $this->assertSame(0, AuditLog::where('action', 'billing.payment_recorded')->count());
+    }
+
+    public function test_booking_credit_survives_a_failed_remainder_payment_transaction(): void
+    {
+        $invoice = $this->issuedWithBookingDeposit();
+        $this->app->bind(AuditService::class, fn () => new class extends AuditService {
+            public function record(array $attributes): AuditLog
+            {
+                throw new \RuntimeException('fin01 audit fixture unavailable');
+            }
+        });
+        $this->withoutExceptionHandling();
+        try {
+            $this->postJson("/api/invoices/{$invoice->public_id}/payment", [
+                'expected_revision' => 3, 'method' => 'Cash', 'amount' => '700.00',
+            ], ['Idempotency-Key' => $this->key()]);
+            $this->fail('A remainder payment must roll back if its audit cannot be written.');
+        } catch (\RuntimeException $e) {
+            $this->assertSame('fin01 audit fixture unavailable', $e->getMessage());
+        }
+        $this->assertSame([0, 0, 'Issued', '300.00', 3], [Payment::count(), Receipt::count(), $invoice->fresh()->status, (string) $invoice->fresh()->paid_amount, $invoice->fresh()->revision]);
+        $this->assertSame(0, InvoiceHistory::where('event', 'invoice.paid')->count());
+        $this->assertSame(0, DB::table('command_keys')->where('command', 'billing.payment')->count());
     }
 
     // ---- arithmetic and price authority -----------------------------------------------------------------------------

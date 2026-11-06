@@ -6,6 +6,7 @@ use App\Models\Appointment;
 use App\Models\BranchService;
 use App\Models\CommandKey;
 use App\Models\DentistServiceAssignment;
+use App\Models\QueueEntry;
 use App\Models\Service;
 use App\Models\Treatment;
 use App\Models\TreatmentHistory;
@@ -50,9 +51,11 @@ final class TreatmentService
         $payload = ['visit' => $visit->id, 'expected_revision' => $expectedRevision];
 
         return $this->idempotent($actor, $key, 'treatment.start', $payload, $present, function () use ($actor, $visit, $expectedRevision) {
-            // appointment_id never changes after creation, so it is safe to read before taking the locks.
-            $appointment = $visit->appointment_id ? Appointment::whereKey($visit->appointment_id)->lockForUpdate()->firstOrFail() : null;
+            // Resolve persisted context, then preserve appointment -> Visit lock order and detect a changed link.
+            $snapshot = Visit::whereKey($visit->id)->firstOrFail();
+            $appointment = $snapshot->appointment_id ? Appointment::whereKey($snapshot->appointment_id)->lockForUpdate()->firstOrFail() : null;
             $current = Visit::whereKey($visit->id)->lockForUpdate()->firstOrFail();
+            $this->assertAppointmentLink($current, $appointment);
             if (Treatment::where('visit_id', $current->id)->exists()) {
                 throw self::treatmentExists();
             }
@@ -66,7 +69,7 @@ final class TreatmentService
                 throw VisitCommandException::rule('dentist_unresolved', 'Assign a responsible Dentist to this visit before clinical work starts.', 'dentist');
             }
             $dentist = $current->dentist()->with('person')->firstOrFail();
-            if ($dentist->person_id !== $actor->person_id) {
+            if ($actor->role->value !== 'dentist' || $dentist->person_id !== $actor->person_id) {
                 throw new VisitCommandException(403, 'forbidden', 'Only the responsible Dentist may start this treatment.');
             }
             // The linked appointment mirrors the Visit's clinical progression; a mismatch is refused, never repaired.
@@ -112,14 +115,14 @@ final class TreatmentService
         $payload = ['treatment' => $treatment->id, 'expected_revision' => $expectedRevision, 'data' => $data];
 
         return $this->idempotent($actor, $key, 'treatment.document', $payload, $present, function () use ($actor, $treatment, $expectedRevision, $data) {
-            $current = $this->lockForAuthor($actor, $treatment);
+            [$current, $visit, $appointment, $queueEntry] = $this->lockClinicalEncounter($actor, $treatment);
             if ($current->revision !== $expectedRevision) {
                 throw self::stale();
             }
             if ($current->status !== 'In Treatment') {
                 throw self::readOnly();
             }
-            $visit = $current->visit;
+            $this->assertActiveEncounter($current, $visit, $appointment, $queueEntry);
             $lines = $this->resolveLines($current, $visit, $data['procedures']);
             $fields = $data['fields'];
             if (! empty($fields['followup_recommended_date']) && $fields['followup_recommended_date'] < $visit->clinic_date->format('Y-m-d')) {
@@ -155,19 +158,14 @@ final class TreatmentService
         $payload = ['treatment' => $treatment->id, 'expected_revision' => $expectedRevision];
 
         return $this->idempotent($actor, $key, 'treatment.complete', $payload, $present, function () use ($actor, $treatment, $expectedRevision) {
-            $visitRow = Visit::whereKey($treatment->visit_id)->firstOrFail();
-            $appointment = $visitRow->appointment_id ? Appointment::whereKey($visitRow->appointment_id)->lockForUpdate()->firstOrFail() : null;
-            $visit = Visit::whereKey($treatment->visit_id)->lockForUpdate()->firstOrFail();
-            $current = $this->lockForAuthor($actor, $treatment);
+            [$current, $visit, $appointment, $queueEntry] = $this->lockClinicalEncounter($actor, $treatment);
             if ($current->status === 'Completed') {
                 return [$current, 200];
             }
             if ($current->revision !== $expectedRevision) {
                 throw self::stale();
             }
-            if ($visit->status !== 'In Treatment' || ($appointment && $appointment->status !== 'In Treatment')) {
-                throw VisitCommandException::rule('encounter_mismatch', 'The visit or its appointment is not In Treatment; this encounter needs clinic review.', 'visit');
-            }
+            $this->assertActiveEncounter($current, $visit, $appointment, $queueEntry);
             if (trim((string) $current->procedure_summary) === '') {
                 throw VisitCommandException::rule('procedure_summary_required', 'Document the performed procedure before completing treatment.', 'procedure_summary');
             }
@@ -197,15 +195,70 @@ final class TreatmentService
         });
     }
 
+    /**
+     * Serialize documentation with start/completion in appointment -> Visit -> queue/container -> Treatment order.
+     * Completed Treatments are immutable in PostgreSQL. Once the Visit is locked, an observed Completed result can
+     * skip active-encounter prerequisites (including a missing legacy queue), but must still pass locked author checks.
+     * Every runtime clinical writer holds the Visit before changing Treatment state.
+     *
+     * @return array{Treatment,Visit,?Appointment,?QueueEntry}
+     */
+    private function lockClinicalEncounter(User $actor, Treatment $treatment): array
+    {
+        $visitRow = Visit::whereKey($treatment->visit_id)->firstOrFail();
+        $appointment = $visitRow->appointment_id ? Appointment::whereKey($visitRow->appointment_id)->lockForUpdate()->firstOrFail() : null;
+        $visit = Visit::whereKey($treatment->visit_id)->lockForUpdate()->firstOrFail();
+        $snapshot = Treatment::whereKey($treatment->id)->firstOrFail();
+        if ($snapshot->visit_id !== $visit->id) {
+            throw new VisitCommandException(409, 'conflict', 'The treatment encounter changed. Reload before trying again.');
+        }
+        $entry = null;
+        if ($snapshot->status !== 'Completed') {
+            $this->assertAppointmentLink($visit, $appointment);
+            $entry = $this->queue->forClinicalVisit($visit);
+        }
+        $current = $this->lockForAuthor($actor, $treatment);
+        $current->setRelation('visit', $visit);
+
+        return [$current, $visit, $appointment, $entry];
+    }
+
+    private function assertActiveEncounter(Treatment $treatment, Visit $visit, ?Appointment $appointment, ?QueueEntry $entry): void
+    {
+        if ($treatment->status !== 'In Treatment' || $visit->status !== 'In Treatment' || ($appointment && $appointment->status !== 'In Treatment')) {
+            throw VisitCommandException::rule('encounter_mismatch', 'The visit or its appointment is not In Treatment; this encounter needs clinic review.', 'visit');
+        }
+        if ($entry?->status !== 'Served') {
+            throw VisitCommandException::rule('encounter_mismatch', 'The treatment queue entry is not Served; this encounter needs clinic review.', 'queue');
+        }
+    }
+
     /** Locks the Treatment and re-checks, under the lock, that the actor is its author and the Visit's responsible Dentist. */
     private function lockForAuthor(User $actor, Treatment $treatment): Treatment
     {
         $current = Treatment::whereKey($treatment->id)->lockForUpdate()->with(['dentist', 'visit.dentist'])->firstOrFail();
-        if ($current->dentist->person_id !== $actor->person_id || $current->visit->responsible_dentist_profile_id !== $current->dentist_profile_id) {
+        if ($current->visit_id !== $treatment->visit_id) {
+            throw new VisitCommandException(409, 'conflict', 'The treatment encounter changed. Reload before trying again.');
+        }
+        if ($actor->role->value !== 'dentist' || $current->dentist->person_id !== $actor->person_id || $current->visit->responsible_dentist_profile_id !== $current->dentist_profile_id) {
             throw new VisitCommandException(403, 'forbidden', 'Only the Dentist responsible for this treatment may change it.');
         }
 
         return $current;
+    }
+
+    /** Appointment and Visit are already locked. Status is checked separately; identities are never silently repaired. */
+    private function assertAppointmentLink(Visit $visit, ?Appointment $appointment): void
+    {
+        $date = $visit->clinic_date->format('Y-m-d');
+        if ($visit->appointment_id !== $appointment?->id
+            || ($visit->source === 'appointment') !== ($appointment !== null)
+            || ClinicClock::local($visit->arrived_at)->toDateString() !== $date
+            || ($appointment && ($appointment->patient_id !== $visit->patient_id || $appointment->branch_id !== $visit->branch_id
+                || $appointment->dentist_profile_id !== $visit->responsible_dentist_profile_id
+                || ClinicClock::local($appointment->starts_at)->toDateString() !== $date))) {
+            throw VisitCommandException::rule('appointment_mismatch', 'The appointment and visit identities do not agree. Clinic review is required.', 'appointment');
+        }
     }
 
     /**
@@ -256,8 +309,11 @@ final class TreatmentService
     }
 
     /** The performed service must be Active, offered at the Visit's branch and authorized for the treating Dentist. */
-    private function serviceFailure(Service $service, Visit $visit, Treatment $treatment): ?string
+    private function serviceFailure(?Service $service, Visit $visit, Treatment $treatment): ?string
     {
+        if (! $service) {
+            return 'This service does not exist.';
+        }
         if ($service->status !== 'Active') {
             return 'This service is not active.';
         }

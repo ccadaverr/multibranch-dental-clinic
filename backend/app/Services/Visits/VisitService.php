@@ -62,6 +62,11 @@ final class VisitService
             if (ClinicClock::local($current->starts_at)->toDateString() !== ClinicClock::today()) {
                 throw VisitCommandException::rule('not_today', 'Only today’s appointments can be checked in.', 'status');
             }
+            // An online-payment hold is not admission approval. Match the existing appointment-confirmation guard;
+            // unpaid pay-at-clinic appointments remain eligible under the existing admission rules.
+            if ($current->booking_payment_status === 'held') {
+                throw VisitCommandException::rule('booking_payment_pending', 'This booking is awaiting verified payment confirmation.', 'booking_payment_status');
+            }
             $this->assertNoActiveVisit($current->patient_id);
 
             $from = $current->status;

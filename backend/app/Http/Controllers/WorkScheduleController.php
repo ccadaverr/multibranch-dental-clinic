@@ -37,20 +37,34 @@ class WorkScheduleController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $dentists = DentistProfile::with(['person', 'branches'])->orderBy('id')->get()->filter(fn (DentistProfile $d) => $this->canView($user, $d))->values();
-        $work = new WorkSchedules;
-        $weekly = DentistSchedule::whereIn('dentist_profile_id', $dentists->pluck('id'))->where('status', 'active')->with('branch')->orderBy('weekday')->orderBy('start_time')->get()->groupBy('dentist_profile_id');
-        $exceptions = DentistScheduleException::whereIn('dentist_profile_id', $dentists->pluck('id'))->where('status', 'active')->where('on_date', '>=', ClinicClock::today())
-            ->with(['branch', 'dentist.person'])->orderBy('on_date')->get();
-        $editable = $this->editableBranchIds($user);
-        $branches = Branch::where('status', 'Open')->orderBy('id')->get();
-        $staffProfiles = \App\Models\StaffProfile::with(['person', 'branch'])->orderBy('id')->get();
-
-        $now = ClinicClock::now();
-        $todayDate = $now->toDateString();
         $visibleBranchIds = $user->role->value === 'staff'
             ? UserBranchScope::where('user_id', $user->id)->pluck('branch_id')->all()
             : null;
+        $dentistQuery = DentistProfile::with(['person', 'branches']);
+        if ($visibleBranchIds !== null) {
+            $dentistQuery->whereHas('branches', fn ($q) => $q->whereIn('branches.id', $visibleBranchIds));
+        } elseif ($user->role->value === 'dentist') {
+            $dentistQuery->where('person_id', $user->person_id);
+        } elseif ($user->role->value !== 'owner') {
+            $dentistQuery->whereRaw('1 = 0');
+        }
+        $dentists = $dentistQuery->orderBy('id')->get();
+        $work = new WorkSchedules;
+        $weekly = DentistSchedule::whereIn('dentist_profile_id', $dentists->pluck('id'))->where('status', 'active')
+            ->when($visibleBranchIds !== null, fn ($q) => $q->whereIn('branch_id', $visibleBranchIds))
+            ->with('branch')->orderBy('weekday')->orderBy('start_time')->get()->groupBy('dentist_profile_id');
+        $exceptions = DentistScheduleException::whereIn('dentist_profile_id', $dentists->pluck('id'))->where('status', 'active')->where('on_date', '>=', ClinicClock::today())
+            // Unassigned day-off exceptions affect every branch; keep their existing projection pending privacy policy.
+            ->when($visibleBranchIds !== null, fn ($q) => $q->where(fn ($scope) => $scope->whereIn('branch_id', $visibleBranchIds)->orWhereNull('branch_id')))
+            ->with(['branch', 'dentist.person'])->orderBy('on_date')->get();
+        $editable = $this->editableBranchIds($user);
+        $branches = Branch::where('status', 'Open')->orderBy('id')->get();
+        $staffProfiles = \App\Models\StaffProfile::with(['person', 'branch'])
+            ->when($user->role->value === 'staff', fn ($q) => $q->whereIn('branch_id', UserBranchScope::select('branch_id')->where('user_id', $user->id)))
+            ->orderBy('id')->get();
+
+        $now = ClinicClock::now();
+        $todayDate = $now->toDateString();
         // Staff Operations reads only this branch-scoped projection. WorkSchedules is also the booking authority;
         // no schedule, closure, break, or leave decision is copied into the browser.
         $duty = $dentists->flatMap(function (DentistProfile $d) use ($todayDate, $visibleBranchIds, $work) {
@@ -73,14 +87,15 @@ class WorkScheduleController extends Controller
         $dutyByDentist = $duty->groupBy('dentist_id');
 
         return response()->json(['data' => [
-            'dentists' => $dentists->map(function (DentistProfile $d) use ($dutyByDentist, $weekly, $work, $editable) {
+            'dentists' => $dentists->map(function (DentistProfile $d) use ($dutyByDentist, $weekly, $work, $editable, $visibleBranchIds) {
                 return [
                     'id' => $d->legacy_ref,
                     'name' => $this->name($d),
                     'available' => (bool) $d->available,
                     'on_duty_today' => ($dutyByDentist->get($d->legacy_ref) ?? collect())->contains('on_duty_today', true),
                     'profile_hours' => $work->usesProfileHours($d) ? ['start' => substr((string) $d->shift_start, 0, 5), 'end' => substr((string) $d->shift_end, 0, 5)] : null,
-                    'branches' => $d->branches->map(fn (Branch $b) => ['id' => $b->legacy_ref, 'name' => $b->name, 'editable' => in_array($b->id, $editable, true)])->values(),
+                    'branches' => $d->branches->filter(fn (Branch $b) => $visibleBranchIds === null || in_array($b->id, $visibleBranchIds, true))
+                        ->map(fn (Branch $b) => ['id' => $b->legacy_ref, 'name' => $b->name, 'editable' => in_array($b->id, $editable, true)])->values(),
                     'weekly' => ($weekly[$d->id] ?? collect())->map(fn (DentistSchedule $s) => $this->rowView($s))->values(),
                     'demo' => ($weekly[$d->id] ?? collect())->contains('demo', true),
                 ];
