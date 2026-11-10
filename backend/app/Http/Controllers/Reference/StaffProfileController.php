@@ -41,9 +41,10 @@ class StaffProfileController extends Controller
 
             $current->update($attributes);
 
-            // Section 3.5: synchronize only explicit assignment changes. The account lock is also used by
-            // UserBranchScopeController, so replacements share a serialization point, including empty scope sets.
-            if ($request->has('branch_ref') && $current->person_id) {
+            // Section 3.5: synchronize only explicit, persisted assignment changes. Repeating the current
+            // branch must preserve independently authorized account scopes, including an empty scope set.
+            // UserBranchScopeController uses the same account lock, serializing replacements even for empty sets.
+            if ($request->has('branch_ref') && $current->wasChanged('branch_id') && $current->person_id) {
                 $linkedUser = \App\Models\User::where('person_id', $current->person_id)
                     ->where('role', \App\Enums\Role::Staff)
                     ->lockForUpdate()->first();
