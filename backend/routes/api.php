@@ -208,6 +208,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
     });
     // M20 Patient Follow-Up: front desk and Dentists of the branch; Owner counts and dates only.
     Route::get('/followups', [\App\Http\Controllers\FollowupController::class, 'index'])->middleware('role:staff,dentist,owner');
+    Route::get('/followups/{followupTask}', [\App\Http\Controllers\FollowupController::class, 'show'])->middleware('role:staff,dentist');
     Route::post('/followups', [\App\Http\Controllers\FollowupController::class, 'store'])->middleware(['role:staff,dentist', 'throttle:30,1']);
     Route::patch('/followups/{followupTask}', [\App\Http\Controllers\FollowupController::class, 'update'])->middleware(['role:staff,dentist', 'throttle:60,1']);
     Route::get('/patients/{patient}/followups', [\App\Http\Controllers\FollowupController::class, 'forPatient'])->middleware('role:staff,dentist');

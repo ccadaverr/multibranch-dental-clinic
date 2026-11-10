@@ -42,6 +42,22 @@ class FollowupController extends Controller
             'meta' => ['today' => $today, 'counts' => $this->counts($user)]]);
     }
 
+    /** Exact task readback uses the work-list branch boundary, not generic patient-profile access. */
+    public function show(Request $request, FollowupTask $followupTask): JsonResponse
+    {
+        $user = $request->user();
+        abort_unless(in_array($user->role->value, ['staff', 'dentist'], true), 403);
+        // Re-read by public identity with current branch scope. Do not serialize
+        // a stale route snapshot or rely on the capped/active work lists.
+        $task = FollowupTask::where('public_id', $followupTask->public_id)
+            ->whereIn('branch_id', $this->branchIds($user))
+            ->with(['patient.person', 'branch', 'service', 'assignee.person', 'appointment'])
+            ->firstOrFail();
+
+        return response()->json(['data' => $this->view($task, $user)])
+            ->header('Cache-Control', 'private, no-store');
+    }
+
     /** The task panel on a patient record (front desk with the patient's full record, or a Dentist of the branch). */
     public function forPatient(Request $request, Patient $patient): JsonResponse
     {
