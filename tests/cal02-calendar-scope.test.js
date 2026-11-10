@@ -142,7 +142,7 @@ export async function runCal02CalendarScope(page, base, runCase = async (_name, 
       assert.deepEqual(await names(), ['View appointment details: Synthetic Patient A · 9:00 AM · Synthetic service'])
       assert.equal(await page.getByText('1 appointment this month', { exact: true }).count(), 1)
       assert.doesNotMatch(await page.locator('main').innerText(), /Synthetic Patient B/)
-      assert.equal(await page.getByLabel('Branch', { exact: true }).count(), 0)
+      assert.equal(await page.getByRole('combobox', { name: 'Branch', exact: true }).count(), 0)
     })
 
     await runCase('5. empty/absent Staff scopes never borrow the operational assignment or request rows', async () => {
@@ -206,7 +206,7 @@ export async function runCal02CalendarScope(page, base, runCase = async (_name, 
 
     await runCase('8. losing selected branch access closes details/confirmation and suppresses late detail resolution', async () => {
       await fresh('all'); await ready()
-      await page.getByLabel('Branch', { exact: true }).selectOption('a')
+      await page.getByRole('combobox', { name: 'Branch', exact: true }).selectOption('a')
       await avatar().first().click()
       await page.getByRole('dialog', { name: 'Appointment details', exact: true }).waitFor()
       await page.evaluate(() => window.cal02.setSession({ branchScopes: ['b'] }))
@@ -261,10 +261,10 @@ export async function runCal02CalendarScope(page, base, runCase = async (_name, 
     await runCase('10. Owner sees all branches with zero scopes and may filter clinic-wide data', async () => {
       await fresh('owner'); await ready()
       assert.equal(await avatar().count(), 2)
-      await page.getByLabel('Branch', { exact: true }).selectOption('b')
+      await page.getByRole('combobox', { name: 'Branch', exact: true }).selectOption('b')
       assert.equal(await avatar().count(), 1)
       assert.match((await names()).join('|'), /Synthetic Patient B/)
-      await page.getByLabel('Branch', { exact: true }).selectOption('all')
+      await page.getByRole('combobox', { name: 'Branch', exact: true }).selectOption('all')
       assert.equal(await avatar().count(), 2)
       const requests = await page.evaluate(() => window.cal02.listRequests.length)
       await page.evaluate(() => window.cal02.setSession({ branchScopes: ['b', 'a'] }))
@@ -329,7 +329,7 @@ export async function runCal02CalendarScope(page, base, runCase = async (_name, 
     await runCase('12. reading/filtering/navigation never fabricates attendance or scheduling writes', async () => {
       await fresh('all'); await ready()
       const before = await page.evaluate(() => structuredClone(window.cal02.rows))
-      await page.getByLabel('Branch', { exact: true }).selectOption('b')
+      await page.getByRole('combobox', { name: 'Branch', exact: true }).selectOption('b')
       await avatar().first().click()
       const dialog = page.getByRole('dialog', { name: 'Appointment details', exact: true })
       await dialog.getByRole('button', { name: 'Close', exact: true }).click()

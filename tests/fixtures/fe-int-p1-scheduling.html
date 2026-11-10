@@ -1,0 +1,71 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synthetic scheduling concurrency acceptance</title></head><body><main id="root"></main><script type="module">
+import React, {useRef,useState} from 'react'
+import {createRoot} from 'react-dom/client'
+import {flushSync} from 'react-dom'
+import {AppointmentForm, AppointmentsPage} from '/src/pages/Scheduling.jsx'
+import {StaffDayCalendar} from '/src/pages/StaffDayCalendar.jsx'
+import {loadAppointments,mapAppointment} from '/src/appointments-api.js'
+import {createAppointmentFlow} from '/src/appointment-flow.js'
+import {setClockSource} from '/src/clock.js'
+import '/src/styles.css'
+import '/src/foundation.css'
+import '/src/polish.css'
+setClockSource(()=>new Date('2026-11-10T10:00:00+08:00'))
+const raw = id => ({id,code:`SYNTHETIC-${id}`,revision:3,status:'Confirmed',source:'front_desk',date:id==='A'?'2026-11-10':'2026-11-12',start_time:'13:00',end_time:'13:30',duration_minutes:30,patient:{id:`patient-${id}`,name:`Synthetic Patient ${id}`,code:`P-${id}`},branch:{id:'b1',name:'Synthetic branch'},service:{id:'s1',name:'Synthetic service'},dentist:{id:'d1',name:'Synthetic Dentist'}})
+const fixture = window.fe = {pipeline:new URLSearchParams(location.search).has('pipeline'),auth:1,raw:[raw('A'),raw('B')],commands:[],requests:[],events:[],details:[],feedback:[],saved:[],holdCommands:true,holdDetails:false,fail:false,throwCommand:false,refreshes:0}
+const reply = async (list,hold,entry) => {
+  const pending = new Promise(resolve=>{entry.release=resolve})
+  list.push(entry)
+  if(hold)await pending
+}
+window.fetch=async(url,options={})=>{
+  const path=new URL(url,location.href).pathname
+  if(path==='/sanctum/csrf-cookie')return new Response(null,{status:204})
+  if(fixture.pipeline&&options.method==='POST'){
+    const id=path.split('/').at(-2),action=path.split('/').at(-1),body=JSON.parse(options.body)
+    const entry={id,action,body,key:new Headers(options.headers).get('Idempotency-Key')}
+    await reply(fixture.requests,fixture.holdCommands,entry)
+    const row=fixture.raw.find(row=>row.id===id)
+    if(fixture.fail||body.expected_revision!==row?.revision)return Response.json({message:'Synthetic stale revision',code:'stale_revision'},{status:409})
+    if(action==='reschedule'){row.date=body.date;row.start_time=body.start_time;row.end_time='14:30'}
+    else row.status=action==='cancel'?'Cancelled':'No-show'
+    row.revision++
+    return Response.json({data:row})
+  }
+  if(path==='/api/appointments/availability')return Response.json({data:{date:new URL(url,location.href).searchParams.get('date'),slots:[{start_time:'14:00',end_time:'14:30'}]}})
+  if(path==='/api/appointments')return Response.json({data:fixture.raw,meta:{current_page:1,last_page:1}})
+  if(path==='/api/calendar/load')return Response.json({data:{crowded_percent:80,days:[]}})
+  if(path.startsWith('/api/appointments/')){
+    const id=decodeURIComponent(path.split('/').at(-1))
+    const entry={id,row:structuredClone(fixture.raw.find(a=>a.id===id))}
+    await reply(fixture.details,fixture.holdDetails,entry)
+    return entry.failure?Response.json({message:'Synthetic detail unavailable'},{status:403}):Response.json({data:entry.row})
+  }
+  throw Error(`Unexpected synthetic request ${path}`)
+}
+function Fixture(){
+  const [session,setSession]=useState({serverUserId:'server-staff',userId:'staff-user',role:'staff',active:true,branchId:'b1',branchScopes:['b1']})
+  const [selection,setSelection]=useState('A'),[mounted,setMounted]=useState(true),[version,setVersion]=useState(0)
+  const [permission,setPermission]=useState(true)
+  const projected=useRef(fixture.raw.map(row=>mapAppointment(row)))
+  fixture.setSession=patch=>flushSync(()=>setSession(s=>({...s,...patch})))
+  fixture.select=id=>flushSync(()=>setSelection(id));fixture.setMounted=setMounted
+  fixture.changeRow=(id,patch)=>flushSync(()=>{Object.assign(fixture.raw.find(a=>a.id===id),patch);setVersion(v=>v+1)})
+  fixture.setPermission=value=>flushSync(()=>setPermission(value))
+  const appointments=fixture.pipeline?projected.current:fixture.raw.map(row=>mapAppointment(row))
+  const state={appointments:new URLSearchParams(location.search).get('mode')==='calendar'&&!new URLSearchParams(location.search).has('fullWindow')?[]:appointments,persons:[{id:'staff-person'}],users:[{id:'staff-user',personId:'staff-person',role:'Staff',status:'Active',branchId:'b1',permissions:permission?['appointments']:[]}],staff:[{userId:'staff-user',personId:'staff-person',branchId:'b1'}],patients:fixture.raw.map(row=>({id:row.patient.id,publicId:row.patient.id,serverProjection:true,name:row.patient.name})),branches:[{id:'b1',name:'Synthetic branch',status:'Open'},{id:'b2',name:'Synthetic second branch',status:'Open'}],services:[{id:'s1',name:'Synthetic service',status:'Active',duration:30}],branchServices:[{branchId:'b1',serviceId:'s1'}],dentists:[{id:'d1',name:'Synthetic Dentist',branchIds:['b1'],available:true}],dentistServiceAssignments:[{dentistId:'d1',serviceId:'s1'}],queue:[],treatments:[]}
+  state.services.push(...['s2','s3'].map(id=>({id,name:`Synthetic restricted ${id}`,status:'Active',duration:30,onlineBooking:'consultation_first'})))
+  state.branchServices.push(...['s2','s3'].map(serviceId=>({branchId:'b1',serviceId})))
+  const command=async(action,a,payload,key)=>{
+    const entry={action,id:a?.id,revision:a?.revision,payload,key}
+    await reply(fixture.commands,fixture.holdCommands,entry)
+    if(fixture.throwCommand)throw Error('Synthetic network interruption')
+    return fixture.fail?{ok:false,kind:'validation',message:'Synthetic scheduling refusal'}:{ok:true,record:{id:a?.id}}
+  }
+  const store={state,session,getAuthGeneration:()=>fixture.auth,appointmentsStatus:'ready',directoryPatients:state.patients,toast:(...args)=>fixture.feedback.push(args),appointmentFlow:{create:(payload,options)=>command('create',null,payload,options.key),refresh:async()=>{fixture.refreshes++},searchPatients:async()=>{},reschedule:(a,p,k)=>command('reschedule',a,p,k),cancel:(a,k)=>command('cancel',a,null,k),noShow:(a,k)=>command('noShow',a,null,k)}}
+  if(fixture.pipeline)store.appointmentFlow=createAppointmentFlow({getState:()=>({...state,appointments:projected.current}),getSession:()=>session,getActions:()=>({recordAppointmentEvent:(id,action)=>fixture.events.push({id,action}),applyAppointmentCancellation:id=>{fixture.events.push({id,action:'cancelled'});return{ok:true}},applyAppointmentNoShow:id=>{fixture.events.push({id,action:'no-show'});return{ok:true}}}),refresh:async()=>{const result=await loadAppointments('2026-11-10');if(result.ok){projected.current=result.rows.map(row=>mapAppointment(row));fixture.refreshes++;setVersion(v=>v+1)}return result}})
+  const mode=new URLSearchParams(location.search).get('mode')||'form'
+  return !mounted?React.createElement('p',null,'Unmounted'):mode==='calendar'?React.createElement(StaffDayCalendar,{store}):mode==='appointments'?React.createElement(AppointmentsPage,{role:'staff',store,setPage:()=>{}}):React.createElement(AppointmentForm,{role:'staff',store,appointment:mode==='create'?null:appointments.find(a=>a.id===selection),submitLabel:mode==='create'?'Confirm appointment':'Save new time',onSaved:record=>fixture.saved.push(record)})
+}
+createRoot(document.getElementById('root')).render(React.createElement(Fixture))
+</script></body></html>

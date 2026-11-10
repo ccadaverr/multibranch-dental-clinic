@@ -7,6 +7,8 @@ import {
 import { commandKey, rescheduleAppointment } from '../appointments-api.js'
 import { dutyForBranch } from '../work-hours-duty.js'
 import '../den12-work-hours.css'
+import { schedulingActorKey, useRequestOwner } from '../appointment-ui.js'
+import { canAccessPage } from '../safeguards.js'
 
 const firstError = r => (r.kind === 'validation' ? Object.values(r.errors || {})[0]?.[0] || r.message : r.message) || 'That did not work.'
 const t12 = hm => { if (!hm) return ''; const [h, m] = hm.split(':').map(Number); return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}` }
@@ -53,26 +55,61 @@ export function AffectedAppointments({ rows, wordingApproved, onNotify, onChange
 // ---- M3 Work schedules ----------------------------------------------------------------------------------------------
 
 export function WorkSchedulesPage({ store, role }) {
+  const allowed = !!store?.session?.serverUserId && store.session.role === role &&
+    (!store.getAuthGeneration || store.getAuthGeneration() != null) && Array.isArray(store.state?.users) && Array.isArray(store.state?.persons) && canAccessPage(store.state, store.session, 'schedules')
+  if (!allowed) return <Notice title="Work schedules unavailable">Your current account cannot open work schedules. Refresh your session and try again.</Notice>
+  return <WorkScheduleSession key={JSON.stringify([role, schedulingActorKey(store)])} store={store} role={role}/>
+}
+
+function WorkScheduleSession({ store, role }) {
   const toast = store?.toast || (() => {})
   const [data, setData] = useState(null), [error, setError] = useState(''), [selected, setSelected] = useState(''), [affected, setAffected] = useState(null), [approved, setApproved] = useState(true), [scheduleRole, setScheduleRole] = useState('dentist')
-  const load = () => workSchedules().then(r => { if (r.ok) { setData(r.data); setError(''); setApproved(r.data.wording_approved); const ownDentist = role === 'dentist' ? (r.data.dentists.find(d => d.id === store?.session?.dentistId || d.userId === store?.session?.userId)) : null; setSelected(s => s || ownDentist?.id || r.data.dentists[0]?.id || '') } else setError(r.message || 'Work schedules could not be loaded.') })
-  useEffect(() => { load() }, [])
+  const [loading, setLoading] = useState(true)
+  const live = useRef(false), generation = useRef(0), affectedGeneration = useRef(0), selectedRef = useRef(selected)
+  const dentistControl = useRef(null)
+  const auth = store.getAuthGeneration?.()
+  selectedRef.current = selected
+  const owner = useRequestOwner(selected, store.getAuthGeneration)
+  const load = async () => {
+    const request = ++generation.current, auth = store.getAuthGeneration?.()
+    setLoading(true)
+    try {
+      const r = await workSchedules()
+      if (!live.current || request !== generation.current || auth !== store.getAuthGeneration?.()) return
+      if (!r.ok || !Array.isArray(r.data?.dentists) || !Array.isArray(r.data?.branches) || !Array.isArray(r.data?.exceptions) || !r.data?.weekdays) {
+        setError(r.message || 'Work schedules could not be loaded.'); return
+      }
+      setData(r.data); setError(''); setApproved(r.data.wording_approved)
+      const ownDentist = role === 'dentist' ? (r.data.dentists.find(d => d.id === store?.session?.dentistId || d.userId === store?.session?.userId)) : null
+      setSelected(s => r.data.dentists.some(d => d.id === s) ? s : ownDentist?.id || r.data.dentists[0]?.id || '')
+    } catch { if (live.current && request === generation.current) setError('Work schedules could not be loaded. Try again.') }
+    finally { if (live.current && request === generation.current) setLoading(false) }
+  }
+  React.useLayoutEffect(() => { live.current = true; load(); return () => { live.current = false; generation.current++; affectedGeneration.current++ } }, [])
   const dentist = data?.dentists.find(d => d.id === selected)
   const dutyBranches = role === 'staff'
     ? (dentist?.branches || []).filter(branch => data?.duty?.rows?.some(row => row.dentist_id === dentist.id && row.branch_id === branch.id))
     : (dentist?.branches || [])
-  const refreshAffected = () => dentist && scheduleAffected(dentist.id).then(r => { if (r.ok) { setAffected(r.data.affected); setApproved(r.data.wording_approved) } })
-  useEffect(() => { setAffected(null); refreshAffected() }, [selected])
-  const after = r => { if (r.data?.affected) setAffected(r.data.affected); load() }
+  const refreshAffected = async () => {
+    if (!dentist) return
+    const id = dentist.id, request = ++affectedGeneration.current, auth = store.getAuthGeneration?.()
+    try {
+      const r = await scheduleAffected(id)
+      if (live.current && request === affectedGeneration.current && selectedRef.current === id && auth === store.getAuthGeneration?.() && r.ok) { setAffected(r.data.affected); setApproved(r.data.wording_approved) }
+    } catch { /* The affected list remains unavailable; no care action is inferred. */ }
+  }
+  useEffect(() => { setAffected(null); refreshAffected(); return () => { affectedGeneration.current++ } }, [selected])
+  const after = r => { if (!live.current || selectedRef.current !== dentist?.id || auth !== store.getAuthGeneration?.()) return; affectedGeneration.current++; if (r.data?.affected) setAffected(r.data.affected); load() }
+  const currentToast = (...args) => { if (live.current && selectedRef.current === dentist?.id && auth === store.getAuthGeneration?.()) toast(...args) }
   const editable = dentist?.branches.some(b => b.editable)
-  const canEdit = role === 'owner' && editable
+  const canEdit = role === 'owner' && editable && !error
   const staffSessionKey = JSON.stringify([store?.session?.serverUserId, store?.session?.userId, store?.session?.role, store?.session?.active, store?.session?.branchScopes])
 
   return <div className="st-page">
     <PageHeader kicker={role === 'dentist' ? 'My hours' : role === 'owner' ? 'Administration' : 'Team'} title={role === 'dentist' ? 'My work hours' : 'Work schedules'}
       text="Each dentist’s weekly hours per branch, and dated exceptions. Online booking, the front desk, walk-ins and the calendar use only these hours, inside the branch’s opening hours and minus approved leave. A change never cancels an appointment."/>
     {role === 'staff' && <Notice tone="info" title="Staff shift profiles are read-only">Only the Clinic Owner can change Staff shift profiles. A profile's hours do not confirm weekday coverage. Request time off under Leave.</Notice>}
-    {error && <Notice tone="warning" title="Unavailable">{error}</Notice>}
+    {error && <div role="alert"><Notice tone="warning" title="Unavailable">{error} {data && 'Showing the last loaded schedule.'} <Button variant="ghost" disabled={loading} onClick={load}>Retry work schedules</Button></Notice></div>}
     {role !== 'dentist' && (
       <div className="st-role-toggle" role="tablist" aria-label="Schedule role selector" style={{display:'flex',gap:'8px',marginBottom:'12px'}}>
         <Button variant={scheduleRole === 'dentist' ? 'primary' : 'soft'} size="sm" onClick={() => setScheduleRole('dentist')} role="tab" aria-selected={scheduleRole === 'dentist'}>Dentist schedules</Button>
@@ -82,9 +119,10 @@ export function WorkSchedulesPage({ store, role }) {
     {scheduleRole === 'staff' && role !== 'dentist' ? (
       <StaffScheduleProfiles key={staffSessionKey} role={role} session={store?.session}/>
     ) : (
-      !data ? <p className="au-muted" role="status">Loading…</p> : !data.dentists.length ? <Notice>No dentists to show for your branches.</Notice> : <>
+      !data ? (loading && <p className="au-muted" role="status">Loading work schedules…</p>) : !data.dentists.length ? <Notice>No dentists to show for your branches.</Notice> : <>
+        {loading && <p role="status">Refreshing work schedules…</p>}
         <Card>
-          {role === 'dentist' ? (<div className="dentist-hours-header" style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'12px',flexWrap:'wrap',paddingBottom:'10px',borderBottom:'1px solid var(--line)'}}><div><span className="block-muted" style={{fontSize:'11px',textTransform:'uppercase',letterSpacing:'0.05em',fontWeight:700}}>Rostered Provider</span><b style={{fontSize:'16px',color:'var(--ink)',display:'block',marginTop:'2px'}}>{dentist?.name || store?.session?.name || 'Dentist'}</b></div>{data.dentists.length > 1 && (<label style={{fontSize:'12px',display:'flex',alignItems:'center',gap:'6px'}}><span className="au-muted">Select dentist:</span><select value={selected} onChange={e => setSelected(e.target.value)} style={{width:'auto',minHeight:'36px',padding:'4px 8px'}}>{data.dentists.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></label>)}</div>) : (<Field label="Dentist"><select value={selected} onChange={e => setSelected(e.target.value)}>{data.dentists.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></Field>)}
+          {role === 'dentist' ? (<div className="dentist-hours-header" style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'12px',flexWrap:'wrap',paddingBottom:'10px',borderBottom:'1px solid var(--line)'}}><div><span className="block-muted" style={{fontSize:'11px',textTransform:'uppercase',letterSpacing:'0.05em',fontWeight:700}}>Rostered Provider</span><b style={{fontSize:'16px',color:'var(--ink)',display:'block',marginTop:'2px'}}>{dentist?.name || store?.session?.name || 'Dentist'}</b></div>{data.dentists.length > 1 && (<label style={{fontSize:'12px',display:'flex',alignItems:'center',gap:'6px'}}><span className="au-muted">Select dentist:</span><select value={selected} onChange={e => setSelected(e.target.value)} style={{width:'auto',minHeight:'36px',padding:'4px 8px'}}>{data.dentists.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></label>)}</div>) : (<Field label="Dentist"><select value={selected} ref={dentistControl} onChange={e => setSelected(e.target.value)}>{data.dentists.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></Field>)}
           {dentist && <div className="den12-duty" role="status" aria-label="Dentist duty today by branch"><p className="den12-duty-title">Duty today by branch</p><div className="den12-duty-list">{dutyBranches.map(branch => {
             const status = dutyForBranch(data.duty, dentist.id, branch.id, manilaToday())
             return <div className="den12-duty-item" key={branch.id}><strong>{branch.name}</strong><span className={`fd-badge ${status === 'on' ? 'is-ok' : status === 'off' ? 'is-muted' : 'is-unknown'}`}>{status === 'on' ? 'On duty today' : status === 'off' ? 'Off duty' : 'Duty status unavailable'}</span></div>
@@ -92,17 +130,25 @@ export function WorkSchedulesPage({ store, role }) {
           {role === 'dentist' && <Notice tone="info" title="Roster and working hours are managed by the Clinic Owner and Front Desk staff">Dentists view rostered schedules and shift hours read-only. To request time off or coverage, submit a request under Leave.</Notice>}
           {dentist?.demo && <Notice tone="info" title="Demo schedule, not confirmed by the clinic">These hours were made up for the demonstration. The clinic still has to give each dentist’s real hours.</Notice>}
           {dentist?.profile_hours && <Notice tone="info" title="No weekly schedule yet">Booking uses the hours on the profile ({t12(dentist.profile_hours.start)}–{t12(dentist.profile_hours.end)}) on every day the branch is open, and the calendar marks its capacity as estimated.
-            {canEdit && <div className="ns-actions st-gap">{dentist.branches.filter(b => b.editable).map(b => <Button key={b.id} size="sm" variant="soft" onClick={async () => {
-              const r = await copyProfileHours(dentist.id, b.id); if (!r.ok) return toast(firstError(r), 'warning'); toast(`${r.data.created} day(s) added at ${b.name}. Edit any day below.`, 'success'); after(r)
+            {owner.busy && <p role="status">Copying profile hours…</p>}
+            {canEdit && <div className="ns-actions st-gap">{dentist.branches.filter(b => b.editable).map(b => <Button key={b.id} size="sm" variant="soft" disabled={owner.busy} onClick={async () => {
+              const ticket = owner.begin(); if (!ticket) return
+              try {
+                const r = await copyProfileHours(dentist.id, b.id)
+                if (!owner.current(ticket)) return
+                if (!r.ok) return toast(firstError(r), 'warning')
+                toast(`${r.data.created} day(s) added at ${b.name}. Edit any day below.`, 'success'); dentistControl.current?.focus(); after(r)
+              } catch { if (owner.current(ticket)) setError('Could not confirm the schedule copy. Reload before retrying.') }
+              finally { owner.finish(ticket) }
             }}>Start from these hours at {b.name}</Button>)}</div>}
             {canEdit && <p className="au-muted">Once a dentist has a weekly schedule, a day without hours is a day off.</p>}</Notice>}
         </Card>
-        {dentist && <WeeklyGrid dentist={dentist} data={data} toast={toast} onSaved={after} canEdit={canEdit} role={role}/>}
+        {dentist && <WeeklyGrid dentist={dentist} data={data} key={`weekly:${dentist.id}`} toast={currentToast} onSaved={after} canEdit={canEdit} role={role} getAuthGeneration={store.getAuthGeneration}/>}
         {dentist && <Card title="Affected appointments" subtitle="The next 90 days: booked times this dentist no longer covers.">
-          <AffectedAppointments rows={affected} wordingApproved={approved} toast={toast} canAct={role !== 'dentist'} onChanged={() => { refreshAffected() }}
+          <AffectedAppointments rows={affected} key={dentist.id} wordingApproved={approved} toast={currentToast} canAct={role !== 'dentist'} onChanged={() => { if (live.current && selectedRef.current === dentist.id && auth === store.getAuthGeneration?.()) refreshAffected() }}
             onNotify={() => notifyScheduleAffected(dentist.id)}/>
         </Card>}
-        <Exceptions data={data} dentist={dentist} toast={toast} onSaved={after} canEdit={canEdit}/>
+        <Exceptions data={data} dentist={dentist} key={`exceptions:${dentist?.id || 'none'}`} toast={currentToast} onSaved={after} canEdit={canEdit} getAuthGeneration={store.getAuthGeneration}/>
       </>
     )}
   </div>
@@ -212,25 +258,33 @@ export function StaffShiftProfile({ staff, role, branches, canEdit, onPending = 
   </div>
 }
 
-function WeeklyGrid({ dentist, data, toast, onSaved, canEdit = true, role = 'owner' }) {
+function WeeklyGrid({ dentist, data, toast, onSaved, canEdit = true, role = 'owner', getAuthGeneration }) {
   const [editing, setEditing] = useState(null)
+  const owner = useRequestOwner(JSON.stringify([dentist.id, editing, canEdit]), getAuthGeneration)
+  const controls = useRef(null), restore = useRef(null)
+  React.useLayoutEffect(() => { if (!editing && restore.current) { [...(controls.current?.querySelectorAll('button[data-hours-key]') || [])].find(button => button.dataset.hoursKey === restore.current)?.focus(); restore.current = null } }, [editing])
   const rowFor = (branch, day) => dentist.weekly.find(w => w.branch.id === branch.id && w.weekday === Number(day))
   const hours = (branchId, day) => data.branches.find(b => b.id === branchId)?.hours?.[day]
   return <Card className="den12-roster" title={role === 'dentist' ? 'My rostered weekly hours' : 'Weekly hours'} subtitle={canEdit ? 'Select Change to edit a day. The hours must fall inside the branch’s opening hours.' : 'Scheduled shift hours by branch for each day of the week (read-only).'}>
-    <ul className="st-week">{Object.entries(data.weekdays).sort(([a], [b]) => Number(a) - Number(b)).map(([day, name]) => <li key={day}>
+    <ul className="st-week" ref={controls}>{Object.entries(data.weekdays).sort(([a], [b]) => Number(a) - Number(b)).map(([day, name]) => <li key={day}>
       <b className="st-day">{name}</b>
       <div className="st-cells">{dentist.branches.map(b => {
         const row = rowFor(b, day), open = hours(b.id, day), key = `${b.id}:${day}`
         const label = !open ? 'Branch closed' : row ? `${t12(row.start)}–${t12(row.end)}${row.break_start ? ` · break ${t12(row.break_start)}–${t12(row.break_end)}` : ''}` : dentist.profile_hours ? `Estimated profile hours: ${t12(dentist.profile_hours.start)}–${t12(dentist.profile_hours.end)}` : 'Day off'
         return <div key={b.id} className={`st-cell ${row && open ? 'is-on' : ''}`}>
           <span className="st-branch">{b.name}</span>
-          {editing === key ? <HoursForm row={row} open={open} onCancel={() => setEditing(null)} onSave={async (body, remove) => {
-            const r = await saveWeeklyHours(dentist.id, remove ? { branch_ref: b.id, weekday: Number(day), remove: true } : { branch_ref: b.id, weekday: Number(day), ...body })
-            if (!r.ok) return firstError(r)
-            setEditing(null); toast(remove ? `${name} removed: a day off at ${b.name}.` : `${name} saved.`, 'success'); onSaved(r); return null
+          {editing === key && canEdit ? <HoursForm row={row} open={open} onCancel={() => { restore.current = key; setEditing(null) }} onSave={async (body, remove) => {
+            const ticket = owner.begin(); if (!ticket) return null
+            try {
+              const r = await saveWeeklyHours(dentist.id, remove ? { branch_ref: b.id, weekday: Number(day), remove: true } : { branch_ref: b.id, weekday: Number(day), ...body })
+              if (!owner.current(ticket)) return null
+              if (!r.ok) return firstError(r)
+              restore.current = key; setEditing(null); toast(remove ? `${name} removed: a day off at ${b.name}.` : `${name} saved.`, 'success'); onSaved(r); return null
+            } catch { return owner.current(ticket) ? 'Could not confirm the save. Your hours are retained. Reload before retrying.' : null }
+            finally { owner.finish(ticket) }
           }}/> : <>
             <span>{label}</span>
-            {canEdit && b.editable && open && <Button size="sm" variant="ghost" onClick={() => setEditing(key)} aria-label={`Change ${name} at ${b.name}`}>Change</Button>}
+            {canEdit && b.editable && open && <Button size="sm" variant="ghost" data-hours-key={key} onClick={() => setEditing(key)} aria-label={`Change ${name} at ${b.name}`}>Change</Button>}
           </>}
         </div>
       })}</div>
@@ -240,14 +294,21 @@ function WeeklyGrid({ dentist, data, toast, onSaved, canEdit = true, role = 'own
 
 function HoursForm({ row, open, onSave, onCancel }) {
   const [f, setF] = useState({ start_time: row?.start || open?.open || '09:00', end_time: row?.end || open?.close || '17:00', has_break: !!row?.break_start, break_start: row?.break_start || '12:00', break_end: row?.break_end || '13:00' })
-  const [err, setErr] = useState(''), [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const owner = useRequestOwner('hours'), busy = owner.busy
   const set = (k, v) => setF(x => ({ ...x, [k]: v }))
   const save = async remove => {
-    setBusy(true); setErr('')
-    const e = await onSave({ start_time: f.start_time, end_time: f.end_time, break_start: f.has_break ? f.break_start : null, break_end: f.has_break ? f.break_end : null }, remove)
-    setBusy(false); if (e) setErr(e)
+    const ticket = owner.begin(); if (!ticket) return
+    setErr('')
+    try {
+      const e = await onSave({ start_time: f.start_time, end_time: f.end_time, break_start: f.has_break ? f.break_start : null, break_end: f.has_break ? f.break_end : null }, remove)
+      if (owner.current(ticket) && e) setErr(e)
+    } catch { if (owner.current(ticket)) setErr('Could not confirm the save. Your hours are retained. Reload before retrying.') }
+    finally { owner.finish(ticket) }
   }
-  return <form className="au-form st-hours" onSubmit={e => { e.preventDefault(); save(false) }}>
+  return <form className="au-form st-hours" aria-label="Edit weekly hours" aria-busy={busy} onSubmit={e => { e.preventDefault(); save(false) }}>
+    {busy && <p role="status">Saving weekly hours…</p>}
+    <fieldset disabled={busy} style={{border:0,padding:0,margin:0,minWidth:0}}>
     {open && <p className="au-muted">Branch open {t12(open.open)}–{t12(open.close)}</p>}
     <div className="st-pair"><Field label="Starts"><input type="time" value={f.start_time} onChange={e => set('start_time', e.target.value)}/></Field>
       <Field label="Ends"><input type="time" value={f.end_time} onChange={e => set('end_time', e.target.value)}/></Field></div>
@@ -258,28 +319,51 @@ function HoursForm({ row, open, onSave, onCancel }) {
     <div className="ns-actions"><Button type="submit" size="sm" disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button>
       {row && <Button size="sm" variant="ghost" disabled={busy} onClick={() => save(true)}>Make it a day off</Button>}
       <Button size="sm" variant="ghost" disabled={busy} onClick={onCancel}>Cancel</Button></div>
+    </fieldset>
   </form>
 }
 
-function Exceptions({ data, dentist, toast, onSaved, canEdit = true }) {
+function Exceptions({ data, dentist, toast, onSaved, canEdit = true, getAuthGeneration }) {
   const editableBranches = dentist?.branches.filter(b => b.editable) || []
   const [f, setF] = useState({ date: '', kind: 'day_off', branch_ref: '', start_time: '09:00', end_time: '12:00', reason: '' })
-  const [err, setErr] = useState(''), [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const owner = useRequestOwner(JSON.stringify([dentist?.id, canEdit]), getAuthGeneration), busy = owner.busy
   const set = (k, v) => setF(x => ({ ...x, [k]: v }))
   const rows = data.exceptions.filter(e => !dentist || e.dentist.id === dentist.id)
   const add = async e => {
-    e.preventDefault(); setBusy(true); setErr('')
-    const r = await addScheduleException(dentist.id, { date: f.date, kind: f.kind, reason: f.reason.trim() || null, ...(f.kind === 'custom_hours' ? { branch_ref: f.branch_ref || editableBranches[0]?.id, start_time: f.start_time, end_time: f.end_time } : {}) })
-    setBusy(false)
-    if (!r.ok) return setErr(firstError(r))
-    toast('Exception saved. Booking reflects it now.', 'success'); setF(x => ({ ...x, date: '', reason: '' })); onSaved(r)
+    e.preventDefault()
+    if (!canEdit || !dentist) return
+    const ticket = owner.begin(); if (!ticket) return
+    setErr('')
+    try {
+      const r = await addScheduleException(dentist.id, { date: f.date, kind: f.kind, reason: f.reason.trim() || null, ...(f.kind === 'custom_hours' ? { branch_ref: f.branch_ref || editableBranches[0]?.id, start_time: f.start_time, end_time: f.end_time } : {}) })
+      if (!owner.current(ticket)) return
+      if (!r.ok) return setErr(firstError(r))
+      toast('Exception saved. Booking reflects it now.', 'success'); setF(x => ({ ...x, date: '', reason: '' })); onSaved(r)
+    } catch { if (owner.current(ticket)) setErr('Could not confirm the save. Your exception is retained. Reload before retrying.') }
+    finally { owner.finish(ticket) }
+  }
+  const remove = async id => {
+    if (!canEdit) return
+    const ticket = owner.begin(); if (!ticket) return
+    setErr('')
+    try {
+      const r = await removeScheduleException(id)
+      if (!owner.current(ticket)) return
+      if (!r.ok) return setErr(firstError(r))
+      toast('Exception removed.', 'success'); onSaved(r)
+    } catch { if (owner.current(ticket)) setErr('Could not confirm the change. Reload the exceptions before retrying.') }
+    finally { owner.finish(ticket) }
   }
   return <Card title="Exceptions" subtitle="One date: a day off (every branch) or different hours at one branch.">
+    {busy && <p role="status">Saving schedule exception…</p>}
+    {err && <p className="au-error" role="alert">{err}</p>}
     {!rows.length ? <p className="au-muted">No upcoming exceptions{dentist ? ` for ${dentist.name}` : ''}.</p> : <ul className="fd-list">{rows.map(x => <li key={x.id}>
       <div><b>{longDate(x.date)} · {x.kind === 'day_off' ? 'Day off' : `${t12(x.start)}–${t12(x.end)} at ${x.branch?.name}`}</b><span>{x.dentist.name}{x.reason ? ` · ${x.reason}` : ''}</span></div>
-      {canEdit && x.editable && <Button size="sm" variant="ghost" onClick={async () => { const r = await removeScheduleException(x.id); if (!r.ok) return toast(firstError(r), 'warning'); toast('Exception removed.', 'success'); onSaved(r) }}>Remove</Button>}
+      {canEdit && x.editable && <Button size="sm" variant="ghost" disabled={busy} onClick={() => remove(x.id)}>Remove</Button>}
     </li>)}</ul>}
-    {canEdit && dentist && editableBranches.length > 0 && <form className="au-form st-exception" onSubmit={add}>
+    {canEdit && dentist && editableBranches.length > 0 && <form className="au-form st-exception" aria-label={`Add exception for ${dentist.name}`} aria-busy={busy} onSubmit={add}>
+      <fieldset disabled={busy} style={{border:0,padding:0,margin:0,minWidth:0}}>
       <h3 className="st-sub">Add an exception for {dentist.name}</h3>
       <Field label="Date" required><input type="date" min={manilaToday()} value={f.date} onChange={e => set('date', e.target.value)} required/></Field>
       <Field label="Kind"><select value={f.kind} onChange={e => set('kind', e.target.value)}><option value="day_off">Day off</option><option value="custom_hours">Different hours</option></select></Field>
@@ -289,8 +373,8 @@ function Exceptions({ data, dentist, toast, onSaved, canEdit = true }) {
           <Field label="Ends"><input type="time" value={f.end_time} onChange={e => set('end_time', e.target.value)}/></Field></div>
       </>}
       <Field label="Reason (internal)" hint="Optional, for example “Seminar”."><input value={f.reason} maxLength={120} onChange={e => set('reason', e.target.value)}/></Field>
-      {err && <p className="au-error" role="alert">{err}</p>}
       <div className="au-actions"><Button type="submit" disabled={busy || !f.date}>{busy ? 'Saving…' : 'Add exception'}</Button></div>
+      </fieldset>
     </form>}
   </Card>
 }

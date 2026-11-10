@@ -41,5 +41,6 @@ window.fetch = async (url, options = {}) => {
   if (path.includes('/affected')) return { ok: true, status: 200, json: async () => ({ data: { affected: [], wording_approved: true } }) }
   return { ok: true, status: 200, json: async () => ({ data }) }
 }
-const store = { state: { staff: [], branches: [] }, session: { role, userId: role === 'dentist' ? 'dentist-user' : 'staff-user', dentistId: 'd1', name: 'Dr. Fictional Provider' }, toast: (message, tone) => window.den12.messages.push({ message, tone }) }
+const identity = {id:role === 'dentist' ? 'dentist-user' : 'staff-user',personId:'synthetic-person',role:role === 'owner' ? 'Owner / Admin' : role === 'dentist' ? 'Dentist' : 'Staff',status:'Active',branchId:'b1',permissions:role === 'owner' ? ['all'] : ['schedule','appointments']}
+const store = { state: { users:[identity],persons:[{id:'synthetic-person'}],staff:[{userId:identity.id,personId:identity.personId,branchId:'b1'}],dentists:[{id:'d1',userId:identity.id,personId:identity.personId,branchIds:['b1','b2']}],branches: [] }, session: { serverUserId:'synthetic-account',active:true,branchId:'b1',branchScopes:['b1'],role, userId: role === 'dentist' ? 'dentist-user' : 'staff-user', dentistId: 'd1', name: 'Dr. Fictional Provider' }, toast: (message, tone) => window.den12.messages.push({ message, tone }) }
 createRoot(document.getElementById('root')).render(<main style={{ maxWidth: 1200, margin: 'auto', padding: 16 }}><WorkSchedulesPage store={store} role={role}/></main>)

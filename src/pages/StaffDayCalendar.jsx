@@ -5,6 +5,8 @@ import { clinicNow, clinicDate } from '../clock.js'
 import { useVisibleRefresh } from '../use-visible-refresh.js'
 import { calendarLoad, getAppointment } from '../api-client.js'
 import { commandKey } from '../appointments-api.js'
+import { mapAppointment } from '../appointments-api.js'
+import { appointmentActionProblem, canSchedule, schedulingActorKey, useRequestOwner } from '../appointment-ui.js'
 import { AppointmentForm } from './Scheduling.jsx'
 import '../b4-calendar.css'
 import {
@@ -92,7 +94,7 @@ export function StaffDayCalendar({ store }) {
   const scopes = Array.isArray(session?.branchScopes)
     ? [...new Set(session.branchScopes.filter(id => typeof id === 'string' && id))].sort()
     : []
-  const authorizationKey = JSON.stringify([session?.serverUserId ?? null, session?.role ?? null, session?.active !== false, session?.role === 'owner' ? null : scopes])
+  const authorizationKey = JSON.stringify([session?.serverUserId ?? null, session?.role ?? null, session?.active !== false, session?.role === 'owner' ? null : scopes, schedulingActorKey(store)])
   return <CalendarSession key={authorizationKey} store={store} scopes={scopes} authorizationKey={authorizationKey}/>
 }
 
@@ -104,7 +106,7 @@ function CalendarSession({ store, scopes, authorizationKey }) {
   const hasAccess = session?.active !== false && (session?.role === 'owner' || (session?.role === 'staff' && scopes.length > 0))
   const sessionKey = serverSession && hasAccess ? authorizationKey : null
   const live = useRef(false)
-  useEffect(() => {
+  React.useLayoutEffect(() => {
     live.current = true
     return () => { live.current = false }
   }, [])
@@ -117,6 +119,10 @@ function CalendarSession({ store, scopes, authorizationKey }) {
   const [reschedule, setReschedule] = useState(null)
   const [cancelling, setCancelling] = useState(null)
   const [missed, setMissed] = useState(null)
+  const [actionError, setActionError] = useState('')
+  const [resolving, setResolving] = useState(false)
+  const actionOwner = useRequestOwner(authorizationKey, store.getAuthGeneration)
+  const detailGeneration = useRef(0), latestRows = useRef([])
   const [snapshot, setSnapshot] = useState({ status: 'idle', date: null, key: null, rows: [], complete: false, error: '', stale: false })
   const calendarRef = useRef(null)
   const pendingFocusDate = useRef(null)
@@ -124,6 +130,10 @@ function CalendarSession({ store, scopes, authorizationKey }) {
   if (!loaderRef.current) loaderRef.current = createDayLoader({ onChange: setSnapshot })
   const loader = loaderRef.current
   const target = periodTarget('month', date)
+  React.useLayoutEffect(() => {
+    detailGeneration.current++; actionOwner.invalidate()
+    setResolving(false); setReschedule(null); setCancelling(null); setMissed(null); setActionError('')
+  }, [target, branchId, selectedDate])
 
   // Adjacent-month buttons are replaced by in-month controls after navigation.
   // Restore requested date focus; Previous/Next and the month input keep their focus.
@@ -181,6 +191,7 @@ function CalendarSession({ store, scopes, authorizationKey }) {
   const current = snapshot.date === target && snapshot.key === sessionKey ? snapshot : null
   const status = current?.status ?? 'loading'
   const rows = status === 'ready' ? current.rows.filter(r => role === 'owner' || scopes.includes(r.branchId)) : []
+  latestRows.current = rows
   const complete = status === 'ready' && current.complete
   const activeBranch = branches.length > 1 && branches.some(b => b.id === branchId) ? branchId : null
   const filtered = activeBranch ? rows.filter(r => r.branchId === activeBranch) : rows
@@ -201,72 +212,71 @@ function CalendarSession({ store, scopes, authorizationKey }) {
 
   const rowsOn = d => byDate.get(d) || []
   const loadOf = d => (load.key === loadParams.key ? load.days[d] : null)
-  const canManage = session?.role === 'staff' || session?.role === 'owner'
+  const canManage = canSchedule(store)
 
   const handleRefresh = () => {
     if (!live.current || !sessionKey) return
+    detailGeneration.current++; setResolving(false)
     loader.refresh()
     store.appointmentFlow?.refresh()
   }
 
   const resolveAppointment = async row => {
-    const fromStore = store.state.appointments.find(x => x.id === row.id)
-    if (fromStore?.serviceId && fromStore?.patientPublicId) return fromStore
+    const res = await getAppointment(row.id)
+    if (!res.ok) throw Error(res.message || 'The appointment could not be loaded. Refresh and try again.')
+    if (res.data?.id !== row.id || res.data.branch?.id !== row.branchId || !res.data.patient?.id ||
+      !res.data.service?.id || !Number.isInteger(res.data.revision) || res.data.revision < 1) {
+      throw Error('The appointment could not be matched to this selection. Refresh and review it again.')
+    }
+    return mapAppointment(res.data)
+  }
+
+  const startAction = async (a, action, select) => {
+    if (!canSchedule(store, a.branchId)) return
+    const request = ++detailGeneration.current, auth = store.getAuthGeneration?.()
+    actionOwner.invalidate(); setActionError(''); setResolving(true)
+    setReschedule(null); setCancelling(null); setMissed(null)
     try {
-      const res = await getAppointment(row.id)
-      if (res?.ok && res.data) {
-        return {
-          ...row,
-          revision: res.data.revision ?? 1,
-          appointmentNo: res.data.code || row.code,
-          patientPublicId: res.data.patient?.id ?? null,
-          patientName: res.data.patient?.name ?? row.patientName,
-          patientCode: res.data.patient?.code ?? row.patientCode,
-          serviceId: res.data.service?.id ?? null,
-          serviceName: res.data.service?.name ?? row.serviceName,
-          branchId: res.data.branch?.id ?? row.branchId,
-          dentistId: res.data.dentist?.id ?? row.dentistId,
-        }
-      }
-    } catch {}
-    return fromStore || { ...row, revision: 1, appointmentNo: row.code }
+      const full = await resolveAppointment(a)
+      if (!live.current || request !== detailGeneration.current || auth !== store.getAuthGeneration?.()) return
+      const currentRow = latestRows.current.find(row => row.id === a.id && row.branchId === full.branchId)
+      if (!currentRow || currentRow.status !== full.status) { setActionError('This appointment changed. Refresh and review it again.'); return }
+      const problem = appointmentActionProblem(store, full, action)
+      if (problem) { setActionError(problem); return }
+      select(full)
+    } catch (error) {
+      if (live.current && request === detailGeneration.current && auth === store.getAuthGeneration?.()) setActionError(error.message || 'The appointment could not be loaded. Refresh and try again.')
+    } finally { if (live.current && request === detailGeneration.current) setResolving(false) }
   }
+  const onStartReschedule = a => startAction(a, 'reschedule', setReschedule)
+  const onStartCancel = a => startAction(a, 'cancel', setCancelling)
+  const onStartNoShow = a => startAction(a, 'noShow', setMissed)
 
-  const onStartReschedule = async a => {
-    const full = await resolveAppointment(a)
-    if (!live.current || !(role === 'owner' || scopes.includes(full.branchId))) return
-    setReschedule(full)
+  const selectDetail = id => {
+    detailGeneration.current++; actionOwner.invalidate(); setResolving(false); setSelectedId(id)
   }
-
-  const onStartCancel = async a => {
-    const full = await resolveAppointment(a)
-    if (!live.current || !(role === 'owner' || scopes.includes(full.branchId))) return
-    setCancelling(full)
+  const openNewAppointment = () => {
+    detailGeneration.current++; actionOwner.invalidate(); setResolving(false)
+    setReschedule(null); setCancelling(null); setMissed(null); setNewOpen(true)
   }
-
-  const onStartNoShow = async a => {
-    const full = await resolveAppointment(a)
-    if (!live.current || !(role === 'owner' || scopes.includes(full.branchId))) return
-    setMissed(full)
+  const runAction = async (action, a, close, command) => {
+    const problem = appointmentActionProblem(store, a, action)
+    if (problem) { close(null); setActionError(problem); return }
+    const ticket = actionOwner.begin()
+    if (!ticket) return
+    close(null); setActionError('')
+    try {
+      const result = await command(a)
+      if (!actionOwner.current(ticket)) return
+      if (result.ok && result.warning) toast(result.warning, 'warning')
+      if (!result.ok) setActionError(result.message)
+      toast(result.ok ? (action === 'cancel' ? 'Appointment cancelled.' : 'Marked as No-show.') : result.message, result.ok ? 'success' : 'warning')
+      if (result.ok) handleRefresh()
+    } catch { if (actionOwner.current(ticket)) setActionError('Could not confirm the action. Refresh the appointment before retrying.') }
+    finally { actionOwner.finish(ticket) }
   }
-
-  const cancel = async () => {
-    const a = cancelling; setCancelling(null)
-    const result = await store.appointmentFlow.cancel(a, commandKey())
-    if (!live.current) return
-    if (result.ok && result.warning) toast(result.warning, 'warning')
-    toast(result.ok ? 'Appointment cancelled.' : result.message, result.ok ? 'success' : 'warning')
-    if (result.ok) handleRefresh()
-  }
-
-  const markNoShow = async () => {
-    const a = missed; setMissed(null)
-    const result = await store.appointmentFlow.noShow(a, commandKey())
-    if (!live.current) return
-    if (result.ok && result.warning) toast(result.warning, 'warning')
-    toast(result.ok ? 'Marked as No-show.' : result.message, result.ok ? 'success' : 'warning')
-    if (result.ok) handleRefresh()
-  }
+  const cancel = () => runAction('cancel', cancelling, setCancelling, a => store.appointmentFlow.cancel(a, commandKey()))
+  const markNoShow = () => runAction('noShow', missed, setMissed, a => store.appointmentFlow.noShow(a, commandKey()))
 
   const selectedRows = selectedDate ? rowsOn(selectedDate) : []
   const selectedLoad = selectedDate ? loadOf(selectedDate) : null
@@ -284,6 +294,8 @@ function CalendarSession({ store, scopes, authorizationKey }) {
         <RefreshButton onClick={handleRefresh}/>
       </div>}
     />
+    {(resolving || actionOwner.busy) && <p role="status">{resolving ? 'Loading selected appointment…' : 'Saving appointment change…'}</p>}
+    {actionError && <p role="alert">{actionError}</p>}
 
     <Card className="daycal-controls">
       <div className="daycal-bar">
@@ -386,7 +398,7 @@ function CalendarSession({ store, scopes, authorizationKey }) {
               </div>
 
               <div className="daycal-cell-chips daycal-avatars-row" aria-label={`${list.length} appointments`}>
-                {shown.map(a => <AppointmentAvatarButton key={a.id} a={a} onSelect={setSelectedId}/>)}
+                {shown.map(a => <AppointmentAvatarButton key={a.id} a={a} onSelect={selectDetail}/>)}
                 {totals && list.length > shown.length && <button type="button" className="daycal-avatar-badge daycal-more-avatar" title={`+${list.length - shown.length} more appointments`} aria-label={`Show ${list.length - shown.length} more appointments for ${longDate(c.date)}`} aria-controls="daycal-day-details" aria-expanded={isSelected} onClick={e => { e.stopPropagation(); setSelectedDate(c.date) }}>+{list.length - shown.length}</button>}
               </div>
             </div>
@@ -420,7 +432,7 @@ function CalendarSession({ store, scopes, authorizationKey }) {
 
             {verified && selectedRows.length === 0 && <div className="daycal-expanded-empty">
               <p className="muted-copy">No appointments are scheduled for this date.</p>
-              {canManage && <Button size="sm" variant="soft" onClick={() => setNewOpen(true)} icon="plusCalendar">Book an appointment on {shortDay(selectedDate)}</Button>}
+              {canManage && <Button size="sm" variant="soft" onClick={openNewAppointment} icon="plusCalendar">Book an appointment on {shortDay(selectedDate)}</Button>}
             </div>}
 
             {selectedRows.length > 0 && <div className="daycal-day-filter" style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px' }}>
@@ -473,11 +485,11 @@ function CalendarSession({ store, scopes, authorizationKey }) {
                   </div>
                 </div>
                 <div className="daycal-expanded-actions">
-                  <Button size="sm" variant="ghost" onClick={() => setSelectedId(a.id)}>Details</Button>
+                  <Button size="sm" variant="ghost" onClick={() => selectDetail(a.id)}>Details</Button>
                   {canManage && ['Confirmed', 'Pending'].includes(a.status) && <>
                     <Button size="sm" variant="soft" onClick={() => onStartReschedule(a)}>Reschedule</Button>
-                    <Button size="sm" variant="ghost" onClick={() => onStartCancel(a)}>Cancel</Button>
-                    {a.date === clinicDate() && <Button size="sm" variant="ghost" onClick={() => onStartNoShow(a)}>No-show</Button>}
+                    <Button size="sm" variant="ghost" disabled={actionOwner.busy} onClick={() => onStartCancel(a)}>Cancel</Button>
+                    {a.date === clinicDate() && <Button size="sm" variant="ghost" disabled={actionOwner.busy} onClick={() => onStartNoShow(a)}>No-show</Button>}
                   </>}
                 </div>
               </li>)}
@@ -597,7 +609,7 @@ function CalendarSession({ store, scopes, authorizationKey }) {
                   <Button size="sm" variant="soft" onClick={() => { const s = selected; setSelectedId(null); onStartReschedule(s) }}>
                     Reschedule
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => { const s = selected; setSelectedId(null); onStartCancel(s) }}>
+                  <Button size="sm" variant="ghost" disabled={actionOwner.busy} onClick={() => { const s = selected; setSelectedId(null); onStartCancel(s) }}>
                     Cancel
                   </Button>
                 </>

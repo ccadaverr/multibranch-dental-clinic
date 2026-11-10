@@ -73,7 +73,8 @@ function Fixture() {
   fixture.setSession = patch => flushSync(() => setSession(previous => ({ ...previous, ...patch })))
   const store = {
     session,
-    state: { branches: [{ id: 'a', name: 'Synthetic Branch a' }, { id: 'b', name: 'Synthetic Branch b' }], appointments: [], patients: [], services: [], dentists: [] },
+    state: { branches: [{ id: 'a', name: 'Synthetic Branch a' }, { id: 'b', name: 'Synthetic Branch b' }], appointments: [], patients: [], services: [], dentists: [],
+      persons: [{id:'synthetic-person'}], users: [{id:'synthetic-user',personId:'synthetic-person',role:session.role==='owner'?'Owner / Admin':'Staff',status:'Active',branchId:'a',permissions:session.role==='owner'?['all']:['appointments']}], staff: [{userId:'synthetic-user',personId:'synthetic-person',branchId:'a'}] },
     toast: (...args) => fixture.feedback.push(args),
     appointmentFlow: {
       refresh: () => { fixture.refreshes++; return Promise.resolve({ ok: true }) },

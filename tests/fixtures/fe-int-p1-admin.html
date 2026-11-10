@@ -1,0 +1,48 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synthetic administrative scheduling acceptance</title></head><body><main id="root"></main><script type="module">
+import React,{useState} from 'react'
+import {createRoot} from 'react-dom/client'
+import {flushSync} from 'react-dom'
+import {BranchesPage} from '/src/pages/Admin.jsx'
+import {WorkSchedulesPage} from '/src/pages/Staffing.jsx'
+import '/src/styles.css'
+import '/src/foundation.css'
+import '/src/automations.css'
+const branch=id=>({id,branchCode:id==='b1'?'BRC-A':'BRC-B',name:`Synthetic branch ${id}`,city:'Synthetic city',address:'Synthetic address',phone:'',email:'',status:'Open',threshold:80,open:'08:00',close:'18:00',weeklyHours:{1:{open:'08:00',close:'18:00'}},latitude:null,longitude:null})
+const dentist=id=>({id,userId:`user-${id}`,name:`Synthetic Dentist ${id}`,branches:[{id:'b1',name:'Synthetic branch b1',editable:true}],weekly:[{branch:{id:'b1'},weekday:1,start:'08:00',end:'17:00'}]})
+const params=new URLSearchParams(location.search)
+const fixture=window.admin={auth:1,writes:[],loads:[],affected:[],feedback:[],adopted:[],adoptedServices:[],holdWrites:true,holdLoads:params.has('holdLoads'),holdAffected:params.has('holdAffected'),fail:false,wrongId:false,throwWrite:false}
+fixture.schedule={dentists:[dentist('d1'),dentist('d2')],staff:[],branches:[{id:'b1',name:'Synthetic branch b1',hours:{1:{open:'08:00',close:'18:00'}}}],weekdays:{1:'Monday'},wording_approved:true,exceptions:[],duty:{rows:[]}}
+if(params.has('profile'))for(const row of fixture.schedule.dentists){row.weekly=[];row.profile_hours={start:'08:00',end:'17:00'}}
+if(params.has('withException'))fixture.schedule.exceptions.push({id:'ex1',date:'2026-11-12',kind:'day_off',dentist:{id:'d1',name:'Synthetic Dentist d1'},editable:true})
+async function hold(queue,flag,entry){const pending=new Promise(resolve=>entry.release=resolve);queue.push(entry);if(flag)await pending}
+window.fetch=async(url,options={})=>{
+ const path=new URL(url,location.href).pathname,method=options.method||'GET'
+ if(path==='/sanctum/csrf-cookie')return new Response(null,{status:204})
+ if(path==='/api/work-schedules'){
+  const entry={payload:structuredClone(fixture.schedule)};await hold(fixture.loads,fixture.holdLoads,entry)
+  return entry.fail?Response.json({message:'Synthetic load unavailable'},{status:503}):Response.json({data:entry.payload})
+ }
+ if(path.endsWith('/affected')){
+  const entry={id:path.split('/')[3],payload:{affected:[],wording_approved:true}};await hold(fixture.affected,fixture.holdAffected,entry);return Response.json({data:entry.payload})
+ }
+ if(method!=='GET'){
+  const entry={path,body:JSON.parse(options.body||'{}')};await hold(fixture.writes,fixture.holdWrites,entry)
+  if(fixture.throwWrite)throw Error('Synthetic network interruption')
+  if(fixture.fail)return Response.json({message:'Synthetic save refused',errors:{shift_end:['Synthetic scheduling validation refusal']}},{status:422})
+  if(path.endsWith('/from-profile')){const row=fixture.schedule.dentists.find(row=>row.id===path.split('/')[3]);row.profile_hours=null;row.weekly=dentist(row.id).weekly;return Response.json({data:{created:1,affected:[],wording_approved:true}})}
+  if(path.startsWith('/api/work-schedule-exceptions/'))fixture.schedule.exceptions=fixture.schedule.exceptions.filter(row=>row.id!==path.split('/').at(-1))
+  if(path==='/api/branch-services')return Response.json({data:entry.body})
+  if(path.startsWith('/api/branches/'))return Response.json({data:{id:fixture.wrongId?'wrong':path.split('/').at(-1),...entry.body}})
+  return Response.json({data:{affected:[],wording_approved:true}})
+ }
+ return Response.json({message:'Unexpected synthetic request'},{status:500})
+}
+function Fixture(){
+ const[branches,setBranches]=useState([branch('b1'),branch('b2')]),[branchServices,setBranchServices]=useState([]),[role,setRole]=useState('owner'),[account,setAccount]=useState('owner'),[mounted,setMounted]=useState(true)
+ fixture.setRole=value=>flushSync(()=>setRole(value));fixture.setAccount=value=>flushSync(()=>setAccount(value));fixture.setMounted=value=>flushSync(()=>setMounted(value))
+ const session={serverUserId:`server-${account}`,userId:'owner-user',role,active:true,branchId:'b1',branchScopes:['b1']}
+ const store={session,getAuthGeneration:()=>fixture.auth,state:{branches,services:[{id:'s1',name:'Synthetic service',status:'Active',duration:30,category:'Synthetic'}],branchServices,persons:[{id:'owner-person'}],users:[{id:'owner-user',personId:'owner-person',role:role==='owner'?'Owner / Admin':'Staff',status:'Active',branchId:'b1',permissions:role==='owner'?['all']:['appointments']}],staff:[{userId:'owner-user',personId:'owner-person',branchId:'b1'}]},toast:(...args)=>fixture.feedback.push(args),actions:{adoptBranchServiceFromServer(branchId,serviceId,record){fixture.adoptedServices.push({branchId,serviceId,record});setBranchServices(rows=>[...rows.filter(row=>row.branchId!==branchId||row.serviceId!==serviceId),record]);return{ok:true}},adoptBranchFromServer(id,record){fixture.adopted.push({id,record});setBranches(rows=>rows.map(row=>row.id===id?record:row));return{ok:true}}}}
+ return !mounted?React.createElement('p',null,'Unmounted'):new URLSearchParams(location.search).get('mode')==='schedules'?React.createElement(WorkSchedulesPage,{store,role}):React.createElement(BranchesPage,{store})
+}
+createRoot(document.getElementById('root')).render(React.createElement(Fixture))
+</script></body></html>

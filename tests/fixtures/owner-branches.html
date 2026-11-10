@@ -17,7 +17,7 @@ function Fixture() {
   const services = Array.from({length:4}, (_, i) => ({id:`svc${i+1}`, name:`Synthetic service ${i+1}`, duration:30, category:'Test category', status:'Active'}))
   return React.createElement(React.Fragment, null,
     React.createElement('p', {role:'status'}, notice),
-    React.createElement(BranchesPage, {store: { state: {branches, services, branchServices}, toast: setNotice, actions: {
+    React.createElement(BranchesPage, {store: { session: {serverUserId:'synthetic-owner',userId:'owner',role:'owner',active:true}, state: {branches, services, branchServices, persons:[{id:'owner-person'}], users:[{id:'owner',personId:'owner-person',role:'Owner / Admin',status:'Active',permissions:['all']}],staff:[]}, toast: setNotice, actions: {
       adoptBranchFromServer(id, record) { setBranches(rows => rows.map(row => row.id === id ? record : row)); return {ok:true} },
       adoptBranchServiceFromServer(branchId, serviceId, record) { setBranchServices(rows => [...rows.filter(row => !(row.branchId===branchId && row.serviceId===serviceId)),record]); return {ok:true} }
     }}}))
