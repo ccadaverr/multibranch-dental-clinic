@@ -173,7 +173,9 @@ export function StaffShiftProfile({ staff, role, branches, canEdit, onPending = 
   const save = async event => {
     event.preventDefault()
     if (!allowed.current || !live.current || pending.current) return
-    const id = staff.id, payload = { shift_start: start, shift_end: end, branch_ref: branch || null }
+    const id = staff.id, payload = { shift_start: start, shift_end: end }
+    // Presence of branch_ref instructs the server to synchronize authorization scopes.
+    if (branch && branch !== staff.branchRef) payload.branch_ref = branch
     pending.current = true; setSaving(true); onPending(true); setError(''); setSuccess('')
     try {
       const result = await updateStaffProfile(id, payload)

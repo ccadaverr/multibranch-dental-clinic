@@ -6,8 +6,10 @@ import '/src/styles.css'
 import '/src/foundation.css'
 import '/src/automations.css'
 const staff=[{id:'s1',name:'Synthetic Staff A',title:'Receptionist',branch:{id:'b1',name:'Synthetic Branch A'},shift_start:'08:30',shift_end:'17:30',available:true},{id:'s2',name:'Synthetic Staff B',title:'Assistant',branch:{id:'b1',name:'Synthetic Branch A'},shift_start:'10:00',shift_end:'19:00',available:false},{id:'s3',name:'Synthetic foreign Staff',branch:{id:'b2',name:'Synthetic Branch B'},shift_start:null,shift_end:null}]
+staff.push({id:'s4',name:'Synthetic unassigned Staff',branch:null,shift_start:'08:30',shift_end:'17:30'})
+staff.push({id:'s5',name:'Synthetic Staff at unlisted branch',branch:{id:'b-unlisted',name:'Synthetic unlisted branch'},shift_start:'08:30',shift_end:'17:30'})
 const branches=[{id:'b1',name:'Synthetic Branch A'},{id:'b2',name:'Synthetic Branch B'}]
-window.sched01={requests:[],hold:false,fail:false,release:null}
+window.sched01={requests:[],hold:false,fail:false,release:null,completed:0,wrongId:false,throwSave:false}
 window.fetch=async (url,options={})=>{
  const path=new URL(url,location.href).pathname
  if(path==='/sanctum/csrf-cookie')return new Response(null,{status:204})
@@ -16,10 +18,14 @@ window.fetch=async (url,options={})=>{
   const id=decodeURIComponent(path.split('/').at(-1)),body=JSON.parse(options.body)
   window.sched01.requests.push({id,body})
   if(window.sched01.hold)await new Promise(resolve=>{window.sched01.release=resolve})
+  window.sched01.completed++
+  if(window.sched01.throwSave)throw new Error('Synthetic connection failure')
   if(window.sched01.fail)return Response.json({message:'Synthetic save refused',errors:{shift_end:['Synthetic validation refusal']}},{status:422})
+  if(window.sched01.wrongId)return Response.json({data:{id:'wrong-profile'}})
   const current=staff.find(row=>row.id===id)
   if(!current)return Response.json({message:'Not found'},{status:404})
-  current.shift_start=body.shift_start;current.shift_end=body.shift_end;current.branch=branches.find(branch=>branch.id===body.branch_ref)||null
+  current.shift_start=body.shift_start;current.shift_end=body.shift_end
+  if(Object.hasOwn(body,'branch_ref'))current.branch=branches.find(branch=>branch.id===body.branch_ref)||null
   return Response.json({data:{id,name:current.name,title:current.title,branchId:current.branch?.id??null,branch:current.branch?.name??'All Branches',shiftStart:current.shift_start+':00',shiftEnd:current.shift_end+':00',available:current.available}})
  }
  return Response.json({message:'Unexpected fixture request'},{status:500})
