@@ -133,8 +133,11 @@ test('missing auth reader refuses issuance before starting either command', asyn
   assert.equal(e.calls.length,0);assert.match(e.value.err,/authentication could not be confirmed/);assert.deepEqual(e.feedback,[]);e.unmount()
 })
 test('authentication replacement after Issue began cannot undo it, but suppresses obsolete UI adoption', async () => {
-  const o=owner();o.login('A');const held=deferred(),e=editor({getAuthGeneration:o.getAuthGeneration,issue:()=>held.promise})
-  e.fill();const task=e.value.save(true);await Promise.resolve()
+  const o=owner();o.login('A');const held=deferred(),issueStarted=deferred(),e=editor({getAuthGeneration:o.getAuthGeneration,issue:()=>{issueStarted.resolve();return held.promise}})
+  e.fill();const task=e.value.save(true)
+  // Synchronize on actual mock dispatch, not a host microtask count across VM
+  // realms. Fail if Save finishes without reaching Issue instead of hanging.
+  await Promise.race([issueStarted.promise, task.then(()=>assert.fail('Save completed before Issue began'))])
   assert.equal(e.calls.at(-1).command,'issue');o.login('B')
   held.resolve({ok:true,data:{id:'rx-A',number:'RX-SYNTHETIC',status:'Issued'}});await task
   assert.deepEqual(e.feedback,[]);assert.deepEqual(e.done,[]);e.unmount();o.dispose()

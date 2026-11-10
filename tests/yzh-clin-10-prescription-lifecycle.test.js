@@ -5,6 +5,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {readFileSync} from 'node:fs'
 import {runInNewContext} from 'node:vm'
+import {setImmediate} from 'node:timers/promises'
 
 const source = readFileSync(new URL('../src/pages/ServerPrescriptions.jsx', import.meta.url), 'utf8').replaceAll('\r\n', '\n')
 const start = source.indexOf('function WriteCard('), end = source.indexOf('\n  if(editing&&!draft)', start)
@@ -106,8 +107,14 @@ test('issuance success proves issuance, without asserting notification delivery'
 test('failed Visit retrieval becomes an error and supports retry to an empty list', async () => {
   let attempts = 0
   const e = editor({visits: async () => ++attempts === 1 ? {ok: false, message: 'Synthetic outage'} : {ok: true, data: []}})
-  await Promise.resolve(); e.render(); assert.equal(e.value.visitError, 'Synthetic outage')
-  e.value.setVisitAttempt(a => a + 1); e.render(); await Promise.resolve(); e.render()
+  // The VM awaits a host Promise: one host microtask does not settle its
+  // cross-realm continuation. Yield to the next event-loop turn to drain the
+  // mock's microtasks, with no elapsed-time sleep or production-source adapter.
+  assert.equal(attempts, 1); assert.equal(e.value.visits, null)
+  await setImmediate(); e.render(); assert.equal(e.value.visitError, 'Synthetic outage')
+  e.value.setVisitAttempt(a => a + 1); e.render()
+  assert.equal(attempts, 2); assert.equal(e.value.visits, null)
+  await setImmediate(); e.render()
   assert.equal(e.value.visitError, ''); assert.deepEqual(wire(e.value.visits), []); e.unmount()
 })
 

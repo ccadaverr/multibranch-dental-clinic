@@ -125,7 +125,7 @@ function PrescriptionsBody({ store, role, context, setPage }) {
           </div>
         </li>)}</ul>}
     </Card>
-    {openId && <PrescriptionDialog id={openId} toast={toast} onClose={() => setOpenId(null)} onChanged={load} onEdit={dentist ? id => selectDraft(id, true) : undefined}/>}
+    {openId && <PrescriptionDialog id={openId} getAuthGeneration={store.getAuthGeneration} toast={toast} onClose={() => setOpenId(null)} onChanged={load} onEdit={dentist ? id => selectDraft(id, true) : undefined}/>}
   </div>
 }
 
@@ -402,23 +402,120 @@ function LicenseCard({ toast }) {
   </Card>
 }
 
-export function PrescriptionDialog({ id, toast, onClose, onChanged, onEdit }) {
-  const mounted=useRef(true), currentId=useRef(id)
-  currentId.current=id
-  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false}},[])
+// Void operations survive dialog remounts within the existing provider lifetime.
+// These are client continuity guards, not server session/operation receipts.
+const rxVoidLedgers = new WeakMap()
+function rxVoidLedger(read, generation) {
+  if (typeof read !== 'function' || !Number.isSafeInteger(generation)) return null
+  let ledger = rxVoidLedgers.get(read)
+  if (!ledger || ledger.generation !== generation) {
+    ledger = {generation, operations: new Map(), known: new Map(), version: 0}
+    rxVoidLedgers.set(read, ledger)
+  }
+  return ledger
+}
+const rxRecordValid = (p, id) => p?.id === id && Object.hasOwn(TONE, p.status) && Number.isSafeInteger(p.revision) && p.revision > 0
+const rxSamePrescription = (p, original) => p?.id === original.id && p.patient?.id === original.patientId && p.visit === original.visit && p.number === original.number
+const rxSnapshotCurrent = (p, known) => !known || p.revision >= known.revision &&
+  (p.revision !== known.revision || p.status === known.status) && (known.status !== 'Void' || p.status === 'Void') &&
+  p.patient?.id === known.patientId && p.visit === known.visit && p.number === known.number
+const rxVoidState = (p, original) => rxSamePrescription(p, original) && p.status === 'Void' &&
+  Number.isSafeInteger(p.revision) && p.revision > original.revision && p.can_void === false &&
+  typeof p.voided?.at === 'string' && typeof p.voided.reason === 'string'
+const rxVoidUncertain = r => !r || r.ok !== false || !r.kind || ['network', 'server'].includes(r.kind)
+const rxRemember = (ledger, p) => ledger?.known.set(p.id, {revision: p.revision, status: p.status, patientId: p.patient?.id, visit: p.visit, number: p.number})
+
+export function PrescriptionDialog(props) {
+  const selection = useRef(null), next = useRef(0)
+  const generation = props.getAuthGeneration?.()
+  if (!selection.current || selection.current.id !== props.id || selection.current.reader !== props.getAuthGeneration || selection.current.generation !== generation) {
+    selection.current = {id: props.id, reader: props.getAuthGeneration, generation, key: ++next.current, closed: false}
+  }
+  const scope = selection.current
+  const isCurrent = () => selection.current === scope && !scope.closed &&
+    (!scope.reader || Number.isSafeInteger(scope.generation) && scope.reader() === scope.generation)
+  const dismiss = () => {
+    if (selection.current !== scope || scope.closed) return
+    scope.closed = true // Close/Escape invalidates callbacks before React cleanup.
+    props.onClose?.()
+  }
+  const ledger = rxVoidLedger(scope.reader, scope.generation)
+  return <PrescriptionDialogBody {...props} key={scope.key} ledger={ledger} isCurrent={isCurrent} onClose={dismiss}/>
+}
+function PrescriptionDialogBody({ id, toast, onClose, onChanged, onEdit, ledger, isCurrent }) {
+  const mounted = useRef(false), serial = useRef(0), pending = useRef(null)
+  useLayoutEffect(() => { mounted.current = true; return () => { mounted.current = false; serial.current++ } }, [])
+  const owns = () => mounted.current && isCurrent()
   const [p, setP] = useState(null), [error, setError] = useState(''), [reason, setReason] = useState(''), [voiding, setVoiding] = useState(false), [busy, setBusy] = useState(false)
-  useEffect(() => { let live=true;setP(null);setError('');prescription(id).then(r => {if(live){r.ok ? setP(r.data) : setError(r.message || 'This prescription could not be opened.')}});return()=>{live=false} }, [id])
+  const [voidError, setVoidError] = useState('')
+  const operation = ledger?.operations.get(id), observedPending = operation?.phase === 'pending'
+  const protectedVoid = busy || !!operation
+  const reload = async () => {
+    if (!owns()) return false
+    const attempt = ++serial.current, version = ledger?.version
+    setP(null); setError('')
+    let r
+    try { r = await prescription(id) }
+    catch { r = {ok: false, message: 'This prescription could not be confirmed. Reload it before continuing.'} }
+    if (!owns() || serial.current !== attempt) return false
+    if (ledger && ledger.version !== version) { setError('The Void result settled after this read began. Reload the prescription again.'); return false }
+    const outstanding = ledger?.operations.get(id)
+    if (!r?.ok || !rxRecordValid(r.data, id) || !rxSnapshotCurrent(r.data, ledger?.known.get(id)) || outstanding && !rxSamePrescription(r.data, outstanding.submitted)) {
+      setError(r?.ok ? 'The prescription response did not match this record or its verified state. Reload it before continuing.' : r?.message || 'This prescription could not be opened.')
+      return false
+    }
+    rxRemember(ledger, r.data)
+    const reconciled = outstanding && outstanding.phase !== 'pending' && rxVoidState(r.data, outstanding.submitted)
+    if (reconciled) ledger.operations.delete(id)
+    setP(r.data); setVoidError('')
+    if (r.data.status !== 'Issued' || r.data.can_void !== true) setVoiding(false)
+    if (reconciled) onChanged?.()
+    return true
+  }
+  useEffect(() => { reload() }, [])
+  useEffect(() => {
+    // Capture pending at render, since settlement may precede passive effects.
+    if (!operation || operation.owner === pending || !observedPending) return
+    let current = true
+    operation.promise.then(() => { if (current && owns()) reload() })
+    return () => { current = false }
+  }, [operation])
   const doVoid = async () => {
-    setBusy(true)
-    const r = await voidPrescription(id, reason.trim())
-    if(!mounted.current||currentId.current!==id)return
-    setBusy(false)
-    if (!r.ok) return toast(firstError(r), 'warning')
-    setP(r.data); setVoiding(false); toast('Voided. Write a new prescription if one is still needed.', 'success'); onChanged?.()
+    if (!owns() || pending.current || ledger?.operations.has(id)) return
+    if (!ledger) return setVoidError('Your authentication could not be confirmed. Sign in again before voiding. No Void request was started.')
+    if (!p || p.id !== id || p.status !== 'Issued' || p.can_void !== true || !p.patient?.id || !p.visit || !rxSnapshotCurrent(p, ledger.known.get(id))) return setVoidError('This prescription is not confirmed as eligible for voiding. Reload it before continuing.')
+    if (reason.trim().length < 3 || reason.trim().length > 300) return setVoidError('Enter a reason between 3 and 300 characters.')
+    const submitted = {id, reason: reason.trim(), revision: p.revision, patientId: p.patient.id, visit: p.visit, number: p.number}
+    const request = {submitted, owner: pending, token: {}, phase: 'pending'}
+    pending.current = request; ledger.operations.set(id, request); setBusy(true); setVoidError('')
+    request.promise = (async () => {
+      let r
+      try { r = await voidPrescription(id, reason.trim()) }
+      catch { r = {ok: false, kind: 'network'} }
+      if (ledger.operations.get(id)?.token === request.token) {
+        ledger.version++
+        const confirmed = r?.ok === true && rxVoidState(r.data, submitted) && r.data.voided.reason === submitted.reason && rxSnapshotCurrent(r.data, ledger.known.get(id))
+        request.phase = confirmed ? 'confirmed' : rxVoidUncertain(r) ? 'recovery' : 'refused'
+        if (confirmed) rxRemember(ledger, r.data)
+        if (request.phase === 'refused') ledger.operations.delete(id)
+      }
+      return r
+    })()
+    const r = await request.promise
+    if (!owns()) return
+    pending.current = null; setBusy(false)
+    if (request.phase !== 'confirmed') return setVoidError(request.phase === 'recovery'
+      ? 'The Void result could not be confirmed. Reload before continuing; an unchanged Issued record does not prove that the request failed.'
+      : firstError(r))
+    setP(r.data); setVoiding(false); toast?.('Voided. Write a new prescription if one is still needed.', 'success'); onChanged?.()
   }
   return <Modal open title={p ? `${p.number || 'Draft'}${p.patient ? ` · ${p.patient.name}` : ''}` : 'Prescription'} onClose={onClose}>
-    {error && <Notice tone="warning" title="Unavailable">{error}</Notice>}
-    {!p ? !error && <p className="au-muted" role="status">Loading…</p> : <div className="st-handover">
+    {error && <Notice tone="warning" title="Unavailable">{error} <Button variant="soft" onClick={reload}>Reload prescription</Button></Notice>}
+    {voidError && <div role="alert"><p className="au-error">{voidError}</p>{!error && operation?.phase !== 'recovery' && <Button variant="soft" onClick={reload}>Reload prescription</Button>}</div>}
+    {operation?.phase === 'recovery' && <Notice tone="warning" title="Void result unconfirmed">The original request may have succeeded. Reload to check for a verified Void state; do not repeat it based on an unchanged Issued record. {!error && <Button variant="soft" onClick={reload}>Reload prescription</Button>}</Notice>}
+    {(busy || operation?.phase === 'pending') && <p role="status">Voiding the original prescription. Closing this dialog does not cancel the transmitted request.</p>}
+    {!isCurrent() && <Notice title="Session unavailable">Close this dialog and sign in again before continuing.</Notice>}
+    {!p ? !error && isCurrent() && <p className="au-muted" role="status">Loading…</p> : <div className="st-handover">
       <p className="au-muted"><span className={`fd-badge ${TONE[p.status]}`}>{p.status === 'Void' ? 'VOID' : p.status}</span> {p.date ? day(p.date) : ''} · {p.dentist} · {p.branch}{p.license_no ? ` · License no. ${p.license_no}` : ''}</p>
       {p.voided && <Notice tone="warning" title="Void">Reason: {p.voided.reason}</Notice>}
       {p.lines && p.lines.length > 0 ? <ol className="rx-view">{p.lines.map((l, i) => <li key={i}><b>{l.medicine}</b>
@@ -426,12 +523,12 @@ export function PrescriptionDialog({ id, toast, onClose, onChanged, onEdit }) {
         {l.instructions && <span>Instructions: {l.instructions}</span>}</li>)}</ol>
         : !p.lines && <p className="au-muted" style={{ padding: '0.75rem', background: 'var(--surface-muted, #f8fafc)', borderRadius: '6px' }}>Medication details and instructions are private clinical records accessible only to the treating dentist, authorized branch front desk, and the patient.</p>}
       {p.note && <p><b>Note:</b> {p.note}</p>}
-      {voiding && <Field label="Reason for voiding" required><input value={reason} maxLength={300} onChange={e => setReason(e.target.value)}/></Field>}
+      {voiding && <Field label="Reason for voiding" required><input value={reason} disabled={protectedVoid} maxLength={300} onChange={e => setReason(e.target.value)}/></Field>}
       <div className="ns-actions">
         {onEdit && p.status === 'Draft' && p.can_edit && <Button variant="soft" onClick={() => onEdit(p.id)}>Edit draft</Button>}
-        {p.status !== 'Draft' && Array.isArray(p.lines) && <Button variant="soft" icon="download" onClick={async () => { const r = await downloadPrescriptionPdf(p.id, p.number); if (!r.ok&&mounted.current&&currentId.current===id) toast(r.message || 'The PDF could not be downloaded.', 'warning') }}>Download PDF</Button>}
-        {p.can_void && !voiding && <Button variant="ghost" onClick={() => setVoiding(true)}>Void…</Button>}
-        {voiding && <Button disabled={busy || reason.trim().length < 3} onClick={doVoid}>{busy ? 'Voiding…' : 'Void this prescription'}</Button>}
+        {p.status !== 'Draft' && Array.isArray(p.lines) && <Button variant="soft" icon="download" onClick={async () => { const r = await downloadPrescriptionPdf(p.id, p.number); if (!r.ok&&owns()) toast(r.message || 'The PDF could not be downloaded.', 'warning') }}>Download PDF</Button>}
+        {p.can_void && p.status === 'Issued' && !voiding && <Button disabled={protectedVoid || !ledger} variant="ghost" onClick={() => setVoiding(true)}>Void…</Button>}
+        {voiding && <Button disabled={protectedVoid || !ledger || reason.trim().length < 3} onClick={doVoid}>{busy ? 'Voiding…' : 'Void this prescription'}</Button>}
         <Button variant="ghost" onClick={onClose}>Close</Button>
       </div>
     </div>}
