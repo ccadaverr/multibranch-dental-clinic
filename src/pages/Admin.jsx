@@ -19,6 +19,8 @@ import { EmployeeInvitations } from './EmployeeInvitations.jsx'
 import { BranchAccessDialog } from './BranchAccessDialog.jsx'
 import '../owner-branches.css'
 import { OwnerRevenueCharts } from './OwnerRevenueCharts.jsx'
+import { schedulingActorKey, useRequestOwner } from '../appointment-ui.js'
+import { canAccessPage } from '../safeguards.js'
 
 export const ALLOWED_BRANCH_CODES = ['BRC-A', 'BRC-B', 'BRC-C', 'BRC-D', 'BRC-E', 'BRC-F', 'MNL', 'QC', 'MKTI', 'BGC', 'ORT', 'ALB', 'CEB', 'DVO', 'PAS']
 
@@ -31,7 +33,7 @@ export function branchPinError(latitude, longitude) {
   return ''
 }
 
-export function BranchMapPicker({ latitude, longitude, onChange }) {
+export function BranchMapPicker({ latitude, longitude, onChange, disabled = false }) {
   const mapRef = useRef(null)
   const mapControl = useRef(null)
   const latest = useRef({ latitude, longitude, onChange })
@@ -70,7 +72,7 @@ export function BranchMapPicker({ latitude, longitude, onChange }) {
   }, [latitude, longitude])
 
   return (
-    <div className="branch-map-picker-container">
+    <div className="branch-map-picker-container" inert={disabled || undefined}>
       <div
         ref={mapRef}
         className="branch-map-canvas"
@@ -90,11 +92,21 @@ export function BranchMapPicker({ latitude, longitude, onChange }) {
 }
 
 export function BranchesPage({ store }) {
+  return <BranchConfiguration key={schedulingActorKey(store)} store={store}/>
+}
+
+function BranchConfiguration({ store }) {
   const { state, actions, toast }=store
   const [selected,setSelected]=useState(state.branches[0]?.id||'')
+  const selectedRef=useRef(selected)
+  selectedRef.current=selected
   const branch=state.branches.find(b=>b.id===selected)
   const [form,setForm]=useState(branch||{})
   const [configTab,setConfigTab]=useState('details')
+  const owner=useRequestOwner(JSON.stringify([schedulingActorKey(store),selected]),store.getAuthGeneration)
+  const [saveError,setSaveError]=useState('')
+  const allowed=!!store.session&&Array.isArray(state.users)&&Array.isArray(state.persons)&&canAccessPage(state,store.session,'branches')
+  const selectBranch=id=>{if(!owner.isPending()){selectedRef.current=id;setSaveError('');setSelected(id)}}
   const coordinateInputRef = useRef(null)
   const coordinateError = branchPinError(form.latitude, form.longitude)
   const coordinateValue = value => value == null || value === '' ? null : Number(value)
@@ -113,21 +125,43 @@ export function BranchesPage({ store }) {
   // server). See adoptBranchFromServer/adoptBranchServiceFromServer (administration.js) and the Phase 2A
   // plan, section J/point 8.
   const save=async()=>{
+    if(!allowed)return
+    if(selectedRef.current!==selected||form.id!==selected){setSaveError('The selected branch changed. Review its details before publishing.');return}
     if (coordinateError) return toast(coordinateError, 'warning')
     if (codesInUse.has(form.branchCode)) {
       return toast(`Branch code ${form.branchCode} is already assigned to another branch.`, 'warning')
     }
-    const result=await syncBranchUpdate(selected,form)
-    if(!result.ok)return toast(result.message||'Could not save branch changes.','warning')
-    const adopted=actions.adoptBranchFromServer(selected,result.record)
-    toast(adopted.ok?'Branch configuration saved.':adopted.message,adopted.ok?'success':'warning')
+    const ticket=owner.begin()
+    if(!ticket)return
+    const id=selected
+    setSaveError('')
+    try{
+      const result=await syncBranchUpdate(id,form)
+      if(!owner.current(ticket))return
+      if(!result.ok){const message=result.message||'Could not save branch changes.';setSaveError(message);toast(message,'warning');return}
+      if(result.record?.id!==id){setSaveError('The saved branch could not be confirmed. Refresh before retrying.');return}
+      const adopted=actions.adoptBranchFromServer(id,result.record)
+      if(!adopted.ok)setSaveError(adopted.message)
+      toast(adopted.ok?'Branch configuration saved.':adopted.message,adopted.ok?'success':'warning')
+    }catch{if(owner.current(ticket))setSaveError('Could not confirm the save. Your edits are retained. Check the branch before retrying.')}
+    finally{owner.finish(ticket)}
   }
   const serviceActive=serviceId=>state.branchServices.some(bs=>bs.branchId===selected&&bs.serviceId===serviceId&&bs.active!==false)
   const toggleService=async serviceId=>{
-    const result=await syncBranchServiceToggle(selected,serviceId,!serviceActive(serviceId))
-    if(!result.ok)return toast(result.message||'Could not update service availability.','warning')
-    const adopted=actions.adoptBranchServiceFromServer(selected,serviceId,result.record)
-    if(!adopted.ok)toast(adopted.message,'warning')
+    if(!allowed||selectedRef.current!==selected||form.id!==selected)return
+    const ticket=owner.begin()
+    if(!ticket)return
+    const id=selected
+    setSaveError('')
+    try{
+      const result=await syncBranchServiceToggle(id,serviceId,!serviceActive(serviceId))
+      if(!owner.current(ticket))return
+      if(!result.ok){const message=result.message||'Could not update service availability.';setSaveError(message);toast(message,'warning');return}
+      if(result.record?.branchId!==id||result.record?.serviceId!==serviceId){setSaveError('The saved service availability could not be confirmed. Refresh before retrying.');return}
+      const adopted=actions.adoptBranchServiceFromServer(id,serviceId,result.record)
+      if(!adopted.ok){setSaveError(adopted.message);toast(adopted.message,'warning')}
+    }catch{if(owner.current(ticket))setSaveError('Could not confirm service availability. Review the branch before retrying.')}
+    finally{owner.finish(ticket)}
   }
   const activeServicesCount=state.services.filter(s=>s.status==='Active'&&serviceActive(s.id)).length
   const configTabs=[
@@ -135,6 +169,7 @@ export function BranchesPage({ store }) {
     {key:'hours',label:'Opening Hours'},
     {key:'services',label:`Services (${activeServicesCount})`},
   ]
+  if(!allowed)return <Notice tone="warning" title="Branch configuration unavailable">Your current account cannot change branch configuration.</Notice>
   return <div className="owner-branches">
     <PageHeader title="Multi-Branch Clinic Management" text="Clinic locations and operational branch information."/>
     <Notice tone="warning">Branch names, addresses, phones, emails and opening hours were given by the clinic (October 2026). Capacity settings still need clinic confirmation, and holiday or temporary-closure schedules have not been supplied.</Notice>
@@ -147,7 +182,7 @@ export function BranchesPage({ store }) {
           return (
             <div
               key={b.id}
-              onClick={() => setSelected(b.id)}
+              onClick={() => selectBranch(b.id)}
               className={`branch-overview-card ${isSel ? 'branch-card-selected' : ''}`}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
@@ -165,7 +200,7 @@ export function BranchesPage({ store }) {
                 <span>Phone: <b>{b.phone || '—'}</b></span>
               </div>
               <div style={{ marginTop: '10px', textAlign: 'right' }}>
-                <Button size="sm" variant={isSel ? 'primary' : 'soft'} aria-pressed={isSel} onClick={(e) => { e.stopPropagation(); setSelected(b.id); }}>{isSel ? 'Configuring' : 'Configure'}</Button>
+                <Button size="sm" variant={isSel ? 'primary' : 'soft'} disabled={owner.busy} aria-pressed={isSel} onClick={(e) => { e.stopPropagation(); selectBranch(b.id); }}>{isSel ? 'Configuring' : 'Configure'}</Button>
               </div>
             </div>
           );
@@ -174,6 +209,9 @@ export function BranchesPage({ store }) {
     </div>
     <div className="admin-config">
       {branch&&<Card title={`Configure ${branch.name}`} subtitle={`${branch.branchCode} • ${branch.city}`}>
+        {owner.busy&&<p role="status">Publishing changes for {branch.name}…</p>}
+        {saveError&&<p role="alert">{saveError}</p>}
+        <fieldset disabled={owner.busy} aria-busy={owner.busy} style={{border:0,padding:0,margin:0,minWidth:0}}>
         <Tabs tabs={configTabs} active={configTab} onChange={setConfigTab}/>
         {configTab==='details'&&<div className="form-grid" style={{marginTop:'12px'}}>
           <Field label="Branch name"><input value={form.name||''} onChange={e=>setForm({...form,name:e.target.value})}/></Field>
@@ -210,6 +248,7 @@ export function BranchesPage({ store }) {
           <div className="branch-map-field" style={{ gridColumn: '1 / -1', marginTop: '6px' }}>
             <p className="field-label">Branch location map <small>Click the map, drag the pin, or enter coordinates below.</small></p>
             <BranchMapPicker
+              disabled={owner.busy}
               latitude={form.latitude}
               longitude={form.longitude}
               onChange={({ latitude, longitude }) => setForm(f => ({ ...f, latitude, longitude }))}
@@ -272,8 +311,9 @@ export function BranchesPage({ store }) {
         </div>}
         {configTab !== 'details' && <p id="branch-coordinate-status" role={coordinateError ? 'alert' : 'status'}>{coordinateError || (locationChanged ? 'Unsaved location changes. Publish Branch Changes to save.' : 'Location matches the saved branch record.')}</p>}
         <div style={{marginTop:'16px',display:'flex',justifyContent:'flex-end'}}>
-          <Button onClick={save} disabled={!!coordinateError} aria-describedby="branch-coordinate-status">Publish Branch Changes</Button>
+          <Button onClick={save} disabled={owner.busy||!!coordinateError} aria-describedby="branch-coordinate-status">Publish Branch Changes</Button>
         </div>
+        </fieldset>
       </Card>}
     </div>
   </div>

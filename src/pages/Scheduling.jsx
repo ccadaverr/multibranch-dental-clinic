@@ -9,6 +9,7 @@ import { dentistsFor, servicesAt } from '../scheduling.js'
 import { PatientAppointmentsPage } from './PatientVisits.jsx'
 import { PatientBookingPage } from './PatientBook.jsx'
 import { inScope, isTodayQueue, patientInScope, sessionForRole } from '../contracts.js'
+import { appointmentActionProblem, canSchedule, schedulingActorKey, useRequestOwner } from '../appointment-ui.js'
 
 // Staff/Owner appointment form (M6, server-authoritative). Used for a new front-desk booking, a reschedule, and a
 // Dentist-requested follow-up. The Patient comes from the server Patient directory (public_id), branches are limited to
@@ -31,6 +32,13 @@ export function appointmentRecordPatient(appointment,state,session) {
 
 // `prefill` (M20 server follow-up task or calendar click): prefilled parameters; patient/branch locked only when patient is specified.
 export function AppointmentForm({ role, store, appointment=null, followup=null, prefill=null, onSaved, submitLabel='Confirm appointment' }) {
+  const context = JSON.stringify([schedulingActorKey(store), appointment ? ['appointment', appointment.id, appointment.patientPublicId, appointment.branchId, appointment.serviceId, appointment.dentistId] : followup ? ['followup', followup.id, followup.patientId, followup.branchId, followup.dentistId] : ['booking', prefill?.patientPublicId, prefill?.branchId, prefill?.date]])
+  return <AppointmentEditor key={context} {...{role,store,appointment,followup,prefill,onSaved,submitLabel}}/>
+}
+
+function AppointmentEditor({ role, store, appointment: currentAppointment, followup, prefill, onSaved, submitLabel }) {
+  // A refreshed row must not silently rebase an in-progress reschedule onto a newer revision.
+  const [appointment]=useState(currentAppointment)
   const { state, toast }=store
   const session=store.session||sessionForRole(role,state)
   const key=useRef(commandKey())
@@ -46,16 +54,20 @@ export function AppointmentForm({ role, store, appointment=null, followup=null, 
   })
   const [search,setSearch]=useState('')
   const [failure,setFailure]=useState(null)
-  const [saving,setSaving]=useState(false)
+  const owner=useRequestOwner(schedulingActorKey(store),store.getAuthGeneration), saving=owner.busy
   const [authConfirmed,setAuthConfirmed]=useState(false)
-  const setForm=next=>{key.current=commandKey();setFailure(null);setFormState(next)}
-  const update=(name,value)=>setForm(previous=>{
+  const draftGeneration=useRef(0), draftVersion=draftGeneration.current
+  const setForm=next=>{draftGeneration.current++;key.current=commandKey();setFailure(null);setFormState(next)}
+  const update=(name,value)=>{
+    if(['patientPublicId','branchId','serviceId'].includes(name))setAuthConfirmed(false)
+    setForm(previous=>{
     const next={...previous,[name]:value}
     if(name==='branchId'){next.serviceId='';next.dentistId=followup?previous.dentistId:'';next.start=''}
     if(name==='serviceId'){next.dentistId=followup||appointment?previous.dentistId:'';next.start=''}
-    if(['date','dentistId'].includes(name))next.start=''
+    if(['date','dentistId','patientPublicId'].includes(name))next.start=''
     return next
-  })
+    })
+  }
   useEffect(()=>{if(!lockedPatient&&search.trim().length>=2){const t=setTimeout(()=>store.appointmentFlow?.searchPatients(search),250);return ()=>clearTimeout(t)}},[search,lockedPatient])
   useEffect(()=>{if(!lockedPatient){store.appointmentFlow?.searchPatients?.('')}},[lockedPatient])
 
@@ -74,11 +86,17 @@ export function AppointmentForm({ role, store, appointment=null, followup=null, 
   </Notice>
 
   const save=async()=>{
-    setSaving(true);setFailure(null)
+    if(draftGeneration.current!==draftVersion)return
+    const problem=appointment?appointmentActionProblem(store,appointment):!canSchedule(store,form.branchId)?'Your appointment access changed. Refresh before continuing.':''
+    if(problem){setFailure({kind:'forbidden',message:problem});return}
+    const ticket=owner.begin()
+    if(!ticket)return
+    setFailure(null)
+    try {
     const result=appointment
       ?await store.appointmentFlow.reschedule(appointment,{date:form.date,start:form.start,dentistId:form.dentistId&&form.dentistId!==appointment.dentistId?form.dentistId:null},key.current)
       :await store.appointmentFlow.create({branchId:form.branchId,serviceId:form.serviceId,date:form.date,start:form.start,notes:form.notes||null,patientPublicId:form.patientPublicId,dentistId:form.dentistId||null,consultationAcknowledged:isRestricted?authConfirmed:null},{key:key.current,followupId:followup?.id||null})
-    setSaving(false)
+    if(!owner.current(ticket)||!canSchedule(store,form.branchId))return
     if(!result.ok){
       setFailure(result);toast(result.message,'warning')
       if(result.kind==='conflict'||result.kind==='validation'){key.current=commandKey();day.reload()}
@@ -87,11 +105,15 @@ export function AppointmentForm({ role, store, appointment=null, followup=null, 
     if(result.warning)toast(result.warning,'warning')
     toast(appointment?'Appointment rescheduled.':followup?'Follow-up appointment scheduled.':'Appointment confirmed.','success')
     onSaved?.(result.record)
+    } catch {
+      if(owner.current(ticket))setFailure({kind:'network',message:'Could not confirm the save. Your changes are retained. Check the appointment before retrying.'})
+    } finally { owner.finish(ticket) }
   }
-  const canSave=!!form.patientPublicId&&branches.some(b=>b.id===form.branchId)&&!!form.serviceId&&!!form.date&&!!form.start&&(!isRestricted||authConfirmed)&&!saving
+  const canSave=canSchedule(store,form.branchId)&&!!form.patientPublicId&&branches.some(b=>b.id===form.branchId)&&!!form.serviceId&&!!form.date&&!!form.start&&(!isRestricted||authConfirmed)&&!saving
 
   return <div className="booking-layout">
-    <form className="form-grid" onSubmit={e=>{e.preventDefault();if(canSave)save()}}>
+    <form aria-label={appointment?'Reschedule appointment':'Create appointment'} aria-busy={saving} onSubmit={e=>{e.preventDefault();if(canSave)save()}}>
+      <fieldset className="form-grid" disabled={saving} style={{border:0,padding:0,margin:0,minWidth:0}}>
       {lockedPatient
         ?<Field label="Patient"><input value={appointment?`${appointment.patientName||patientName(appointment.patientId,state.patients)} • ${appointment.patientCode||''}`:prefill?prefill.patientName||prefill.patientPublicId:patientName(followup.patientId,state.patients)} disabled/></Field>
         :<>
@@ -116,7 +138,7 @@ export function AppointmentForm({ role, store, appointment=null, followup=null, 
             <Button size="sm" variant="soft" type="button" onClick={()=>update('serviceId',selectedService.consultationServiceId)}>Switch to Dental Consultation</Button>
           </div>}
           <label className="check-control" style={{marginTop:'8px',display:'flex',alignItems:'center',gap:'8px'}}>
-            <input type="checkbox" checked={authConfirmed} onChange={e=>setAuthConfirmed(e.target.checked)}/>
+            <input type="checkbox" checked={authConfirmed} onChange={e=>{draftGeneration.current++;key.current=commandKey();setAuthConfirmed(e.target.checked)}}/>
             <span>Prior consultation / dentist clinical authorization confirmed by front desk</span>
           </label>
         </Notice>
@@ -138,6 +160,8 @@ export function AppointmentForm({ role, store, appointment=null, followup=null, 
           :<Notice tone="warning" title="No open times">No bookable start times on {dateLabel(form.date)}. Try another date{lockedDentist?'':' or Dentist'}.</Notice>}
       </div>
       <div className="form-actions span-2"><Button type="submit" disabled={!canSave}>{saving?'Saving…':submitLabel}</Button></div>
+      </fieldset>
+      {saving&&<p role="status">Saving appointment…</p>}
     </form>
     <div className="validation-card">
       <div className="validation-title"><b>Scheduling checks</b><span>Confirmed by the clinic server</span></div>
@@ -163,6 +187,11 @@ export function BookingPage({ role, store, setPage, context }) {
 }
 
 export function AppointmentsPage({ role, store, setPage, context }) {
+  if(role==='patient')return <PatientAppointmentsPage store={store} setPage={setPage} context={context}/>
+  return <AppointmentManagement key={schedulingActorKey(store)} {...{role,store,setPage,context}}/>
+}
+
+function AppointmentManagement({ role, store, setPage, context }) {
   const { state, toast }=store
   const session=store.session||sessionForRole(role,state)
   const [reschedule,setReschedule]=useState(null)
@@ -173,7 +202,9 @@ export function AppointmentsPage({ role, store, setPage, context }) {
   const [statusFilter,setStatusFilter]=useState('All')
   const [branchFilter,setBranchFilter]=useState('All')
   const [dateFilter,setDateFilter]=useState('')
-  if(role==='patient')return <PatientAppointmentsPage store={store} setPage={setPage} context={context}/>
+  const owner=useRequestOwner(schedulingActorKey(store),store.getAuthGeneration)
+  const [actionError,setActionError]=useState('')
+  const openAction=(set,record)=>{owner.invalidate();setActionError('');set(record)}
   const branches=bookableBranches(state,session)
   const visible=state.appointments.filter(a=>{
     if(!inScope(a,session,state))return false
@@ -190,23 +221,30 @@ export function AppointmentsPage({ role, store, setPage, context }) {
     }
     return true
   }).sort((a,b)=>`${a.date}${a.start}`.localeCompare(`${b.date}${b.start}`))
-  const cancel=async()=>{
-    const a=cancelling;setCancelling(null)
-    const result=await store.appointmentFlow.cancel(a,commandKey())
-    if(result.ok&&result.warning)toast(result.warning,'warning')
-    toast(result.ok?'Appointment cancelled.':result.message,result.ok?'success':'warning')
+  const runAction=async(action,a,close,command)=>{
+    const problem=appointmentActionProblem(store,a,action)
+    if(problem){close(null);setActionError(problem);return}
+    const ticket=owner.begin()
+    if(!ticket)return
+    close(null);setActionError('')
+    try{
+      const result=await command(a)
+      if(!owner.current(ticket))return
+      if(result.ok&&result.warning)toast(result.warning,'warning')
+      if(!result.ok)setActionError(result.message)
+      toast(result.ok?(action==='cancel'?'Appointment cancelled.':'Marked as No-show.'):result.message,result.ok?'success':'warning')
+    }catch{if(owner.current(ticket))setActionError('Could not confirm the action. Refresh the appointment before retrying.')}
+    finally{owner.finish(ticket)}
   }
+  const cancel=()=>runAction('cancel',cancelling,setCancelling,a=>store.appointmentFlow.cancel(a,commandKey()))
   // Pre-arrival No-show (M6): a manual same-day Staff decision that the scheduled Patient did not arrive. No Visit is
   // created; once the Patient has checked in, No-show is no longer possible.
-  const markNoShow=async()=>{
-    const a=missed;setMissed(null)
-    const result=await store.appointmentFlow.noShow(a,commandKey())
-    if(result.ok&&result.warning)toast(result.warning,'warning')
-    toast(result.ok?'Marked as No-show.':result.message,result.ok?'success':'warning')
-  }
+  const markNoShow=()=>runAction('noShow',missed,setMissed,a=>store.appointmentFlow.noShow(a,commandKey()))
   return <>
-    <PageHeader kicker="Scheduling" title="Appointment management" text="Create, reschedule and cancel visits. Every change is validated and stored by the clinic server." aside={<div className="row-actions"><RefreshButton onClick={()=>store.appointmentFlow.refresh()}/><Button onClick={()=>setNewOpen(true)} icon="plusCalendar">New appointment</Button></div>}/>
+    <PageHeader kicker="Scheduling" title="Appointment management" text="Create, reschedule and cancel visits. Every change is validated and stored by the clinic server." aside={<div className="row-actions"><RefreshButton onClick={()=>store.appointmentFlow.refresh()}/><Button onClick={()=>openAction(setNewOpen,true)} icon="plusCalendar">New appointment</Button></div>}/>
     <AppointmentsStatusNotice store={store}/>
+    {owner.busy&&<p role="status">Saving appointment change…</p>}
+    {actionError&&<p role="alert">{actionError}</p>}
     <FilterBar
       search={search}
       onSearchChange={setSearch}
@@ -237,7 +275,7 @@ export function AppointmentsPage({ role, store, setPage, context }) {
           <Status>{a.status}</Status>
           <small className="block-muted">{a.bookingPaymentStatus==='paid'?`Deposit paid${a.bookingPaymentMethod?` (${a.bookingPaymentMethod})`:''}`:a.bookingPaymentStatus==='held'?'Held':a.bookingPaymentStatus==='refunded'?'Refunded':a.bookingPaymentStatus==='forfeited'?'Forfeited':'Unpaid'}</small>
         </div>},
-        {key:'actions',label:'Actions',render:a=><div className="row-actions">{role==='staff'&&appointmentRecordPatient(a,state,session)&&<Button size="sm" variant="soft" onClick={()=>{const patient=appointmentRecordPatient(a,state,session);if(patient)setPage('patients',{patientId:patient.id})}}>Open Patient Record</Button>}{['Confirmed','Pending'].includes(a.status)&&<><Button size="sm" variant="soft" onClick={()=>setReschedule(a)}>Reschedule</Button><Button size="sm" variant="ghost" onClick={()=>setCancelling(a)}>Cancel</Button>{a.date===clinicDate()&&<Button size="sm" variant="ghost" onClick={()=>setMissed(a)}>No-show</Button>}</>}</div>}
+        {key:'actions',label:'Actions',render:a=><div className="row-actions">{role==='staff'&&appointmentRecordPatient(a,state,session)&&<Button size="sm" variant="soft" onClick={()=>{const patient=appointmentRecordPatient(a,state,session);if(patient)setPage('patients',{patientId:patient.id})}}>Open Patient Record</Button>}{canSchedule(store,a.branchId)&&['Confirmed','Pending'].includes(a.status)&&<><Button size="sm" variant="soft" onClick={()=>openAction(setReschedule,a)}>Reschedule</Button><Button size="sm" variant="ghost" disabled={owner.busy} onClick={()=>openAction(setCancelling,a)}>Cancel</Button>{a.date===clinicDate()&&<Button size="sm" variant="ghost" disabled={owner.busy} onClick={()=>openAction(setMissed,a)}>No-show</Button>}</>}</div>}
       ]}/>
     </Card>
     <Modal open={newOpen} title="Create appointment" subtitle="The clinic server validates the slot and assigns an eligible Dentist unless you choose one." wide onClose={()=>setNewOpen(false)}><AppointmentForm role={role} store={store} onSaved={()=>setNewOpen(false)}/></Modal>

@@ -29,7 +29,9 @@ test('MAP-01 coordinate bounds match the branch contract and require a complete 
 
 test('MAP-01 renders named native keyboard controls and honest draft instructions without a default saved pin', () => {
   const html = renderToStaticMarkup(React.createElement(BranchesPage, { store: {
-    state: { branches: [{ id: 'map01-test', name: 'Synthetic branch', branchCode: 'BRC-A', latitude: null, longitude: null }], services: [], branchServices: [] },
+    session: {serverUserId:'synthetic-owner',userId:'owner',role:'owner',active:true},
+    state: { branches: [{ id: 'map01-test', name: 'Synthetic branch', branchCode: 'BRC-A', latitude: null, longitude: null }], services: [], branchServices: [],
+      persons:[{id:'owner-person'}],users:[{id:'owner',personId:'owner-person',role:'Owner / Admin',status:'Active',permissions:['all']}],staff:[] },
     actions: {}, toast() {},
   } }))
   assert.match(html, /Draft latitude/)
@@ -46,9 +48,12 @@ test('MAP-01 renders named native keyboard controls and honest draft instruction
 test('MAP-01 source guard retains authoritative publish and map synchronization', () => {
   const source = readFileSync('src/pages/Admin.jsx', 'utf8')
   assert.match(source, /if \(coordinateError\) return toast\(coordinateError, 'warning'\)/)
-  assert.match(source, /await syncBranchUpdate\(selected,form\)/)
-  assert.match(source, /if\(!result.ok\)return toast/)
-  assert.match(source, /actions.adoptBranchFromServer\(selected,result.record\)/)
+  assert.match(source, /const id=selected/)
+  assert.match(source, /await syncBranchUpdate\(id,form\)/)
+  assert.match(source, /if\(!result.ok\).*setSaveError\(message\);toast\(message,'warning'\);return/)
+  assert.match(source, /actions.adoptBranchFromServer\(id,result.record\)/)
+  assert.match(source, /if\(!owner.current\(ticket\)\)return/)
+  assert.match(source, /if\(result.record\?\.id!==id\)/)
   assert.match(source, /if \(!branchPinError\(latitude, longitude\)\) mapControl.current\?\.setCoordinates/)
   assert.match(source, /coordinateInputRef.current\?\.focus\(\)/)
   assert.match(source, /React.useEffect\(\(\)=>setForm\(branch\|\|\{\}\),\[branch\]\)/)
