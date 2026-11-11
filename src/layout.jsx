@@ -50,8 +50,9 @@ function navGroups(role,serverSession=false){
 // Real sign-in for every role (Backend Foundation 1B): the backend's GET /api/me determines role after a
 // successful login, so one email+password form serves Patient/Staff/Dentist/Owner alike — there is no client
 // role picker to trust or forge. `onLogin(email,password)` is expected to return a Promise resolving to
-// `{ok:true}` or `{ok:false, message}` (see App.jsx / api-client.js); this component owns only its own
-// submitting/error UI state, never the auth result itself.
+// `{ok:true}` or `{ok:false, message}` (see App.jsx / api-client.js). The third callback argument's
+// isCurrent reader lets App reject obsolete completions before identity/route changes. This component
+// owns only its submitting/error UI state, never authenticated identity.
 export function Login({ onLogin, onShowRegister, onForgotPassword, initialEmail = '', notice = '' }) {
   const [email,setEmail]=React.useState(initialEmail||'')
   const passwordWrap=React.useRef(null)
@@ -60,14 +61,34 @@ export function Login({ onLogin, onShowRegister, onForgotPassword, initialEmail 
   const [password,setPassword]=React.useState('')
   const [submitting,setSubmitting]=React.useState(false)
   const [error,setError]=React.useState('')
+  const submission=React.useRef(null)
+  useLayoutEffectSafe(()=>{
+    const lifetime={pending:null}
+    submission.current=lifetime;setSubmitting(false)
+    return()=>{if(submission.current===lifetime)submission.current=null}
+  },[initialEmail])
   const submit=async event=>{
     event.preventDefault()
-    if(submitting)return
+    const lifetime=submission.current
+    if(!lifetime||lifetime.pending)return
+    const ticket={hash:typeof window==='undefined'?'':window.location.hash}
+    lifetime.pending=ticket
+    // The ref owns this attempt before React commits the pending UI. The App
+    // also checks this lifetime before adopting identity or changing auth routes.
+    const isCurrent=()=>submission.current===lifetime&&lifetime.pending===ticket
+      &&(typeof window==='undefined'||window.location.hash===ticket.hash)
     setError('')
     setSubmitting(true)
-    const result=await onLogin(email,password)
-    setSubmitting(false)
-    if(!result?.ok)setError(result?.message||'Something went wrong. Try again.')
+    try{
+      const result=await onLogin(email,password,{isCurrent})
+      if(isCurrent()&&!result?.ok&&!result?.obsolete)setError(result?.message||'Something went wrong. Try again.')
+    }catch{
+      if(isCurrent())setError('Could not sign in. Please try again.')
+    }finally{
+      if(submission.current===lifetime&&lifetime.pending===ticket){
+        lifetime.pending=null;setSubmitting(false)
+      }
+    }
   }
   return <AuthShell><div className="auth-form" aria-labelledby="login-title">
       <div className="login-copy-wrap"><div className="eyebrow">Patient Portal</div><h1 id="login-title">Welcome back</h1><p className="login-copy">Sign in to continue to your clinic portal.</p></div>

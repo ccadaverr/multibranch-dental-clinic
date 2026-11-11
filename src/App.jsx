@@ -18,6 +18,7 @@ import { ClaimAccount } from './pages/ClaimAccount.jsx'
 const JoinPage=lazy(()=>import('./pages/Join.jsx').then(m=>({default:m.JoinPage})))
 import { stopRealtime } from './realtime.js'
 import { bootstrapSession } from './session-bootstrap.js'
+import { createAuthenticationOwner } from './login-lifecycle.js'
 import { clearInvoiceLinkFromUrl, readInvoiceLink, rememberInvoiceLink, takeInvoiceLink } from './invoice-link.js'
 import { clearPageLinkFromUrl, pageForLink, readPageLink, rememberPageLink, takePageLink } from './page-link.js'
 
@@ -97,6 +98,12 @@ function RefDataUnavailable({ onRetry }) {
 
 function AppBody() {
   const store=useClinic()
+  const authenticationOwner=useRef(null)
+  if(!authenticationOwner.current)authenticationOwner.current=createAuthenticationOwner(store.getAuthGeneration)
+  useEffect(()=>{
+    authenticationOwner.current.activate()
+    return()=>authenticationOwner.current.dispose()
+  },[])
   const clinicalNav=useClinicalNavigation(clinicalSessionKey(store.session))
   const clinicalNavRef=useRef(clinicalNav);clinicalNavRef.current=clinicalNav
   const [authPhase,setAuthPhase]=useState('checking')
@@ -163,9 +170,12 @@ function AppBody() {
   }
 
   const checkSession=async()=>{
+    const ticket=authenticationOwner.current.begin()
+    if(!ticket)return
     setAuthPhase('checking')
     setAuthError('')
     const result=await bootstrapSession(api.me)
+    if(!authenticationOwner.current.current(ticket))return
     if(result.ok){
       const bridge=store.actions.bridgeBackendIdentity(result.data)
       if(bridge.ok){
@@ -177,6 +187,7 @@ function AppBody() {
       // this account (see identity-bridge.js) — fail closed rather than show a broken workspace, and don't
       // leave a dangling backend session behind either.
       await api.logout()
+      if(!authenticationOwner.current.current(ticket))return
       setAuthError(NO_WORKSPACE_MESSAGE)
       setAuthPhase('unauthenticated')
       return
@@ -186,9 +197,13 @@ function AppBody() {
   // Session restoration on load/refresh comes only from the backend session, never from localStorage.
   useEffect(()=>{checkSession()},[])
 
-  const login=async(email,password)=>{
+  const login=async(email,password,{isCurrent=()=>true}={})=>{
+    const ticket=authenticationOwner.current.begin(isCurrent)
+    const obsolete={ok:false,obsolete:true}
+    if(!ticket)return obsolete
     setAuthError('')
     const result=await api.login(email,password)
+    if(!authenticationOwner.current.current(ticket))return obsolete
     if(!result.ok){
       if(result.kind==='email_verification_required'){
         setVerification({email})
@@ -200,6 +215,7 @@ function AppBody() {
     const bridge=store.actions.bridgeBackendIdentity(result.data)
     if(!bridge.ok){
       await api.logout()
+      if(!authenticationOwner.current.current(ticket))return obsolete
       return {ok:false,message:NO_WORKSPACE_MESSAGE}
     }
     enterSession(bridge.session,result.data)
@@ -231,6 +247,7 @@ function AppBody() {
 
 
   const signedOut=()=>{
+    authenticationOwner.current.invalidate()
     stopRealtime() // M17: no socket keeps listening for the previous account
     store.adoptSession(null)
     setServerMe(null)
@@ -240,9 +257,12 @@ function AppBody() {
   }
 
   const logout=async()=>{
+    const ticket=authenticationOwner.current.begin(()=>true,()=>latest.current.session?.serverUserId)
+    if(!ticket)return
     const result=await api.logout()
-    // Always clears the local compatibility session — a stuck authenticated shell is never acceptable — but the
-    // message told to the Patient/Staff/Dentist/Owner is honest about whether the backend actually confirmed it.
+    if(!authenticationOwner.current.current(ticket))return
+    // Clear this account's compatibility session while this sign-out still owns
+    // it, with honest feedback about whether the backend confirmed the close.
     signedOut()
     store.toast(
       result.backendConfirmed?'You’re signed out.':'Signed out on this device, but the server session close could not be confirmed.',
@@ -256,7 +276,10 @@ function AppBody() {
   // command already reported its failure — and browser-local Booking Drafts are left intact for the next sign-in.
   // Account security changes (email or password) end every session on the server: return to sign-in with a clear message.
   const signedOutForSecurity=async({email,message})=>{
+    const ticket=authenticationOwner.current.begin(()=>true,()=>latest.current.session?.serverUserId)
+    if(!ticket)return
     await api.logout()
+    if(!authenticationOwner.current.current(ticket))return
     signedOut()
     setSignInNotice({email,message})
     window.history.replaceState(null,'','#sign-in');setPublicView('login')
@@ -267,9 +290,14 @@ function AppBody() {
   const revalidating=useRef(false)
   useEffect(()=>api.onSessionInvalidated(async()=>{
     if(revalidating.current||!latest.current.session)return
+    // This event itself invalidates the clinical auth generation. Revalidation
+    // and sign-out follow the current server identity plus App request lifetime.
+    const ticket=authenticationOwner.current.begin(()=>true,()=>latest.current.session?.serverUserId)
+    if(!ticket)return
     revalidating.current=true
     try{
       const valid=await api.sessionStillValid(latest.current.session.serverUserId)
+      if(!authenticationOwner.current.current(ticket))return
       const current=latest.current
       if(!current.session||valid)return
       current.signedOut()
