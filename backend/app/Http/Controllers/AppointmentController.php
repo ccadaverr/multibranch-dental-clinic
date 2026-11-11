@@ -127,8 +127,8 @@ class AppointmentController extends Controller
             $branch,
             Service::where('legacy_ref', $request->validated('service_ref'))->firstOrFail(),
             $dentistRef ? DentistProfile::where('legacy_ref', $dentistRef)->firstOrFail() : null,
-            $request->safe()->only(['date', 'start_time', 'notes', 'pay_at_clinic', 'consultation_acknowledged']),
-            $this->idempotencyKey($request),
+            $request->safe()->only(['date', 'start_time', 'notes', 'pay_at_clinic', 'consultation_acknowledged', 'followup_task_id', 'followup_expected_revision']),
+            $this->idempotencyKey($request, $request->selectsFollowup()),
         );
     }
 
