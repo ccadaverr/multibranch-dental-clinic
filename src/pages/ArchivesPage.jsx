@@ -33,6 +33,12 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
   layoutEffect(() => { live.current = true; return () => { live.current = false } }, [])
   const [tab, setTab] = useState('visits')
   const [query, setQuery] = useState('')
+  const retryPending = useRef(false)
+  const [retrying, setRetrying] = useState(false)
+  const [retryFailed, setRetryFailed] = useState(false)
+  const appointmentsLoading = retrying || !retryFailed && ['idle', 'loading'].includes(store.appointmentsStatus)
+  const appointmentsFailed = !appointmentsLoading && (retryFailed || store.appointmentsStatus === 'error')
+  useEffect(() => { setRetryFailed(false) }, [store.appointmentsStatus])
   const [selectedBranch, setSelectedBranch] = useState(
     role === 'owner' ? (activeBranch || 'All Branches') : (activeBranch && activeBranch !== 'All Branches' ? activeBranch : 'All Branches')
   )
@@ -41,6 +47,21 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
     ...selection, id: selection.record.id, patientId: patientIdOf(selection.record),
   } : null)
   const noStaffScope = role === 'staff' && scopes.length === 0
+  const retryAppointments = async () => {
+    if (!live.current || !enabled || noStaffScope || retryPending.current || typeof store.appointmentFlow?.refresh !== 'function') return
+    retryPending.current = true
+    setRetrying(true)
+    setRetryFailed(false)
+    try {
+      const result = await store.appointmentFlow.refresh()
+      if (live.current && !result?.superseded) setRetryFailed(result?.ok === false)
+    } catch {
+      if (live.current) setRetryFailed(true)
+    } finally {
+      retryPending.current = false
+      if (live.current) setRetrying(false)
+    }
+  }
   const branchLabel = item => {
     const canonical = (state.branches || []).find(branch => branch.id === branchIdOf(item))
     return canonical?.name || (typeof item.branch === 'object' && item.branch ? item.branch.name : item.branch || item.branchName) || 'Branch unavailable'
@@ -257,9 +278,18 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
 
       {tab === 'visits' && (
         <Card title="Historical Appointments" subtitle="Past or terminal appointments; inclusion here does not confirm completed care.">
-          <Table
+          {appointmentsLoading ? <Notice title="Loading historical appointments">
+            Refreshing clinic records. {archivedVisits.length > 0 && 'Previously loaded appointments remain visible below.'}
+          </Notice> : appointmentsFailed ? <Notice tone="error" title="Historical appointments could not be refreshed">
+            {archivedVisits.length > 0 ? 'Previously loaded appointments may be out of date.' : 'No current result is available. This does not mean there are no historical appointments.'}
+          </Notice> : null}
+          {(appointmentsFailed || retrying || !Array.isArray(state.appointments)) && typeof store.appointmentFlow?.refresh === 'function' && <Button
+            size="sm" variant="secondary" onClick={retryAppointments} disabled={appointmentsLoading}
+          >{retrying ? 'Retrying historical appointments…' : 'Retry historical appointments'}</Button>}
+          {(archivedVisits.length > 0 || !appointmentsLoading && !appointmentsFailed) && <Table
             rows={archivedVisits}
-            emptyMessage={emptyMessage(state.appointments, 'Historical appointments')}
+            caption="Historical appointments"
+            empty={<span role="status">{emptyMessage(state.appointments, 'Historical appointments')}</span>}
             columns={[
               { key: 'date', label: 'Date', render: r => <b>{r.date}</b> },
               { key: 'code', label: 'Ref Code', render: r => <code>{r.code || r.id}</code> },
@@ -278,7 +308,7 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
                 </div>
               ) },
             ]}
-          />
+          />}
         </Card>
       )}
 
@@ -286,7 +316,8 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
         <Card title="Archived Digital Prescriptions" subtitle="Historical prescriptions issued to patients, scoped by role and branch.">
           <Table
             rows={archivedPrescriptions}
-            emptyMessage={emptyMessage(state.prescriptions, 'Prescriptions')}
+            caption="Archived prescriptions"
+            empty={<span role="status">{emptyMessage(state.prescriptions, 'Prescriptions')}</span>}
             columns={[
               { key: 'number', label: 'Rx Number', render: r => <b>{r.number}</b> },
               { key: 'issued_at', label: 'Issued Date', render: r => r.issued_at || r.date || '—' },
@@ -312,7 +343,8 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
         <Card title="Settled Billing & Receipt Records" subtitle="Archived invoices and receipts settled via PayMongo or front-desk cash.">
           <Table
             rows={archivedInvoices}
-            emptyMessage={emptyMessage(state.invoices, 'Settled financial records')}
+            caption="Settled invoices and receipts"
+            empty={<span role="status">{emptyMessage(state.invoices, 'Settled financial records')}</span>}
             columns={[
               { key: 'invoiceNumber', label: 'Invoice #', render: r => <b>{r.invoiceNumber || r.invoice_number || r.id}</b> },
               { key: 'patientName', label: 'Patient', render: r => r.patientName || 'Patient' },
