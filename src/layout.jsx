@@ -33,7 +33,7 @@ const GROUPS={
   patient:[['Overview',['dashboard']],['Booking',['book','appointments']],['Communication',['messages']],['Account',['billing','archives','me']]],
   staff:[['Clinic Operations',['dashboard','appointments','calendar','patients','handovers','schedules','leave','closures']],['Patient Care',['checkin','queue','capacity','prescriptions','followups']],['Billing & Finance',['billing','hmo']],['Marketing & Analytics',['inquiries','messages','engagement']],['Archives',['archives']]],
   dentist:[['Patient Care',['dashboard','schedule','queue','chart','treatment','prescriptions','followups']],['Clinic Operations',['patients','handovers','schedules','leave']],['Marketing & Analytics',['messages','wording']],['Archives',['archives']]],
-  owner:[['Executive Dashboard',['dashboard']],['Clinic Operations',['branches','calendar','schedules','leave','handovers']],['Patient Care',['capacity','prescriptions']],['Billing & Finance',['pricing','hmo','hmos']],['Marketing & Analytics',['analytics','engagement']],['Administration',['users','automations','closures','audit','branding','assistant']],['Archives',['archives']]],
+  owner:[['Executive Dashboard',['dashboard']],['Clinic Operations',['branches','team','calendar','schedules','leave','handovers']],['Patient Care',['capacity','prescriptions']],['Billing & Finance',['pricing','hmo','hmos']],['Marketing & Analytics',['analytics','engagement']],['Administration',['users','automations','closures','audit','branding','assistant']],['Archives',['archives']]],
 }
 
 // In a clinic-server session the capacity page is the factual live-queue view (src/pages/QueueCounts.jsx); the
