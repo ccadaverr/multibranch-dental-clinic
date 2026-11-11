@@ -1,5 +1,5 @@
 import React, { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { ConfirmDialog, Icon } from '../components.jsx'
+import { ConfirmDialog, Icon, Modal } from '../components.jsx'
 import { Brand } from '../Brand.jsx'
 import { listNotifications, readAllNotifications, readNotification } from '../api-client.js'
 import { useVisibleRefresh } from '../use-visible-refresh.js'
@@ -148,18 +148,18 @@ export function PatientPortal({ me, store, initialPage = 'home', initialContext 
     <nav className="pp-bottom" aria-label="Main">
       {PHONE_NAV.map(([key, icon, label]) => {
         const active = key === 'more' ? more || !PHONE_NAV.some(([k]) => k === page) : page === key && !more
-        return <button key={key} type="button" className={`pp-tab ${active ? 'is-active' : ''}`} aria-current={active && key !== 'more' ? 'page' : undefined} aria-expanded={key === 'more' ? more : undefined}
-          onClick={() => key === 'more' ? setMore(m => !m) : navigate(key)}><Icon name={icon} size={22}/><span>{label}</span></button>
+        return <button key={key} type="button" className={`pp-tab ${active ? 'is-active' : ''}`} aria-current={active && key !== 'more' ? 'page' : undefined} aria-expanded={key === 'more' ? more : undefined} aria-haspopup={key === 'more' ? 'dialog' : undefined}
+          onClick={event => { if (key === 'more') { event.currentTarget.focus(); setMore(m => !m) } else navigate(key) }}><Icon name={icon} size={22}/><span>{label}</span></button>
       })}
     </nav>
-    {more && <div className="pp-sheet-backdrop" onClick={() => setMore(false)}>
-      <div className="pp-sheet pp-pop" role="dialog" aria-label="More" onClick={e => e.stopPropagation()}>
+    <Modal open={more} title="More" onClose={() => setMore(false)} className="pp-more-dialog">
+      <div className="pp-sheet">
         <div className="pp-sheet-me"><span className="pp-avatar" aria-hidden="true">{initials(me.name)}</span><span><b>{me.name}</b><small>{me.email}</small></span></div>
         {[['billing', 'receipt', 'Billing'], ['prescriptions', 'file', 'Prescriptions'], ['teeth', 'star', 'My teeth'], ['archives', 'archive', 'Historical records'], ['documents', 'file', 'Documents'], ['profile', 'user', 'Profile']].map(([key, icon, label]) =>
           <button key={key} type="button" className="pp-sheet-item" onClick={() => navigate(key)}><Icon name={icon} size={20}/>{label}</button>)}
         <button type="button" className="pp-sheet-item pp-danger" onClick={() => { setMore(false); setLogoutConfirmOpen(true) }}><Icon name="logout" size={20}/>Sign out</button>
       </div>
-    </div>}
+    </Modal>
 
     {bell && <NotificationPanel key={notes.identity} notes={notes} onClose={() => { setBell(false); bellButton.current?.focus() }} destination={n => patientNotificationDestination(me, n)} onOpen={async n => {
       if (!await notes.markRead(n.id) || !notes.isCurrent()) return
