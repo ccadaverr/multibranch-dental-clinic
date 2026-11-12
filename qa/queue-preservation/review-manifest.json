@@ -1,0 +1,341 @@
+{
+  "purpose": "Source evidence and decision inventory only; no executable mapping or runtime authorization.",
+  "assignment": "DENTALOPS-QUEUE-MIGRATION-PRESERVATION-01",
+  "baseline": "15d626c03c97baf7198a7b7ca6dea2bec8f60836",
+  "implementationVerdict": "BLOCKED",
+  "executionAllowed": false,
+  "provisioningAllowed": false,
+  "selectedStrategy": "D: hold conversion pending policy and applied-state evidence",
+  "sourceHashes": {
+    "backend/app/Http/Controllers/QueueController.php": "fdd86d014f83e4721b69e1cef3aa7a44c86ff4b1e096ec20f9e883215249a1a9",
+    "backend/app/Http/Controllers/VisitController.php": "a9b138e2bc1a25d4ac47e41c7a8caf16b5b1818d9c47b720e31899a86200daef",
+    "backend/app/Http/Requests/Queue/QueuePriorityRequest.php": "49860db546e90df6fa5ccf50fcfdffca399a4769e4f206a6aba2443737f891b6",
+    "backend/app/Http/Requests/Queue/QueueTransitionRequest.php": "de235866e3eb4fff4c29740265e3ddb0492c65e00ed4e00687fa39b31e2a0b57",
+    "backend/app/Http/Resources/QueueEntryResource.php": "5f8b416d27c2d68d0c88b8ada4554a8f2c7f0a6af4ca741a6f6d28933adc8643",
+    "backend/app/Models/QueueEntry.php": "c4f03d2120fdfc7e5ae49e354edfe3c90641f447bdbf4027fb6c84d834096eed",
+    "backend/app/Models/QueueEntryHistory.php": "740387b70dd49f2ef6b6591eb1a94d4a9137db8a81bd7bd51c2ed43f8ea0cf26",
+    "backend/app/Models/Visit.php": "80e1a08477e7e063965b23f7c426d85a32999eedd8749ef13e7d13746e514e82",
+    "backend/app/Policies/QueueEntryPolicy.php": "42a241c0a59e9fd1b926395092d4bf40cafc876a31f0e40a24ade5fdaa765bb1",
+    "backend/app/Policies/TreatmentPolicy.php": "7f8186750c948c3dd414983dac7d070bcdc2d04ece9969d9ca69cc494db24db7",
+    "backend/app/Policies/VisitPolicy.php": "7e77b05ca3d7c1033d8766a5c9158f629995bdd2d5e445b5acea8e7f0003d9b1",
+    "backend/app/Services/Analytics/AnalyticsService.php": "3771680595e4de6e6e07e237bf9f8407ffcc7bdcb97df74431aa855fa4dde7fc",
+    "backend/app/Services/Appointments/AppointmentService.php": "8b51e0a8ffccec6074835b24f75acaf5279c979bd0872f494666a209a00c37f8",
+    "backend/app/Services/Automations/OwnerSummaryData.php": "5223f1ea029737cc189c70f933715b9cc9d7e21639318f24240115fbc1387890",
+    "backend/app/Services/Followups/Followups.php": "51f93df29d7fa783acb2fc792922c7c56022d2a1837921834b797749cc433989",
+    "backend/app/Services/Intake/IntakeService.php": "e192bea72eacd51230c7c0d4e14d9bc73a610aca560efee05b8acb87ce580365",
+    "backend/app/Services/Queue/QueueBackfill.php": "067788d648bcf28c5a38ee0973bd9fdf825216bf5e116be2dd42473ae443907e",
+    "backend/app/Services/Queue/QueueService.php": "6d9c1c006a410704f22a7c7bfc1cf68bc0572384dd4457f4c47bad8040d47434",
+    "backend/app/Services/Treatments/TreatmentService.php": "44ce2bd64471fba94f21c1f11f080f993074f3486f558eb1da4ea98d2b6bffaa",
+    "backend/app/Services/Visits/VisitCommandException.php": "209d9ada133c2a1be0e941620f13a801c628c0283b98680c4a245bbfff977a17",
+    "backend/app/Services/Visits/VisitService.php": "ccc99bd079664e8bca92117bf9de8c5968f0d702ac49ae5ad7d272d2e8491ed4",
+    "backend/app/Support/IdempotentCommand.php": "3ed8453461a1a3cae4f03b76d7db5bad7df848d00984858d913ff02842dbaba4",
+    "backend/database/migrations/2026_10_01_000100_create_queue_tables.php": "b4a89bd043a41ef2419d8f6f95877041910d7edcdae65271b814d7646411672a",
+    "backend/database/migrations/2026_10_01_000200_backfill_queue_entries_from_visits.php": "d2708b9aaa4e52bfd98da99d020cd675927cd2f0345305d539120fbae96ea5a2",
+    "backend/database/migrations/2026_10_28_000200_create_arrival_and_freed_slot_tables.php": "866bfc487f47ed946f38d063baee0a4a4706176ea7fe787834e98b6d2d64151e",
+    "backend/database/migrations/2026_11_16_000500_update_queue_statuses_and_remove_urgent_priority.php": "16b5eaddf6a725791fb74ef9a0d04b25187ba0e006fa885b7cd452df6feaed40",
+    "backend/routes/api.php": "6aa37e710931b9629aae1b4afebbb15807315577c19e6bd8e2dd694663ffed81",
+    "docs/architecture/CONTRACTS.md": "b70387dc276a44bf4e4d15ab8cafd41ac112617e14415dd2bf2917397b443499",
+    "src/encounter.js": "bb1c1d31280a8e755245391c416dd3990c8860cb6770410dbd90dae88a9e0e3e",
+    "src/pages/PatientFlow.jsx": "72f3fd619bce5e3067f7ecdd9218a235bea70f241b66fc5f0843f6e1d202766a",
+    "src/queue-api.js": "a82849574dad4c43a388d4576d50adde570d76beab3f59ad6b860d95460b5529",
+    "src/queue-counts.js": "8eadb5ae060ff7976400651aaf466d53d17ffefa33611684e80c970ce88436a2"
+  },
+  "legacyStatuses": [
+    "Waiting",
+    "Called",
+    "Treatment Ready",
+    "Temporarily Away",
+    "Served"
+  ],
+  "legacyPriorities": [
+    "Normal",
+    "Priority",
+    "Urgent"
+  ],
+  "currentModelStatuses": [
+    "In Queue",
+    "In Treatment",
+    "Done",
+    "Cancelled",
+    "No-show",
+    "Waiting",
+    "Called",
+    "Treatment Ready",
+    "Temporarily Away",
+    "Served"
+  ],
+  "currentRequestPriorities": [
+    "Normal",
+    "Priority"
+  ],
+  "observedUnsafeForwardMap": {
+    "Waiting": "In Queue",
+    "Called": "In Treatment",
+    "Treatment Ready": "In Treatment",
+    "Temporarily Away": "In Queue",
+    "Served": "Done"
+  },
+  "observedUnsafeReverseMap": {
+    "In Queue": "Waiting",
+    "In Treatment": "Treatment Ready",
+    "Done": "Served"
+  },
+  "namedTransitions": {
+    "call": {
+      "sources": [
+        "Waiting"
+      ],
+      "target": "Called",
+      "event": "queue.called"
+    },
+    "ready": {
+      "sources": [
+        "Called"
+      ],
+      "target": "Treatment Ready",
+      "event": "queue.ready"
+    },
+    "away": {
+      "sources": [
+        "Waiting",
+        "Called",
+        "Treatment Ready"
+      ],
+      "target": "Temporarily Away",
+      "event": "queue.away"
+    },
+    "return": {
+      "sources": [
+        "Temporarily Away"
+      ],
+      "target": "Waiting",
+      "event": "queue.returned"
+    }
+  },
+  "legacyCombinations": [
+    {
+      "status": "Waiting",
+      "priority": "Normal",
+      "observedUnsafeTarget": "In Queue",
+      "observedUnsafePriority": "Normal",
+      "recommendedPreservedStatus": "Waiting",
+      "recommendedPreservedPriority": "Normal",
+      "conversion": "REFUSED_PENDING_DECISION",
+      "newPriorityRequestSupported": true
+    },
+    {
+      "status": "Waiting",
+      "priority": "Priority",
+      "observedUnsafeTarget": "In Queue",
+      "observedUnsafePriority": "Priority",
+      "recommendedPreservedStatus": "Waiting",
+      "recommendedPreservedPriority": "Priority",
+      "conversion": "REFUSED_PENDING_DECISION",
+      "newPriorityRequestSupported": true
+    },
+    {
+      "status": "Waiting",
+      "priority": "Urgent",
+      "observedUnsafeTarget": "In Queue",
+      "observedUnsafePriority": "Normal",
+      "recommendedPreservedStatus": "Waiting",
+      "recommendedPreservedPriority": "Urgent",
+      "conversion": "REFUSED_PENDING_DECISION",
+      "newPriorityRequestSupported": false
+    },
+    {
+      "status": "Called",
+      "priority": "Normal",
+      "observedUnsafeTarget": "In Treatment",
+      "observedUnsafePriority": "Normal",
+      "recommendedPreservedStatus": "Called",
+      "recommendedPreservedPriority": "Normal",
+      "conversion": "REFUSED_PENDING_DECISION",
+      "newPriorityRequestSupported": true
+    },
+    {
+      "status": "Called",
+      "priority": "Priority",
+      "observedUnsafeTarget": "In Treatment",
+      "observedUnsafePriority": "Priority",
+      "recommendedPreservedStatus": "Called",
+      "recommendedPreservedPriority": "Priority",
+      "conversion": "REFUSED_PENDING_DECISION",
+      "newPriorityRequestSupported": true
+    },
+    {
+      "status": "Called",
+      "priority": "Urgent",
+      "observedUnsafeTarget": "In Treatment",
+      "observedUnsafePriority": "Normal",
+      "recommendedPreservedStatus": "Called",
+      "recommendedPreservedPriority": "Urgent",
+      "conversion": "REFUSED_PENDING_DECISION",
+      "newPriorityRequestSupported": false
+    },
+    {
+      "status": "Treatment Ready",
+      "priority": "Normal",
+      "observedUnsafeTarget": "In Treatment",
+      "observedUnsafePriority": "Normal",
+      "recommendedPreservedStatus": "Treatment Ready",
+      "recommendedPreservedPriority": "Normal",
+      "conversion": "REFUSED_PENDING_DECISION",
+      "newPriorityRequestSupported": true
+    },
+    {
+      "status": "Treatment Ready",
+      "priority": "Priority",
+      "observedUnsafeTarget": "In Treatment",
+      "observedUnsafePriority": "Priority",
+      "recommendedPreservedStatus": "Treatment Ready",
+      "recommendedPreservedPriority": "Priority",
+      "conversion": "REFUSED_PENDING_DECISION",
+      "newPriorityRequestSupported": true
+    },
+    {
+      "status": "Treatment Ready",
+      "priority": "Urgent",
+      "observedUnsafeTarget": "In Treatment",
+      "observedUnsafePriority": "Normal",
+      "recommendedPreservedStatus": "Treatment Ready",
+      "recommendedPreservedPriority": "Urgent",
+      "conversion": "REFUSED_PENDING_DECISION",
+      "newPriorityRequestSupported": false
+    },
+    {
+      "status": "Temporarily Away",
+      "priority": "Normal",
+      "observedUnsafeTarget": "In Queue",
+      "observedUnsafePriority": "Normal",
+      "recommendedPreservedStatus": "Temporarily Away",
+      "recommendedPreservedPriority": "Normal",
+      "conversion": "REFUSED_PENDING_DECISION",
+      "newPriorityRequestSupported": true
+    },
+    {
+      "status": "Temporarily Away",
+      "priority": "Priority",
+      "observedUnsafeTarget": "In Queue",
+      "observedUnsafePriority": "Priority",
+      "recommendedPreservedStatus": "Temporarily Away",
+      "recommendedPreservedPriority": "Priority",
+      "conversion": "REFUSED_PENDING_DECISION",
+      "newPriorityRequestSupported": true
+    },
+    {
+      "status": "Temporarily Away",
+      "priority": "Urgent",
+      "observedUnsafeTarget": "In Queue",
+      "observedUnsafePriority": "Normal",
+      "recommendedPreservedStatus": "Temporarily Away",
+      "recommendedPreservedPriority": "Urgent",
+      "conversion": "REFUSED_PENDING_DECISION",
+      "newPriorityRequestSupported": false
+    },
+    {
+      "status": "Served",
+      "priority": "Normal",
+      "observedUnsafeTarget": "Done",
+      "observedUnsafePriority": "Normal",
+      "recommendedPreservedStatus": "Served",
+      "recommendedPreservedPriority": "Normal",
+      "conversion": "REFUSED_PENDING_DECISION",
+      "newPriorityRequestSupported": true
+    },
+    {
+      "status": "Served",
+      "priority": "Priority",
+      "observedUnsafeTarget": "Done",
+      "observedUnsafePriority": "Priority",
+      "recommendedPreservedStatus": "Served",
+      "recommendedPreservedPriority": "Priority",
+      "conversion": "REFUSED_PENDING_DECISION",
+      "newPriorityRequestSupported": true
+    },
+    {
+      "status": "Served",
+      "priority": "Urgent",
+      "observedUnsafeTarget": "Done",
+      "observedUnsafePriority": "Normal",
+      "recommendedPreservedStatus": "Served",
+      "recommendedPreservedPriority": "Urgent",
+      "conversion": "REFUSED_PENDING_DECISION",
+      "newPriorityRequestSupported": false
+    }
+  ],
+  "alternateCombinations": [
+    {
+      "status": "In Queue",
+      "priority": "Normal",
+      "conversion": "REFUSED_REQUIRES_PROVENANCE",
+      "automaticLegacyRecovery": false
+    },
+    {
+      "status": "In Queue",
+      "priority": "Priority",
+      "conversion": "REFUSED_REQUIRES_PROVENANCE",
+      "automaticLegacyRecovery": false
+    },
+    {
+      "status": "In Treatment",
+      "priority": "Normal",
+      "conversion": "REFUSED_REQUIRES_PROVENANCE",
+      "automaticLegacyRecovery": false
+    },
+    {
+      "status": "In Treatment",
+      "priority": "Priority",
+      "conversion": "REFUSED_REQUIRES_PROVENANCE",
+      "automaticLegacyRecovery": false
+    },
+    {
+      "status": "Done",
+      "priority": "Normal",
+      "conversion": "REFUSED_REQUIRES_PROVENANCE",
+      "automaticLegacyRecovery": false
+    },
+    {
+      "status": "Done",
+      "priority": "Priority",
+      "conversion": "REFUSED_REQUIRES_PROVENANCE",
+      "automaticLegacyRecovery": false
+    },
+    {
+      "status": "Cancelled",
+      "priority": "Normal",
+      "conversion": "REFUSED_REQUIRES_PROVENANCE",
+      "automaticLegacyRecovery": false
+    },
+    {
+      "status": "Cancelled",
+      "priority": "Priority",
+      "conversion": "REFUSED_REQUIRES_PROVENANCE",
+      "automaticLegacyRecovery": false
+    },
+    {
+      "status": "No-show",
+      "priority": "Normal",
+      "conversion": "REFUSED_REQUIRES_PROVENANCE",
+      "automaticLegacyRecovery": false
+    },
+    {
+      "status": "No-show",
+      "priority": "Priority",
+      "conversion": "REFUSED_REQUIRES_PROVENANCE",
+      "automaticLegacyRecovery": false
+    }
+  ],
+  "unknownValues": "REFUSE; do not default or infer",
+  "offlineGate": {
+    "commit": "431ce91805d546913dcf18cdb9e78b4af0010a8d",
+    "migrationCount": 86,
+    "migrationDigest": "f565b8e643f41787575f8d54c0be5d0c33b81aeaa35f4844b4527c5ba13ee1ff",
+    "heldContent": [
+      "16b5eaddf6a725791fb74ef9a0d04b25187ba0e006fa885b7cd452df6feaed40",
+      "3c8af7cb8126866af3d67107bdd792960b5389922c762a09f6c08781db5b6df9",
+      "36f0fa951bc7c612f87ba47e40307729e96e8d222d6fcc019dd7acb2dd249181",
+      "921a1dcfdfd321569ebcff08dcd72a069e32fb50bddc9c360af3ca795809711f"
+    ]
+  }
+}
