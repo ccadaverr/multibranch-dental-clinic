@@ -1,0 +1,825 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dentalops:qa:offline-manifest:1",
+  "title": "Untrusted QA descriptor; never execution authorization",
+  "description": "Every declaration remains untrusted. The module has no approved schema registry, runtime attestation, trust anchors or execution path.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "request",
+    "provisioningEvidence",
+    "approval",
+    "migrationApproval"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "request": {
+      "$ref": "#/$defs/request"
+    },
+    "provisioningEvidence": {
+      "$ref": "#/$defs/provisioningEvidence"
+    },
+    "approval": {
+      "$ref": "#/$defs/approval"
+    },
+    "migrationApproval": {
+      "$ref": "#/$defs/migrationApproval"
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{2,79}$",
+      "maxLength": 80
+    },
+    "sha": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "minLength": 64,
+      "maxLength": 64
+    },
+    "commit": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$",
+      "minLength": 40,
+      "maxLength": 40
+    },
+    "instant": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+      "minLength": 20,
+      "maxLength": 20
+    },
+    "path": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_./-]+$",
+      "minLength": 1,
+      "maxLength": 240
+    },
+    "root": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "origin",
+        "commit",
+        "branch"
+      ],
+      "properties": {
+        "origin": {
+          "const": "https://github.com/ccadaverr/multibranch-dental-clinic.git"
+        },
+        "commit": {
+          "$ref": "#/$defs/commit"
+        },
+        "branch": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_/-]+$",
+          "maxLength": 120,
+          "minLength": 1
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "driver",
+        "host",
+        "port",
+        "database",
+        "searchPath",
+        "url",
+        "sslmode"
+      ],
+      "properties": {
+        "driver": {
+          "const": "pgsql"
+        },
+        "host": {
+          "const": "127.0.0.1"
+        },
+        "port": {
+          "const": 5432
+        },
+        "database": {
+          "const": "dental_clinic_test"
+        },
+        "searchPath": {
+          "const": "public"
+        },
+        "url": {
+          "const": null
+        },
+        "sslmode": {
+          "const": "prefer"
+        }
+      }
+    },
+    "lane": {
+      "enum": [
+        "workflow",
+        "schema",
+        "seed",
+        "contention",
+        "outbox"
+      ]
+    },
+    "operation": {
+      "enum": [
+        "feature-tests",
+        "migration-manifest",
+        "schema-reset",
+        "reference-seeder",
+        "contention-worker",
+        "outbox-worker"
+      ]
+    },
+    "capability": {
+      "enum": [
+        "database",
+        "ddl",
+        "reset",
+        "seed",
+        "multiple-processes",
+        "background-jobs"
+      ]
+    },
+    "flags": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "nontransactional",
+          "trigger-bypass",
+          "drop-data",
+          "data-rewrite",
+          "schema-reset",
+          "process-dispatch",
+          "bootstrap",
+          "database-capable"
+        ]
+      },
+      "minItems": 0,
+      "maxItems": 8,
+      "uniqueItems": true
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/path"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha"
+        }
+      }
+    },
+    "observedFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "flags"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/path"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha"
+        },
+        "flags": {
+          "$ref": "#/$defs/flags"
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidenceId",
+        "issuerId",
+        "method",
+        "reference"
+      ],
+      "properties": {
+        "evidenceId": {
+          "$ref": "#/$defs/id"
+        },
+        "issuerId": {
+          "$ref": "#/$defs/id"
+        },
+        "method": {
+          "const": "unverified-declaration"
+        },
+        "reference": {
+          "$ref": "#/$defs/id"
+        }
+      }
+    },
+    "cleanup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ownerRunId",
+        "resourceIds",
+        "strategy",
+        "authorized"
+      ],
+      "properties": {
+        "ownerRunId": {
+          "$ref": "#/$defs/id"
+        },
+        "resourceIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "minItems": 3,
+          "maxItems": 3,
+          "uniqueItems": true
+        },
+        "strategy": {
+          "const": "owned-resources-only"
+        },
+        "authorized": {
+          "const": false
+        }
+      }
+    },
+    "profile": {
+      "const": "isolated-postgres-v1-proposal"
+    },
+    "schemaVersion": {
+      "const": "full-chain-v1-proposal"
+    },
+    "migrationManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceCommit",
+        "schemaVersion",
+        "digest",
+        "entries"
+      ],
+      "properties": {
+        "sourceCommit": {
+          "$ref": "#/$defs/commit"
+        },
+        "schemaVersion": {
+          "$ref": "#/$defs/schemaVersion"
+        },
+        "digest": {
+          "$ref": "#/$defs/sha"
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/observedFile"
+          },
+          "minItems": 1,
+          "maxItems": 500,
+          "uniqueItems": true
+        }
+      }
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runId",
+        "operatorId",
+        "source",
+        "profile",
+        "environment",
+        "workspaceRoot",
+        "target",
+        "configuration",
+        "credentials",
+        "operation",
+        "migrationManifest",
+        "resourcePaths",
+        "cleanup"
+      ],
+      "properties": {
+        "runId": {
+          "$ref": "#/$defs/id"
+        },
+        "operatorId": {
+          "$ref": "#/$defs/id"
+        },
+        "source": {
+          "$ref": "#/$defs/source"
+        },
+        "profile": {
+          "$ref": "#/$defs/profile"
+        },
+        "environment": {
+          "const": "testing"
+        },
+        "workspaceRoot": {
+          "$ref": "#/$defs/root"
+        },
+        "target": {
+          "$ref": "#/$defs/target"
+        },
+        "configuration": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "default",
+            "connections"
+          ],
+          "properties": {
+            "default": {
+              "const": "pgsql"
+            },
+            "connections": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "pgsql"
+              ],
+              "properties": {
+                "pgsql": {
+                  "$ref": "#/$defs/target"
+                }
+              }
+            }
+          }
+        },
+        "credentials": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "reference",
+            "source",
+            "roleClass",
+            "superuser",
+            "createDatabase",
+            "createRole",
+            "bypassRls",
+            "ownsProtectedTables",
+            "ddlAllowed"
+          ],
+          "properties": {
+            "reference": {
+              "$ref": "#/$defs/id"
+            },
+            "source": {
+              "const": "future-ephemeral-secret"
+            },
+            "roleClass": {
+              "enum": [
+                "application",
+                "schema-owner"
+              ]
+            },
+            "superuser": {
+              "const": false
+            },
+            "createDatabase": {
+              "const": false
+            },
+            "createRole": {
+              "const": false
+            },
+            "bypassRls": {
+              "const": false
+            },
+            "ownsProtectedTables": {
+              "type": "boolean"
+            },
+            "ddlAllowed": {
+              "type": "boolean"
+            }
+          }
+        },
+        "operation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "category",
+            "lane",
+            "artifacts",
+            "capabilities",
+            "reviewRef"
+          ],
+          "properties": {
+            "category": {
+              "$ref": "#/$defs/operation"
+            },
+            "lane": {
+              "$ref": "#/$defs/lane"
+            },
+            "artifacts": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/artifact"
+              },
+              "minItems": 0,
+              "maxItems": 20,
+              "uniqueItems": true
+            },
+            "capabilities": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/capability"
+              },
+              "minItems": 1,
+              "maxItems": 6,
+              "uniqueItems": true
+            },
+            "reviewRef": {
+              "$ref": "#/$defs/id"
+            }
+          }
+        },
+        "migrationManifest": {
+          "$ref": "#/$defs/migrationManifest"
+        },
+        "resourcePaths": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/path"
+          },
+          "minItems": 1,
+          "maxItems": 20,
+          "uniqueItems": true
+        },
+        "cleanup": {
+          "$ref": "#/$defs/cleanup"
+        }
+      }
+    },
+    "provisioningEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runId",
+        "instanceId",
+        "volumeId",
+        "networkId",
+        "disposableClaim",
+        "target",
+        "issuedAt",
+        "expiresAt",
+        "provenance"
+      ],
+      "properties": {
+        "runId": {
+          "$ref": "#/$defs/id"
+        },
+        "instanceId": {
+          "$ref": "#/$defs/id"
+        },
+        "volumeId": {
+          "$ref": "#/$defs/id"
+        },
+        "networkId": {
+          "$ref": "#/$defs/id"
+        },
+        "disposableClaim": {
+          "const": true
+        },
+        "target": {
+          "$ref": "#/$defs/target"
+        },
+        "issuedAt": {
+          "$ref": "#/$defs/instant"
+        },
+        "expiresAt": {
+          "$ref": "#/$defs/instant"
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        }
+      }
+    },
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runId",
+        "operatorId",
+        "sourceCommit",
+        "profile",
+        "target",
+        "migrationDigest",
+        "provisioningEvidenceId",
+        "lane",
+        "operation",
+        "artifactDigest",
+        "capabilities",
+        "credentialRole",
+        "cleanupOwnerRunId",
+        "resourceIds",
+        "issuedAt",
+        "expiresAt",
+        "provenance"
+      ],
+      "properties": {
+        "runId": {
+          "$ref": "#/$defs/id"
+        },
+        "operatorId": {
+          "$ref": "#/$defs/id"
+        },
+        "sourceCommit": {
+          "$ref": "#/$defs/commit"
+        },
+        "profile": {
+          "$ref": "#/$defs/profile"
+        },
+        "target": {
+          "$ref": "#/$defs/target"
+        },
+        "migrationDigest": {
+          "$ref": "#/$defs/sha"
+        },
+        "provisioningEvidenceId": {
+          "$ref": "#/$defs/id"
+        },
+        "lane": {
+          "$ref": "#/$defs/lane"
+        },
+        "operation": {
+          "$ref": "#/$defs/operation"
+        },
+        "artifactDigest": {
+          "$ref": "#/$defs/sha"
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/capability"
+          },
+          "minItems": 1,
+          "maxItems": 6,
+          "uniqueItems": true
+        },
+        "credentialRole": {
+          "enum": [
+            "application",
+            "schema-owner"
+          ]
+        },
+        "cleanupOwnerRunId": {
+          "$ref": "#/$defs/id"
+        },
+        "resourceIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "minItems": 3,
+          "maxItems": 3,
+          "uniqueItems": true
+        },
+        "issuedAt": {
+          "$ref": "#/$defs/instant"
+        },
+        "expiresAt": {
+          "$ref": "#/$defs/instant"
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        }
+      }
+    },
+    "migrationApproval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceCommit",
+        "schemaVersion",
+        "digest",
+        "decision",
+        "transactionPolicy",
+        "reviewRef",
+        "provenance",
+        "issuedAt",
+        "expiresAt"
+      ],
+      "properties": {
+        "sourceCommit": {
+          "$ref": "#/$defs/commit"
+        },
+        "schemaVersion": {
+          "$ref": "#/$defs/schemaVersion"
+        },
+        "digest": {
+          "$ref": "#/$defs/sha"
+        },
+        "decision": {
+          "enum": [
+            "approved",
+            "unapproved"
+          ]
+        },
+        "transactionPolicy": {
+          "enum": [
+            "reviewed-per-file",
+            "unreviewed"
+          ]
+        },
+        "reviewRef": {
+          "$ref": "#/$defs/id"
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        },
+        "issuedAt": {
+          "$ref": "#/$defs/instant"
+        },
+        "expiresAt": {
+          "$ref": "#/$defs/instant"
+        }
+      }
+    },
+    "inspection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "artifacts",
+        "resourcePaths"
+      ],
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/source"
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/path"
+          },
+          "minItems": 0,
+          "maxItems": 20,
+          "uniqueItems": true
+        },
+        "resourcePaths": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/path"
+          },
+          "minItems": 1,
+          "maxItems": 20,
+          "uniqueItems": true
+        }
+      }
+    },
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workspaceRoot",
+        "source",
+        "sourceObservation",
+        "capturedAt",
+        "migrationEntries",
+        "migrationDigest",
+        "artifacts",
+        "pathChecks",
+        "environment",
+        "cache",
+        "legacyProfileConflict"
+      ],
+      "properties": {
+        "workspaceRoot": {
+          "$ref": "#/$defs/root"
+        },
+        "source": {
+          "$ref": "#/$defs/source"
+        },
+        "sourceObservation": {
+          "const": "caller-declared"
+        },
+        "capturedAt": {
+          "$ref": "#/$defs/instant"
+        },
+        "migrationEntries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/observedFile"
+          },
+          "minItems": 1,
+          "maxItems": 500,
+          "uniqueItems": true
+        },
+        "migrationDigest": {
+          "$ref": "#/$defs/sha"
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/observedFile"
+          },
+          "minItems": 0,
+          "maxItems": 20,
+          "uniqueItems": true
+        },
+        "pathChecks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "canonicalRelativePath",
+              "symlink"
+            ],
+            "properties": {
+              "path": {
+                "$ref": "#/$defs/path"
+              },
+              "canonicalRelativePath": {
+                "$ref": "#/$defs/path"
+              },
+              "symlink": {
+                "const": false
+              }
+            }
+          },
+          "minItems": 1,
+          "maxItems": 40,
+          "uniqueItems": true
+        },
+        "environment": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "inspection",
+            "inheritedSensitiveNames",
+            "privateFilesPresent"
+          ],
+          "properties": {
+            "inspection": {
+              "const": "names-only"
+            },
+            "inheritedSensitiveNames": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "minItems": 0,
+              "maxItems": 500,
+              "uniqueItems": true
+            },
+            "privateFilesPresent": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "backend/.env",
+                  "backend/.env.testing"
+                ]
+              },
+              "minItems": 0,
+              "maxItems": 2,
+              "uniqueItems": true
+            }
+          }
+        },
+        "cache": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "provenance"
+          ],
+          "properties": {
+            "state": {
+              "enum": [
+                "absent",
+                "present",
+                "unknown"
+              ]
+            },
+            "provenance": {
+              "const": "read-only-filesystem"
+            }
+          }
+        },
+        "legacyProfileConflict": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}
