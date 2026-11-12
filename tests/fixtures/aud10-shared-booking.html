@@ -1,0 +1,59 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synthetic selected follow-up shared-form acceptance</title></head><body><main id="root"></main><script type="module">
+import React,{useRef,useState} from 'react'
+import {createRoot} from 'react-dom/client'
+import {flushSync} from 'react-dom'
+import {AppointmentForm} from '/src/pages/Scheduling.jsx'
+import {createAppointmentFlow} from '/src/appointment-flow.js'
+import {loadAppointments,mapAppointment,SELECTED_FOLLOWUP_BACKEND_COMMIT} from '/src/appointments-api.js'
+import {apiBase} from '/src/api-client.js'
+import {setClockSource} from '/src/clock.js'
+import '/src/styles.css'
+import '/src/foundation.css'
+import '/src/polish.css'
+setClockSource(()=>new Date('2026-11-12T10:00:00+08:00'))
+const P='01ARZ3NDEKTSV4RRFFQ69G5FAB', B='01ARZ3NDEKTSV4RRFFQ69G5FAV', A='01ARZ3NDEKTSV4RRFFQ69G5FAW', AP='01ARZ3NDEKTSV4RRFFQ69G5FAA'
+const selection={taskId:B,expectedRevision:7,patientPublicId:P,branchId:'b1'}
+const fixture=window.aud10={auth:1,requests:[],saved:[],feedback:[],events:[],refreshes:0,hold:true,mode:'valid',rows:[],refreshFail:false,refreshThrows:false,ids:{P,A,B,AP},csrf:0}
+window.fetch=async(url,options={})=>{
+  const path=new URL(url,location.href).pathname
+  if(path==='/sanctum/csrf-cookie'){fixture.csrf++;document.cookie='XSRF-TOKEN=synthetic-csrf; path=/';return new Response(null,{status:204})}
+  if(path==='/api/appointments/availability')return Response.json({data:{date:'2026-11-20',service:{duration_minutes:30},slots:[{start_time:'10:00',end_time:'10:30'},{start_time:'11:00',end_time:'11:30'}]}})
+  if(path==='/api/appointments'&&options.method==='POST'){
+    const entry={body:JSON.parse(options.body),key:new Headers(options.headers).get('Idempotency-Key'),credentials:options.credentials,csrf:new Headers(options.headers).get('X-XSRF-TOKEN')}
+    const pending=new Promise(resolve=>{entry.release=resolve});fixture.requests.push(entry)
+    if(fixture.hold)await pending
+    if(fixture.mode==='network')throw Error('Synthetic response unavailable')
+    if(fixture.mode==='refusal')return Response.json({message:'Synthetic scheduling refusal',code:fixture.refusalCode||'schedule_invalid',errors:{schedule:['Synthetic scheduling refusal']}},{status:fixture.refusalStatus||422})
+    const row={id:AP,code:'SYNTHETIC-APT',revision:1,status:'Confirmed',source:'front_desk',date:entry.body.date,start_time:entry.body.start_time,end_time:'10:30',duration_minutes:30,patient:{id:entry.body.patient_id,name:'Synthetic selected patient',code:'SYNTHETIC-P'},branch:{id:entry.body.branch_ref,name:'Synthetic branch'},service:{id:entry.body.service_ref,name:'Synthetic service'},dentist:{id:entry.body.dentist_ref||'d1',name:'Synthetic dentist'}}
+    const proof={task_id:entry.body.followup_task_id,appointment_id:AP,status:'Booked',revision:entry.body.followup_expected_revision+1}
+    if(fixture.mode==='wrong-task')proof.task_id=A
+    if(fixture.mode==='wrong-appointment')proof.appointment_id=A
+    if(fixture.mode==='wrong-status')proof.status='Closed'
+    if(fixture.mode==='wrong-revision')proof.revision='8'
+    if(fixture.mode==='wrong-patient')row.patient.id=A
+    if(fixture.mode==='wrong-branch')row.branch.id='b2'
+    fixture.rows=[row]
+    return Response.json({data:row,...(fixture.mode==='missing-proof'?{}:{meta:{followup_link:proof}})},{status:201})
+  }
+  if(path==='/api/appointments')return fixture.refreshFail?Response.json({message:'Synthetic list unavailable'},{status:503}):Response.json({data:fixture.rows,meta:{current_page:1,last_page:1}})
+  throw Error('Unexpected synthetic request')
+}
+function Fixture(){
+  const [config,setConfig]=useState({selected:true,selection,gate:true,mounted:true,prefill:{patientPublicId:P,patientName:'Synthetic selected patient',branchId:'b1',serviceId:'svc1',date:'2026-11-20'}})
+  const [session,setSession]=useState({serverUserId:'synthetic-staff',userId:'staff',role:'staff',active:true,branchId:'b1',branchScopes:['b1']})
+  const [version,setVersion]=useState(0),latest=useRef({})
+  fixture.configure=patch=>flushSync(()=>setConfig(c=>({...c,...patch})))
+  fixture.setSession=patch=>flushSync(()=>setSession(s=>({...s,...patch})))
+  fixture.rerender=()=>flushSync(()=>setVersion(v=>v+1))
+  const state={appointments:fixture.rows.map(row=>mapAppointment(row)),persons:[{id:'person'}],users:[{id:'staff',personId:'person',role:session.role==='owner'?'Owner / Admin':'Staff',status:'Active',branchId:'b1',permissions:session.role==='owner'?['all']:['appointments']}],staff:[{userId:'staff',personId:'person',branchId:'b1'}],patients:[{id:P,publicId:P,serverProjection:true,name:'Synthetic selected patient'}],branches:[{id:'b1',name:'Synthetic branch',status:'Open'},{id:'b2',name:'Synthetic second branch',status:'Open'}],services:[{id:'svc1',name:'Synthetic service',duration:30,status:'Active'}],branchServices:[{branchId:'b1',serviceId:'svc1'}],dentists:[{id:'d1',name:'Synthetic dentist',branchIds:['b1'],available:true}],dentistServiceAssignments:[{dentistId:'d1',serviceId:'svc1'}],followups:[{id:A,patientId:P,due_on:'2026-11-13'},{id:B,patientId:P,due_on:'2026-11-20'}]}
+  latest.current={state,session}
+  const flow=createAppointmentFlow({getState:()=>latest.current.state,getSession:()=>latest.current.session,getActions:()=>({recordAppointmentEvent:(...args)=>fixture.events.push(args)}),refresh:async()=>{
+    fixture.refreshes++
+    if(fixture.refreshThrows)throw Error('Synthetic projection failure')
+    const result=await loadAppointments('2026-11-12');setVersion(v=>v+1);return result
+  }})
+  const store={state,session,getAuthGeneration:()=>fixture.auth,appointmentFlow:flow,directoryPatients:[{id:P,name:'Synthetic selected patient',patientCode:'SYNTHETIC-P'}],toast:(...args)=>fixture.feedback.push(args)}
+  return React.createElement(React.Fragment,null,React.createElement('p',null,'Synthetic shared-form test. No live clinic service.'),config.mounted?React.createElement(AppointmentForm,{role:session.role,store,prefill:config.prefill,...(config.selected?{serverFollowupSelection:config.selection,verifiedFollowupBackend:config.gate?{commit:SELECTED_FOLLOWUP_BACKEND_COMMIT,apiBase:apiBase()}:undefined}:{}),onSaved:(record,proof)=>fixture.saved.push({record,proof})}):React.createElement('p',null,'Form unmounted'))
+}
+createRoot(document.getElementById('root')).render(React.createElement(Fixture))
+</script></body></html>

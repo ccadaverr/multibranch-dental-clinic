@@ -1,8 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useId, useRef, useState } from 'react'
 import { Button, Card, ConfirmDialog, Field, FilterBar, Modal, Notice, PageHeader, RefreshButton, Status, Table } from '../components.jsx'
 import { addMinutes, dateLabel, dentistName, displayTime, patientName } from '../logic.js'
 import { clinicDate } from '../clock.js'
-import { commandKey } from '../appointments-api.js'
+import { commandKey, selectedFollowupProblem } from '../appointments-api.js'
 import { publicPatientIdFor } from '../appointment-projection.js'
 import { useDayAvailability } from '../booking-availability.js'
 import { dentistsFor, servicesAt } from '../scheduling.js'
@@ -31,22 +31,27 @@ export function appointmentRecordPatient(appointment,state,session) {
 }
 
 // `prefill` (M20 server follow-up task or calendar click): prefilled parameters; patient/branch locked only when patient is specified.
-export function AppointmentForm({ role, store, appointment=null, followup=null, prefill=null, onSaved, submitLabel='Confirm appointment' }) {
-  const context = JSON.stringify([schedulingActorKey(store), appointment ? ['appointment', appointment.id, appointment.patientPublicId, appointment.branchId, appointment.serviceId, appointment.dentistId] : followup ? ['followup', followup.id, followup.patientId, followup.branchId, followup.dentistId] : ['booking', prefill?.patientPublicId, prefill?.branchId, prefill?.date]])
-  return <AppointmentEditor key={context} {...{role,store,appointment,followup,prefill,onSaved,submitLabel}}/>
+export function AppointmentForm({ role, store, appointment=null, followup=null, prefill=null, serverFollowupSelection, verifiedFollowupBackend, onSaved, submitLabel='Confirm appointment' }) {
+  const selectedMode = serverFollowupSelection !== undefined
+  const context = JSON.stringify([schedulingActorKey(store), selectedMode ? ['server-followup', serverFollowupSelection?.taskId, serverFollowupSelection?.expectedRevision, serverFollowupSelection?.patientPublicId, serverFollowupSelection?.branchId, verifiedFollowupBackend?.commit, verifiedFollowupBackend?.apiBase] : appointment ? ['appointment', appointment.id, appointment.patientPublicId, appointment.branchId, appointment.serviceId, appointment.dentistId] : followup ? ['followup', followup.id, followup.patientId, followup.branchId, followup.dentistId] : ['booking', prefill?.patientPublicId, prefill?.branchId, prefill?.date]])
+  return <AppointmentEditor key={context} {...{role,store,appointment,followup,prefill,serverFollowupSelection,verifiedFollowupBackend,selectedMode,onSaved,submitLabel}}/>
 }
 
-function AppointmentEditor({ role, store, appointment: currentAppointment, followup, prefill, onSaved, submitLabel }) {
+function AppointmentEditor({ role, store, appointment: currentAppointment, followup, prefill, serverFollowupSelection, verifiedFollowupBackend, selectedMode, onSaved, submitLabel }) {
   // A refreshed row must not silently rebase an in-progress reschedule onto a newer revision.
   const [appointment]=useState(currentAppointment)
   const { state, toast }=store
   const session=store.session||sessionForRole(role,state)
   const key=useRef(commandKey())
+  const [selection]=useState(()=>Object.freeze({...serverFollowupSelection}))
+  const selectedAttempt=useRef(null), feedback=useRef(null), formElement=useRef(null), feedbackId=useId()
+  const [selectedPhase,setSelectedPhase]=useState('idle')
   const branches=bookableBranches(state,session)
   const followupPatient=followup?publicPatientIdFor(followup.patientId,{session,users:state.users,patients:state.patients}):null
-  const lockedPatient=!!(appointment||followup||prefill?.patientPublicId||prefill?.patientName)
-  const lockedBranch=!!(appointment||followup||(prefill?.patientPublicId&&prefill?.branchId))
+  const lockedPatient=!!(appointment||followup||prefill?.patientPublicId||prefill?.patientName)||selectedMode
+  const lockedBranch=!!(appointment||followup||(prefill?.patientPublicId&&prefill?.branchId))||selectedMode
   const [form,setFormState]=useState(()=>{
+    if(selectedMode)return {patientPublicId:selection.patientPublicId||'',branchId:selection.branchId||'',serviceId:prefill?.serviceId||'',dentistId:prefill?.dentistId||'',date:prefill?.date&&prefill.date>=clinicDate()?prefill.date:clinicDate(),start:'',notes:prefill?.notes||''}
     if(appointment)return {patientPublicId:appointment.patientPublicId,branchId:appointment.branchId,serviceId:appointment.serviceId,dentistId:appointment.dentistId,date:appointment.date>=clinicDate()?appointment.date:clinicDate(),start:'',notes:''}
     if(followup)return {patientPublicId:followupPatient,branchId:followup.branchId,serviceId:'',dentistId:followup.dentistId,date:followup.recommendedDate&&followup.recommendedDate>=clinicDate()?followup.recommendedDate:clinicDate(),start:'',notes:followup.reason||''}
     if(prefill)return {patientPublicId:prefill.patientPublicId,branchId:prefill.branchId||branches[0]?.id||'',serviceId:prefill.serviceId||'',dentistId:prefill.dentistId||'',date:prefill.date&&prefill.date>=clinicDate()?prefill.date:clinicDate(),start:'',notes:prefill.notes||''}
@@ -55,10 +60,12 @@ function AppointmentEditor({ role, store, appointment: currentAppointment, follo
   const [search,setSearch]=useState('')
   const [failure,setFailure]=useState(null)
   const owner=useRequestOwner(schedulingActorKey(store),store.getAuthGeneration), saving=owner.busy
+  const selectedLocked=selectedMode&&!!selectedAttempt.current
   const [authConfirmed,setAuthConfirmed]=useState(false)
   const draftGeneration=useRef(0), draftVersion=draftGeneration.current
-  const setForm=next=>{draftGeneration.current++;key.current=commandKey();setFailure(null);setFormState(next)}
+  const setForm=next=>{if(selectedMode&&selectedAttempt.current)return;draftGeneration.current++;key.current=commandKey();setFailure(null);setFormState(next)}
   const update=(name,value)=>{
+    if(selectedMode&&selectedAttempt.current)return
     if(['patientPublicId','branchId','serviceId'].includes(name))setAuthConfirmed(false)
     setForm(previous=>{
     const next={...previous,[name]:value}
@@ -70,22 +77,60 @@ function AppointmentEditor({ role, store, appointment: currentAppointment, follo
   }
   useEffect(()=>{if(!lockedPatient&&search.trim().length>=2){const t=setTimeout(()=>store.appointmentFlow?.searchPatients(search),250);return ()=>clearTimeout(t)}},[search,lockedPatient])
   useEffect(()=>{if(!lockedPatient){store.appointmentFlow?.searchPatients?.('')}},[lockedPatient])
+  useEffect(()=>{if(selectedMode&&['unknown','refused','verified'].includes(selectedPhase))feedback.current?.focus()},[selectedMode,selectedPhase])
 
   const services=servicesAt(state,form.branchId)
   const dentists=form.serviceId?dentistsFor(state,form.branchId,form.serviceId):[]
   const lockedDentist=!!followup
   const selectedService=services.find(s=>s.id===form.serviceId)
   const isRestricted=selectedService?.onlineBooking==='consultation_first'||selectedService?.onlineBooking==='hidden'
+  const selectionProblem=selectedMode?(role!=='staff'||session?.role!=='staff'||appointment||followup
+    ?'Selected follow-up booking is available only to authorized Staff creating a new appointment.'
+    :selectedFollowupProblem(form,selection,verifiedFollowupBackend)||
+      (prefill?.patientPublicId&&prefill.patientPublicId!==selection.patientPublicId||prefill?.branchId&&prefill.branchId!==selection.branchId?'The selected follow-up context changed. Close this form and reload the selected follow-up.':'')||
+      (typeof store.appointmentFlow?.beginSelectedFollowup!=='function'?'Selected follow-up booking is unavailable. Contact the clinic system administrator.':'')):''
   const day=useDayAvailability({branchId:form.branchId,serviceId:form.serviceId,date:form.date,patientPublicId:form.patientPublicId||null,
-    ignoreAppointmentId:appointment?.id||null,dentistId:form.dentistId||null,enabled:!!form.serviceId})
+    ignoreAppointmentId:appointment?.id||null,dentistId:form.dentistId||null,enabled:!!form.serviceId&&!selectionProblem})
   const directory=(store.directoryPatients||[]).filter(p=>!search.trim()||`${p.name} ${p.patientCode} ${p.phone}`.toLowerCase().includes(search.trim().toLowerCase()))
   const selectedPatient=(store.directoryPatients||[]).find(p=>p.id===form.patientPublicId)
+
+  if(selectionProblem)return <Notice tone="warning" title="Selected follow-up booking unavailable">{selectionProblem}</Notice>
 
   if(followup&&(followup.legacyAppointment||!followupPatient))return <Notice tone="warning" title="This follow-up can’t be booked here">
     {followup.legacyAppointment?'This follow-up belongs to historical demo records and is read-only.':'This Patient has no clinic account record on the server yet, so a server appointment can’t be created for them. Register the Patient first.'}
   </Notice>
 
+  const saveSelected=async()=>{
+    if(draftGeneration.current!==draftVersion||!canSchedule(store,form.branchId)||session?.role!=='staff')return
+    if(['verified','refused','obsolete'].includes(selectedAttempt.current?.outcome))return
+    const ticket=owner.begin()
+    if(!ticket)return
+    setFailure(null);setSelectedPhase('submitting')
+    try{
+      if(!selectedAttempt.current)selectedAttempt.current=store.appointmentFlow.beginSelectedFollowup(
+        {...form,notes:form.notes||null,consultationAcknowledged:isRestricted?authConfirmed:null},
+        {selection,backend:verifiedFollowupBackend,key:key.current,isCurrent:()=>owner.current(ticket)})
+      const result=await selectedAttempt.current.submit()
+      if(!owner.current(ticket)||!canSchedule(store,form.branchId))return
+      if(!['verified','refused','unknown'].includes(result.outcome))return
+      setSelectedPhase(result.outcome)
+      if(!result.ok){setFailure(result);return}
+      if(result.warning)toast(result.warning,'warning')
+      toast('Appointment and selected follow-up link verified.','success')
+      onSaved?.(result.record,{followupLink:result.followupLink})
+    }catch{
+      if(owner.current(ticket)&&selectedAttempt.current?.outcome!=='verified'){
+        setSelectedPhase('unknown');setFailure({kind:'unverified',message:'The booking outcome could not be verified. Keep this form open and ask the front desk to review it before starting another booking.'})
+      }
+    }finally{owner.finish(ticket)}
+  }
+  const reviewSelected=()=>{
+    if(saving||selectedAttempt.current?.outcome!=='refused')return
+    selectedAttempt.current=null;key.current=commandKey();setFailure(null);setSelectedPhase('idle');day.reload()
+    formElement.current?.querySelector('select:not(:disabled)')?.focus()
+  }
   const save=async()=>{
+    if(selectedMode)return saveSelected()
     if(draftGeneration.current!==draftVersion)return
     const problem=appointment?appointmentActionProblem(store,appointment):!canSchedule(store,form.branchId)?'Your appointment access changed. Refresh before continuing.':''
     if(problem){setFailure({kind:'forbidden',message:problem});return}
@@ -109,13 +154,14 @@ function AppointmentEditor({ role, store, appointment: currentAppointment, follo
       if(owner.current(ticket))setFailure({kind:'network',message:'Could not confirm the save. Your changes are retained. Check the appointment before retrying.'})
     } finally { owner.finish(ticket) }
   }
-  const canSave=canSchedule(store,form.branchId)&&!!form.patientPublicId&&branches.some(b=>b.id===form.branchId)&&!!form.serviceId&&!!form.date&&!!form.start&&(!isRestricted||authConfirmed)&&!saving
+  const canSave=canSchedule(store,form.branchId)&&!!form.patientPublicId&&branches.some(b=>b.id===form.branchId)&&!!form.serviceId&&!!form.date&&!!form.start&&(!isRestricted||authConfirmed)&&!saving&&!selectedLocked
+  const canReviewSelected=selectedPhase==='refused'&&((failure?.kind==='validation'&&!['selected_context_invalid','followup_patient_mismatch','followup_branch_mismatch','idempotency_key_reused'].includes(failure.code))||failure?.code==='schedule_conflict'||failure?.kind==='rate_limited')
 
   return <div className="booking-layout">
-    <form aria-label={appointment?'Reschedule appointment':'Create appointment'} aria-busy={saving} onSubmit={e=>{e.preventDefault();if(canSave)save()}}>
-      <fieldset className="form-grid" disabled={saving} style={{border:0,padding:0,margin:0,minWidth:0}}>
+    <form ref={formElement} aria-label={appointment?'Reschedule appointment':'Create appointment'} aria-busy={saving} aria-describedby={selectedMode?feedbackId:undefined} onSubmit={e=>{e.preventDefault();if(canSave)save()}}>
+      <fieldset className="form-grid" disabled={saving||selectedLocked} style={{border:0,padding:0,margin:0,minWidth:0}}>
       {lockedPatient
-        ?<Field label="Patient"><input value={appointment?`${appointment.patientName||patientName(appointment.patientId,state.patients)} • ${appointment.patientCode||''}`:prefill?prefill.patientName||prefill.patientPublicId:patientName(followup.patientId,state.patients)} disabled/></Field>
+        ?<Field label="Patient"><input value={selectedMode?prefill?.patientName||selectedPatient?.name||'Selected follow-up patient':appointment?`${appointment.patientName||patientName(appointment.patientId,state.patients)} • ${appointment.patientCode||''}`:prefill?prefill.patientName||prefill.patientPublicId:patientName(followup.patientId,state.patients)} disabled/></Field>
         :<>
           <Field label="Find patient" hint="Search the clinic Patient directory by name, code or phone."><input value={search} placeholder="Type at least 2 characters" onChange={e=>setSearch(e.target.value)}/></Field>
           <Field label="Patient" required><select value={form.patientPublicId} onChange={e=>update('patientPublicId',e.target.value)}>
@@ -138,7 +184,7 @@ function AppointmentEditor({ role, store, appointment: currentAppointment, follo
             <Button size="sm" variant="soft" type="button" onClick={()=>update('serviceId',selectedService.consultationServiceId)}>Switch to Dental Consultation</Button>
           </div>}
           <label className="check-control" style={{marginTop:'8px',display:'flex',alignItems:'center',gap:'8px'}}>
-            <input type="checkbox" checked={authConfirmed} onChange={e=>{draftGeneration.current++;key.current=commandKey();setAuthConfirmed(e.target.checked)}}/>
+            <input type="checkbox" checked={authConfirmed} onChange={e=>{if(selectedMode&&selectedAttempt.current)return;draftGeneration.current++;key.current=commandKey();setAuthConfirmed(e.target.checked)}}/>
             <span>Prior consultation / dentist clinical authorization confirmed by front desk</span>
           </label>
         </Notice>
@@ -162,11 +208,17 @@ function AppointmentEditor({ role, store, appointment: currentAppointment, follo
       <div className="form-actions span-2"><Button type="submit" disabled={!canSave}>{saving?'Saving…':submitLabel}</Button></div>
       </fieldset>
       {saving&&<p role="status">Saving appointment…</p>}
+      {selectedMode&&<div id={feedbackId} ref={feedback} tabIndex={-1} role={['unknown','refused'].includes(selectedPhase)?'alert':'status'}>
+        {selectedPhase==='idle'&&<p>This booking will link the selected follow-up after the clinic verifies it.</p>}
+        {selectedPhase==='unknown'&&<><p>{failure?.message}</p><Button disabled={saving} onClick={saveSelected}>Retry the same booking</Button><p>Keep this form open. Closing or reloading it loses the retry details; ask the front desk to review the outcome before booking again.</p></>}
+        {selectedPhase==='refused'&&<><p>{failure?.kind==='not_found'?'The selected follow-up is unavailable. Close this form and reload the selected follow-up.':failure?.kind==='forbidden'||failure?.kind==='unauthenticated'?'Your access could not be confirmed. Sign in again and ask the front desk to review the selected follow-up.':failure?.code==='followup_conflict'?'The selected follow-up changed or is no longer available. Close this form and reload it before trying again.':failure?.message}</p>{canReviewSelected?<Button onClick={reviewSelected}>Review booking details</Button>:<p>Close this form and review the selected follow-up before starting another booking.</p>}</>}
+        {selectedPhase==='verified'&&<p>Appointment and selected follow-up link verified.</p>}
+      </div>}
     </form>
     <div className="validation-card">
       <div className="validation-title"><b>Scheduling checks</b><span>Confirmed by the clinic server</span></div>
-      {!failure&&<Notice tone="info">Only start times the server can accept are offered. On confirm, the server re-checks branch hours, branch service, Dentist eligibility and shift, and Dentist/Patient conflicts{selectedPatient?` for ${selectedPatient.name}`:''}.</Notice>}
-      {failure&&<>
+      {(!failure||selectedMode)&&<Notice tone="info">Only start times the server can accept are offered. On confirm, the server re-checks branch hours, branch service, Dentist eligibility and shift, and Dentist/Patient conflicts{selectedPatient?` for ${selectedPatient.name}`:''}.</Notice>}
+      {failure&&!selectedMode&&<>
         <Notice tone={failure.kind==='conflict'?'warning':'danger'} title={failure.kind==='conflict'?'Availability changed':'This slot can’t be booked'}>{failure.message}</Notice>
         {!!failure.alternatives?.length&&<div className="alternatives"><small>Other start times on this date</small><div className="chip-row">{failure.alternatives.map(t=><button type="button" className="chip" key={t} onClick={()=>setForm(previous=>({...previous,start:t}))}>{displayTime(t)}</button>)}</div></div>}
       </>}

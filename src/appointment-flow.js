@@ -3,6 +3,7 @@ import * as visitsApi from './visits-api.js'
 import * as queueApi from './queue-api.js'
 import * as treatmentsApi from './treatments-api.js'
 import { encounterIssue } from './safeguards.js'
+import { canSchedule, schedulingActorKey } from './appointment-ui.js'
 
 // Server-first M6/M8/M9/M5 command flows. Every appointment, Visit, queue and Treatment change is a Laravel command
 // followed by a refresh of the in-memory server projection; the browser-local adapter step for unfinished modules
@@ -30,6 +31,71 @@ export function createAppointmentFlow({ getState, getSession, getActions, refres
   return {
     refresh,
     searchPatients,
+
+    // One mounted selected workflow owns this command; no browser persistence or local clinical mutation.
+    beginSelectedFollowup(form, { selection, backend, isCurrent, key = appointmentsApi.commandKey(), timeoutMs = 30000 } = {}) {
+      const intent = Object.freeze({ ...form }), selected = Object.freeze({ ...selection }), target = Object.freeze({ ...backend })
+      const actor = () => ({ session: getSession(), state: getState() })
+      const identity = schedulingActorKey(actor())
+      const owns = () => typeof isCurrent === 'function' && isCurrent() && getSession()?.role === 'staff' &&
+        identity === schedulingActorKey(actor()) && canSchedule(actor(), selected.branchId)
+      let phase = 'idle', pending = false, uncertain = false
+      const unknown = () => {
+        uncertain = true; phase = 'unknown'
+        return { ok: false, outcome: phase, kind: 'unverified', message: 'The booking outcome could not be verified. Keep this form open and retry the same booking, or ask the front desk to review it before starting another booking.' }
+      }
+      // A timeout does not cancel the server operation. Late completion is deliberately never adopted; retry
+      // can only send this same immutable command/key, including when the original request is still running.
+      const bounded = async work => {
+        let timer
+        try {
+          return await Promise.race([Promise.resolve().then(work), new Promise((_, reject) => {
+            timer = setTimeout(() => reject(new Error('Booking response unavailable')), timeoutMs)
+          })])
+        } finally { clearTimeout(timer) }
+      }
+      return {
+        get outcome() { return phase },
+        async submit() {
+          if (pending) return { ok: false, outcome: 'submitting' }
+          if (phase === 'verified' || phase === 'refused' || phase === 'obsolete') return { ok: false, outcome: 'settled' }
+          if (!owns()) { phase = 'obsolete'; return { ok: false, outcome: phase } }
+          const problem = appointmentsApi.selectedFollowupProblem(intent, selected, target, key)
+          if (problem) {
+            // A revoked target attestation after uncertainty does not establish absence of the original booking.
+            if (uncertain) return unknown()
+            phase = 'refused'
+            return { ok: false, outcome: phase, kind: 'validation', code: 'selected_context_invalid', message: problem }
+          }
+          pending = true; phase = 'submitting'
+          try {
+            let result
+            try { result = await bounded(() => owns()
+              ? api.createSelectedFollowupAppointment(intent, { selection: selected, backend: target, key })
+              : { ok: false, outcome: 'obsolete' }) }
+            catch { result = { ok: false, kind: 'network' } }
+            if (!owns()) { phase = 'obsolete'; return { ok: false, outcome: phase } }
+            if (!result?.ok) {
+              const definite = result?.ok === false && ['validation', 'conflict', 'not_found', 'forbidden', 'unauthenticated', 'rate_limited'].includes(result.kind)
+              // A refusal to replay after a lost response (e.g. revoked scope) cannot undo the original commit.
+              if (uncertain || !definite) return unknown()
+              phase = 'refused'
+              return { ...result, outcome: phase }
+            }
+            const proof = appointmentsApi.selectedFollowupReceipt(result, intent, selected)
+            if (!proof) return unknown()
+            phase = 'verified'
+            let warning = ''
+            try {
+              const refreshed = await bounded(refresh)
+              if (refreshed?.ok === false) warning = 'The booking and selected follow-up link are verified. The appointment list could not be refreshed; refresh the list before taking another action.'
+            } catch { warning = 'The booking and selected follow-up link are verified. The appointment list could not be refreshed; refresh the list before taking another action.' }
+            if (!owns()) { phase = 'obsolete'; return { ok: false, outcome: phase } }
+            return { ok: true, outcome: phase, row: result.row, record: appointmentsApi.mapAppointment(result.row), followupLink: proof, warning }
+          } finally { pending = false }
+        },
+      }
+    },
 
     async create(form, { key, followupId = null } = {}) {
       if (followupId) {
