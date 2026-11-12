@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "identity": {"id": "dentalops-qa-runtime-contracts", "revision": 1},
+  "classification": "development-untrusted",
+  "source": {
+    "repository": "https://github.com/ccadaverr/multibranch-dental-clinic.git",
+    "reviewedCommit": "15d626c03c97baf7198a7b7ca6dea2bec8f60836",
+    "offlineGateCommit": "431ce91805d546913dcf18cdb9e78b4af0010a8d",
+    "dependencyLockDigest": null,
+    "buildDigest": null,
+    "controllerDigest": null
+  },
+  "migrations": {
+    "id": "baseline-migrations-held",
+    "sourceCommit": "15d626c03c97baf7198a7b7ca6dea2bec8f60836",
+    "count": 86,
+    "orderedDigest": "f565b8e643f41787575f8d54c0be5d0c33b81aeaa35f4844b4527c5ba13ee1ff",
+    "decision": "held",
+    "holds": [
+      {"id": "queue-preservation", "path": "backend/database/migrations/2026_11_16_000500_update_queue_statuses_and_remove_urgent_priority.php", "sha256": "16b5eaddf6a725791fb74ef9a0d04b25187ba0e006fa885b7cd452df6feaed40"},
+      {"id": "feedback-preservation", "path": "backend/database/migrations/2026_11_10_000100_remove_patient_feedback_table.php", "sha256": "3c8af7cb8126866af3d67107bdd792960b5389922c762a09f6c08781db5b6df9"},
+      {"id": "tooth-chart-provenance", "path": "backend/database/migrations/2026_11_15_000400_backfill_tooth_chart_branch.php", "sha256": "36f0fa951bc7c612f87ba47e40307729e96e8d222d6fcc019dd7acb2dd249181"},
+      {"id": "nontransactional-indexes", "path": "backend/database/migrations/2026_11_15_000500_add_critical_foreign_key_and_analytics_indexes.php", "sha256": "921a1dcfdfd321569ebcff08dcd72a069e32fb50bddc9c360af3ca795809711f"}
+    ]
+  },
+  "vocabulary": {
+    "phases": ["assessment", "allocation", "verification", "schema", "execution", "containment", "teardown"],
+    "states": ["requested", "assessed", "allocated", "identity-verified", "schema-initialized", "execution-finished", "fenced", "torn-down"],
+    "operations": ["assess-request", "allocate-instance", "verify-instance", "initialize-schema", "transactional-feature-tests", "committed-contention-tests", "synthetic-simulation", "browser-qa", "fence-run", "teardown-run"]
+  },
+  "constraints": {
+    "exclusiveResources": true,
+    "freshVolume": true,
+    "privateNetworkOnly": true,
+    "noHostMounts": true,
+    "separateRoles": true,
+    "authenticatedControllerRequired": true,
+    "trustedClockRequired": true,
+    "durableReplayLedgerRequired": true,
+    "immutableSourceRequired": true,
+    "noOverrides": true
+  },
+  "limits": {"requestSeconds": 3600, "approvalSeconds": 1800, "receiptSeconds": 900, "observationSeconds": 300},
+  "deniedOperations": ["raw-shell", "arbitrary-process", "schema-reset", "unreviewed-migration", "provider-request", "ledger-rewrite", "global-cleanup", "force-override"],
+  "requiredEvidence": ["source-build-provenance", "authenticated-policy", "controller-resource-record", "scoped-approval", "runtime-identity", "effective-configuration", "network-isolation", "role-privileges", "durable-replay-ledger", "teardown-ownership"],
+  "installation": {
+    "state": "unconfigured",
+    "hostIdentity": null,
+    "controllerIdentity": null,
+    "provisionerAuthority": null,
+    "approvalAuthority": null,
+    "postgresImageDigest": null,
+    "profileDigest": null
+  },
+  "executionAllowed": false,
+  "provisioningAllowed": false
+}
