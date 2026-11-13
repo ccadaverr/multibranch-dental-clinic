@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Button, Card, ConfirmDialog, Field, FilterBar, Modal, Notice, PageHeader, RefreshButton, Status, Table } from '../components.jsx'
 import { addMinutes, dateLabel, dentistName, displayTime, patientName } from '../logic.js'
+import { canAccessPage } from '../safeguards.js'
+import { checkInNavigationFor } from '../checkin-navigation.js'
 import { clinicDate } from '../clock.js'
 import { commandKey } from '../appointments-api.js'
 import { publicPatientIdFor } from '../appointment-projection.js'
@@ -23,7 +25,7 @@ export function bookableBranches(state,session){
 
 // Resolve the exact projected identity; names/codes never identify a Patient.
 export function appointmentRecordPatient(appointment,state,session) {
-  if(session?.role!=='staff'||!inScope(appointment,session,state))return null
+  if(session?.role!=='staff'||!canAccessPage(state,session,'patients')||!inScope(appointment,session,state))return null
   const patient=state.patients.find(p=>p.id===appointment.patientId)
   if(!patient?.serverProjection||!patientInScope(patient,state,session))return null
   const publicId=publicPatientIdFor(patient.id,{session,users:state.users,patients:state.patients})
@@ -275,7 +277,7 @@ function AppointmentManagement({ role, store, setPage, context }) {
           <Status>{a.status}</Status>
           <small className="block-muted">{a.bookingPaymentStatus==='paid'?`Deposit paid${a.bookingPaymentMethod?` (${a.bookingPaymentMethod})`:''}`:a.bookingPaymentStatus==='held'?'Held':a.bookingPaymentStatus==='refunded'?'Refunded':a.bookingPaymentStatus==='forfeited'?'Forfeited':'Unpaid'}</small>
         </div>},
-        {key:'actions',label:'Actions',render:a=><div className="row-actions">{role==='staff'&&appointmentRecordPatient(a,state,session)&&<Button size="sm" variant="soft" onClick={()=>{const patient=appointmentRecordPatient(a,state,session);if(patient)setPage('patients',{patientId:patient.id})}}>Open Patient Record</Button>}{canSchedule(store,a.branchId)&&['Confirmed','Pending'].includes(a.status)&&<><Button size="sm" variant="soft" onClick={()=>openAction(setReschedule,a)}>Reschedule</Button><Button size="sm" variant="ghost" disabled={owner.busy} onClick={()=>openAction(setCancelling,a)}>Cancel</Button>{a.date===clinicDate()&&<Button size="sm" variant="ghost" disabled={owner.busy} onClick={()=>openAction(setMissed,a)}>No-show</Button>}</>}</div>}
+        {key:'actions',label:'Actions',render:a=><div className="row-actions">{checkInNavigationFor(store,a)&&<Button size="sm" variant="soft" onClick={()=>{const checkIn=checkInNavigationFor(store,a);if(checkIn)setPage('checkin',{mode:'scheduled',checkIn})}}>Check in</Button>}{role==='staff'&&appointmentRecordPatient(a,state,session)&&<Button size="sm" variant="soft" onClick={()=>{const patient=appointmentRecordPatient(a,state,session);if(patient)setPage('patients',{patientId:patient.id})}}>Open Patient Record</Button>}{canSchedule(store,a.branchId)&&['Confirmed','Pending'].includes(a.status)&&<><Button size="sm" variant="soft" onClick={()=>openAction(setReschedule,a)}>Reschedule</Button><Button size="sm" variant="ghost" disabled={owner.busy} onClick={()=>openAction(setCancelling,a)}>Cancel</Button>{a.date===clinicDate()&&<Button size="sm" variant="ghost" disabled={owner.busy} onClick={()=>openAction(setMissed,a)}>No-show</Button>}</>}</div>}
       ]}/>
     </Card>
     <Modal open={newOpen} title="Create appointment" subtitle="The clinic server validates the slot and assigns an eligible Dentist unless you choose one." wide onClose={()=>setNewOpen(false)}><AppointmentForm role={role} store={store} onSaved={()=>setNewOpen(false)}/></Modal>

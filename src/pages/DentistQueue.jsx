@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Button, Notice, PageHeader, Status } from '../components.jsx'
+import { Button, RefreshButton, SearchInput, Notice, PageHeader, Status } from '../components.jsx'
 import { inScope, isTodayQueue } from '../contracts.js'
 import { commandKey } from '../appointments-api.js'
 import { commandGate, encounterContextFor, clinicalSessionKey } from '../encounter.js'
@@ -49,11 +49,11 @@ function Worklist({store,setPage}) {
   }
   const open=record=>setPage('treatment',encounterContextFor(record))
   return <div className="enc-workspace enc-worklist">
-    <PageHeader title="My Queue" text="Your assigned encounters, in the clinic's current queue order." aside={<Button variant="soft" onClick={()=>flow?.refresh()}>Refresh queue</Button>}/>
+    <PageHeader title="My Queue" text="Your assigned encounters, in the clinic's current queue order." aside={<RefreshButton title="Refresh queue" ariaLabel="Refresh queue" onClick={()=>flow?.refresh()}/>}/>
     <QueueCountsNotice vis={vis} store={store}/>
     {feedback&&<Notice tone={feedback.ok?'success':'warning'} title={feedback.ok?'Queue updated':'Command not confirmed'}>{feedback.message}{gate.current.retry&&<Button disabled={!!busy} onClick={()=>call(gate.current.retry.entry)}>Retry same call</Button>}</Notice>}
     {activeTreatments.length>0&&<section className="enc-current" aria-label="Current treatment"><h2>In treatment</h2>{activeTreatments.map(t=><article className="enc-current-row" key={t.id}><div><h3>{t.patientName||state.patients.find(p=>p.id===t.patientId)?.name}</h3><p>{state.branches.find(b=>b.id===t.branchId)?.name} · {t.date} · <Status>{t.status}</Status></p></div><Button onClick={()=>open(t)}>Continue treatment</Button></article>)}</section>}
-    <div className="enc-filters"><label>Find patient or queue number<input type="search" value={search} onChange={e=>setSearch(e.target.value)}/></label><label>Worklist<select value={filter} onChange={e=>setFilter(e.target.value)}><option value="active">Active queue</option><option value="history">Completed today</option></select></label></div>
+    <div className="enc-filters"><label>Find patient or queue number<SearchInput value={search} onChange={setSearch} ariaLabel="Find patient or queue number" placeholder="Search patient or queue number"/></label><label>Worklist<select value={filter} onChange={e=>setFilter(e.target.value)}><option value="active">Active queue</option><option value="history">Completed today</option></select></label></div>
     <section aria-label={filter==='history'?'Completed encounters':'Assigned worklist'}><h2>{filter==='history'?'Completed today':'Ready and waiting'}</h2>
     {!rows.length&&fresh&&<p role="status">{search?'No patients match this search.':'No encounters in this view.'}</p>}
     {rows.map(q=>{

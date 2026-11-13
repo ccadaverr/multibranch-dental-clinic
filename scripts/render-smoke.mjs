@@ -9,7 +9,7 @@ import { renderToString } from 'react-dom/server'
 
 const require=createRequire(import.meta.url)
 const files=['assistant-panel.jsx','components.jsx','store.jsx','layout.jsx','clock.js','contracts.js','workflow.js','phase2.js','phase3-contracts.js','orchestration.js','pages/Dashboards.jsx','pages/Scheduling.jsx','pages/StaffDayCalendar.jsx','pages/PatientFlow.jsx','pages/Clinical.jsx','pages/FinanceCommunication.jsx','pages/Admin.jsx','pages/Pricing.jsx','pages/AuditTrail.jsx','pages/ClinicBranding.jsx','pages/AssistantAnswers.jsx','pages/Automations.jsx','pages/PossibleNoShows.jsx','pages/FrontDeskToday.jsx','pages/ClosedDates.jsx','pages/Staffing.jsx','pages/Handovers.jsx','pages/ServerPrescriptions.jsx','pages/ServerFollowups.jsx','pages/DentalChart.jsx','pages/AcceptedHmos.jsx','pages/WordingApprovals.jsx','pages/ArchivesPage.jsx','audit-api.js','automation-api.js','analytics-api.js','hmo-api.js','pages/PatientLoyalty.jsx','pages/Feedback.jsx','pages/PatientRegister.jsx','pages/PatientBook.jsx','pages/PatientMe.jsx','pages/PatientVisits.jsx','pages/PatientHome.jsx','loyalty.js','registration.js','scheduling.js','booking-drafts.js','geo.js','patient-view.js','data.js']
-const result=await build({stdin:{contents:[...files.map(file=>`export * from './src/${file}';`),`export * from './tests/support/server-appointments.js';`].join('\n'),resolveDir:process.cwd()},bundle:true,write:false,loader:{'.css':'empty'},platform:'node',format:'esm',plugins:[{name:'shared-react',setup(b){b.onResolve({filter:/^react$/},()=>({path:pathToFileURL(require.resolve('react')).href,external:true}))}}]})
+const result=await build({stdin:{contents:[...files.map(file=>`export * from './src/${file}';`),`export * from './tests/support/server-appointments.js';`, `export {PatientPortal, PORTAL_PAGES, portalPageFromHash} from './src/patient/Portal.jsx';`].join('\n'),resolveDir:process.cwd()},bundle:true,write:false,loader:{'.css':'empty'},platform:'node',format:'esm',plugins:[{name:'shared-react',setup(b){b.onResolve({filter:/^react$/},()=>({path:pathToFileURL(require.resolve('react')).href,external:true}))}}]})
 const m=await import('data:text/javascript;base64,'+Buffer.from(result.outputFiles[0].text).toString('base64'))
 m.setClockSource(()=>new Date('2026-09-19T02:08:00Z'))
 // Phase 2A: branches/services/branchServices/dentists/staff are backend-authoritative and populated only
@@ -35,8 +35,8 @@ function Capture(){store=m.useClinic();return null}
 renderToString(React.createElement(m.ClinicProvider,{initialReferenceData},React.createElement(Capture)))
 const pages={dashboard:'DashboardPage',book:'BookingPage',appointments:'AppointmentsPage',schedule:'SchedulePage',calendar:'StaffDayCalendar',checkin:'CheckInPage',queue:'QueuePage',capacity:'CapacityPage',patients:'PatientsPage',treatment:'TreatmentPage',billing:'BillingPage',hmo:'HmoPage',inquiries:'InquiriesPage',messages:'MessagesPage',prescriptions:'PrescriptionsServerPage',followups:'FollowupsServerPage',chart:'DentalChartPage',branches:'BranchesPage',team:'TeamPage',analytics:'AnalyticsPage',users:'UsersPage',pricing:'ServicesPricingPage',automations:'AutomationsPage',closures:'ClosedDatesPage',schedules:'WorkSchedulesPage',leave:'LeavePage',handovers:'HandoversPage',hmos:'AcceptedHmosPage',wording:'WordingApprovalsPage',automation:'AutomationPage',audit:'AuditTrailPage',branding:'ClinicBrandingPage',assistant:'AssistantAnswersPage',engagement:'EngagementPage',loyalty:'PatientLoyaltyPage',feedback:'PatientFeedbackPage',me:'PatientMePage',archives:'ArchivesPage'}
 let count=0
-function render(page,role='staff',context=null){
-  const session={...m.sessionForRole(role,store.state),...(role==='dentist'?{serverUserId:'synthetic-smoke-dentist'}:{})}
+function render(page,role='staff',context=null,sessionPatch={}){
+  const session={...m.sessionForRole(role,store.state),...(role==='dentist'?{serverUserId:'synthetic-smoke-dentist'}:{}),...sessionPatch}
   const activeBranch=store.state.branches.find(b=>b.id===session.branchId)?.name||'All Branches'
   return renderToString(React.createElement(m.Shell,{role,page,setPage:()=>{},onLogout:()=>{},activeBranch,setActiveBranch:()=>{},store:{...store,session}},React.createElement(m[pages[page]],{role,activeBranch,store:{...store,session},context,setPage:()=>{}})))
 }
@@ -187,8 +187,14 @@ withHmo('patient',hmoRow())
 assert.ok(render('hmo','patient').includes('HMO Coverage'))
 assert.ok(!render('hmo','patient').includes('Record Document Metadata'),'no Patient document upload in this wave (M14)')
 withHmo('staff',hmoRow())
-assert.ok(render('hmo','staff',{hmoCaseId:hmoCase.id}).includes('Record Provider Response'))
-assert.ok(render('hmo','staff',{hmoCaseId:hmoCase.id}).includes('Internal contact history'),'Staff see their contact log')
+// HMO operations require the same server identity + explicit scopes as the production workspace.
+// The default smoke role is intentionally unauthenticated and must not expose mutation controls.
+assert.ok(!render('hmo','staff',{hmoCaseId:hmoCase.id}).includes('Record Provider Response'),'unauthenticated Staff cannot record a provider response')
+const hmoStaffSession={serverUserId:'synthetic-smoke-staff',branchScopes:['b1']}
+assert.ok(render('hmo','staff',{hmoCaseId:hmoCase.id},hmoStaffSession).includes('Record Provider Response'),'authorized in-scope Staff retain the manual response action')
+assert.ok(render('hmo','staff',{hmoCaseId:hmoCase.id},hmoStaffSession).includes('Internal contact history'),'Staff see their contact log')
+assert.ok(!render('hmo','staff',{hmoCaseId:hmoCase.id},{...hmoStaffSession,branchScopes:['b2']}).includes('Record Provider Response'),'foreign branch scope cannot record a response')
+assert.ok(!render('hmo','owner',{hmoCaseId:hmoCase.id},{serverUserId:'synthetic-smoke-owner'}).includes('Record Provider Response'),'Owner oversight cannot record provider responses')
 withHmo('patient',hmoRow())
 assert.ok(!render('hmo','patient',{hmoCaseId:hmoCase.id}).includes('Internal contact history'))
 assert.ok(!render('hmo','patient',{hmoCaseId:hmoCase.id}).includes('Record Provider Response'))
@@ -386,12 +392,34 @@ const mainOf=html=>html.match(/<main id="main-content"[\s\S]*?<\/main>/)?.[0]||'
 const staffControls=['Record Payment','Review Invoice','Issue Invoice','Confirm arrival','Call patient','Prepare HMO Case','Record Provider Response','Authorize Prescription','Emergency priority','Mark resolved']
 for(const page of patientPages){
   const html=render(page,'patient'),main=mainOf(html)
-  assert.equal((main.match(/<h1[\s>]/g)||[]).length,1,`${page}: exactly one h1`)
+  if(page==='followups'){
+    // The clinical server component is not a Patient route. Test its refusal,
+    // rather than demanding a page heading from an unauthorized component.
+    assert.ok(main.includes('Follow-up information is unavailable for this role.'),'clinical Follow-ups refuses Patient access')
+    assert.ok(!main.includes('Phase Two return visit')&&!/>Schedule follow-up</.test(main),'denied clinical route reveals no task or scheduling action')
+  }else assert.equal((main.match(/<h1[\s>]/g)||[]).length,1,`${page}: exactly one h1`)
   for(const control of staffControls)assert.ok(!html.includes(control),`${page}: no Staff control ${control}`)
   assert.ok(html.includes('id="clinic-assistant-fab"')&&html.includes('assistant-fab is-patient')&&html.includes('aria-controls="clinic-assistant-panel"')&&html.includes('aria-expanded="false"'),`${page}: the Patient assistant is the floating logo FAB`)
   assert.ok(!html.includes('PhaseOne'),`${page}: no other Patient's data`)
   for(const tag of main.match(/<button\b[^>]*>/g)||[])assert.ok(/\stype="/.test(tag),`${page}: button declares a type ${tag}`)
 }
+// App.jsx sends server-authenticated Patients to PatientPortal before its legacy
+// workspace switch. Exercise that real shell and supported route vocabulary too.
+// Effects/lazy page requests do not run in SSR: this verifies shell headings and
+// route isolation, not populated server pages or deployed backend availability.
+assert.ok(readFileSync('src/App.jsx','utf8').includes("if(role==='patient'&&serverMe?.patient?.id)return <>"),'authenticated Patients use the portal')
+assert.ok(!m.PORTAL_PAGES.includes('followups'),'Follow-ups is not a supported Patient portal page')
+assert.equal(m.portalPageFromHash('#p/followups'),null,'an unsupported clinical hash cannot select a portal page')
+const portalMe={id:'synthetic-smoke-patient',name:'Synthetic Portal Patient',first_name:'Synthetic',email:'synthetic@example.test',role:'patient',account_status:'Active',patient:{id:'synthetic-patient'}}
+for(const page of [...m.PORTAL_PAGES,'followups']){
+  const html=renderToString(React.createElement(m.PatientPortal,{me:portalMe,store:{...store,session:{role:'patient',serverUserId:portalMe.id,active:true}},initialPage:page,onLogout(){},onSignedOut(){}}))
+  assert.equal((html.match(/<h1 class="pp-top-title">[^<]+<\/h1>/g)||[]).length,1,`${page}: real portal has exactly one named shell page heading`)
+  assert.ok(html.includes('id="pp-main"')&&html.includes('href="#pp-main"'),'portal retains its focusable main landmark and skip link')
+  for(const control of staffControls)assert.ok(!html.includes(control),`${page}: portal exposes no Staff action ${control}`)
+  assert.ok(!html.includes('PhaseOne')&&!html.includes('Phase Two return visit'),'portal SSR exposes no legacy patient or follow-up data')
+  if(page==='followups')assert.ok(html.includes('<h1 class="pp-top-title">Home</h1>'),'unsupported initial page falls back to the real Home route')
+}
+console.log(`PASS: real Patient portal headings for ${m.PORTAL_PAGES.length} supported routes, unsupported Follow-ups fallback and clinical-role refusal`)
 const home=render('dashboard','patient')
 assert.ok(/Good (morning|afternoon|evening), Maria/.test(home))
 // Phase 4B.3C-1 Home: no giant "Needs your attention" or "Recent care" sections; compact quick actions instead,
@@ -465,7 +493,8 @@ withState({users:fullState.users.map(u=>u.id==='u12'?{...u,accountStatus:'Inacti
 // (Prescriptions are a clinic-server page since M19: the server refuses an inactive account, so it is not a browser-session page here.)
 for(const page of ['dashboard','book','appointments','queue','hmo','billing','messages']){ // (follow-ups too are a clinic-server page since M20)
   const html=render(page,'patient')
-  assert.ok(html.includes('couldn’t confirm your account'),`${page}: fails closed for an inactive account`)
+  assert.ok(html.includes(page==='hmo'?'HMO access is unavailable for this account.':'couldn’t confirm your account'),`${page}: fails closed for an inactive account`)
+  if(page==='hmo')assert.ok(!/Insurer One|M-000123|0123|Record Provider Response/.test(html),'inactive HMO account reveals neither case/member data nor commands')
   assert.ok(!html.includes('Phase Two')&&!html.includes(payment.receipt),`${page}: exposes nothing`)
 }
 store={...store,state:fullState}

@@ -1,5 +1,5 @@
 import React from 'react'
-import { Button, Card, Notice } from '../components.jsx'
+import { RefreshButton, Card, Notice } from '../components.jsx'
 import { workSchedules } from '../api-client.js'
 import { clinicDate } from '../clock.js'
 import { useVisibleRefresh } from '../use-visible-refresh.js'
@@ -37,7 +37,7 @@ export function StaffOnDuty({ session, activeBranch }) {
   const duty = snapshot.duty?.date === day ? snapshot.duty : null
   const rows = duty?.rows.filter(row => activeBranch === 'All Branches' || row.branch_name === activeBranch) || []
   return <Card title="Dentists on duty today" subtitle="Based on branch hours, work schedules, closures and approved leave." className="stf07-duty top-gap"
-    actions={active && <Button size="sm" variant="soft" onClick={load} disabled={snapshot.status === 'refreshing'}>{snapshot.status === 'refreshing' ? 'Refreshing…' : 'Refresh status'}</Button>}>
+    actions={active && <RefreshButton title="Refresh duty status" ariaLabel="Refresh duty status" onClick={load} loading={['loading', 'refreshing'].includes(snapshot.status)}/>}>
     {!active && <Notice tone="info">Sign in to the clinic server to verify today’s Dentist duty status.</Notice>}
     {active && (snapshot.status === 'loading' || !duty && snapshot.status === 'refreshing') && <p role="status">Checking today’s duty status…</p>}
     {active && ['forbidden', 'error'].includes(snapshot.status) && <Notice tone="warning">{snapshot.error}</Notice>}

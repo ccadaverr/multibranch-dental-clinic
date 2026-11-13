@@ -23,7 +23,10 @@ test('Staff on-duty panel does not fabricate status without a clinic session', (
 test('Staff on-duty panel waits for server evidence before showing a status', () => {
   const html = renderToString(React.createElement(StaffOnDuty, { session: { serverUserId: 'fictional-staff' }, activeBranch: 'All Branches' }))
   assert.match(html, /Checking today’s duty status/)
-  assert.match(html, /Refresh status/)
+  assert.match(html, /aria-label="Refresh duty status"/)
+  assert.match(html, /aria-busy="true"/)
+  assert.match(html, /disabled=""/)
+  assert.doesNotMatch(html, />Refresh status</)
   assert.doesNotMatch(html, /class="fd-badge/)
 })
 

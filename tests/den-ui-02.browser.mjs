@@ -6,6 +6,8 @@ const require=createRequire(import.meta.url)
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE)
 const browser=await chromium.launch({headless:true,channel:'chrome'})
 const page=await browser.newPage();page.setDefaultTimeout(7000)
+const url=process.env.DEN_UI_URL||'http://127.0.0.1:5187/tests/fixtures/den-ui-02.html'
+await page.route('**/*',r=>new URL(r.request().url()).origin===new URL(url).origin?r.continue():r.abort())
 const errors=[],calls=[],results=[];page.on('pageerror',e=>errors.push(e.message))
 let visits,queue,treatments,fail='',delay=0
 function reset(){visits=[visitRow(),visitRow('v2','p2')];queue=visits.map((v,i)=>queueRow('q'+(i+1),v));treatments=[];fail=''}
@@ -15,6 +17,7 @@ await page.route('**/api/**',async route=>{
  const req=route.request(),u=new URL(req.url()),p=u.pathname,method=req.method();calls.push({p,method,key:req.headers()['idempotency-key']})
  if(delay)await new Promise(r=>setTimeout(r,delay))
  if(method==='GET'){
+  if(p==='/api/notifications')return route.fulfill({json:{data:[],meta:{unread:0}}})
   if(p==='/api/queue')return fulfill(route,queue)
   if(p==='/api/visits')return fulfill(route,visits)
   if(p==='/api/treatments')return fulfill(route,treatments)
@@ -41,7 +44,7 @@ await page.route('**/api/**',async route=>{
 })
 await page.route('**/sanctum/csrf-cookie',r=>r.fulfill({status:204}))
 const button=name=>page.getByRole('button',{name,exact:true})
-const go=async()=>{await page.goto('http://127.0.0.1:5187/tests/fixtures/den-ui-02.html');await button('Call patient').first().waitFor()}
+const go=async()=>{await page.goto(url);await button('Call patient').first().waitFor()}
 const noOverflow=async()=>assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1))
 const evidence=process.env.QA_EVIDENCE_DIR||'docs/ui-review/den-ui-02'
 await mkdir(evidence,{recursive:true})
@@ -54,6 +57,7 @@ try{
   delay=100;await button('Start Treatment').dblclick();await page.getByText('Saved on the clinic server. Revision 1.',{exact:true}).waitFor();delay=0
   assert.equal(calls.filter(c=>c.p==='/api/visits/v1/treatment').length,results.length+1)
   await page.getByLabel('Clinical notes',{exact:true}).fill('Illustrative unsaved note')
+  await page.evaluate(()=>window.encFixture.setStatus('error'));const refresh=button('Refresh encounter');await refresh.waitFor();assert.equal(await refresh.textContent(),'');await refresh.click();await page.getByText('The encounter could not be verified as current.',{exact:false}).waitFor({state:'detached'});assert.equal(await page.getByLabel('Clinical notes',{exact:true}).inputValue(),'Illustrative unsaved note')
   for(const destination of ['queue','patients','chart','prescriptions','followups']){
    await page.evaluate(p=>window.encFixture.go(p),destination);await page.getByRole('dialog',{name:'Leave this encounter?'}).waitFor();await button('Stay with encounter').click();assert.equal(await page.getByLabel('Clinical notes',{exact:true}).inputValue(),'Illustrative unsaved note')
   }

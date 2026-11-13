@@ -36,12 +36,14 @@ const serverCase=(fields={})=>({id:'01jhmo0000000000000000000a',status:'Missing 
   dentist:{id:'d1',name:'Miguel Reyes'},appointment:null,submitted_at:null,follow_up_due_at:null,escalated_at:null,final_at:null,approved_amount:null,created_at:'2026-09-19T10:00:00+08:00',
   requirements:[{rule:'hmo-card',label:'HMO Card',state:'Missing'},{rule:'valid-id',label:'Valid ID',state:'Missing'},{rule:'treatment-request',label:'Dentist treatment request',state:'Missing'}],
   events:[{kind:'created',submission_cycle:0,from_status:null,to_status:'Missing Requirements',occurred_at:'2026-09-19T10:00:00+08:00',actor:{role:'staff',name:'Alyssa Cruz'}}],...fields})
+// Match the production HMO command boundary; a local role alone is not authenticated.
+const hmoStaffSession=f=>({...f.session,serverUserId:'synthetic-hmo-staff',branchScopes:['b1']})
 const withCases=(f,rows,patient=false)=>m.normalizeClinicState({...f.state,hmo:rows.map(r=>patient?m.mapPatientHmoCase(r,'p1'):m.mapHmoCase(r)),claimDecisions:[]})
 
 test('live HMO worklist uses server cases and detail reveals the case sections',()=>{
   const f=fixture()
   const state=withCases(f,[serverCase()])
-  const store={state,session:f.session,actions:f.actions,toast:()=>{}}
+  const store={state,session:hmoStaffSession(f),actions:f.actions,toast:()=>{}}
   const list=render(m.HmoPage,{role:'staff',store})
   assert.match(list,/HMO Management/)
   assert.match(list,/All Cases/);assert.match(list,/Needs Action/);assert.match(list,/Follow-Ups/)
@@ -69,12 +71,25 @@ test('a Returned case corrected to Ready keeps Returned as the last provider res
       {kind:'response',submission_cycle:1,to_status:'Returned',outcome:'Returned',method:'Email',note:'Provider returned the ID',rule_keys:['valid-id'],occurred_at:'2026-09-19T09:00:00+08:00',actor:{name:'Alyssa Cruz'}}]})
   const mapped=m.mapHmoCase(row)
   assert.equal(m.latestProviderResponse(mapped).outcome,'Returned')
-  const detail=render(m.HmoPage,{role:'staff',store:{state:withCases(f,[row]),session:f.session,actions:f.actions,toast:()=>{}},context:{hmoCaseId:row.id}})
+  const detail=render(m.HmoPage,{role:'staff',store:{state:withCases(f,[row]),session:hmoStaffSession(f),actions:f.actions,toast:()=>{}},context:{hmoCaseId:row.id}})
   assert.match(detail,/Current status: <b>Ready for Submission<\/b>/)
   assert.match(detail,/Provider response: (<!-- -->)?Returned/)
   assert.match(detail,/Record Resubmission/)
   assert.doesNotMatch(detail,/Withdraw \(self-pay\)/,'withdrawal is only possible before the first submission')
   assert.equal(m.latestProviderResponse({status:'Approved',providerOutcome:'Approved'}),null,'legacy status alone is not response history')
+})
+
+test('HMO fixture authentication does not authorize local Staff, foreign branches or Owner commands',()=>{
+  const f=fixture(),state=withCases(f,[serverCase()])
+  for(const session of [f.session,{...hmoStaffSession(f),branchScopes:['b2']}]){
+    const html=render(m.HmoPage,{role:'staff',store:{state,session,actions:f.actions,toast(){}},context:{hmoCaseId:'01jhmo0000000000000000000a'}})
+    assert.doesNotMatch(html,/Check (?:<!-- -->)?HMO Card|Withdraw \(self-pay\)|Record Provider Response/)
+    if(session.serverUserId)assert.doesNotMatch(html,/Maria Santos|M-000123|Insurer One/,'foreign-scope Staff sees no Branch b1 case or member data')
+    else assert.doesNotMatch(html,/Patient HMO membership/,'local role alone cannot manage memberships')
+  }
+  f.role('owner')
+  const html=render(m.HmoPage,{role:'owner',store:{state,session:{...f.session,serverUserId:'synthetic-owner'},actions:f.actions,toast(){}},context:{hmoCaseId:'01jhmo0000000000000000000a'}})
+  assert.doesNotMatch(html,/Patient HMO membership|Record Provider Response|Withdraw \(self-pay\)/)
 })
 
 test('HMO attention and timeline derive from case state and dated events',()=>{

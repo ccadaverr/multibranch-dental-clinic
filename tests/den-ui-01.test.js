@@ -87,6 +87,22 @@ test('DEN-UI-01: Schedule renders the calendar immediately with one selected and
   assert.equal((html.match(/data-date=/g) || []).length, monthCells(today).length)
 })
 
+test('OWN-08: past-day presentation follows clinic dates across year and leap-day boundaries without disabling history', () => {
+  for (const [date, today, past, future] of [
+    ['2027-01-01', '2027-01-01', '2026-12-31', '2027-01-02'],
+    ['2028-02-29', '2028-03-01', '2028-02-29', '2028-03-02'],
+    ['2026-11-12', '2026-11-12', '2026-11-11', '2026-11-13'],
+  ]) {
+    const html = render(ui.MonthCalendar, { date, today, read: { status: 'ready', complete: true, rows: [{ date: past }] }, onChange() {} })
+    const button = day => html.match(new RegExp(`<button[^>]*data-date="${day}"[^>]*>`))?.[0]
+    assert.match(button(past), /is-past/)
+    assert.doesNotMatch(button(past), /disabled/)
+    assert.doesNotMatch(button(future), /is-past/)
+    if (button(today)) { assert.match(button(today), /aria-current="date"/); assert.doesNotMatch(button(today), /is-past/) }
+    assert.equal((html.match(/aria-pressed="true"/g) || []).length, 1)
+  }
+})
+
 test('DEN-UI-01: unknown calendar counts are never advertised as zero', () => {
   for (const read of [{ status: 'loading' }, { status: 'error' }, { status: 'ready', complete: false, rows: [] }, { status: 'ready', complete: true, stale: true, rows: [] }]) {
     const html = render(ui.MonthCalendar, { date: today, today, read, onChange() {} })

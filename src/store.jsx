@@ -489,7 +489,7 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
     setDirectoryPatients(merged)
     applyServerRows(rowsRef.current,merged)
   }
-  const appointmentFlow=createAppointmentFlow({getState:()=>stateRef.current,getSession:()=>sessionRef.current,getActions:()=>actionsRef.current,refresh:refreshAppointments,searchPatients:searchPatientDirectory,addDirectoryPatient})
+  const appointmentFlow=createAppointmentFlow({getState:()=>stateRef.current,getSession:()=>sessionRef.current,getAuthGeneration,getActions:()=>actionsRef.current,refresh:refreshAppointments,searchPatients:searchPatientDirectory,addDirectoryPatient})
 
   useEffect(()=>{refreshGate.invalidate()},[session?.serverUserId,session?.role])
 

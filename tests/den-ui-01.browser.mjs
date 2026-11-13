@@ -72,6 +72,13 @@ try {
     if ([390, 768, 1440].includes(width)) await page.screenshot({ path: `${evidence}/schedule-${width}.png`, fullPage: true })
     // GEN-02: exercise the real Schedule state, shared icon, keyboard and reset results.
     const search = schedule.getByLabel('Find a patient or service')
+    // GEN-04: the shared search icon cannot overlap the input's text start.
+    assert.equal(await schedule.locator('.den-agenda-filters .search-input-icon').count(), 1)
+    const searchGeometry = await search.evaluate(e => {
+      const icon = e.parentElement.querySelector('svg').getBoundingClientRect(), input = e.getBoundingClientRect()
+      return { padding: parseFloat(getComputedStyle(e).paddingLeft), iconEnd: icon.right - input.left }
+    })
+    assert.ok(searchGeometry.padding > searchGeometry.iconEnd, 'GEN-04: typed text clears the icon')
     const statusFilter = schedule.getByLabel('Filter schedule by status')
     const clear = schedule.getByRole('button', { name: 'Clear filters', exact: true })
     const locationBefore = page.url(), dateBefore = await schedule.getByLabel('Schedule date', { exact: true }).inputValue()

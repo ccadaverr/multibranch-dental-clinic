@@ -86,6 +86,7 @@
 .den-month-weekdays { color: var(--den-muted); font-size: 12px; text-align: center; padding-bottom: 8px; font-weight: 650; }
 .den-month-grid button { position: relative; display: grid; place-items: center; border: 1px solid transparent; border-radius: 9px; background: transparent; color: var(--den-ink); height: 46px; padding: 4px 0 8px; font-size: 14px; font-variant-numeric: tabular-nums; }
 .den-month-grid button.is-outside { color: #65727b; }
+.den-month-grid button.is-past { color: #65727b; background: #f3f5f6; }
 .den-month-grid button.is-today { border-color: var(--den-accent); font-weight: 750; }
 .den-workspace .den-month-grid button[aria-pressed="true"] { background: var(--den-accent); color: white; font-weight: 750; }
 .den-month-grid button i, .den-calendar-hint > i { display: block; width: 4px; height: 4px; border-radius: 100%; background: currentColor; }

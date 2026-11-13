@@ -18,7 +18,7 @@ const accepted = (id = 'rx-A') => ({ok: true, data: {id, revision: 2, status: 'D
 
 function editor({respond = async () => accepted(), issue = async () => ({ok: true, data: {id: 'rx-A', number: 'RX-SYNTHETIC', status: 'Issued'}}), visits = async () => ({ok: true, data: []})} = {}) {
   const cells = [], pending = [], calls = [], feedback = [], done = [], protections = []
-  let cursor = 0, active = true, value
+  let cursor = 0, active = true, value, authGeneration = 1
   const useState = initial => {
     const i = cursor++
     cells[i] ||= {value: typeof initial === 'function' ? initial() : initial}
@@ -39,11 +39,11 @@ function editor({respond = async () => accepted(), issue = async () => ({ok: tru
     updatePrescription: (id, body) => {calls.push({command: 'update', id, body: wire(body)}); return respond(body)},
     issuePrescription: (id, revision) => {calls.push({command: 'issue', id, revision}); return issue(id, revision)},
   })
-  const props = {context: {visitId: 'visit-A'}, editing: null, isCurrent: () => active, leaveRef: {current: null}, toast: (...args) => feedback.push(args), onDone: id => done.push(id), onEdited() {}}
+  const props = {getAuthGeneration:()=>authGeneration, context: {visitId: 'visit-A'}, editing: null, isCurrent: () => active, leaveRef: {current: null}, toast: (...args) => feedback.push(args), onDone: id => done.push(id), onEdited() {}}
   const render = () => {cursor = 0; value = component(props); for (const run of pending.splice(0)) run(); return value}
   render()
   const fill = () => {value.setLines([{medicine: 'Synthetic medicine', dosage: 'Synthetic dosage', frequency: '', duration: '', instructions: 'Synthetic instructions'}]); value.setNote('Submitted note'); render()}
-  return {render, fill, calls, feedback, done, protections, get value() {return value}, unmount() {active = false; for (const cell of cells) cell?.cleanup?.()}}
+  return {replaceActor(){authGeneration++}, render, fill, calls, feedback, done, protections, get value() {return value}, unmount() {active = false; for (const cell of cells) cell?.cleanup?.()}}
 }
 
 test('genuine medication fields and notes register dirty protection; pending Save registers busy', async () => {
@@ -118,8 +118,14 @@ test('failed Visit retrieval becomes an error and supports retry to an empty lis
   assert.equal(e.value.visitError, ''); assert.deepEqual(wire(e.value.visits), []); e.unmount()
 })
 
-test.todo('BLOCKED: actor A to B before second request must prevent Issue; needs an app-owned live auth generation surviving unmount')
-test.todo('BLOCKED: actor A to B to A cannot revive obsolete operation; current session key and /api/me are insufficient')
+for (const replacements of [1,2]) test(`auth lifetime changes ${replacements} time(s) before saved-Draft Issue cannot revive old intent`, async () => {
+  const held=deferred(), e=editor({respond:()=>held.promise});e.fill()
+  const task=e.value.save(true)
+  for(let i=0;i<replacements;i++)e.replaceActor()
+  held.resolve(accepted());await task;e.render()
+  assert.deepEqual(e.calls.map(c=>c.command),['create'])
+  assert.deepEqual(e.feedback,[]);assert.deepEqual(e.done,[]);e.unmount()
+})
 
 // Keep historical CLIN-05/R2 and RX-01 files intact and run them separately in
 // the approved test phase. Navigation/DOM/PDF assertions are in the browser file.

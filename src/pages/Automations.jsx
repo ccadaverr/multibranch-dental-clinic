@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Button, Card, Field, Notice, PageHeader } from '../components.jsx'
+import { Button, RefreshButton, Card, Field, Notice, PageHeader } from '../components.jsx'
 import {
   approveMessageTemplate, listAutomations, listMessageTemplates, previewMessageTemplate, runAutomationDemo, testAutomation, testMessageTemplate,
   updateAutomation, updateMessageTemplate,
@@ -325,7 +325,7 @@ export function TemplateEditor({ template, toast, onChanged, approveAction = app
       )}
       {err && <p className="au-error" role="alert">{err}</p>}
       <div className="au-actions">
-        <Button size="sm" variant="soft" disabled={!!busy} onClick={show}>{busy === 'preview' ? 'Loading…' : canEdit ? (dirty ? 'Preview my changes' : 'Refresh preview') : 'Preview formatted email'}</Button>
+        {canEdit && !dirty ? <RefreshButton title="Refresh preview" ariaLabel="Refresh preview" loading={!!busy} onClick={show}/> : <Button size="sm" variant="soft" disabled={!!busy} onClick={show}>{busy === 'preview' ? 'Loading…' : canEdit ? 'Preview my changes' : 'Preview formatted email'}</Button>}
         {canEdit && <Button size="sm" disabled={!dirty || !!busy} onClick={save}>{busy === 'save' ? 'Saving…' : 'Save wording'}</Button>}
         {!dirty && !approvedByMe && <Button size="sm" variant="primary" icon="check" disabled={!!busy} onClick={approve}>{busy === 'approve' ? 'Approving…' : 'Approve this wording'}</Button>}
         {!canEdit && approvedByMe && <span className="au-tag is-ok au-approved-badge">✓ You approved this wording</span>}

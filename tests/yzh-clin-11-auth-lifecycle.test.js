@@ -25,8 +25,10 @@ let legacy = readFileSync(legacyUrl, 'utf8').replaceAll('\r\n', '\n')
 legacy = replaceOnce(legacy, "new URL('../src/pages/ServerPrescriptions.jsx', import.meta.url)", JSON.stringify(new URL('../src/pages/ServerPrescriptions.jsx', import.meta.url).href))
 // readFileSync accepts a URL object rather than a file: URL string.
 legacy = replaceOnce(legacy, 'readFileSync(' + JSON.stringify(new URL('../src/pages/ServerPrescriptions.jsx', import.meta.url).href), 'readFileSync(new URL(' + JSON.stringify(new URL('../src/pages/ServerPrescriptions.jsx', import.meta.url).href) + ')')
-legacy = replaceOnce(legacy, 'function editor({respond =', 'function editor({getAuthGeneration = () => 1, respond =')
-legacy = replaceOnce(legacy, 'const props = {context:', 'const props = {getAuthGeneration, context:')
+legacy = replaceOnce(legacy, 'function editor({respond =', 'function editor({getAuthGeneration, respond =')
+// CLIN-10 now owns a mutable synthetic lifetime for its own regressions. Keep
+// that default, while injecting the real store reader for CLIN-11 owner cases.
+legacy = replaceOnce(legacy, 'getAuthGeneration:()=>authGeneration, context:', 'getAuthGeneration:getAuthGeneration === undefined ? (()=>authGeneration) : getAuthGeneration, context:')
 const {editor} = await import('data:text/javascript;base64,' + Buffer.from(legacy + '\nexport {editor}\n').toString('base64'))
 
 const fixture = () => ({

@@ -1,3 +1,4 @@
+import { checkInActorKey, reviewedCheckInAppointmentFor } from './checkin-navigation.js'
 import * as appointmentsApi from './appointments-api.js'
 import * as visitsApi from './visits-api.js'
 import * as queueApi from './queue-api.js'
@@ -17,7 +18,7 @@ import { encounterIssue } from './safeguards.js'
 const hasDocumentation = form => ['complaint', 'plan', 'procedure', 'notes'].some(k => typeof form[k] === 'string' && form[k].trim())
   || form.prescriptionRequired === true || form.followupRequired === true || (form.procedures || []).some(p => p?.serviceId)
 
-export function createAppointmentFlow({ getState, getSession, getActions, refresh, searchPatients = null, addDirectoryPatient = null, api = appointmentsApi, visits = visitsApi, queue = queueApi, treatments = treatmentsApi }) {
+export function createAppointmentFlow({ getState, getSession, getActions, refresh, getAuthGeneration = null, searchPatients = null, addDirectoryPatient = null, api = appointmentsApi, visits = visitsApi, queue = queueApi, treatments = treatmentsApi }) {
   const projected = id => getState().appointments.find(a => a.id === id)
   const visitFor = id => (getState().visits || []).find(v => v.id === id)
 
@@ -69,12 +70,27 @@ export function createAppointmentFlow({ getState, getSession, getActions, refres
 
     // M8 scheduled Check-In: the server moves the appointment to Checked In, opens the Visit and — when the Visit has a
     // responsible Dentist — queues it, all in one transaction. Nothing is written locally.
-    async checkIn(appointmentId, key) {
-      const appointment = projected(appointmentId)
-      if (!appointment) return { ok: false, message: 'This appointment is not loaded from the server. Refresh and try again.' }
-      const result = await visits.checkIn(appointment, key)
+    async checkIn(appointmentId, key, reviewed) {
+      // The clinic provider always supplies its live auth reader: an ID-only
+      // call cannot bypass the reviewed-snapshot boundary there. Unbound legacy
+      // flow adapters retain their existing imperative ID interface.
+      const guarded = !!getAuthGeneration || reviewed !== undefined
+      const stale = () => ({ ok: false, kind: 'stale_context', message: 'This appointment or your access changed. Refresh, review and confirm the current appointment before checking in.' })
+      const appointment = guarded
+        ? reviewed?.appointmentId === appointmentId && getAuthGeneration && reviewedCheckInAppointmentFor({state:getState(),session:getSession(),getAuthGeneration}, reviewed)
+        : projected(appointmentId)
+      if (!appointment) return guarded ? stale() : { ok: false, message: 'This appointment is not loaded from the server. Refresh and try again.' }
+      // Copy the reviewed version before the first await. Never substitute a
+      // newer projected revision for the human's confirmed command context.
+      const submitted = Object.freeze({...appointment, revision:guarded ? reviewed.revision : appointment.revision})
+      const currentActor = () => !guarded || getAuthGeneration() === reviewed.authGeneration && checkInActorKey(getSession()) === reviewed.actorKey
+      const beforeDispatch = guarded ? () => !!reviewedCheckInAppointmentFor({state:getState(),session:getSession(),getAuthGeneration}, reviewed) : undefined
+      const result = await visits.checkIn(submitted, key, beforeDispatch)
+      if (result.kind === 'stale_context') return stale()
+      if (!currentActor()) return {ok:false,kind:'superseded',message:'The arrival outcome belongs to an earlier session. Refresh the current view to verify it.'}
       if (!result.ok) return afterServerCommand(result)
       await refresh()
+      if (!currentActor()) return {ok:false,kind:'superseded',message:'The arrival outcome belongs to an earlier session. Refresh the current view to verify it.'}
       return { ok: true, visitId: result.row.id, queued: !!result.row.queue, queueNumber: result.row.queue?.queue_number ?? null }
     },
 

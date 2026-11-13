@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Button, Card, ConfirmDialog, Field, Notice, PageHeader, Status } from '../components.jsx'
+import { Button, RefreshButton, Card, ConfirmDialog, Field, Notice, PageHeader, Status } from '../components.jsx'
 import { commandKey } from '../appointments-api.js'
 import { clinicalSessionKey, commandGate, encounterContextFor, encounterKey, resolveEncounter } from '../encounter.js'
 import { useClinicalSession } from '../use-clinical-session.js'
@@ -79,7 +79,7 @@ function EncounterEditor({ store, context, setPage }) {
     setNotice(result.record.status==='Completed'?'Treatment completion confirmed by the clinic server.':`Saved on the clinic server. Revision ${result.record.revision}.`)
   }
   const line=(index,key,value)=>setForm({...form,procedures:form.procedures.map((p,i)=>i===index?{...p,[key]:value}:p)})
-  if(!encounter.ok)return <div className="enc-workspace"><PageHeader title="Encounter unavailable"/><Notice tone="warning">{encounter.message}{dirty&&' Your unsaved editor is retained in memory while you refresh this encounter.'}</Notice><div className="row-actions"><Button onClick={()=>flow?.refresh()}>Refresh encounter</Button><Button variant="ghost" onClick={()=>setPage('queue')}>Back to My Queue</Button></div></div>
+  if(!encounter.ok)return <div className="enc-workspace"><PageHeader title="Encounter unavailable"/><Notice tone="warning">{encounter.message}{dirty&&' Your unsaved editor is retained in memory while you refresh this encounter.'}</Notice><div className="row-actions"><RefreshButton title="Refresh encounter" ariaLabel="Refresh encounter" onClick={()=>flow?.refresh()}/><Button variant="ghost" onClick={()=>setPage('queue')}>Back to My Queue</Button></div></div>
   const {patient,record,visit}=encounter
   const navContext=encounterContextFor(treatment||queueEntry)
   const performedServices=state.services.filter(s=>s.status==='Active'&&state.branchServices.some(bs=>bs.branchId===record.branchId&&bs.serviceId===s.id&&bs.active!==false)&&state.dentistServiceAssignments.some(a=>a.dentistId===session.dentistId&&a.serviceId===s.id&&a.isAuthorized!==false))
@@ -87,7 +87,7 @@ function EncounterEditor({ store, context, setPage }) {
     <div className="enc-breadcrumb"><Button variant="ghost" size="sm" onClick={()=>setPage('queue')}>My Queue</Button><span> / Encounter</span></div>
     <header className="enc-header"><div><p className="enc-eyebrow">{patient.patientCode || 'Patient encounter'}{queueEntry?.queueNumber!=null?` / Queue ${queueEntry.queueNumber}`:''}</p><h1>{patient.name}</h1><p>{state.branches.find(b=>b.id===record.branchId)?.name} · {treatment?.dentistName||dentist?.name} · {visit.clinicDate}</p></div><Status>{base?.status==='Completed'?'Completed':treatment?.status||visit.status}</Status></header>
     <dl className="enc-identity"><div><dt>Visit</dt><dd>{visit.walkIn?'Walk-in':'Appointment'}{record.appointmentId?' · '+(state.appointments.find(a=>a.id===record.appointmentId)?.code||'Scheduled'):''}</dd></div><div><dt>Requested service</dt><dd>{state.services.find(s=>s.id===(queueEntry?.serviceId||treatment?.requestedServiceId))?.name||'Not available'}</dd></div><div><dt>Documentation</dt><dd>{base?`Revision ${base.revision}`:'Not started'}{dirty?' · Unsaved changes':''}</dd></div></dl>
-    {!fresh&&<Notice tone="warning">The encounter could not be verified as current. Your text is retained; commands are paused. <Button size="sm" onClick={()=>flow?.refresh()}>Refresh encounter</Button></Notice>}
+    {!fresh&&<Notice tone="warning">The encounter could not be verified as current. Your text is retained; commands are paused. <RefreshButton title="Refresh encounter" ariaLabel="Refresh encounter" onClick={()=>flow?.refresh()}/></Notice>}
     {problem&&<Notice tone="warning" title="Command not confirmed">{problem.message}{gate.current.retry&&<><p>Retry sends the same command and documentation. Review the latest record before starting a different command.</p><Button disabled={saving||!fresh} onClick={()=>run(gate.current.retry.mode,true)}>Retry same command</Button><Button variant="ghost" onClick={()=>flow?.refresh()}>Check server record</Button><Button variant="ghost" onClick={()=>setReloadOpen(true)}>Review latest record</Button></>}</Notice>}
     {notice&&<p className="enc-feedback" role="status">{notice}</p>}
     <div className="enc-layout"><section className="enc-documentation" aria-labelledby="enc-documentation-title">

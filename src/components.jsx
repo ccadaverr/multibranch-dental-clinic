@@ -181,19 +181,22 @@ export function SplitBadge({ left, right, tone='neutral' }) {
   return <span className={`split-badge ${tone}`}><b>{left}</b><span>{right}</span></span>
 }
 
-export function SearchInput({ value, onChange, placeholder = 'Search…', ariaLabel, className = '', onClear, ...props }) {
-  return <div className={`search-input-wrap ${className}`.trim()}>
+export function SearchInput({ value, onChange, placeholder = 'Search…', ariaLabel, className = '', onClear, ref: forwardedRef, ...props }) {
+  const input = useRef(null)
+  React.useImperativeHandle(forwardedRef, () => input.current)
+  return <div className={`search-input-wrap ${value && onClear ? 'has-clear' : ''} ${className}`.trim()}>
     <Icon name="search" size={16} className="search-input-icon"/>
     <input
       type="search"
       className="search-input-field"
+      ref={input}
       value={value || ''}
       onChange={e => onChange?.(e.target.value)}
       placeholder={placeholder}
       aria-label={ariaLabel || placeholder}
       {...props}
     />
-    {value && onClear && <button type="button" className="search-input-clear" title="Clear search" aria-label="Clear search" onClick={onClear}>
+    {value && onClear && <button type="button" className="search-input-clear" title="Clear search" aria-label="Clear search" onClick={event => { onClear(event); input.current?.focus() }}>
       <Icon name="x" size={14}/>
     </button>}
   </div>
@@ -202,14 +205,16 @@ export function SearchInput({ value, onChange, placeholder = 'Search…', ariaLa
 export function RefreshButton({ onClick, loading = false, title = 'Refresh', ariaLabel = 'Refresh', size = 'md', className = '', ...props }) {
   const [spinning, setSpinning] = React.useState(false)
   const isRefreshing = loading || spinning
+  const pending = useRef(false)
 
   const handleClick = async (e) => {
-    if (isRefreshing) return
+    if (isRefreshing || pending.current) return
+    pending.current = true
     setSpinning(true)
     try {
       await onClick?.(e)
     } finally {
-      setTimeout(() => setSpinning(false), 500)
+      setTimeout(() => { pending.current = false; setSpinning(false) }, 500)
     }
   }
 
@@ -219,6 +224,7 @@ export function RefreshButton({ onClick, loading = false, title = 'Refresh', ari
     title={title}
     aria-label={ariaLabel}
     disabled={isRefreshing}
+    aria-busy={isRefreshing}
     onClick={handleClick}
     {...props}
   >

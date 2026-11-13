@@ -6,10 +6,11 @@ import {createRequire} from 'node:module'
 import {createServer} from 'node:http'
 import {fileURLToPath, pathToFileURL} from 'node:url'
 import path from 'node:path'
+import {mkdir,writeFile} from 'node:fs/promises'
 
 const dependencies = process.env.CLIN05_NODE_MODULES
 if (!dependencies) throw new Error('Set CLIN05_NODE_MODULES to an existing isolated dependency directory.')
-const require = createRequire(path.join(dependencies, '..', 'package.json'))
+const require = createRequire(import.meta.url)
 const {build} = require('esbuild')
 const {chromium} = await import(pathToFileURL(path.join(dependencies, 'playwright/index.mjs')))
 const root = fileURLToPath(new URL('..', import.meta.url))
@@ -27,8 +28,10 @@ Object.assign(window.rx10,window.rx10Initial||{});
 function Harness(){
  const base=clinicalFixture(),[page,setPage]=React.useState('prescriptions'),[owner,setOwner]=React.useState(false);
  window.rx10.owner=setOwner;
+ const auth=React.useRef(1),previousOwner=React.useRef(owner),readAuth=React.useRef(()=>auth.current).current;
+ if(previousOwner.current!==owner){auth.current++;previousOwner.current=owner}
  const nav=useClinicalNavigation(owner?'owner':'dentist');
- const store={...base,toast:(...args)=>window.rx10.feedback.push(args)};
+ const store={...base,getAuthGeneration:readAuth,toast:(...args)=>window.rx10.feedback.push(args)};
  const encounter={treatmentId:'t1',visitId:'visit-A',patientId:'p1',branchId:'b1',dentistId:'d1',appointmentId:null};
  if(window.rx10.returnEncounter){base.state.treatments=[{id:'t1',server:true,author:true,...encounter,status:'In Treatment'}];base.state.visits=[{id:'visit-A',server:true,...encounter,status:'In Treatment'}]}
  if(owner)store.session={...store.session,role:'owner'};
@@ -41,6 +44,8 @@ function Harness(){
 `
 const api = `
 export const onSessionInvalidated=()=>()=>{};
+const unexpected=()=>{throw new Error('Unexpected non-prescription operation in isolated fixture')};
+export const reportSessionInvalidated=unexpected,listAppointments=unexpected,getAppointment=unexpected,appointmentAvailability=unexpected,appointmentRecommendation=unexpected,createAppointment=unexpected,rescheduleAppointment=unexpected,cancelAppointmentRemote=unexpected,transitionAppointment=unexpected,searchPatients=unexpected;
 export const prescriptionVisits=async()=>window.rx10.failVisits?{ok:false,message:'Synthetic Visit outage'}:{ok:true,data:['A','B'].map(x=>({id:'visit-'+x,date:'2026-11-06',patient:{id:'patient-'+x,name:'Synthetic '+x,age:null},branch:'Synthetic branch'})),meta:{license_no:'',allergy_notice:'Ask the patient'}};
 export const listPrescriptions=async()=>({ok:true,data:window.rx10.records});
 export const prescription=async id=>({ok:true,data:window.rx10.records.find(p=>p.id===id)});
@@ -71,7 +76,7 @@ const server = createServer((req, res) => {
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
 const origin = `http://127.0.0.1:${server.address().port}`
 let browser
-const completed = []
+const completed = [], measurements = []
 const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))))
 const button = (p, name) => p.getByRole('button', {name, exact: true})
 const note = p => p.getByRole('textbox', {name: /^Note \(optional\)/})
@@ -100,7 +105,23 @@ async function check(name, run, config = {}) {
   finally {await p.close()}
 }
 try {
-  browser = await chromium.launch({headless: true})
+  browser = await chromium.launch({headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || 'chrome'})
+  for (const width of [1440,390]) for (const route of ['list-return','direct']) await check(`GEN-09 prescription review to exact Draft editor: ${route} at ${width}`, async p => {
+    await p.setViewportSize({width,height:1000})
+    await button(p,'Open').click()
+    const dialog=p.getByRole('dialog')
+    await dialog.getByRole('button',{name:'Edit draft',exact:true}).waitFor()
+    let activations=0
+    if(route==='list-return'){await dialog.getByRole('button',{name:'Close',exact:true}).click();activations++;await button(p,'Edit draft').click();activations++}
+    else {await dialog.getByRole('button',{name:'Edit draft',exact:true}).click();activations++}
+    await p.getByRole('heading',{name:'Edit draft for Synthetic A',exact:true}).waitFor()
+    assert.equal(await note(p).inputValue(),'Submitted note')
+    assert.equal(await p.getByLabel('Select medicine 1',{exact:true}).inputValue(),'Paracetamol')
+    assert.equal(await p.getByRole('dialog').count(),0)
+    assert.deepEqual(await calls(p),[],'navigation does not save or issue')
+    assert.equal(activations,route==='direct'?1:2)
+    measurements.push({workflow:'Prescription review to the same Draft editor',width,route,activations,method:'control activations from open review; excludes opening the initial review, typing, network waits, save and issue'})
+  },{records:[saved.data]})
   await check('dirty sidebar navigation: Stay retains every field; Discard leaves', async p => {
     await fill(p)
     await p.getByLabel('Select dosage 1', {exact: true}).selectOption('500mg')
@@ -153,15 +174,24 @@ try {
   })
   await check('Visit loading failure has retry and differs from no eligible Visits', async p => {
     await p.getByText('Synthetic Visit outage', {exact:true}).waitFor()
-    assert.equal(await p.getByText('Loading visits', {exact:false}).count(), 0)
+    assert.equal(await p.getByRole('status').filter({hasText:/^Loading visits/}).count(), 0)
     await p.evaluate(() => {window.rx10.failVisits=false}); await button(p, 'Retry loading visits').click()
     await visit(p).waitFor(); assert.equal(await visit(p).locator('option').count(), 3)
   }, {failVisits:true})
+  for(const returnToDentist of [false,true]) await check(`auth replacement before Issue${returnToDentist?' and return to earlier role':''} refuses the second command`,async p=>{
+    await fill(p);await startIssue(p);await waitCalls(p,1)
+    await p.evaluate(()=>window.rx10.owner(true))
+    if(returnToDentist)await p.evaluate(()=>window.rx10.owner(false))
+    await respond(p,0,saved)
+    assert.deepEqual((await calls(p)).map(c=>c.command),['create'])
+    assert.deepEqual(await feedback(p),[])
+  },{holdSave:true})
   await check('Owner metadata stays readable and offers no denied PDF', async p => {
     await p.evaluate(() => window.rx10.owner(true))
     await button(p, 'View record').click(); await p.getByRole('dialog').waitFor()
     assert.equal(await button(p, 'Download PDF').count(), 0); assert.equal(await button(p, 'Edit draft').count(), 0)
     assert.equal(await p.getByRole('dialog').getByText(/Synthetic dentist/).count(), 1)
   }, {records:[{id:'rx-meta',number:'RX-SYNTHETIC',status:'Issued',revision:3,date:'2026-11-06',branch:'Synthetic branch',dentist:'Synthetic dentist'}]})
-  console.log(JSON.stringify({completed, blocked:['actor A to B pre-Issue','actor A to B to A replacement'], required:['unchanged CLIN-05/R2 suites','real authenticated navigation/reload/PDF acceptance'], evidence:'Synthetic only'}, null, 2))
+  if(process.env.QA_EVIDENCE_DIR){await mkdir(process.env.QA_EVIDENCE_DIR,{recursive:true});await writeFile(path.join(process.env.QA_EVIDENCE_DIR,'prescription-measurements.json'),JSON.stringify(measurements,null,2))}
+  console.log(JSON.stringify({measurements,completed, blocked:[], required:['unchanged CLIN-05/R2 suites','real authenticated navigation/reload/PDF acceptance'], evidence:'Synthetic only'}, null, 2))
 } finally {await browser?.close(); await new Promise(resolve => server.close(resolve))}

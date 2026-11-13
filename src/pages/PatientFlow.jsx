@@ -1,3 +1,4 @@
+import { checkInActorKey, checkInAppointmentFor, checkInSelectionFor } from '../checkin-navigation.js'
 import { DentistQueue } from './DentistQueue.jsx'
 import React, { useEffect, useState, useRef } from 'react'
 import { Button, Card, Field, FilterBar, Icon, Modal, Notice, PageHeader, Progress, RefreshButton, SelectWithOther, Status, Table } from '../components.jsx'
@@ -34,12 +35,24 @@ export function CheckInPage({ store, context, setPage }) {
   // Today's server Visits that are checked in but not in a queue: only a Visit without a responsible Dentist (M9 Q4).
   // Shown honestly; no assignment workflow exists in this wave.
   const notQueued=(state.visits||[]).filter(v=>v.status==='Checked In'&&v.clinicDate===today&&inScope(v,session,state)&&!v.dentistId)
-  const [appointmentId,setAppointmentId]=useState('')
-  const selectedAppointment=eligible.find(a=>a.id===appointmentId)
+  const [appointmentId,setAppointmentId]=useState(context?.checkIn?.appointmentId || '')
+  const [selectionContext,setSelectionContext]=useState(()=>context?.checkIn ? Object.freeze({...context.checkIn}) : null)
+  const contextualAppointment=selectionContext ? checkInAppointmentFor(store,selectionContext) : null
+  const selectedAppointment=contextualAppointment?.id===appointmentId ? contextualAppointment : null
   // One Idempotency-Key per confirm attempt, reused when retrying the same arrival.
-  const checkInKey=useRef({appointmentId:null,key:null})
+  const checkInKey=useRef({selection:null,key:null}), scheduledPending=useRef(null), scheduledLive=useRef(true), reviewedSelection=useRef(selectionContext)
+  reviewedSelection.current=selectionContext
+  const [arrivalProblem,setArrivalProblem]=useState('')
+  const selectScheduled=snapshot=>{
+    const next=snapshot ? Object.freeze({...snapshot}) : null
+    reviewedSelection.current=next;setSelectionContext(next);setAppointmentId(next?.appointmentId||'');setIdConfirmed(false);setArrivalProblem('')
+  }
+  useEffect(()=>{scheduledLive.current=true;return()=>{scheduledLive.current=false;scheduledPending.current=null}},[])
   const [busy,setBusy]=useState(false)
   const [idConfirmed, setIdConfirmed] = useState(false)
+  useEffect(()=>{
+    selectScheduled(context?.checkIn || null)
+  },[context?.checkIn])
   const [cancelModalOpen, setCancelModalOpen] = useState(false)
   const [cancelReason, setCancelReason] = useState('No valid ID presented')
   const [cancelReasonOther, setCancelReasonOther] = useState('')
@@ -72,17 +85,25 @@ export function CheckInPage({ store, context, setPage }) {
     cancelKey.current = commandKey()
   }
   const checkScheduled=async()=>{
-    if(!selectedAppointment||busy)return
+    const reviewed=reviewedSelection.current
+    if(!selectedAppointment||!reviewed||busy||scheduledPending.current)return
     if(!idConfirmed){
       return toast('Confirm that the patient presented a valid ID before completing check-in, or cancel the appointment.', 'warning')
     }
-    if(checkInKey.current.appointmentId!==selectedAppointment.id)checkInKey.current={appointmentId:selectedAppointment.id,key:commandKey()}
-    setBusy(true)
-    const result=await flow.checkIn(selectedAppointment.id,checkInKey.current.key)
+    const selection=JSON.stringify(reviewed)
+    if(checkInKey.current.selection!==selection)checkInKey.current={selection,key:commandKey()}
+    const ticket={reviewed,key:checkInKey.current.key};scheduledPending.current=ticket;setBusy(true);setArrivalProblem('')
+    let result
+    try {result=await flow.checkIn(reviewed.appointmentId,ticket.key,reviewed)}
+    catch {result={ok:false,message:'The arrival outcome could not be confirmed. Refresh the appointment list before retrying; no new arrival was assumed.'}}
+    if(scheduledPending.current!==ticket)return
+    scheduledPending.current=null
+    if(!scheduledLive.current)return
     setBusy(false)
-    if(!result.ok)return toast(result.message,'warning')
-    checkInKey.current={appointmentId:null,key:null}
-    setAppointmentId('');toast(result.queued?`Arrival recorded — queue number ${result.queueNumber}.`:'Arrival recorded.','success')
+    if(reviewedSelection.current!==reviewed||store.getAuthGeneration?.()!==reviewed.authGeneration||checkInActorKey(store.session)!==reviewed.actorKey)return
+    if(!result.ok){setArrivalProblem(result.message);if(result.kind==='stale_context')setIdConfirmed(false);return toast(result.message,'warning')}
+    checkInKey.current={selection:null,key:null};selectScheduled(null)
+    toast(result.queued?`Arrival recorded — queue number ${result.queueNumber}.`:'Arrival recorded.','success')
   }
 
   const branches=bookableBranches(state,session)
@@ -92,8 +113,13 @@ export function CheckInPage({ store, context, setPage }) {
   const [search,setSearch]=useState('')
   const [patientMenuOpen,setPatientMenuOpen]=useState(false)
   const [activeIndex,setActiveIndex]=useState(-1)
+  const patientInput=useRef(null), patientBlur=useRef(null)
+  useEffect(()=>()=>clearTimeout(patientBlur.current),[])
+  const openPatientMenu=()=>{clearTimeout(patientBlur.current);setPatientMenuOpen(true)}
   useEffect(()=>{if(search.trim().length>=2){const t=setTimeout(()=>flow?.searchPatients(search),250);return ()=>clearTimeout(t)}},[search])
   const directory=(store.directoryPatients||[]).filter(p=>!search.trim()||`${p.name} ${p.patientCode} ${p.phone}`.toLowerCase().includes(search.trim().toLowerCase()))
+  const directoryIdentity=JSON.stringify(directory.map(p=>p.id))
+  useEffect(()=>{setActiveIndex(-1)},[directoryIdentity])
   const walkServices=state.services.filter(s=>s.status==='Active'&&state.branchServices.some(bs=>bs.branchId===walkIn.branchId&&bs.serviceId===s.id&&bs.active!==false))
   const walkDentists=state.dentists.filter(d=>d.available&&d.branchIds.includes(walkIn.branchId)&&state.dentistServiceAssignments.some(a=>a.dentistId===d.id&&a.serviceId===walkIn.serviceId&&a.isAuthorized!==false))
   const updateWalkin=(key,value)=>{
@@ -144,11 +170,13 @@ export function CheckInPage({ store, context, setPage }) {
     <div className="checkin-shell">
       <div className="checkin-mode"><button className={mode==='scheduled'?'active':''} onClick={()=>setMode('scheduled')}><Icon name="calendar" size={18}/>Scheduled arrivals</button><button className={mode==='walkin'?'active':''} onClick={()=>setMode('walkin')}><Icon name="user" size={18}/>Walk-in admission</button></div>
       {mode==='scheduled'?<Card className="checkin-focus-card" title="Scheduled arrivals" subtitle="Select the patient who has arrived (earliest first).">
-        <div className="checkin-select-row"><Field label="Today’s appointment"><select value={selectedAppointment?.id||''} onChange={e=>{setAppointmentId(e.target.value);setIdConfirmed(false)}}><option value="">Select appointment</option>{eligible.map(a=><option value={a.id} key={a.id}>{displayTime(a.start)} • {patientName(a.patientId,state.patients)} • {a.service}</option>)}</select></Field></div>
+        {arrivalProblem&&<Notice tone="warning">{arrivalProblem}</Notice>}
+        {selectionContext&&!contextualAppointment&&<Notice tone="warning">The selected appointment changed or is no longer eligible. Refresh and explicitly select the current appointment; no patient was substituted.</Notice>}
+        <div className="checkin-select-row"><Field label="Today’s appointment"><select disabled={busy||cancelling} value={selectedAppointment?.id||''} onChange={e=>selectScheduled(checkInSelectionFor(store,state.appointments.find(a=>a.id===e.target.value)))}><option value="">Select appointment</option>{eligible.map(a=><option value={a.id} key={a.id}>{displayTime(a.start)} • {patientName(a.patientId,state.patients)} • {a.service}</option>)}</select></Field></div>
         {selectedAppointment?<div className="arrival-card"><div className="avatar large">{patientName(selectedAppointment.patientId,state.patients).split(' ').map(x=>x[0]).slice(0,2).join('')}</div><div className="arrival-main"><span>Arriving patient</span><h2>{patientName(selectedAppointment.patientId,state.patients)}</h2><p>{selectedAppointment.service} • {selectedAppointment.dentistName||dentistName(selectedAppointment.dentistId,state.dentists)}</p><div className="arrival-meta"><span><Icon name="calendar" size={15}/>{displayTime(selectedAppointment.start)}</span><span><Icon name="building" size={15}/>{selectedAppointment.branch}</span><span>{selectedAppointment.appointmentNo}</span></div></div><div className="arrival-action">
             <Status>{selectedAppointment.status}</Status>
             <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', margin: '4px 0', cursor: 'pointer' }}>
-              <input type="checkbox" checked={idConfirmed} onChange={e=>setIdConfirmed(e.target.checked)}/>
+              <input type="checkbox" disabled={busy||cancelling} checked={idConfirmed} onChange={e=>setIdConfirmed(e.target.checked)}/>
               <span>Valid ID presented</span>
             </label>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -205,10 +233,10 @@ export function CheckInPage({ store, context, setPage }) {
         {!registering && <>
         {!registering && <div className="span-2 patient-combobox">
           <Field label="Patient" required hint="Search the clinic Patient directory by name, code or phone, then select in one step.">
-            <input role="combobox" aria-expanded={patientMenuOpen} aria-autocomplete="list" aria-controls="walkin-patient-listbox" aria-activedescendant={patientMenuOpen&&directory[activeIndex]?`walkin-patient-option-${activeIndex}`:undefined} value={search} placeholder="Type name, patient code, or phone…" onFocus={()=>setPatientMenuOpen(true)} onBlur={()=>setTimeout(()=>setPatientMenuOpen(false),150)} onChange={e=>{setSearch(e.target.value);setPatientMenuOpen(true);setActiveIndex(-1);if(walkIn.patientPublicId)updateWalkin('patientPublicId','')}} onKeyDown={e=>{if(e.key==='ArrowDown'){e.preventDefault();setPatientMenuOpen(true);setActiveIndex(i=>Math.min(i+1,Math.max(0,directory.length-1)))}else if(e.key==='ArrowUp'){e.preventDefault();setActiveIndex(i=>Math.max(0,i-1))}else if(e.key==='Enter'&&patientMenuOpen&&directory[activeIndex]){e.preventDefault();selectCombPatient(directory[activeIndex])}else if(e.key==='Escape'){setPatientMenuOpen(false);setActiveIndex(-1)}}}/>
+            <input ref={patientInput} role="combobox" aria-expanded={patientMenuOpen} aria-autocomplete="list" aria-controls="walkin-patient-listbox" aria-activedescendant={patientMenuOpen&&directory[activeIndex]?`walkin-patient-option-${activeIndex}`:undefined} value={search} placeholder="Type name, patient code, or phone…" onFocus={openPatientMenu} onBlur={()=>{clearTimeout(patientBlur.current);patientBlur.current=setTimeout(()=>setPatientMenuOpen(false),150)}} onChange={e=>{setSearch(e.target.value);setPatientMenuOpen(true);setActiveIndex(-1);if(walkIn.patientPublicId)updateWalkin('patientPublicId','')}} onKeyDown={e=>{if(e.key==='ArrowDown'){e.preventDefault();setPatientMenuOpen(true);setActiveIndex(i=>Math.min(i+1,Math.max(0,directory.length-1)))}else if(e.key==='ArrowUp'){e.preventDefault();setActiveIndex(i=>Math.max(0,i-1))}else if(e.key==='Enter'&&patientMenuOpen&&directory[activeIndex]){e.preventDefault();selectCombPatient(directory[activeIndex])}else if(e.key==='Escape'){setPatientMenuOpen(false);setActiveIndex(-1)}}}/>
           </Field>
-          {selectedPatient&&<div className="patient-combobox-selected"><span>Selected: <b>{selectedPatient.name}</b> ({selectedPatient.patientCode})</span><button type="button" className="icon-btn" aria-label="Clear selected patient" onClick={()=>{updateWalkin('patientPublicId','');setSearch('');setPatientMenuOpen(true)}}><Icon name="x" size={14}/></button></div>}
-          {patientMenuOpen&&<ul id="walkin-patient-listbox" role="listbox" className="patient-combobox-list">{directory.length?directory.map((p,idx)=><li key={p.id} id={`walkin-patient-option-${idx}`} role="option" aria-selected={walkIn.patientPublicId===p.id} className={`patient-combobox-option ${idx===activeIndex?'is-active':''} ${walkIn.patientPublicId===p.id?'is-selected':''}`.trim()} onMouseDown={e=>{e.preventDefault();selectCombPatient(p)}}><b>{p.name}</b><span>{p.patientCode}{p.phone?` • ${p.phone}`:''}</span></li>):<li className="patient-combobox-empty">No matching patients found.</li>}</ul>}
+          {selectedPatient&&<div className="patient-combobox-selected"><span>Selected: <b>{selectedPatient.name}</b> ({selectedPatient.patientCode})</span><button type="button" className="icon-btn" aria-label="Clear selected patient" onClick={()=>{updateWalkin('patientPublicId','');setSearch('');setActiveIndex(-1);openPatientMenu();patientInput.current?.focus()}}><Icon name="x" size={14}/></button></div>}
+          {patientMenuOpen&&<ul id="walkin-patient-listbox" role="listbox" className="patient-combobox-list">{directory.length?directory.map((p,idx)=><li key={p.id} id={`walkin-patient-option-${idx}`} role="option" aria-selected={walkIn.patientPublicId===p.id} className={`patient-combobox-option ${idx===activeIndex?'is-active':''} ${walkIn.patientPublicId===p.id?'is-selected':''}`.trim()} onMouseDown={e=>e.preventDefault()} onClick={()=>selectCombPatient(p)}><b>{p.name}</b><span>{p.patientCode}{p.phone?` • ${p.phone}`:''}</span></li>):<li className="patient-combobox-empty">No matching patients found.</li>}</ul>}
         </div>}
 
         </>}

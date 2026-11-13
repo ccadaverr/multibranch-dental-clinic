@@ -54,8 +54,8 @@ export async function loadVisits(today) {
 const commandResult = result => (result.ok ? { ok: true, row: result.data } : normalizeFailure(result))
 
 /** Scheduled Check-In: the server moves the appointment to Checked In and opens the Visit in one transaction. */
-export async function checkIn(appointment, key) {
-  return commandResult(await api.checkInVisit({ appointment_id: appointment.id, expected_revision: appointment.revision }, key))
+export async function checkIn(appointment, key, beforeDispatch) {
+  return commandResult(await api.checkInVisit({ appointment_id: appointment.id, expected_revision: appointment.revision }, key, beforeDispatch))
 }
 
 /** Walk-In admission: a Visit with no appointment. The Dentist may be omitted (the server allows an unresolved one). */

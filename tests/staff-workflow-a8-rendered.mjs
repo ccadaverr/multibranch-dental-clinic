@@ -1,25 +1,76 @@
 import assert from 'node:assert/strict'
 import {pathToFileURL} from 'node:url'
-import {mkdir} from 'node:fs/promises'
+import {mkdir,writeFile} from 'node:fs/promises'
 // Usage: node tests/staff-workflow-a8-rendered.mjs <path-to-playwright/index.mjs>
 const {chromium}=await import(process.argv[2]?pathToFileURL(process.argv[2]).href:'playwright')
 const browser=await chromium.launch({headless:true,channel:'chrome'})
-await mkdir('docs/ui-review/staff-a8',{recursive:true})
+const evidence=process.env.QA_EVIDENCE_DIR||'docs/ui-review/staff-a8'
+const url=process.env.STAFF_A8_URL||'http://127.0.0.1:5178/tests/fixtures/staff-workflow-a8.html'
+const measurements=[]
+await mkdir(evidence,{recursive:true})
 try {
  for(const width of [1440,390]) {
   const page=await browser.newPage({viewport:{width,height:1000}})
+  page.setDefaultTimeout(7000)
+  await page.route('**/*',r=>new URL(r.request().url()).origin===new URL(url).origin?r.continue():r.abort())
   const errors=[];page.on('pageerror',e=>errors.push(e.message))
   await page.route('**/api/**',r=>{
    const u=new URL(r.request().url())
+   if(u.pathname==='/api/front-desk/today')return r.fulfill({json:{data:{settings:{},late:[],replies:[],released:[],free_times:[],confirmations:[]}}})
+   if(!u.pathname.startsWith('/api/patients/')&&!u.pathname.endsWith('/availability'))return r.fulfill({status:403,json:{message:'Synthetic ancillary panel unavailable'}})
    if(u.pathname.endsWith('/availability'))return r.fulfill({json:{data:{date:'2026-10-29',slots:[{date:'2026-10-29',start_time:'14:00',end_time:'14:30'}]}}})
    return r.fulfill({json:{data:{id:'01SYNTHETICPATIENTPUBLIC001',name:'Synthetic Selected Patient',profile_access:'identity'}}})
   })
-  await page.goto('http://127.0.0.1:5178/tests/fixtures/staff-workflow-a8.html')
+  await page.goto(url)
+  if(process.env.QA_CASE==='record-permission'){
+    await page.evaluate(()=>{window.fixture.state.users[0].permissions=['appointments','checkin'];window.fixture.refreshUI()})
+    assert.equal(await page.getByRole('button',{name:'Open Patient Record',exact:true}).count(),0,'shortcut cannot offer a denied Patient Records destination')
+    console.log('PASS record permission '+width);await page.close();continue
+  }
+  if(process.env.QA_CASE==='booking-permission'){
+    await page.evaluate(()=>{window.fixture.state.users[0].permissions=['patient-demographics','checkin'];window.fixture.navigate('patients',{patientId:'01SYNTHETICPATIENTPUBLIC001'})})
+    const book=page.getByRole('button',{name:'Book Appointment',exact:true});await book.waitFor();assert.equal(await book.isDisabled(),true,'booking shortcut respects the existing scheduling permission')
+    console.log('PASS booking permission '+width);await page.close();continue
+  }
+  const counts={recordLongRoute:0,bookingLongRoute:0,recordShortcut:0,bookingShortcut:0,checkInLongRoute:0,checkInShortcut:0}
+  const activate=async(key,action)=>{await action();counts[key]++}
+  await activate('recordLongRoute',()=>page.getByRole('button',{name:'Patient Records',exact:true}).click())
+  await page.getByRole('heading',{name:'Synthetic Other Patient',exact:true}).waitFor()
+  await activate('recordLongRoute',()=>page.locator('.patient-list-scroll button').filter({hasText:'Synthetic Selected Patient'}).click())
+  await page.getByRole('heading',{name:'Synthetic Selected Patient',exact:true}).waitFor()
+  await activate('bookingLongRoute',()=>page.getByRole('button',{name:'Appointments',exact:true}).click())
+  await activate('bookingLongRoute',()=>page.getByRole('button',{name:'New appointment',exact:true}).click())
+  await activate('bookingLongRoute',()=>page.getByRole('combobox',{name:'Patient',exact:true}).selectOption('01SYNTHETICPATIENTPUBLIC001'))
+  await page.keyboard.press('Escape')
+  await activate('checkInLongRoute',()=>page.getByRole('button',{name:'Check-In',exact:true}).click())
+  await activate('checkInLongRoute',()=>page.getByRole('combobox',{name:/^Today.s appointment/}).selectOption('appt1'))
+  await page.getByRole('heading',{name:'Synthetic Selected Patient',exact:true}).waitFor()
+  console.log('MEASURED '+JSON.stringify({width,checkInLongRoute:counts.checkInLongRoute}))
+  await page.getByRole('button',{name:'Appointments',exact:true}).click()
+  await activate('checkInShortcut',()=>page.getByRole('button',{name:'Check in',exact:true}).click())
+  assert.equal(await page.getByRole('combobox',{name:/^Today.s appointment/}).inputValue(),'appt1')
+  await page.getByRole('button',{name:'Confirm arrival',exact:true}).click()
+  assert.equal(await page.evaluate(()=>window.checkIns?.length||0),0,'navigation never bypasses the explicit ID decision')
+  await page.getByRole('checkbox',{name:'Valid ID presented',exact:true}).check()
+  await page.getByRole('button',{name:'Confirm arrival',exact:true}).click()
+  await page.locator('#feedback').filter({hasText:'Synthetic check-in refusal'}).waitFor()
+  const arrival=await page.evaluate(()=>window.checkIns[0]);assert.equal(arrival.id,'appt1');assert.ok(arrival.key)
+  await page.getByRole('button',{name:'Confirm arrival',exact:true}).click()
+  await page.waitForFunction(()=>window.checkIns.length===2)
+  assert.equal((await page.evaluate(()=>window.checkIns[1])).key,arrival.key,'same arrival retry keeps its key')
+  await page.evaluate(()=>{window.fixture.state.appointments[0].revision++;window.fixture.refreshUI()})
+  await page.getByText(/selected appointment changed or is no longer eligible/).waitFor()
+  assert.equal(await page.getByRole('combobox',{name:/^Today.s appointment/}).inputValue(),'')
+  assert.equal(await page.getByRole('button',{name:'Confirm arrival',exact:true}).count(),0)
+  assert.equal(await page.evaluate(()=>window.checkIns.length),2,'stale navigation does not repeat an arrival')
+  await page.getByRole('combobox',{name:/^Today.s appointment/}).selectOption('appt1')
+  assert.equal(await page.getByRole('checkbox',{name:'Valid ID presented',exact:true}).isChecked(),false,'explicit current selection still requires ID confirmation')
+  await page.getByRole('button',{name:'Appointments',exact:true}).click()
   await page.getByRole('button',{name:'Open Patient Record',exact:true}).focus()
-  await page.keyboard.press('Enter')
+  await activate('recordShortcut',()=>page.keyboard.press('Enter'))
   await page.locator('.patient-record-head h2').waitFor()
   assert.equal(await page.locator('.patient-record-head h2').innerText(),'Synthetic Selected Patient')
-  await page.getByRole('button',{name:'Book Appointment',exact:true}).click()
+  await activate('bookingShortcut',()=>page.getByRole('button',{name:'Book Appointment',exact:true}).click())
   const dialog=page.getByRole('dialog')
   assert.equal(await dialog.getByRole('textbox',{name:'Patient',exact:true}).inputValue(),'Synthetic Selected Patient')
   assert.deepEqual(await dialog.getByRole('combobox',{name:'Branch',exact:true}).locator('option').allTextContents(),['Synthetic branch'])
@@ -38,7 +89,7 @@ try {
   await confirm.click();await dialog.getByText('This slot can’t be booked',{exact:true}).waitFor()
   assert.notEqual(await page.evaluate(()=>window.lastBooking.options.key),failedKey)
   await page.evaluate(()=>{window.bookingFailure=null})
-  await page.screenshot({path:`docs/ui-review/staff-a8/booking-${width}.png`,fullPage:true})
+  await page.screenshot({path:`${evidence}/booking-${width}.png`,fullPage:true})
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'mobile overflow')
   await confirm.click();await dialog.waitFor({state:'hidden'})
   const booking=await page.evaluate(()=>window.lastBooking)
@@ -46,7 +97,7 @@ try {
   assert.equal(booking.payload.branchId,'b1');assert.equal(booking.payload.dentistId,null)
   assert.equal(booking.payload.consultationAcknowledged,true)
   await page.getByText('Appointment confirmed.',{exact:true}).waitFor()
-  await page.screenshot({path:`docs/ui-review/staff-a8/record-${width}.png`,fullPage:true})
+  await page.screenshot({path:`${evidence}/record-${width}.png`,fullPage:true})
   // Exercise existing reschedule and follow-up contracts through the same form.
   await page.evaluate(()=>window.fixture.navigate('form',{appointment:window.fixture.state.appointments[0]}))
   assert.equal(await page.getByRole('combobox',{name:'Service',exact:true}).isDisabled(),true)
@@ -77,7 +128,10 @@ try {
   assert.equal(await page.getByRole('button',{name:'Book Appointment',exact:true}).isDisabled(),true)
   await page.getByText(/no verified clinic server identity/).waitFor()
   assert.deepEqual(errors,[])
-  console.log(`PASS ${width}: A 2→1 clicks; B 3→1 activations; exact identity, branch guard, required fields, restricted confirmation, conflict/validation/success, reschedule/follow-up, keyboard, overflow`)
+  assert.deepEqual(counts,{recordLongRoute:2,bookingLongRoute:3,recordShortcut:1,bookingShortcut:1,checkInLongRoute:2,checkInShortcut:1})
+  measurements.push({width,counts,comparison:'existing longer route versus existing shortcut in the same build; not a newly executed historical build',method:'control activations; excludes typing, scrolling, loading and final booking confirmation',historicalComparison:'A8 documented 2→1 and 3→1; historical baseline not executed by this script'})
+  console.log(`PASS ${width}: current record shortcut 1 activation; current prefilled booking shortcut 1 activation; exact identity, branch guard, required fields, restricted confirmation, conflict/validation/success, reschedule/follow-up, keyboard, overflow`)
   await page.close()
  }
+ await writeFile(`${evidence}/measurements.json`,JSON.stringify(measurements,null,2))
 } finally {await browser.close()}

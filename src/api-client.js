@@ -44,6 +44,7 @@ function ensureCsrfCookie() {
 }
 
 async function rawFetch(path, options) {
+  const { beforeDispatch, ...fetchOptions } = options
   const method = (options.method || 'GET').toUpperCase()
   const isForm = typeof FormData !== 'undefined' && options.body instanceof FormData
   const headers = { Accept: 'application/json', ...(options.body && !isForm ? { 'Content-Type': 'application/json' } : {}), ...options.headers }
@@ -52,7 +53,10 @@ async function rawFetch(path, options) {
     const token = getCookie('XSRF-TOKEN')
     if (token) headers['X-XSRF-TOKEN'] = token
   }
-  return fetch(`${apiBaseUrl()}${path}`, { ...options, method, headers, credentials: 'include' })
+  // A reviewed command may become stale while CSRF preparation is pending.
+  // Recheck immediately before every send, including the bounded 419 retry.
+  if (beforeDispatch && !beforeDispatch()) return null
+  return fetch(`${apiBaseUrl()}${path}`, { ...fetchOptions, method, headers, credentials: 'include' })
 }
 
 
@@ -94,6 +98,7 @@ async function request(path, options = {}, { allowCsrfRetry = true } = {}) {
   } catch {
     return { ok: false, kind: 'network', message: 'Could not reach the clinic system. Check your connection and try again.' }
   }
+  if (!response) return { ok: false, kind: 'stale_context', message: 'This command context changed. Refresh, review and confirm the current information before retrying.' }
   if (response.ok) {
     if (response.status === 204) return { ok: true, data: null }
     const body = await response.json().catch(() => null)
@@ -254,7 +259,9 @@ export function getPatientRecordIndex(id) { return request(`/api/patients/${enco
 // M8 Patient Check-In and the shared Visit / Clinical Encounter. Raw calls only; src/visits-api.js owns mapping.
 export function listVisits(params) { return request(`/api/visits${query(params)}`) }
 export function getVisit(id) { return request(`/api/visits/${encodeURIComponent(id)}`) }
-export function checkInVisit(payload, key) { return command('/api/visits/check-in', payload, key) }
+export function checkInVisit(payload, key, beforeDispatch) {
+  return request('/api/visits/check-in', { method:'POST', body:JSON.stringify(payload), headers:key ? {'Idempotency-Key':key} : {}, beforeDispatch })
+}
 export function walkInVisit(payload, key) { return command('/api/visits/walk-in', payload, key) }
 
 // M5 Treatment & Clinical Workflow. Raw calls only; src/treatments-api.js owns mapping. Starting treatment is the atomic
