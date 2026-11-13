@@ -259,16 +259,30 @@ function MessageWording({ toast, onChanged, demo, openKey, onOpen }) {
 
 export function TemplateEditor({ template, toast, onChanged, approveAction = approveMessageTemplate, canEdit = true, showTest = true }) {
   const [draft, setDraft] = useState({ subject: template.subject, body: template.body })
-  const [preview, setPreview] = useState(null), [busy, setBusy] = useState(''), [err, setErr] = useState('')
+  const [previewResult, setPreviewResult] = useState(null), [commandBusy, setBusy] = useState(''), [commandError, setErr] = useState('')
   const dirty = draft.subject !== template.subject || draft.body !== template.body
+  const live = React.useRef(false), previewContext = React.useRef(null)
+  const signature = JSON.stringify([template.key, template.revision, draft.subject, draft.body])
+  if (previewContext.current?.signature !== signature) previewContext.current = {signature, pending: false}
+  const scope = previewContext.current
+  React.useLayoutEffect(() => { live.current = true; return () => { live.current = false } }, [])
+  const preview = previewResult?.scope === scope ? previewResult.data : null
+  const busy = commandBusy || (previewResult?.scope === scope && previewResult.pending ? 'preview' : '')
+  const err = commandError || (previewResult?.scope === scope ? previewResult.error : '')
   const show = async () => {
-    setBusy('preview'); setErr('')
-    const r = await previewMessageTemplate(template.key, dirty ? draft : null)
-    setBusy('')
-    if (!r.ok) return setErr(r.kind === 'validation' ? Object.values(r.errors || {})[0]?.[0] || r.message : r.message)
-    setPreview(r.data)
+    if (!live.current || previewContext.current !== scope || scope.pending || commandBusy) return
+    scope.pending = true; setErr(''); setPreviewResult({scope, pending: true, data: null, error: ''})
+    let r
+    try { r = await previewMessageTemplate(template.key, dirty ? {...draft} : null) }
+    catch { r = {ok: false} }
+    scope.pending = false
+    if (!live.current || previewContext.current !== scope) return
+    if (!r?.ok || typeof r.data?.subject !== 'string' || typeof r.data?.html !== 'string') {
+      return setPreviewResult({scope, pending: false, data: null, error: 'Preview could not be loaded. Try again.'})
+    }
+    setPreviewResult({scope, pending: false, data: r.data, error: ''})
   }
-  useEffect(() => { show() }, [template.revision])
+  useEffect(() => { show() }, [template.key, template.revision])
   const save = async () => {
     setBusy('save'); setErr('')
     const r = await updateMessageTemplate(template.key, { ...draft, expected_revision: template.revision })
@@ -343,7 +357,7 @@ export function TemplateEditor({ template, toast, onChanged, approveAction = app
       ) : (
         <div className="au-preview-empty">
           <p className="au-muted">Click "Preview formatted email" to view the rendered template as seen by patients.</p>
-          <Button size="sm" variant="soft" disabled={busy === 'preview'} onClick={show}>{busy === 'preview' ? 'Loading…' : 'Generate preview'}</Button>
+          <Button size="sm" variant="soft" disabled={!!busy} onClick={show}>{busy === 'preview' ? 'Loading…' : 'Generate preview'}</Button>
         </div>
       )}
     </div>

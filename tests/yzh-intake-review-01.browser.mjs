@@ -42,6 +42,7 @@ export const confirmIntake=(id,body)=>window.review.request('confirm',id,body);
 export const cancelIntake=id=>window.review.request('cancel',id);
 export const getPatientRecord=()=>{throw new Error('Unexpected IdCheck API')};
 export const verifyPatientId=getPatientRecord, offerOnlineAccount=getPatientRecord, requestHandover=getPatientRecord, branchPosterUrl=getPatientRecord, intakeCode=getPatientRecord, refreshIntakeCode=getPatientRecord;
+export const reportSessionInvalidated=getPatientRecord,listAppointments=getPatientRecord,getAppointment=getPatientRecord,appointmentAvailability=getPatientRecord,appointmentRecommendation=getPatientRecord,createAppointment=getPatientRecord,rescheduleAppointment=getPatientRecord,cancelAppointmentRemote=getPatientRecord,transitionAppointment=getPatientRecord,searchPatients=getPatientRecord;
 `
 const bundle = await build({absWorkingDir: root, stdin: {contents: source, resolveDir: root, loader: 'jsx'}, bundle: true, write: false, format: 'iife', platform: 'browser', nodePaths: [dependencies],
   plugins: [{name: 'review-api-isolation', setup(b) {
@@ -63,7 +64,8 @@ const dialog = p => p.getByRole('dialog')
 const button = (p, name) => p.getByRole('button', {name, exact: true})
 const calls = p => p.evaluate(() => window.review.calls)
 const feedback = p => p.evaluate(() => window.review.feedback)
-const confirm = p => button(dialog(p), 'Confirm and check in')
+// Pending uses its real accessible name; disabled-state assertions remain required.
+const confirm = p => dialog(p).getByRole('button', {name: /^(Confirm and check in|Confirming…)$/})
 const field = (p, name) => dialog(p).getByRole('textbox', {name: new RegExp('^' + name)})
 const open = async (p, index = 0) => {await button(p, 'Review and confirm').nth(index).click(); await dialog(p).waitFor()}
 const close = async p => {await p.keyboard.press('Escape'); await dialog(p).waitFor({state: 'detached'})}
@@ -78,7 +80,7 @@ async function check(name, run) {
   finally {await p.close()}
 }
 try {
-  browser = await chromium.launch({headless: true})
+  browser = await chromium.launch({headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || undefined})
   for (const visit of [null, '01K8R000000000000000000010']) await check(`confirmation wording follows accepted admission ${!!visit}`, async p => {
     await open(p); await confirm(p).click(); await waitCalls(p, 1); await respond(p, 0, result(0, visit))
     assert.equal(await dialog(p).count(), 0); assert.equal(await p.evaluate(() => window.review.changes), 1)

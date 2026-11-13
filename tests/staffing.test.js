@@ -1,3 +1,4 @@
+import { jsxAttribute, productionExpression } from './support/source-behavior.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -25,11 +26,21 @@ test('schedule and leave conflicts are listed, moved through the reschedule comm
 })
 
 test('handover content is shown only when the server sends it; the Owner sees metadata only; the duplicate guard can ask for one', () => {
-  const h = read('src/pages/Handovers.jsx')
-  assert.match(h, /h\.summary !== undefined \?/)
-  assert.match(h, /the clinical notes are visible only to the sending and receiving teams/i)
+  const detail=productionExpression('src/pages/Handovers.jsx',n=>n.type==='FunctionDeclaration'&&n.id?.name==='handoverDetail')
+  const row={id:'handover-A',patient:{id:'patient-A'},from:{branch:{id:'b1'}},to:{branch:{id:'b2'}},status:'Sent',summary:'SYNTHETIC PRIVATE NOTES',documents:[{title:'SYNTHETIC PRIVATE DOCUMENT'}]}
+  assert.equal(detail(row,row.id,'patient-A',true),row,'clinical detail is the server-supplied row')
+  const owner=detail(row,row.id,'patient-A',false)
+  assert.equal(owner.summary,undefined);assert.equal(owner.documents,undefined)
+  assert.equal(owner.can_acknowledge,false);assert.equal(owner.can_cancel,false)
+  assert.doesNotMatch(JSON.stringify(owner),/SYNTHETIC PRIVATE/)
+  assert.throws(()=>detail(row,row.id,'patient-B',true),/could not be matched/)
   assert.match(read('src/pages/CounterIntake.jsx'), /Request handover/)
-  assert.match(read('src/pages/Clinical.jsx'), /<HandoverPanel patientId=\{patient\.id\}/)
+  const toast=()=>{}
+  for(const id of ['patient-A','patient-B']) {
+    const bindings={patient:{id},toast}
+    assert.equal(jsxAttribute('src/pages/Clinical.jsx','HandoverPanel','patientId',bindings),id)
+    assert.equal(jsxAttribute('src/pages/Clinical.jsx','HandoverPanel','toast',bindings),toast)
+  }
 })
 
 test('portal: a reload keeps the page (#p/<page>) and Archives is in the navigation', () => {

@@ -1,3 +1,4 @@
+import { jsxAttribute } from './support/source-behavior.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -70,14 +71,13 @@ test('M11 FinanceCommunication invoice issuance uses ConfirmDialog with state pr
 })
 
 test('M12 HMO case escalation uses ConfirmDialog with state preservation on cancel', () => {
-  const hmo = read('src/pages/Hmo.jsx')
-  assert.match(hmo, /confirmEscalate/)
-  assert.match(hmo, /<ConfirmDialog/)
-  assert.match(hmo, /title="Escalate HMO case\?"/)
-  // Cancel preserves state without escalating
-  assert.match(hmo, /onCancel=\{\(\) => setConfirmEscalate\(false\)\}/)
-  // Confirm performs escalation
-  assert.match(hmo, /onConfirm=\{\(\) => \{ setConfirmEscalate\(false\); onEscalate\(h\) \}\}/)
+  const captured=Object.freeze({id:'case-A',revision:7,submissionCycle:1}), calls=[]
+  let confirmation=captured
+  const bindings={confirmEscalate:captured,escalationStale:false,setConfirmEscalate:v=>{confirmation=v},onEscalate:v=>calls.push(v)}
+  const callback=name=>jsxAttribute('src/pages/Hmo.jsx','ConfirmDialog',name,bindings,'Escalate HMO case?')
+  callback('onCancel')(); assert.equal(confirmation,null); assert.deepEqual(calls,[])
+  confirmation=captured; callback('onConfirm')(); assert.equal(confirmation,null); assert.deepEqual(calls,[captured]);assert.equal(calls[0],captured)
+  bindings.escalationStale=true; callback('onConfirm')();assert.equal(calls.length,1,'a stale confirmation cannot escalate')
 })
 
 test('M18 Inquiries close inquiry uses ConfirmDialog with state preservation on cancel', () => {

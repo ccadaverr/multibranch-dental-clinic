@@ -1,3 +1,4 @@
+import { variableValue } from './support/source-behavior.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -62,7 +63,17 @@ test('the session stays inactive until the server profile is loaded, then re-der
   const rederived = sessionForEmployee(later, r.session)
   assert.deepEqual([rederived.userId, rederived.staffId, rederived.active], [UID, 's-01knew', true])
   assert.equal(sessionForEmployee(later, { ...r.session, employeeBridge: false }), null)
-  assert.match(read('src/store.jsx'), /sessionRef\.current\?\.employeeBridge&&sessionRef\.current\.role===role\?sessionForEmployee\(stateRef\.current,sessionRef\.current\)/)
+  const sessionRef={current:{...r.session,serverUserId:'server-invited-staff',branchScopes:['b2']}}, stateRef={current:later}, generations=[]
+  let published
+  const setSession=variableValue('src/store.jsx','setSession',{
+    sessionRef,stateRef,sessionForEmployee,sessionForRole:()=>{throw Error('must not substitute demo identity')},
+    authLifetime:{current:{rederive:()=>generations.push('rederived')}},setSessionState:v=>{published=v},actionsRef:{current:null},
+  })
+  setSession('staff')
+  assert.equal(sessionRef.current.staffId,'s-01knew');assert.equal(published.userId,UID)
+  assert.equal(published.serverUserId,'server-invited-staff');assert.deepEqual(published.branchScopes,['b2'])
+  assert.equal(published.active,true);assert.deepEqual(generations,['rederived'])
+  setSession(null);assert.equal(sessionRef.current,null);assert.equal(published,null)
 })
 
 test('missing or contradictory server links fail closed', () => {

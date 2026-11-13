@@ -252,6 +252,9 @@ export function SelectWithOther({ label, value, onChange, options = [], otherVal
     {isOther && <Field label={`Specify ${label || ''}`.trim()} required error={error}><input
 
         type="text"
+        required
+        pattern=".*\S.*"
+        title="Enter a description, not just spaces."
         value={otherValue || ''}
         onChange={e => onOtherChange?.(e.target.value)}
         placeholder={placeholder}

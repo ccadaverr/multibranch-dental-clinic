@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { variableValue } from './support/source-behavior.js'
 import { looksClean, parseDate, parseIdText, parseMrz, parsePhilIdQr, scanVerdict, splitFullName } from '../src/intake/id-parse.js'
 import { publicViewFromHash } from '../src/public-route.js'
 
@@ -94,15 +95,45 @@ test('walkthrough fixes: phone-only intake, honest invite outcome, a dependent n
   assert.match(read('src/pages/CounterIntake.jsx'), /Under 18: no online account of their own/)
 })
 
-test('STF-04 counter intake ID check: "other" ID requires specify text and passes other_details', () => {
-  const staff = read('src/pages/CounterIntake.jsx')
-  assert.match(staff, /type === 'other' && <input type="text" placeholder="Specify ID \(e\.g\. PhilHealth, Company ID\)"/)
-  assert.match(staff, /disabled=\{busy \|\| \(type === 'other' && !otherText\.trim\(\)\)\}/)
-  assert.match(staff, /other_details: type === 'other' \? \(r\.data\?\.other_details \|\| otherText\.trim\(\)\) : null/)
-  assert.match(staff, /record\.id_check\.other_details \? ` \(\$\{record\.id_check\.other_details\}\)` : ''/)
-  assert.doesNotMatch(staff, /setCorrections/)
+test('STF-04 counter intake ID check: "other" ID requires specify text and passes other_details', async () => {
+  const calls = [], feedback = [], errors = []
+  let record = {id:'patient-A',profile_access:'full'}, busy = false, touched = false
+  const bindings = {
+    patientId:'patient-A', record, type:'other', otherText:'   ', failure:null,
+    live:{current:true}, verifying:{current:false}, setBusy:v=>{busy=v}, setFailure:v=>errors.push(v), setOtherTouched:v=>{touched=v},
+    verifyPatientId:async(id,body)=>{calls.push({id,body:JSON.parse(JSON.stringify(body))});return {ok:false,kind:'validation'}},
+    setRecord:update=>{record=update(record)}, toast:(...args)=>feedback.push(args),
+  }
+  await variableValue('src/pages/CounterIntake.jsx','go',bindings,'PatientIdCheck')()
+  assert.equal(touched,true); assert.deepEqual(calls,[]); assert.equal(busy,false)
+  bindings.otherText=' Company ID '
+  await variableValue('src/pages/CounterIntake.jsx','go',bindings,'PatientIdCheck')()
+  assert.deepEqual(calls,[{id:'patient-A',body:{id_type:'other',other_details:'Company ID'}}])
+  assert.equal(record.id_check,undefined); assert.deepEqual(feedback,[])
+  assert.equal(errors.at(-1).kind,'validation')
+  bindings.type='philid'
+  await variableValue('src/pages/CounterIntake.jsx','go',bindings,'PatientIdCheck')()
+  assert.deepEqual(calls.at(-1),{id:'patient-A',body:{id_type:'philid'}})
+  for(const kind of ['forbidden','unauthenticated','unconfirmed']) {
+    bindings.failure={kind}; const count=calls.length
+    await variableValue('src/pages/CounterIntake.jsx','go',bindings,'PatientIdCheck')()
+    assert.equal(calls.length,count)
+  }
+  // The counter confirmation still conditionally includes a trimmed detail.
+  const staff=read('src/pages/CounterIntake.jsx')
+  assert.match(staff, /record\.id_check\.other_details/)
   assert.match(staff, /\.\.\.\(idType === 'other' \? \{ other_details: idOther\.trim\(\) \} : \{\}\)/)
   assert.match(staff, /disabled=\{!!busy \|\| \(idChecked && idType === 'other' && !idOther\.trim\(\)\)\}/)
+})
+
+for(const detail of [undefined,'Different ID type']) test('STF-04 mismatched ID receipt remains unverified: '+String(detail), async()=>{
+  let record={id:'patient-A',profile_access:'full'}, failure=null; const feedback=[]
+  const go=variableValue('src/pages/CounterIntake.jsx','go',{
+    patientId:'patient-A',record,type:'other',otherText:'Company ID',failure:null,live:{current:true},verifying:{current:false},
+    setBusy(){},setOtherTouched(){},setFailure:v=>{failure=v},setRecord:update=>{record=update(record)},toast:(...x)=>feedback.push(x),
+    verifyPatientId:async()=>({ok:true,data:{id_type:'other',other_details:detail,id_verified_at:'2026-11-13T08:00:00+08:00'}}),
+  },'PatientIdCheck')
+  await go(); assert.equal(record.id_check,undefined); assert.equal(failure?.kind,'unconfirmed'); assert.deepEqual(feedback,[])
 })
 
 test('GEN-07 "other" choices require specify field and block saving without it in Join, Family, and Clinical', () => {

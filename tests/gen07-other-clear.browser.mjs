@@ -6,16 +6,17 @@ import { build } from "esbuild";
 const { chromium } = createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE);
 const source = `
 import React from 'react';import {createRoot} from 'react-dom/client';
-import {SelfRegistered,IdCheck} from './src/pages/CounterIntake.jsx';import {FollowupPanel} from './src/pages/ServerFollowups.jsx';
+import {SelectWithOther} from './src/components.jsx';import {SelfRegistered,IdCheck} from './src/pages/CounterIntake.jsx';import {FollowupPanel} from './src/pages/ServerFollowups.jsx';
 window.other={calls:[],feedback:[],mode:'id'};
 const generation=()=>1;
-function Harness(){const[mode,setMode]=React.useState('id');window.other.setMode=setMode;return mode==='intake'?<SelfRegistered store={{session:{serverUserId:'staff',userId:'staff',role:'staff',branchId:'b1'},state:{}}} toast={()=>{}}/>:mode==='followup'?<FollowupPanel patientId="p1" role="staff" branches={[{id:'b1',name:'Synthetic branch'}]} store={{getAuthGeneration:generation,session:{serverUserId:'staff',userId:'staff',role:'staff',branchId:'b1'}}} toast={(...x)=>window.other.feedback.push(x)}/>:<IdCheck patientId="p1"/>}createRoot(document.getElementById('root')).render(<Harness/>);`;
+function Shared(){const[v,setV]=React.useState('Other'),[detail,setDetail]=React.useState('');return <form onSubmit={e=>{e.preventDefault();window.other.calls.push({kind:'shared',value:v,detail})}}><SelectWithOther label="Relationship" required value={v} onChange={setV} options={['Child','Other']} otherValue={detail} onOtherChange={setDetail} placeholder="e.g., Cousin"/><button type="submit">Save relationship</button></form>}
+function Harness(){const[mode,setMode]=React.useState('id');window.other.setMode=setMode;return mode==='shared'?<Shared/>:mode==='intake'?<SelfRegistered store={{session:{serverUserId:'staff',userId:'staff',role:'staff',branchId:'b1'},state:{}}} toast={()=>{}}/>:mode==='followup'?<FollowupPanel patientId="p1" role="staff" branches={[{id:'b1',name:'Synthetic branch'}]} store={{getAuthGeneration:generation,session:{serverUserId:'staff',userId:'staff',role:'staff',branchId:'b1'}}} toast={(...x)=>window.other.feedback.push(x)}/>:<IdCheck patientId="p1" toast={(...x)=>window.other.feedback.push(x)}/>}createRoot(document.getElementById('root')).render(<Harness/>);`;
 const api = `
 export const onSessionInvalidated=()=>()=>{};
 export const pendingIntake=async()=>({ok:true,data:[{id:'intake1',reference:'SYNTHETIC',channel:'phone',branch_ref:'b1',self:{first_name:'Synthetic',last_name:'Patient'},id_type:'philid',join_queue:false}],meta:{id_types:{philid:'PhilID',other:'Other valid ID'}}});
 export const getPatientRecord=async()=>({ok:true,data:{id:'p1',profile_access:'full'}});
 const refuse=(kind,id,body)=>{window.other.calls.push({kind,id,body});return Promise.resolve({ok:false,kind:'validation',message:'Synthetic refusal',errors:{other_details:['Synthetic specify error']}})};
-export const verifyPatientId=(id,body)=>refuse('id',id,body),confirmIntake=(id,body)=>refuse('intake',id,body);
+export const verifyPatientId=(id,body)=>{if(window.other.receipt){window.other.calls.push({kind:'id',id,body});return Promise.resolve({ok:true,data:window.other.receipt})}return refuse('id',id,body)},confirmIntake=(id,body)=>refuse('intake',id,body);
 export const patientFollowups=async()=>({ok:true,data:[]});
 export const createFollowup=body=>refuse('followup','p1',body);
 export const followups=patientFollowups;
@@ -100,6 +101,39 @@ try {
   assert.equal((await p.evaluate(() => window.other.calls))[1].body.reason, "Suture Removal");
   assert.deepEqual(await p.evaluate(() => window.other.feedback), []);
   completed.push("followup: whitespace refusal, trimmed payload, error retention, hidden clear, ordinary reason");
+  // A real browser's native constraint validation must also protect shared
+  // Other fields, including implicit keyboard submission.
+  await p.goto(origin); await p.waitForFunction(()=>window.other?.setMode);
+  await p.evaluate(()=>window.other.setMode('shared'));
+  const relationship=p.getByRole('textbox',{name:/^Specify Relationship/}), save=p.getByRole('button',{name:'Save relationship'});
+  for(const value of ['', '   ']) {
+    await relationship.fill(value);await save.click();
+    assert.equal(await relationship.evaluate(el=>el.checkValidity()),false,'blank/whitespace Other must fail native form validation');
+    assert.equal(await p.evaluate(()=>window.other.calls.length),0);
+  }
+  await relationship.fill('Cousin');await relationship.press('Enter');
+  await p.waitForFunction(()=>window.other.calls.length===1);
+  assert.deepEqual(await p.evaluate(()=>window.other.calls),[{kind:'shared',value:'Other',detail:'Cousin'}]);
+  await p.getByRole('combobox',{name:/Relationship/}).selectOption('Child');assert.equal(await relationship.count(),0);
+  await p.getByRole('combobox',{name:/Relationship/}).selectOption('Other');assert.equal(await relationship.inputValue(),'');
+  completed.push('shared: native empty/whitespace refusal, keyboard submission, standard-choice reset');
+  for(const detail of [undefined,'Different ID type','Company ID']) {
+    await p.goto(origin);await p.waitForFunction(()=>window.other?.setMode);
+    await choose().selectOption('other');await p.getByRole('textbox',{name:/^Specify ID type/}).fill(' Company ID ');
+    await p.evaluate(detail=>{window.other.receipt={id_type:'other',id_verified_at:'2026-11-13T08:00:00+08:00',...(detail===undefined?{}:{other_details:detail})}},detail);
+    await p.getByRole('button',{name:'ID checked',exact:true}).click();
+    if(detail==='Company ID') {
+      await p.getByRole('status').filter({hasText:'ID checked: Other valid ID (Company ID)'}).waitFor();
+      assert.deepEqual(await p.evaluate(()=>window.other.feedback),[['ID check recorded (type only).','success']]);
+    } else {
+      await p.getByRole('alert').filter({hasText:'could not be confirmed'}).waitFor();
+      assert.deepEqual(await p.evaluate(()=>window.other.feedback),[]);
+      assert.equal(await p.getByRole('button',{name:'ID checked',exact:true}).isDisabled(),true);
+      assert.equal(await p.getByRole('textbox',{name:/^Specify ID type/}).inputValue(),' Company ID ');
+    }
+    assert.equal(await p.evaluate(()=>window.other.calls.length),1);
+    completed.push('id: '+String(detail)+' receipt '+(detail==='Company ID'?'confirmed':'refused without success'));
+  }
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({ passed: completed.length, completed }, null, 2));
 } finally {

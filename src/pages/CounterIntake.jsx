@@ -259,7 +259,8 @@ function PatientIdCheck({ patientId, toast }) {
     verifying.current = false
     setBusy(false)
     if (!r.ok) return setFailure(r)
-    if (!r.data?.id_verified_at || r.data.id_type !== body.id_type) {
+    if (!r.data?.id_verified_at || r.data.id_type !== body.id_type ||
+      (body.id_type === 'other' && r.data.other_details !== body.other_details)) {
       return setFailure({kind: 'unconfirmed', message: 'The ID-check result could not be confirmed. Reload ID status before retrying.'})
     }
     setRecord(x => ({ ...x, id_check: { type: r.data.id_type, other_details: r.data.other_details, at: r.data.id_verified_at } }))
