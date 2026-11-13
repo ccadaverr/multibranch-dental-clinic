@@ -7,9 +7,11 @@ if (!process.env.PLAYWRIGHT_MODULE) throw Error('Set PLAYWRIGHT_MODULE to an exi
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE)
 const browser = await chromium.launch({ headless: true, channel: 'chrome' })
 const context = await browser.newContext()
+const url = process.env.DEN_UI_URL || 'http://127.0.0.1:5186/tests/fixtures/den-ui-01.html'
+await context.route('**/*', route => new URL(route.request().url()).origin === new URL(url).origin ? route.continue() : route.abort())
 const page = await context.newPage()
 page.setDefaultTimeout(12000)
-const errors = [], mutations = [], results = [], requests = []
+const errors = [], mutations = [], results = [], requests = [], gen02Results = []
 page.on('pageerror', e => errors.push(e.message))
 let apiMode = 'populated', detailMode = 'normal', delay = null
 const statusRows = ['Pending', 'Confirmed', 'Checked In', 'In Treatment', 'Completed', 'Cancelled', 'No-show'].map((status, i) => apiAppointment('a' + i, { status, start_time: String(i + 8).padStart(2, '0') + ':00', end_time: String(i + 8).padStart(2, '0') + ':30' }))
@@ -18,6 +20,8 @@ await page.route('**/api/**', async route => {
   const request = route.request(), url = new URL(request.url())
   requests.push({ path: url.pathname, params: Object.fromEntries(url.searchParams) })
   if (request.method() !== 'GET') { mutations.push(request.method() + ' ' + url.pathname); return route.abort() }
+  // The current server shell reads notifications independently of the Schedule.
+  if (url.pathname === '/api/notifications') return route.fulfill({ json: { data: [], meta: { unread: 0 } } })
   if (url.pathname === '/api/appointments') {
     if (apiMode === 'loading') await delay
     if (apiMode === 'error') return route.fulfill({ status: 503, json: { message: 'Illustrative service unavailable' } })
@@ -36,7 +40,6 @@ await page.route('**/api/**', async route => {
   }
   throw Error('Unexpected API request: ' + url.pathname)
 })
-const url = process.env.DEN_UI_URL || 'http://127.0.0.1:5186/tests/fixtures/den-ui-01.html'
 const overflow = async label => assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), label + ': horizontal overflow')
 const evidence = process.env.QA_EVIDENCE_DIR || 'docs/ui-review/den-ui-01'
 await mkdir(evidence, { recursive: true })
@@ -67,12 +70,58 @@ try {
     assert.equal(await schedule.locator('.den-month-grid button[aria-pressed="true"]').count(), 1)
     await overflow('Schedule ' + width)
     if ([390, 768, 1440].includes(width)) await page.screenshot({ path: `${evidence}/schedule-${width}.png`, fullPage: true })
-    await schedule.getByLabel('Filter schedule by status').selectOption('Pending')
+    // GEN-02: exercise the real Schedule state, shared icon, keyboard and reset results.
+    const search = schedule.getByLabel('Find a patient or service')
+    const statusFilter = schedule.getByLabel('Filter schedule by status')
+    const clear = schedule.getByRole('button', { name: 'Clear filters', exact: true })
+    const locationBefore = page.url(), dateBefore = await schedule.getByLabel('Schedule date', { exact: true }).inputValue()
+    await page.evaluate(() => { window.gen02Submits = 0; document.addEventListener('submit', () => { window.gen02Submits++ }) })
+    assert.equal(await clear.count(), 0, 'GEN-02: no reset action when both filters are inactive')
+    await statusFilter.selectOption('Pending')
     assert.equal(await schedule.locator('.den-agenda > li').count(), 1)
-    await schedule.getByRole('button', { name: 'Clear filters', exact: true }).click()
-    await schedule.getByLabel('Find a patient or service').fill('not returned')
+    await writeFile(`${evidence}/gen02-control-${width}.json`, JSON.stringify(await clear.evaluate(e => ({ text: e.textContent, type: e.type, label: e.getAttribute('aria-label'), iconCount: e.querySelectorAll('svg').length })), null, 2))
+    assert.equal(await clear.textContent(), '', 'GEN-02: clear action must be icon-only, without visible text')
+    assert.equal(await clear.getAttribute('type'), 'button', 'GEN-02: reset cannot submit a form')
+    assert.equal(await clear.getAttribute('title'), 'Clear filters')
+    assert.equal(await clear.locator('svg[aria-hidden="true"]').count(), 1)
+    assert.equal(await clear.locator('path').getAttribute('d'), 'M6 6l12 12M18 6 6 18', 'GEN-02: existing shared X icon')
+    const target = await clear.boundingBox()
+    assert.ok(target.width >= 44 && target.height >= 44, 'GEN-02: usable touch target')
+    await statusFilter.focus(); await page.keyboard.press('Tab')
+    assert.ok(await clear.evaluate(e => e === document.activeElement && getComputedStyle(e).outlineStyle !== 'none' && parseFloat(getComputedStyle(e).outlineWidth) >= 2), 'GEN-02: visible keyboard focus')
+    await overflow('GEN-02 active filters ' + width)
+    await page.screenshot({ path: `${evidence}/gen02-active-${width}.png`, fullPage: true })
+    await page.keyboard.press('Enter')
+    assert.equal(await statusFilter.inputValue(), 'All')
+    assert.equal(await search.inputValue(), '')
+    assert.equal(await clear.count(), 0)
+    assert.equal(await schedule.locator('.den-agenda > li').count(), 7)
+    assert.ok(await search.evaluate(e => e === document.activeElement), 'GEN-02: focus returns to the surviving search field')
+    await page.keyboard.press('Tab')
+    assert.ok(await statusFilter.evaluate(e => e === document.activeElement), 'GEN-02: normal filter tab order continues')
+
+    await search.fill('not returned')
     await schedule.getByText('No appointments match these filters.', { exact: true }).waitFor()
-    await schedule.getByRole('button', { name: 'Clear filters', exact: true }).click()
+    await clear.focus(); await page.keyboard.press('Space')
+    assert.equal(await search.inputValue(), '')
+    assert.equal(await statusFilter.inputValue(), 'All')
+    assert.equal(await schedule.locator('.den-agenda > li').count(), 7)
+    assert.ok(await search.evaluate(e => e === document.activeElement))
+
+    await search.fill('consultation'); await statusFilter.selectOption('Confirmed')
+    assert.equal(await schedule.locator('.den-agenda > li').count(), 1)
+    // Same-tick repeated activation must leave both filters reset, without a second action.
+    await clear.evaluate(button => { button.click(); button.click() })
+    assert.equal(await search.inputValue(), '')
+    assert.equal(await statusFilter.inputValue(), 'All')
+    assert.equal(await clear.count(), 0)
+    assert.equal(await schedule.locator('.den-agenda > li').count(), 7)
+    assert.ok(await search.evaluate(e => e === document.activeElement))
+    assert.equal(page.url(), locationBefore)
+    assert.equal(await schedule.getByLabel('Schedule date', { exact: true }).inputValue(), dateBefore)
+    assert.equal(await page.evaluate(() => window.gen02Submits), 0)
+    assert.equal(mutations.length, 0)
+    gen02Results.push({ width, iconAndName: 'pass', statusResetEnter: 'pass', searchResetSpace: 'pass', combinedRepeatedReset: 'pass', focusAndTab: 'pass', conditionalVisibility: 'pass', noSubmitOrNavigation: 'pass' })
     const detailButton = schedule.getByRole('button', { name: /View appointment for/ }).first()
     await detailButton.click()
     const dialog = page.getByRole('dialog', { name: 'Appointment details', exact: true })
@@ -146,6 +195,6 @@ try {
   assert.equal(await page.locator('.den-current').evaluate(el => getComputedStyle(el).animationName), 'none')
   assert.equal(mutations.length, 0, 'No mutating API calls')
   assert.deepEqual(errors, [], 'No browser page errors')
-  await writeFile(`${evidence}/browser-results.json`, JSON.stringify({ results, additionalStates: ['loading', 'empty appointments and clinical work', 'manual Home refresh including follow-ups', 'HTTP error and retry', 'clinical error', 'unauthorized details', 'revoked branch', 'reduced motion'], pageErrors: errors, mutations, requestCount: requests.length, authenticatedAcceptance: false }, null, 2))
-  console.log(JSON.stringify({ results, additionalStates: 'pass', pageErrors: errors, mutations, requestCount: requests.length }))
+  await writeFile(`${evidence}/browser-results.json`, JSON.stringify({ results, gen02Results, additionalStates: ['loading', 'empty appointments and clinical work', 'manual Home refresh including follow-ups', 'HTTP error and retry', 'clinical error', 'unauthorized details', 'revoked branch', 'reduced motion'], pageErrors: errors, mutations, requestCount: requests.length, authenticatedAcceptance: false }, null, 2))
+  console.log(JSON.stringify({ results, gen02Results, additionalStates: 'pass', pageErrors: errors, mutations, requestCount: requests.length }))
 } finally { await browser.close() }

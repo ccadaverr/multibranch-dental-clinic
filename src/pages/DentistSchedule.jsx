@@ -35,6 +35,7 @@ export function DentistSchedule({ store }) {
   const today = useClinicDay()
   const [date, setDate] = useState(today)
   const [search, setSearch] = useState(''), [status, setStatus] = useState('All'), [detailId, setDetailId] = useState(null)
+  const searchInput = useRef(null)
   const read = useDentistPeriod(store, 'month', monthRange(date).from)
   const queueVisibility = useQueueVisibility(store)
   useVisibleRefresh(() => store.appointmentFlow?.refresh(), { active: !!read.scope && date === today })
@@ -57,7 +58,7 @@ export function DentistSchedule({ store }) {
         </div>
         <nav className="den-week" aria-label="Schedule week"><button type="button" aria-label="Previous week" onClick={() => setDate(d => addDays(d, -7))}><Icon name="chevronLeft" size={17}/></button><div>{weekDays(date).map(day => <button type="button" key={day} aria-pressed={day === date} aria-label={clinicDateLabel(day, { weekday: 'long', month: 'long', day: 'numeric' })} onClick={() => setDate(day)}><small>{clinicDateLabel(day, { weekday: 'short' })}</small><b>{Number(day.slice(8))}</b></button>)}</div><button type="button" aria-label="Next week" onClick={() => setDate(d => addDays(d, 7))}><Icon name="chevron" size={17}/></button></nav>
         <Card className="den-panel" title="Scheduled patients" subtitle={read.status === 'ready' && read.complete && !read.stale ? `${allDay.length} appointment${allDay.length === 1 ? '' : 's'} | ${rows.length} shown` : 'Appointments for the selected date'}>
-          <div className="den-agenda-filters"><label>Find a patient or service<input type="search" value={search} placeholder="Search this day" onChange={e => setSearch(e.target.value)}/></label><label>Status<select aria-label="Filter schedule by status" value={status} onChange={e => setStatus(e.target.value)}><option value="All">All statuses</option>{Object.keys(APPOINTMENT_STATUSES).map(s => <option key={s}>{s}</option>)}</select></label>{(search || status !== 'All') && <button className="den-text-link" type="button" onClick={() => { setSearch(''); setStatus('All') }}>Clear filters</button>}</div>
+          <div className="den-agenda-filters"><label>Find a patient or service<input ref={searchInput} type="search" value={search} placeholder="Search this day" onChange={e => setSearch(e.target.value)}/></label><label>Status<select aria-label="Filter schedule by status" value={status} onChange={e => setStatus(e.target.value)}><option value="All">All statuses</option>{Object.keys(APPOINTMENT_STATUSES).map(s => <option key={s}>{s}</option>)}</select></label>{(search || status !== 'All') && <button className="icon-btn filter-bar-clear" type="button" title="Clear filters" aria-label="Clear filters" onClick={() => { setSearch(''); setStatus('All'); searchInput.current?.focus() }}><Icon name="x" size={16}/></button>}</div>
           <ReadState read={read}/>
           {read.status === 'ready' && <AppointmentAgenda rows={rows} onOpen={setDetailId} empty={search || status !== 'All' ? 'No appointments match these filters.' : read.complete ? 'No appointments scheduled for this day.' : 'No appointments in the loaded portion. Refresh to retrieve the full day.'}/>}
         </Card>
