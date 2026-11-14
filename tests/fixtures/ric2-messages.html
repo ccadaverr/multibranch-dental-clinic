@@ -7,5 +7,7 @@ import { ServerMessagesPage } from '/src/pages/ServerMessages.jsx'
 import '/src/styles.css'
 import '/src/foundation.css'
 import '/src/patient.css'
-createRoot(document.getElementById('root')).render(React.createElement(ServerMessagesPage, { store: { toast: () => {} }, role: new URLSearchParams(location.search).get('role') || 'staff' }))
+const role=new URLSearchParams(location.search).get('role')||'staff',person={id:'person'},user={id:'user',personId:'person',role:role==='dentist'?'Dentist':role==='patient'?'Patient':'Staff',status:'Active',permissions:role==='patient'?['patient-portal']:['all'],branchId:'b1'}
+const store={toast:()=>{},session:{serverUserId:'synthetic-account',userId:'user',role,active:true,branchScopes:['b1'],dentistId:'dentist',branchId:'b1',patientId:'patient',patientPublicId:'synthetic-patient'},state:{users:[user],persons:[person],dentists:[{id:'dentist',userId:'user',personId:'person',branchIds:['b1']}],patients:[{id:'patient',userId:'user',personId:'person'}],staff:[{userId:'user',personId:'person',branchId:'b1'}]}}
+createRoot(document.getElementById('root')).render(React.createElement(ServerMessagesPage, {store,role}))
 </script></body></html>

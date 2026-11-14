@@ -49,14 +49,12 @@ test('M4 consultation_first restricted procedure requires clinical authorization
 })
 
 test('M17 ServerMessages close conversation uses ConfirmDialog with state preservation on cancel', () => {
-  const messages = read('src/pages/ServerMessages.jsx')
-  assert.match(messages, /confirmClose/)
-  assert.match(messages, /<ConfirmDialog/)
-  assert.match(messages, /title="Close this conversation\?"/)
-  // On cancel, resets confirmClose without calling close API
-  assert.match(messages, /onCancel=\{\(\) => setConfirmClose\(false\)\}/)
-  // On confirm, invokes conversation close
-  assert.match(messages, /onConfirm=\{\(\) => \{ setConfirmClose\(false\); close\(\) \}\}/)
+  const captured=Object.freeze({id:'conversation-A',patientId:'patient-A',branchId:'b1',status:'Open',revision:7,key:'same-command-key'}), calls=[]
+  let confirmation=captured
+  const bindings={confirmClose:captured,setConfirmClose:value=>{confirmation=value},close:observed=>calls.push(observed)}
+  const callback=name=>jsxAttribute('src/pages/ServerMessages.jsx','ConfirmDialog',name,bindings,'Close this conversation?')
+  callback('onCancel')();assert.equal(confirmation,false);assert.deepEqual(calls,[],'cancel sends no command')
+  confirmation=captured;callback('onConfirm')();assert.equal(confirmation,false);assert.deepEqual(calls,[captured]);assert.equal(calls[0],captured,'confirmation carries the reviewed snapshot, never the latest selected row')
 })
 
 test('M11 FinanceCommunication invoice issuance uses ConfirmDialog with state preservation on cancel', () => {

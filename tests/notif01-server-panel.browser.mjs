@@ -24,7 +24,7 @@ export async function runNotif01ServerPanel(page, base = 'http://127.0.0.1:5176'
   await page.goto(`${base}/tests/fixtures/notif01-server-panel.html`)
   await page.getByRole('button', { name: /Notifications/ }).click()
   const dialog = page.getByRole('dialog', { name: 'Notifications' })
-  await dialog.getByText('Account a notice', { exact: true }).waitFor()
+  await dialog.locator('.notification-row b').filter({ hasText: 'Account a notice' }).waitFor()
   assert.equal(await dialog.getByText('LOCAL DEMO MUST NOT APPEAR').count(), 0)
   assert.equal(await dialog.getByText('61 unread', { exact: true }).count(), 1)
   const unknown = dialog.locator('li').filter({ hasText: 'Unknown destination' })
@@ -54,10 +54,10 @@ export async function runNotif01ServerPanel(page, base = 'http://127.0.0.1:5176'
   holdList = false
   await page.evaluate(() => window.notif01Configure({ account: 'b' }))
   await page.getByRole('button', { name: /Notifications/ }).click()
-  await dialog.getByText('Account b notice', { exact: true }).waitFor()
+  await dialog.locator('.notification-row b').filter({ hasText: 'Account b notice' }).waitFor()
   assert.ok(held.length > 0)
   for (const pending of held.splice(0)) await pending.route.fulfill({ status: 200, json: payload(pending.who) })
-  assert.equal(await dialog.getByText('Account old-a notice', { exact: true }).count(), 0)
+  assert.equal(await dialog.locator('.notification-row b').filter({ hasText: 'Account old-a notice' }).count(), 0)
 
   failList = true
   account = 'failure'
@@ -66,7 +66,7 @@ export async function runNotif01ServerPanel(page, base = 'http://127.0.0.1:5176'
   assert.equal(await dialog.getByText('No recent notifications.', { exact: true }).count(), 0)
   failList = false
   await dialog.getByRole('button', { name: 'Retry notifications' }).click()
-  await dialog.getByText('Account failure notice', { exact: true }).waitFor()
+  await dialog.locator('.notification-row b').filter({ hasText: 'Account failure notice' }).waitFor()
   await page.evaluate(() => window.notif01Configure({ active: false }))
   assert.equal(await dialog.getByRole('button', { name: 'View update' }).count(), 0)
 }

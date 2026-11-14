@@ -20,9 +20,9 @@ const posts = () => calls.filter(c => c.method === 'POST')
 const msg = (n, over = {}) => ({ id: `01k00000000000000000000m0${n}`, body: `message ${n}`, sender: { name: 'Staff Name', role: 'Staff' }, mine: false, sent_at: '2026-09-28T10:00:00+08:00', ...over })
 
 test('a message is sent as {body} only, trimmed, with an Idempotency-Key; the sender is never supplied by the browser', async () => {
-  stubFetch(json(200, {}), json(201, { data: msg(1, { mine: true }) }))
+  stubFetch(json(200, {}), json(201, { data: msg(1, { mine: true, body:'Hello' }) }))
   const result = await messaging.sendMessage('01k0000000000000000000c001', '  Hello  ', 'key-1')
-  assert.deepEqual([result.ok, result.message.body, result.message.mine], [true, 'message 1', true])
+  assert.deepEqual([result.ok, result.message.body, result.message.mine], [true, 'Hello', true])
   assert.deepEqual(posts()[0].body, { body: 'Hello' })
   assert.equal(posts()[0].headers['Idempotency-Key'], 'key-1')
   assert.ok(posts()[0].url.endsWith('/api/conversations/01k0000000000000000000c001/messages'))
@@ -39,7 +39,7 @@ test('marking read names the newest displayed message and nothing else; with not
   const page = read('src/pages/ServerMessages.jsx')
   // Read state follows the newest DISPLAYED server message of the selected conversation (pending sends are not server messages).
   assert.match(page, /const newestShown = thread\?\.messages\?\.length \? thread\.messages\[thread\.messages\.length - 1\]\.id : null/)
-  assert.match(page, /markRead\(selectedId, newestShown\)\.then\(r => \{ if \(current && r\.ok\) refreshList\(\) \}\)/)
+  assert.match(page, /markRead\(selectedId, newestShown, \(\) => owns\(\) && selectedRef.current===selectedId\)\.then\(r => \{ if \(current && owns\(\) && r\.ok\) refreshList\(\) \}\)/)
   assert.doesNotMatch(page, /unread: 0/, 'the browser never decides the unread count; it re-reads the server')
 })
 

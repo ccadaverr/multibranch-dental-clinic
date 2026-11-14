@@ -113,8 +113,8 @@ export function serverNotificationDestination(state, session, notification) {
   return page && canAccessPage(state, session, page) ? { page, context: null } : null
 }
 
-export function notificationFeedKey(session) {
-  return JSON.stringify([session?.serverUserId || null, session?.userId || null, session?.role || null, session?.active === true])
+export function notificationFeedKey(session, auth) {
+  return JSON.stringify([session?.serverUserId || null, session?.userId || null, session?.role || null, session?.active === true, auth ?? null])
 }
 
 export function serverNotificationSnapshot(result) {
@@ -129,8 +129,9 @@ export function serverNotificationSnapshot(result) {
 
 // Render-keyed snapshots hide old-account data before effects run. Epoch objects also
 // reject A -> B -> A responses, and cleanup invalidates in-flight work on unmount.
-function useServerNotificationFeed(session, enabled = true) {
-  const key = notificationFeedKey(session)
+function useServerNotificationFeed(session, enabled = true, getAuthGeneration) {
+  const auth = getAuthGeneration?.()
+  const key = notificationFeedKey(session, auth)
   const epoch = React.useRef(null)
   if (epoch.current?.key !== key) epoch.current = { key }
   const token = epoch.current
@@ -138,15 +139,18 @@ function useServerNotificationFeed(session, enabled = true) {
   const generation = React.useRef(0)
   const pending = React.useRef(null)
   const [snapshot, setSnapshot] = React.useState(null)
-  const run = React.useCallback(async (operation = listNotifications, mutation = false) => {
+  const run = React.useCallback(async (operation = listNotifications, mutation = false, expectedRead = null) => {
+    if (getAuthGeneration && (auth == null || auth !== getAuthGeneration())) return false
     if (!enabled || !session?.serverUserId || !session.active || pending.current === token || epoch.current !== token || !mounted.current) return false
     const requestId = ++generation.current
     pending.current = token
     setSnapshot(previous => ({ ...(previous?.token === token ? previous : { items: [], unread: null }), token, loading: !mutation, busy: mutation, error: '' }))
     try {
-      const result = await operation()
-      if (!mounted.current || epoch.current !== token || generation.current !== requestId) return false
+      const owns=()=>mounted.current && epoch.current===token && generation.current===requestId && auth===getAuthGeneration?.()
+      const result = await operation(owns)
+      if (!mounted.current || epoch.current !== token || generation.current !== requestId || !owns()) return false
       const data = serverNotificationSnapshot(result)
+      if (expectedRead === '*' ? data.items.some(n=>!n.read) : expectedRead && !data.items.some(n=>n.id===expectedRead&&n.read)) throw new Error('Read status could not be confirmed. Reload notifications before trying again.')
       setSnapshot({ ...data, token, loading: false, busy: false, error: '' })
       return true
     } catch (error) {
@@ -157,7 +161,7 @@ function useServerNotificationFeed(session, enabled = true) {
     } finally {
       if (pending.current === token && generation.current === requestId) pending.current = null
     }
-  }, [enabled, token, session?.serverUserId, session?.active])
+  }, [enabled, token, session?.serverUserId, session?.active, auth, getAuthGeneration])
   useLayoutEffectSafe(() => {
     mounted.current = true
     run()
@@ -168,21 +172,22 @@ function useServerNotificationFeed(session, enabled = true) {
     }
   }, [run, token])
   const current = !enabled || !session?.active ? { items: [], unread: null, loading: false, busy: false, error: 'Notifications are unavailable for this session.' } : snapshot?.token === token ? snapshot : { items: [], unread: null, loading: true, busy: false, error: '' }
-  return { ...current, key, refresh: () => run(), mark: id => run(() => readNotification(id), true), markAll: () => run(readAllNotifications, true) }
+  return { ...current, key, refresh: () => run(), mark: id => run(guard => readNotification(id, guard), true, id), markAll: () => run(readAllNotifications, true, '*') }
 }
 
 export function NotificationPanel(props) {
   const session = props.store.session || sessionForRole(props.role, props.store.state)
-  return <NotificationPanelContent key={notificationFeedKey(session)} {...props}/>
+  return <NotificationPanelContent key={notificationFeedKey(session,props.store.getAuthGeneration?.())} {...props}/>
 }
 
 function NotificationPanelContent({role,store,onClose,setPage,serverFeed}){
   const {state,actions,toast}=store
   const session=store.session||sessionForRole(role,state)
   const server=!!session?.serverUserId
-  const ownFeed=useServerNotificationFeed(session,server&&!serverFeed&&canAccessPage(state,session,'dashboard'))
+  const ownFeed=useServerNotificationFeed(session,server&&!serverFeed&&canAccessPage(state,session,'dashboard'),store.getAuthGeneration)
   const feed=serverFeed||ownFeed
-  const key=notificationFeedKey(session)
+  const auth=store.getAuthGeneration?.()
+  const key=notificationFeedKey(session,auth)
   const feedCurrent=feed.key===key
   const loading=server&&(!feedCurrent||feed.loading)
   const feedError=server&&feedCurrent?feed.error:''
@@ -205,27 +210,27 @@ function NotificationPanelContent({role,store,onClose,setPage,serverFeed}){
   latest.current={state,session,key}
   const destination=n=>server?serverNotificationDestination(state,session,n):notificationDestination(state,session,n)
   const perform=async command=>{
-    if(pending.current||loading||feedError)return false
+    if(pending.current||loading||feedError||auth!==store.getAuthGeneration?.())return false
     pending.current=true
     focusOrigin.current=typeof document==='undefined'?null:document.activeElement
     setBusy(true);setFailure('')
     try {
       const result=await command()
-      if(!live.current||latest.current.key!==key)return false
+      if(!live.current||latest.current.key!==key||auth!==store.getAuthGeneration?.())return false
       if(!(server?result:result?.ok)){
         const message=result?.message||'Notifications could not be updated. Try again.'
         setFailure(message);toast?.(message,'warning');return false
       }
       return true
     } catch {
-      if(!live.current||latest.current.key!==key)return false
+      if(!live.current||latest.current.key!==key||auth!==store.getAuthGeneration?.())return false
       const message='Notifications could not be updated. Try again.'
       setFailure(message);toast?.(message,'warning');return false
     } finally {pending.current=false;if(live.current)setBusy(false)}
   }
   const mark=id=>perform(()=>server?feed.mark(id):actions.markNotificationRead(id))
   const open=async n=>{
-    if(!destination(n)||!await mark(n.id)||!live.current||latest.current.key!==key)return
+    if(!destination(n)||!await mark(n.id)||!live.current||latest.current.key!==key||auth!==store.getAuthGeneration?.())return
     const current=server?serverNotificationDestination(latest.current.state,latest.current.session,n):notificationDestination(latest.current.state,latest.current.session,n)
     if(current){setPage(current.page,current.context);onClose()}
   }
@@ -289,7 +294,7 @@ export function Shell({ role, page, setPage, onLogout, activeBranch, setActiveBr
   const account=store.state.users.find(u=>u.id===session?.userId)
   const name=account?.name||session?.name||info.label
   const initials=name.split(' ').map(x=>x[0]).filter(Boolean).slice(0,2).join('')
-  const notificationFeed=useServerNotificationFeed(session,!!session?.serverUserId&&canAccessPage(store.state,session,'dashboard'))
+  const notificationFeed=useServerNotificationFeed(session,!!session?.serverUserId&&canAccessPage(store.state,session,'dashboard'),store.getAuthGeneration)
   const unread=session?.serverUserId?notificationFeed.unread:visibleNotifications(store.state,session).filter(n=>!n.read).length
   React.useEffect(()=>{if(notificationsOpen&&session?.serverUserId)notificationFeed.refresh()},[notificationsOpen,session?.serverUserId])
   const groups=navGroups(role,!!session?.serverUserId).map(([title,items])=>[title,items.filter(([key])=>canAccessPage(store.state,session,key))]).filter(([,items])=>items.length)

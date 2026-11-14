@@ -70,7 +70,7 @@ test('the sync read asks for messages after the last one shown (same endpoint as
 })
 
 test('starting a conversation sends the branch and text with an Idempotency-Key', async () => {
-  respond({ data: { conversation: { id: 'c9', reused: false }, message: { id: 'm1', body: 'Hello', sender: { name: 'P', role: 'Patient' }, mine: true, sent_at: 'x' } } })
+  respond({ data: { conversation: { id: 'c9', reused: false }, message: { id: 'm1', body: 'Hello', sender: { name: 'P', role: 'Patient' }, mine: true, sent_at: '2026-11-14T10:00:00+08:00' } } })
   const result = await startConversation('b1', '  Hello  ', 'key-1')
   const last = calls.at(-1)
   assert.match(last.url, /\/api\/conversations$/)

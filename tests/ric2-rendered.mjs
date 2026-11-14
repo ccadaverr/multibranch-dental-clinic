@@ -10,7 +10,7 @@ export async function runMessagingAcceptance(page, base = 'http://127.0.0.1:5176
   const message = (n, body = `Message ${n}: Please contact the clinic for appointment details. `.repeat(3)) => ({ id: `m${n}`, body,
     sender: { name: n % 2 ? 'Patient Example' : 'Dentist Example', role: n % 2 ? 'Patient' : 'Dentist' }, mine: n % 2 === 0, sent_at: '2026-10-29T10:00:00+08:00' })
   const conversation = n => ({ id: `c${n}`, context: 'Appointment clarification', status: 'Open', revision: 1,
-    patient: { name: `Patient ${n}`, code: `PAT-${n}` }, branch: { name: 'Test Branch', ref: 'branch-test' }, participants: [{ name: 'Dentist Example', role: 'Dentist' }], unread: 0 })
+    patient: { id:'synthetic-patient', name: `Patient ${n}`, code: `PAT-${n}` }, branch: { id:'b1', name: 'Test Branch', ref: 'branch-test' }, participants: [{ name: 'Dentist Example', role: 'Dentist' }], unread: 0 })
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url())
     const q = url.searchParams.get('q') || ''

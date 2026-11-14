@@ -9,7 +9,7 @@ test('old-message search sends a literal encoded query and retains the server cu
   let called
   globalThis.fetch = async url => {
     called = new URL(url, 'http://localhost')
-    return { ok: true, status: 200, json: async () => ({ data: [{ id: 'old', body: '<img> 100%_needle', sender: { name: 'Patient', role: 'Patient' }, sent_at: '2026-10-29T10:00:00+08:00' }], meta: { next_cursor: 'older-match' } }) }
+    return { ok: true, status: 200, json: async () => ({ data: [{ id: 'old', body: '<img> 100%_needle', mine:false, sender: { name: 'Patient', role: 'Patient' }, sent_at: '2026-10-29T10:00:00+08:00' }], meta: { next_cursor: 'older-match' } }) }
   }
   const result = await loadMessages('conversation', 'cursor', ' 100%_needle ')
   assert.equal(called.pathname, '/api/conversations/conversation/messages')

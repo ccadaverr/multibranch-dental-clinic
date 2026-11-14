@@ -187,10 +187,21 @@ test('NOTIF-02 error markup exposes retry, announces stale data and suppresses e
 test('NOTIF-02 source guard keeps account eligibility, awaited navigation and keyboard recovery', () => {
   const source = readFileSync('src/patient/Portal.jsx', 'utf8')
   assert.match(source, /session\?\.serverUserId === me.id/)
-  assert.match(source, /\[identity, eligible\]/)
+  assert.match(source, /\[identity, eligible, auth, getAuthGeneration\]/)
   assert.match(source, /return \(\) => feed.stop\(\)/)
   assert.match(source, /!await notes.markRead\(n.id\) \|\| !notes.isCurrent\(\)/)
   assert.match(source, /e.key === 'Tab'/)
   assert.match(source, /e.key === 'Escape'/)
   assert.match(source, /bellButton.current\?\.focus\(\)/)
+})
+
+for(const operation of ['read','all'])test('GEN-10 Patient '+operation+' refuses a successful response that still contains unread evidence',async()=>{
+ const {feed}=fixture({read:()=>Promise.resolve(response()),readAll:()=>Promise.resolve(response())});await feed.start(()=>{});assert.equal(await (operation==='read'?feed.markRead('notice-a'):feed.markAll()),false);assert.equal(feed.snapshot().items[0].read,false);assert.equal(feed.snapshot().unread,72);assert.match(feed.snapshot().error,/could not be confirmed/);feed.stop()
+})
+test('GEN-10 Patient read checks the current auth lifetime at transport and response adoption',async()=>{
+ let valid=true,guard;const pending=deferred();const feed=createFeed({isCurrent:()=>valid,list:()=>Promise.resolve(response()),read:(id,current)=>{assert.equal(id,'notice-a');guard=current;return pending.promise}});await feed.start(()=>{});const reading=feed.markRead('notice-a');assert.equal(guard(),true);valid=false;assert.equal(guard(),false);pending.resolve(response(true));assert.equal(await reading,false);assert.deepEqual(feed.snapshot().items,[]);assert.equal(feed.isActive(),false);assert.equal(await feed.markRead('notice-a'),false);feed.stop()
+})
+
+test('GEN-10 Patient read-all forwards the same dispatch lifetime guard',async()=>{
+ let valid=true,guard;const pending=deferred();const feed=createFeed({isCurrent:()=>valid,list:()=>Promise.resolve(response()),readAll:current=>{guard=current;return pending.promise}});await feed.start(()=>{});const reading=feed.markAll();assert.equal(guard(),true);valid=false;assert.equal(guard(),false);pending.resolve(response(true));assert.equal(await reading,false);assert.deepEqual(feed.snapshot().items,[]);assert.equal(feed.isActive(),false);feed.stop()
 })

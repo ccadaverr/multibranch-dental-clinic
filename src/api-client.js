@@ -331,8 +331,8 @@ export function testAssistantAnswer(question) { return request('/api/assistant-a
 
 // Identity-specific notifications from real server events (each person sees only their own).
 export function listNotifications() { return request('/api/notifications') }
-export function readNotification(id) { return request(`/api/notifications/${encodeURIComponent(id)}/read`, { method: 'POST', body: '{}' }) }
-export function readAllNotifications() { return request('/api/notifications/read-all', { method: 'POST', body: '{}' }) }
+export function readNotification(id, beforeDispatch) { return request(`/api/notifications/${encodeURIComponent(id)}/read`, { method: 'POST', body: '{}', beforeDispatch }) }
+export function readAllNotifications(beforeDispatch) { return request('/api/notifications/read-all', { method: 'POST', body: '{}', beforeDispatch }) }
 
 // Patient booking helpers (read-only searches; the booking command is createAppointment).
 export function bookingBranchOptions(params) { return request(`/api/appointments/branch-options${query(params)}`) }
@@ -350,15 +350,15 @@ export function reviewFeedback(params) { return request(`/api/feedback/review${q
 export function listConversations(params) { return request(`/api/conversations${query(params)}`) }
 export function conversationSummary() { return request('/api/conversations/summary') }
 export function listConversationMessages(id, params) { return request(`/api/conversations/${encodeURIComponent(id)}/messages${query(params)}`) }
-export function sendConversationMessage(id, body, key) { return command(`/api/conversations/${encodeURIComponent(id)}/messages`, { body }, key) }
+export function sendConversationMessage(id, body, key, beforeDispatch) { return command(`/api/conversations/${encodeURIComponent(id)}/messages`, { body }, key, beforeDispatch) }
 // The browser names the NEWEST message it has actually displayed; the server moves this participant's marker forward only.
-export function markConversationRead(id, upTo) { return command(`/api/conversations/${encodeURIComponent(id)}/read`, { up_to: upTo }) }
-export function closeConversation(id, payload, key) { return command(`/api/conversations/${encodeURIComponent(id)}/close`, payload, key) }
+export function markConversationRead(id, upTo, beforeDispatch) { return command(`/api/conversations/${encodeURIComponent(id)}/read`, { up_to: upTo }, undefined, beforeDispatch) }
+export function closeConversation(id, payload, key, beforeDispatch) { return command(`/api/conversations/${encodeURIComponent(id)}/close`, payload, key, beforeDispatch) }
 export function conversationStartOptions() { return request('/api/conversations/start-options') }
-export function startConversation(payload, key) { return command('/api/conversations', payload, key) }
+export function startConversation(payload, key, beforeDispatch) { return command('/api/conversations', payload, key, beforeDispatch) }
 export function conversationPresence() { return request('/api/conversations/presence', { method: 'POST', body: '{}' }) }
 export function conversationDentistOptions(id) { return request(`/api/conversations/${encodeURIComponent(id)}/dentist-options`) }
-export function addConversationDentist(id, dentistId) { return request(`/api/conversations/${encodeURIComponent(id)}/participants`, { method: 'POST', body: JSON.stringify({ dentist_id: dentistId }) }) }
+export function addConversationDentist(id, dentistId, beforeDispatch) { return request(`/api/conversations/${encodeURIComponent(id)}/participants`, { method: 'POST', body: JSON.stringify({ dentist_id: dentistId }), beforeDispatch }) }
 // M17 realtime: private-channel authorization for the socket client (same session cookie + CSRF as every call).
 export function authorizeChannel(socketId, channelName) { return request('/api/broadcasting/auth', { method: 'POST', body: JSON.stringify({ socket_id: socketId, channel_name: channelName }) }) }
 

@@ -5,6 +5,7 @@ import {useNotifications,NotificationPanel,patientNotificationDestination} from 
 import '/src/styles.css'
 import '/src/foundation.css'
 import '/src/patient/portal.css'
+window.notif02Auth=1
 function Fixture(){
  const [account,setAccount]=useState('a'),[mounted,setMounted]=useState(true)
  window.notif02Account=setAccount
@@ -14,7 +15,8 @@ function Fixture(){
 function Harness({account}){
  const me={id:`account-${account}`,patient:{id:`patient-${account}`},role:'patient',account_status:'Active'}
  const session={serverUserId:me.id,role:'patient',active:true}
- const notes=useNotifications(me,session)
+ const authReader=useRef(()=>window.notif02Auth).current
+ const notes=useNotifications(me,session,authReader)
  const [open,setOpen]=useState(false),[navigation,setNavigation]=useState('')
  const bell=useRef(null)
  window.notif02Reload=notes.reload

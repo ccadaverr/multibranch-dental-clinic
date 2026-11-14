@@ -72,7 +72,7 @@ export function PatientPortal({ me, store, initialPage = 'home', initialContext 
     window.addEventListener('patient-avatar-updated', handler)
     return () => window.removeEventListener('patient-avatar-updated', handler)
   }, [me?.patient?.id, me?.id])
-  const notes = useNotifications(me, store.session)
+  const notes = useNotifications(me, store.session, store.getAuthGeneration)
   const main = useRef(null)
   const bellButton = useRef(null)
   const notificationAccount = useRef(me)
@@ -222,8 +222,9 @@ export function createPatientNotificationFeed(api) {
   let active = false, generation = 0, pending = null, listener = null
   let state = { status: 'loading', items: [], unread: null, error: '', busy: false, refreshing: false, confirmed: false, failed: null }
   const emit = next => { state = next; listener?.(state) }
+  const authorized=()=>!api.isCurrent || api.isCurrent()
   const run = async operation => {
-    if (!active || pending?.type === 'read' || pending?.type === 'all' || (operation.type === 'load' && pending)) return false
+    if (!authorized() || !active || pending?.type === 'read' || pending?.type === 'all' || (operation.type === 'load' && pending)) return false
     if (operation.type === 'read' && !state.items.some(n => n.id === operation.id)) return false
     if (operation.type === 'read' && state.items.find(n => n.id === operation.id)?.read) return true
     const request = { ...operation, generation: ++generation }
@@ -231,14 +232,17 @@ export function createPatientNotificationFeed(api) {
     emit({ ...state, error: '', failed: null, busy: operation.type !== 'load', refreshing: true })
     let result
     try {
-      result = await (operation.type === 'read' ? api.read(operation.id) : operation.type === 'all' ? api.readAll() : api.list())
+      const owns=()=>active && generation===request.generation && authorized()
+      result = await (operation.type === 'read' ? api.read(operation.id, owns) : operation.type === 'all' ? api.readAll(owns) : api.list())
       if (!active || generation !== request.generation) return false
+      if(!authorized())throw new Error('Notifications are unavailable for this account.')
       const snapshot = patientNotificationSnapshot(result)
+      if(operation.type==='read' && !snapshot.items.some(n=>n.id===operation.id&&n.read) || operation.type==='all' && snapshot.items.some(n=>!n.read))throw new Error('Read status could not be confirmed. Retry or reload notifications.')
       emit({ ...snapshot, status: 'ready', busy: false, refreshing: false, error: '', confirmed: true, failed: null })
       return true
     } catch (error) {
       if (!active || generation !== request.generation) return false
-      const denied = ['unauthenticated', 'forbidden'].includes(result?.kind)
+      const denied = !authorized() || ['unauthenticated', 'forbidden'].includes(result?.kind)
       const retained = state.confirmed && !denied
       emit({ ...state, ...(retained ? {} : { items: [], unread: null, confirmed: false }), status: retained ? 'ready' : 'error', busy: false, refreshing: false,
         error: error?.message || 'Notifications are unavailable. Try again.', failed: denied ? { type: 'load' } : operation })
@@ -249,7 +253,7 @@ export function createPatientNotificationFeed(api) {
     snapshot: () => state,
     start(callback) { active = true; listener = callback; return run({ type: 'load' }) },
     stop() { active = false; generation++; pending = null; listener = null },
-    isActive: () => active,
+    isActive: () => active && authorized(),
     reload: () => run({ type: 'load' }),
     poll: () => state.failed && state.failed.type !== 'load' ? Promise.resolve(false) : run({ type: 'load' }),
     markRead: id => run({ type: 'read', id }),
@@ -261,13 +265,14 @@ export function createPatientNotificationFeed(api) {
 const useNotificationLayoutEffect = typeof window === 'undefined' ? useEffect : React.useLayoutEffect
 
 /** Server-only notifications, refreshed every minute while visible and authorized. */
-export function useNotifications(me, session) {
+export function useNotifications(me, session, getAuthGeneration) {
+  const auth=getAuthGeneration?.()
   const identity = patientNotificationIdentity(me)
-  const eligible = !!identity && session?.serverUserId === me.id && session?.role === 'patient' && session?.active === true
+  const eligible = !!identity && session?.serverUserId === me.id && session?.role === 'patient' && session?.active === true && (!getAuthGeneration || auth!=null)
   const [snapshot, setSnapshot] = useState(null)
   // A -> B -> A creates a fresh controller rather than reusing A's earlier epoch.
-  const feed = React.useMemo(() => createPatientNotificationFeed({ list: listNotifications, read: readNotification, readAll: readAllNotifications }), [identity, eligible])
   const latest = useRef(null)
+  const feed = React.useMemo(() => createPatientNotificationFeed({ list: listNotifications, read: readNotification, readAll: readAllNotifications, isCurrent:()=>latest.current===feed && (!getAuthGeneration || auth===getAuthGeneration()) }), [identity, eligible, auth, getAuthGeneration])
   latest.current = eligible ? feed : null
   useNotificationLayoutEffect(() => {
     if (!eligible) return undefined

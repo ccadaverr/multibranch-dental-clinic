@@ -1,0 +1,28 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synthetic messaging and notification QA</title></head><body><main id="root"></main><script type="module">
+import React,{useRef,useState} from 'react'
+import {createRoot} from 'react-dom/client'
+import {ServerMessagesPage} from '/src/pages/ServerMessages.jsx'
+import {NotificationPanel} from '/src/layout.jsx'
+import '/src/styles.css'
+import '/src/foundation.css'
+import '/src/patient.css'
+import '/src/public-site.css'
+import '/src/polish.css'
+import '/src/patient/portal.css'
+import '/src/landing.css'
+import '/src/automations.css'
+window.qa08={auth:1,feedback:[],navigations:[],closed:0}
+function Fixture(){
+ const [role,setRole]=useState(new URLSearchParams(location.search).get('role')||'staff'),[account,setAccount]=useState('A'),[mode,setMode]=useState(new URLSearchParams(location.search).get('mode')||'messages'),[scopes,setScopes]=useState(['b1'])
+ Object.assign(window.qa08,{setRole,setAccount,setMode,setScopes})
+ const getAuthGeneration=useRef(()=>window.qa08.auth).current
+ const person={id:'person-'+account},user={id:'user-'+account,personId:person.id,role:role==='owner'?'Owner / Admin':role==='patient'?'Patient':role==='dentist'?'Dentist':'Staff',status:'Active',permissions:role==='patient'?['patient-portal']:['all'],branchId:'b1'}
+ const session={serverUserId:'server-'+account,userId:user.id,personId:person.id,role,active:true,branchId:'b1',branchScopes:scopes,patientId:'local-'+account,patientPublicId:'patient-'+account,dentistId:'dentist-'+account}
+ const state={users:[user],persons:[person],staff:[{userId:user.id,personId:person.id,branchId:'b1'}],dentists:[{id:'dentist-'+account,userId:user.id,personId:person.id,branchIds:['b1']}],patients:[{id:'local-'+account,userId:user.id,personId:person.id}],notifications:[],branches:[{id:'b1',name:'Synthetic branch'}]}
+ const store={state,session,getAuthGeneration,toast:(...x)=>window.qa08.feedback.push(x),actions:{}}
+ if(mode==='away')return React.createElement('h1',null,'Synthetic destination')
+ if(mode==='notifications')return React.createElement(NotificationPanel,{store,role,onClose:()=>{window.qa08.closed++},setPage:(...x)=>window.qa08.navigations.push(x)})
+ return React.createElement(ServerMessagesPage,{store,role})
+}
+createRoot(document.getElementById('root')).render(React.createElement(Fixture))
+</script></body></html>
