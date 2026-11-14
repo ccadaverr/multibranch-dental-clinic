@@ -1,5 +1,5 @@
 import React, { useId, useRef, useState } from 'react'
-import { Button, ConfirmDialog, Field, FilterBar, Modal, Notice, PageHeader, Status } from '../components.jsx'
+import { Button, ConfirmDialog, Field, FilterBar, Modal, Notice, PageHeader, RefreshButton, Status } from '../components.jsx'
 import { patientName } from '../logic.js'
 import { visibleHmo, HMO_PROVIDERS, pendingHmo } from '../phase3-contracts.js'
 import { sessionForRole } from '../contracts.js'
@@ -37,7 +37,44 @@ export function createHmoAttemptKeys(makeKey = commandKey) {
 }
 
 export function captureHmoCase(h) {
-  return { id: h.id, revision: h.revision, submissionCycle: h.submissionCycle, patientPublicId: h.patientPublicId, branchId: h.branchId, visitId: h.visitId, patientName: h.patientName, clinicDate: h.clinicDate }
+  return { id: h.id, status: h.status, revision: h.revision, submissionCycle: h.submissionCycle, patientPublicId: h.patientPublicId, branchId: h.branchId, visitId: h.visitId, patientName: h.patientName, clinicDate: h.clinicDate }
+}
+
+export const hmoDecisionMatches = (observed, current) => !!current &&
+  ['visitId', 'patientId', 'patientPublicId', 'branchId', 'visitStatus'].every(field => observed[field] === current[field])
+
+const nonempty = value => typeof value === 'string' && !!value.trim()
+const membershipMatches = (patientId, m) => m?.patient?.id === patientId && Array.isArray(m.history) && Object.hasOwn(m, 'active') &&
+  (m.active === null || nonempty(m.active?.id) && m.active.status === 'active' && nonempty(m.active.provider_name) && nonempty(m.active.member_number))
+export function membershipReceiptMatches(visit, submitted, end, m) {
+  if (!membershipMatches(visit.patientPublicId, m)) return false
+  return end ? nonempty(submitted.expectedActiveId) && m.active === null && m.history.some(row => row?.id === submitted.expectedActiveId && row.status === 'ended')
+    : nonempty(submitted.providerName) && nonempty(submitted.memberNumber) && m.active?.provider_name === submitted.providerName && m.active.member_number === submitted.memberNumber &&
+      (m.active.id !== submitted.expectedActiveId || submitted.providerName === submitted.expectedProviderName && submitted.memberNumber === submitted.expectedMemberNumber)
+}
+const amountText = value => {
+  const match = /^(?:(\d+)(?:\.(\d{0,2}))?|\.(\d{1,2}))$/.exec(String(value ?? '').trim())
+  return match ? `${(match[1] || '0').replace(/^0+(?=\d)/, '')}.${(match[2] || match[3] || '').padEnd(2, '0')}` : null
+}
+export function hmoReceiptMatches(h, row, intent) {
+  if (!row || !nonempty(row.id) || row.patient?.id !== h.patientPublicId || row.visit?.id !== h.visitId || row.branch?.id !== h.branchId || !Number.isSafeInteger(row.revision)) return false
+  if (intent.mode === 'open' || intent.mode === 'selfPay') return row.revision === 1 && row.submission_cycle === 0 &&
+    (intent.mode === 'selfPay' ? row.status === 'Withdrawn' : ['Missing Requirements', 'Ready for Submission'].includes(row.status))
+  if (row.id !== h.id || !Number.isSafeInteger(h.revision) || !Number.isSafeInteger(h.submissionCycle)) return false
+  if (intent.mode === 'requirement') return row.submission_cycle === h.submissionCycle &&
+    (row.revision === h.revision && row.status === h.status || row.revision === h.revision + 1 && [h.status, 'Ready for Submission'].includes(row.status)) &&
+    Array.isArray(row.requirements) && row.requirements.some(r => r?.rule === intent.rule && r.state === 'Validated')
+  const status = {submit: 'Pending', contact: h.status, response: intent.outcome, withdraw: 'Withdrawn', escalate: 'Escalated'}[intent.mode]
+  if (!status || row.status !== status || row.revision !== h.revision + 1 || row.submission_cycle !== h.submissionCycle + (intent.mode === 'submit' ? 1 : 0)) return false
+  if (intent.mode !== 'response') return true
+  const event = Array.isArray(row.events) && row.events.filter(e => e?.kind === 'response' && e.submission_cycle === h.submissionCycle).at(-1)
+  if (intent.outcome === 'Returned' && (!Array.isArray(intent.returned) || !intent.returned.length || !Array.isArray(event?.rule_keys) ||
+    JSON.stringify([...intent.returned].sort()) !== JSON.stringify([...event.rule_keys].sort()) || !Array.isArray(row.requirements) ||
+    !intent.returned.every(rule => row.requirements.some(r => r?.rule === rule && r.state === 'Missing')))) return false
+  return !!event && event.outcome === intent.outcome && event.method === intent.method && event.note === intent.note.trim() &&
+    (event.provider_reference || '') === (intent.providerReference || '').trim() && (intent.outcome !== 'Approved' ||
+      amountText(intent.approvedAmount) !== null && typeof row.approved_amount === 'string' && typeof event.approved_amount === 'string' &&
+      amountText(row.approved_amount) === amountText(intent.approvedAmount) && amountText(event.approved_amount) === amountText(intent.approvedAmount))
 }
 
 export function hmoOperationIsStale(operation, current, selectedId) {
@@ -45,7 +82,7 @@ export function hmoOperationIsStale(operation, current, selectedId) {
   const original = operation.caseSnapshot
   return !current || !current.server || current.id !== selectedId || current.id !== original.id ||
     !Number.isInteger(original.revision) || original.revision < 1 ||
-    ['revision', 'submissionCycle', 'patientPublicId', 'branchId', 'visitId'].some(field => current[field] !== original[field])
+    ['status', 'revision', 'submissionCycle', 'patientPublicId', 'branchId', 'visitId'].some(field => current[field] !== original[field])
 }
 
 export async function refreshHmoView(refresh) {
@@ -65,15 +102,16 @@ export function createHmoCommandRunner({ allowed, refresh, onBusy, onFeedback })
     stop() { active = false; generation++; pending = false },
     pending: () => pending,
     isActive: () => active,
-    async run({ command, message, after, failed, current = () => true }) {
+    async run({ command, message, after, failed, current = () => true, validate = () => true }) {
       if (!active || pending || !allowed() || !current()) return false
       const request = ++generation
       const valid = () => active && generation === request && allowed() && current()
       pending = true; onBusy(true)
       let confirmed = false
       try {
-        const result = await command()
+        let result = await command(valid)
         if (!valid()) return false
+        if (result?.ok === true && !validate(result)) result = {ok:false,kind:'unconfirmed',message:'The operation result could not be matched to the reviewed record. Your input is retained; review the record before another operation.'}
         confirmed = result?.ok === true
         if (!confirmed) {
           failed?.(result)
@@ -98,15 +136,16 @@ export function createHmoCommandRunner({ allowed, refresh, onBusy, onFeedback })
 export function HmoPage(props) {
   const session = props.store.session || sessionForRole(props.role, props.store.state)
   const account = props.store.state.users.find(u => u.id === session?.userId)
-  const identity = JSON.stringify([session?.serverUserId, session?.userId, session?.role, session?.active, session?.branchId, session?.branchScopes, account?.accountStatus || account?.status, account?.permissions, props.context?.hmoCaseId || null])
+  const identity = JSON.stringify([props.store.getAuthGeneration?.(), session?.serverUserId, session?.userId, session?.role, session?.active, session?.branchId, session?.branchScopes, account?.accountStatus || account?.status, account?.permissions, props.context?.hmoCaseId || null])
   return <HmoWorkspace key={identity} {...props}/>
 }
 
 function HmoWorkspace({ role, activeBranch, store, context }) {
   const { state, toast } = store
+  const auth = store.getAuthGeneration?.()
   const session = store.session || sessionForRole(role, state)
   const flow = store.appointmentFlow
-  const staff = role === 'staff' && session?.role === 'staff' && !!session.serverUserId && canAccessPage(state, session, 'hmo')
+  const staff = role === 'staff' && session?.role === 'staff' && !!session.serverUserId && (!store.getAuthGeneration || auth != null) && canAccessPage(state, session, 'hmo')
   const scopes = Array.isArray(session?.branchScopes) ? session.branchScopes : []
   const claimDecisions = (state.claimDecisions || []).filter(d => scopes.includes(d.branchId))
   const all = visibleHmo(state, session).filter(h => !h.server || role !== 'staff' || scopes.includes(h.branchId)).filter(h => role !== 'owner' || !activeBranch || activeBranch === 'All Branches' || h.branch === activeBranch || h.branchName === activeBranch)
@@ -172,20 +211,20 @@ function HmoWorkspace({ role, activeBranch, store, context }) {
     if (runner.pending() || reloadPending.current) return
     selection.current = { id }; setSelectedId(id); setOperation(null); setForm({}); setFeedback(null)
   }
-  const run = (command, message, after, current = () => true, failed) => {
+  const run = (command, message, after, current = () => true, failed, validate = () => true) => {
     if (reloadPending.current || runner.pending()) return Promise.resolve(false)
     const lifetime = selection.current
     if (latest.current.reloadNeeded) return Promise.resolve(false)
     setFeedback(null)
-    return runner.run({ command, message, after, failed, current: () => selection.current === lifetime && current() })
+    return runner.run({ command, message, after, failed, validate, current: () => auth === store.getAuthGeneration?.() && selection.current === lifetime && current() })
   }
   const reload = async () => {
-    if (runner.pending() || reloadPending.current) return
+    if (auth !== store.getAuthGeneration?.() || runner.pending() || reloadPending.current) return
     reloadPending.current = true
     const lifetime = selection.current
     setBusy(true)
     const ok = await refreshHmoView(() => flow?.refresh?.())
-    if (runner.isActive() && latest.current.staff && selection.current === lifetime) { setReloadNeeded(!ok); setFeedback({ message: ok ? 'Latest HMO view reloaded. Review the case before continuing.' : 'The latest HMO view could not be reloaded. Try again.', tone: ok ? 'info' : 'warning' }) }
+    if (runner.isActive() && auth === store.getAuthGeneration?.() && latest.current.staff && selection.current === lifetime) { setReloadNeeded(!ok); setFeedback({ message: ok ? 'Latest HMO view reloaded. Review the case before continuing.' : 'The latest HMO view could not be reloaded. Try again.', tone: ok ? 'info' : 'warning' }) }
     reloadPending.current = false
     if (runner.isActive()) setBusy(false)
   }
@@ -204,17 +243,22 @@ function HmoWorkspace({ role, activeBranch, store, context }) {
     const { mode, caseSnapshot: h } = operation
     const submitted = { ...form, returned: [...form.returned] }
     const key = attemptKeys.current(operation, { mode, caseId: h.id, revision: h.revision, submissionCycle: h.submissionCycle, submitted }, operation.key)
+    // Recheck the reviewed snapshot after asynchronous CSRF preparation too.
+    // This dispatch-only check must not invalidate a legitimate later refresh.
+    const dispatchCurrent = guard => () => guard() && !hmoOperationIsStale(operation, latest.current.live.find(row => row.id === h.id), selection.current.id)
     const commands = {
-      submit: () => hmoApi.submitCase(h, { method: submitted.method, note: submitted.note }, key),
-      contact: () => hmoApi.recordContact(h, { method: submitted.method, note: submitted.note, nextAction: submitted.nextAction }, key),
-      response: () => hmoApi.recordResponse(h, { outcome: submitted.outcome, method: submitted.method, note: submitted.note, providerReference: submitted.providerReference, approvedAmount: submitted.approvedAmount, returnedRequirements: submitted.returned }, key),
-      withdraw: () => hmoApi.withdrawCase(h, submitted.reason, key),
-      requirement: () => hmoApi.validateRequirement(h, submitted.rule, submitted.documentLabel.trim(), key),
+      submit: guard => hmoApi.submitCase(h, { method: submitted.method, note: submitted.note }, key, dispatchCurrent(guard)),
+      contact: guard => hmoApi.recordContact(h, { method: submitted.method, note: submitted.note, nextAction: submitted.nextAction }, key, dispatchCurrent(guard)),
+      response: guard => hmoApi.recordResponse(h, { outcome: submitted.outcome, method: submitted.method, note: submitted.note, providerReference: submitted.providerReference, approvedAmount: submitted.approvedAmount, returnedRequirements: submitted.returned }, key, dispatchCurrent(guard)),
+      withdraw: guard => hmoApi.withdrawCase(h, submitted.reason, key, dispatchCurrent(guard)),
+      requirement: guard => hmoApi.validateRequirement(h, submitted.rule, submitted.documentLabel.trim(), key, dispatchCurrent(guard)),
     }
     const messages = { submit: 'External submission recorded.', contact: 'Contact attempt recorded.', response: 'Externally received provider response recorded.', withdraw: 'HMO claim withdrawn; the visit continues as self-pay.', requirement: 'Requirement checked at the clinic.' }
-    if (commands[mode]) run(commands[mode], messages[mode], () => setOperation(null))
+    if (commands[mode]) run(commands[mode], messages[mode], () => setOperation(null), () => true, undefined,
+      result => hmoReceiptMatches(h, result.row, {mode, ...submitted}))
   }
-  const decisionStale = !!decision && !claimDecisions.some(d => d.visitId === decision.visitId && d.patientId === decision.patientId && d.branchId === decision.branchId)
+  const decisionCurrent = observed => latest.current.decisions.some(row => hmoDecisionMatches(observed, row))
+  const decisionStale = !!decision && !decisionCurrent(decision)
 
   if (role !== 'dentist' && !canAccessPage(state, session, 'hmo')) return <Notice tone="warning">HMO access is unavailable for this account.</Notice>
   if (role === 'patient') return <PatientHmoPage store={store} context={context}/>
@@ -223,8 +267,8 @@ function HmoWorkspace({ role, activeBranch, store, context }) {
     <Notice tone="info">No provider is contacted by this application. Staff record what happened outside it; a provider decision exists only once Staff record the response received from the provider.</Notice>
 
     {feedback && !operation && !decision && <p ref={feedbackRef} role={feedback.tone === 'warning' ? 'alert' : 'status'} tabIndex={0}>{feedback.message}</p>}
-    {staff && reloadNeeded && <Notice tone="warning" title="Latest view unavailable"><Button variant="ghost" disabled={busy} onClick={reload}>Reload HMO view</Button></Notice>}
-    {staff && <ClaimDecisions rows={claimDecisions} busy={busy || reloadNeeded} onOpen={d => { if (latest.current.decisions.some(row => row.visitId === d.visitId)) run(() => hmoApi.openCase(d.visitId, directKey('open', d.visitId, { visitId: d.visitId })), 'HMO case opened.', r => setSelectedId(r.row?.id || '')) }} onSelfPay={d => { if (!runner.pending() && !reloadNeeded) { operationTrigger.current = typeof document === 'undefined' ? null : document.activeElement; setFeedback(null); setDecision({ ...d, intent: {}, reason: '', key: commandKey() }) } }}/>}
+    {staff && reloadNeeded && <Notice tone="warning" title="Latest view unavailable"><RefreshButton title="Reload HMO view" ariaLabel="Reload HMO view" loading={busy} disabled={busy} onClick={reload}/></Notice>}
+    {staff && <ClaimDecisions rows={claimDecisions} busy={busy || reloadNeeded} onOpen={d => { if (decisionCurrent(d)) run(guard => hmoApi.openCase(d.visitId, directKey('open', d.visitId, { visitId: d.visitId }), () => guard() && decisionCurrent(d)), 'HMO case opened.', r => setSelectedId(r.row?.id || ''), () => true, undefined, r => hmoReceiptMatches({...d,patientPublicId:d.patientPublicId || d.patientId},r.row,{mode:'open'})) }} onSelfPay={d => { if (!runner.pending() && !reloadNeeded) { operationTrigger.current = typeof document === 'undefined' ? null : document.activeElement; setFeedback(null); setDecision({ ...d, intent: {}, reason: '', key: commandKey() }) } }}/>}
     {staff && <MembershipPanel store={store} busy={busy || reloadNeeded} run={run} pending={() => runner.pending()} onSelection={() => setFeedback(null)}/>}
 
     {role === 'owner' && <div className="hmo-metrics">{[
@@ -277,7 +321,7 @@ function HmoWorkspace({ role, activeBranch, store, context }) {
         </details>}
       </section>
       {selected && <CaseDetail key={selected.id} h={selected} staff={staff && selected.server} busy={busy || reloadNeeded} state={state} headingRef={detailHeading} onClose={() => chooseCase('')} operate={operate}
-        onEscalate={h => run(() => hmoApi.escalateCase(captureHmoCase(h), directKey('escalate', h.id, { caseId: h.id, revision: h.revision })), 'Case escalated for clinic attention.')}/>}
+        onEscalate={h => { const snapshot = captureHmoCase(h); return run(guard => hmoApi.escalateCase(snapshot, directKey('escalate', h.id, { caseId: h.id, revision: h.revision }), () => guard() && !hmoOperationIsStale({caseSnapshot:snapshot},latest.current.live.find(row => row.id === h.id),selection.current.id)), 'Case escalated for clinic attention.', undefined, () => true, undefined, r => hmoReceiptMatches(snapshot,r.row,{mode:'escalate'})) }}/>}
     </div>
 
     <Modal open={!!operation} onClose={() => !busy && !runner.pending() && setOperation(null)} title={{ submit: 'Record external submission', contact: 'Record clinic contact attempt', response: 'Record externally received provider response', withdraw: 'Withdraw HMO claim (self-pay)', requirement: 'Check requirement at the clinic' }[operation?.mode] || ''}>
@@ -308,7 +352,7 @@ function HmoWorkspace({ role, activeBranch, store, context }) {
       <p><b>{decision.patientName}</b> • visit {decision.clinicDate} • {decision.branchName}</p>
       <Notice tone="warning">This records that no HMO claim will be made for this visit (a final Withdrawn decision). Billing can then continue as self-pay.</Notice>
       <Field label="Reason" required><textarea disabled={busy || decisionStale || reloadNeeded} value={decision.reason} onChange={e => setDecision({ ...decision, reason: e.target.value })}/></Field>
-      <div className="form-actions"><Button variant="ghost" disabled={busy} onClick={() => setDecision(null)}>Cancel</Button><Button disabled={busy || decisionStale || reloadNeeded} onClick={() => { if (!decisionStale) run(() => hmoApi.recordSelfPay(decision.visitId, decision.reason.trim(), attemptKeys.current(decision.intent, { visitId: decision.visitId, reason: decision.reason.trim() }, decision.key)), 'Self-pay decision recorded.', () => setDecision(null)) }}>Record self-pay decision</Button></div>
+      <div className="form-actions"><Button variant="ghost" disabled={busy} onClick={() => setDecision(null)}>Cancel</Button><Button disabled={busy || decisionStale || reloadNeeded} onClick={() => { if (!decisionStale) run(guard => hmoApi.recordSelfPay(decision.visitId, decision.reason.trim(), attemptKeys.current(decision.intent, { visitId: decision.visitId, reason: decision.reason.trim() }, decision.key), () => guard() && decisionCurrent(decision)), 'Self-pay decision recorded.', () => setDecision(null), () => true, undefined, r => hmoReceiptMatches({...decision,patientPublicId:decision.patientPublicId || decision.patientId},r.row,{mode:'selfPay'})) }}>Record self-pay decision</Button></div>
     </>}</Modal>
   </>
 }
@@ -326,14 +370,15 @@ function ClaimDecisions({ rows, busy, onOpen, onSelfPay }) {
 
 // A new object token on every select/reload protects A -> B -> A, even for the
 // same Patient. Membership responses must name the exact server Patient requested.
-export function createMembershipLookup(loadMembership, onChange) {
+export function createMembershipLookup(loadMembership, onChange, allowed = () => true) {
   let token = null, active = true
-  const matches = (value, membership) => membership?.patient?.id === value.patientPublicId && Array.isArray(membership.history)
+  const matches = (value, membership) => membershipMatches(value.patientPublicId, membership)
   return {
     capture: () => token,
-    current: value => active && token === value,
+    current: value => active && allowed() && token === value,
     dispose() { active = false; token = null },
     async select(visit) {
+      if (!allowed()) return false
       active = true
       const value = { visitId: visit.id, patientPublicId: visit.patientPublicId }
       token = value
@@ -341,17 +386,17 @@ export function createMembershipLookup(loadMembership, onChange) {
       try {
         if (!value.patientPublicId) throw new Error('This Visit has no server Patient identity. Reload the visit list.')
         const result = await loadMembership(value.patientPublicId)
-        if (!active || token !== value) return false
+        if (!active || !allowed() || token !== value) return false
         if (!result.ok) throw new Error(result.message || 'Membership could not be loaded.')
         if (!matches(value, result.membership)) throw new Error('Membership could not be matched to this Patient. Reload before continuing.')
         onChange({ membership: result.membership, loading: false, error: '' }); return true
       } catch (error) {
-        if (active && token === value) onChange({ membership: null, loading: false, error: error?.message || 'Membership could not be loaded.' })
+        if (active && allowed() && token === value) onChange({ membership: null, loading: false, error: error?.message || 'Membership could not be loaded.' })
         return false
       }
     },
     adopt(value, membership) {
-      if (!active || token !== value) return false
+      if (!active || !allowed() || token !== value) return false
       if (!matches(value, membership)) throw new Error('Membership response does not match the selected Patient.')
       onChange({ membership, loading: false, error: '' }); return true
     },
@@ -368,34 +413,50 @@ export function MembershipPanel({ store, busy, run, pending, onSelection = () =>
     <p className="block-muted">Recorded on the clinic server for the Patient of a visit in your branches. Staff enter the provider and member number; replacing them keeps the earlier record in history.</p>
     {visits.length ? <Field label="Visit"><select value={visit?.id || ''} disabled={busy} onChange={e => { if (!pending()) { onSelection(); setVisitId(e.target.value) } }}><option value="">Select a visit</option>{visits.map(v => <option key={v.id} value={v.id}>{v.patientName} ({v.patientCode}) • visit {v.clinicDate}</option>)}</select></Field>
       : <Notice>No visits in your branches right now. A membership is recorded from the Patient's visit.</Notice>}
-    {visit && <VisitMembership key={`${visit.id}:${visit.patientPublicId}`} visit={visit} busy={busy} run={run} pending={pending}/>}
+    {visit && <VisitMembership key={`${visit.id}:${visit.patientPublicId}:${visit.branchId}`} visit={visit} busy={busy} run={run} pending={pending} getAuthGeneration={store.getAuthGeneration}/>}
   </details>
 }
 
-export function VisitMembership({ visit, busy, run, pending }) {
+export function VisitMembership({ visit, busy, run, pending, getAuthGeneration }) {
   const [loaded, setLoaded] = useState({ membership: null, loading: true, error: '' })
   const [form, setForm] = useState({ providerName: '', memberNumber: '' })
   const [key, setKey] = useState(commandKey), [stale, setStale] = useState(false)
-  const lookup = React.useMemo(() => createMembershipLookup(hmoApi.loadMembership, setLoaded), [])
+  const auth = getAuthGeneration?.()
+  const lookup = React.useMemo(() => createMembershipLookup(hmoApi.loadMembership, setLoaded, () => !getAuthGeneration || auth != null && auth === getAuthGeneration()), [])
+  const controls = useRef(null), restoreFocus = useRef(false)
   const attemptKeys = useRef(null)
   if (!attemptKeys.current) attemptKeys.current = createHmoAttemptKeys()
   useHmoLayoutEffect(() => { lookup.select(visit); return () => lookup.dispose() }, [lookup])
-  const reloadMembership = () => { if (pending()) return; setStale(false); setKey(commandKey()); lookup.select(visit) }
+  useHmoLayoutEffect(() => {
+    if (!restoreFocus.current || loaded.loading) return
+    restoreFocus.current = false
+    if (typeof document !== 'undefined' && document.activeElement === document.body) {
+      const target = controls.current?.querySelector('select:not(:disabled),input:not(:disabled),button:not(:disabled)') || controls.current
+      target?.focus()
+    }
+  }, [loaded])
+  const reloadMembership = () => {
+    if (busy || pending() || loaded.loading) return
+    restoreFocus.current = true; setStale(false); setKey(commandKey())
+    return lookup.select(visit)
+  }
   const save = end => {
     const lifetime = lookup.capture(), membership = loaded.membership
     if (busy || pending() || stale || !membership || !lookup.current(lifetime)) return
     const visitId = visit.id, activeId = membership.active?.id ?? null
-    const submitted = { providerName: form.providerName.trim(), memberNumber: form.memberNumber.trim(), expectedActiveId: activeId }
+    const submitted = { providerName: form.providerName.trim(), memberNumber: form.memberNumber.trim(), expectedActiveId: activeId,
+      expectedProviderName: membership.active?.provider_name, expectedMemberNumber: membership.active?.member_number }
     const capturedKey = attemptKeys.current(lifetime, { end, visitId, submitted }, key)
-    run(() => end ? hmoApi.endMembership(visitId, activeId, capturedKey) : hmoApi.setMembership(visitId, submitted, capturedKey), end ? 'HMO membership ended.' : 'HMO membership saved.', result => {
+    run(guard => end ? hmoApi.endMembership(visitId, activeId, capturedKey, guard) : hmoApi.setMembership(visitId, submitted, capturedKey, guard), end ? 'HMO membership ended.' : 'HMO membership saved.', result => {
       lookup.adopt(lifetime, result.membership)
       setForm({ providerName: '', memberNumber: '' }); setKey(commandKey()); setStale(false)
-    }, () => lookup.current(lifetime), result => { if (result?.code === 'stale_membership') setStale(true) })
+    }, () => lookup.current(lifetime), result => { if (result?.code === 'stale_membership') setStale(true) },
+    result => membershipReceiptMatches(visit, submitted, end, result.membership))
   }
   const membership = loaded.membership
-  return <div aria-busy={busy || loaded.loading}>
+  return <div ref={controls} tabIndex={-1} aria-busy={busy || loaded.loading}>
     {loaded.loading && <p role="status">Loading the selected Patient’s membership…</p>}
-    {(loaded.error || stale) && <div role="alert" tabIndex={0}><p>{loaded.error || 'This membership changed. Reload and review it before saving; your draft has been kept.'}</p><Button variant="ghost" disabled={busy} onClick={reloadMembership}>Reload membership</Button></div>}
+    {(loaded.error || stale) && <div role="alert" tabIndex={0}><p>{loaded.error || 'This membership changed. Reload and review it before saving; your draft has been kept.'}</p><RefreshButton title="Reload membership" ariaLabel="Reload membership" loading={loaded.loading} disabled={busy} onClick={reloadMembership}/></div>}
     {membership && <>
       <p><b>{visit.patientName}</b> — {membership.active ? <>Active: {membership.active.provider_name} • {membership.active.member_number}</> : 'No active HMO membership'}</p>
       <fieldset disabled={busy || stale} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>

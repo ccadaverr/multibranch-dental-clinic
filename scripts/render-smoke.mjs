@@ -35,10 +35,10 @@ function Capture(){store=m.useClinic();return null}
 renderToString(React.createElement(m.ClinicProvider,{initialReferenceData},React.createElement(Capture)))
 const pages={dashboard:'DashboardPage',book:'BookingPage',appointments:'AppointmentsPage',schedule:'SchedulePage',calendar:'StaffDayCalendar',checkin:'CheckInPage',queue:'QueuePage',capacity:'CapacityPage',patients:'PatientsPage',treatment:'TreatmentPage',billing:'BillingPage',hmo:'HmoPage',inquiries:'InquiriesPage',messages:'MessagesPage',prescriptions:'PrescriptionsServerPage',followups:'FollowupsServerPage',chart:'DentalChartPage',branches:'BranchesPage',team:'TeamPage',analytics:'AnalyticsPage',users:'UsersPage',pricing:'ServicesPricingPage',automations:'AutomationsPage',closures:'ClosedDatesPage',schedules:'WorkSchedulesPage',leave:'LeavePage',handovers:'HandoversPage',hmos:'AcceptedHmosPage',wording:'WordingApprovalsPage',automation:'AutomationPage',audit:'AuditTrailPage',branding:'ClinicBrandingPage',assistant:'AssistantAnswersPage',engagement:'EngagementPage',loyalty:'PatientLoyaltyPage',feedback:'PatientFeedbackPage',me:'PatientMePage',archives:'ArchivesPage'}
 let count=0
-function render(page,role='staff',context=null,sessionPatch={}){
+function render(page,role='staff',context=null,sessionPatch={},storePatch={}){
   const session={...m.sessionForRole(role,store.state),...(role==='dentist'?{serverUserId:'synthetic-smoke-dentist'}:{}),...sessionPatch}
   const activeBranch=store.state.branches.find(b=>b.id===session.branchId)?.name||'All Branches'
-  return renderToString(React.createElement(m.Shell,{role,page,setPage:()=>{},onLogout:()=>{},activeBranch,setActiveBranch:()=>{},store:{...store,session}},React.createElement(m[pages[page]],{role,activeBranch,store:{...store,session},context,setPage:()=>{}})))
+  return renderToString(React.createElement(m.Shell,{role,page,setPage:()=>{},onLogout:()=>{},activeBranch,setActiveBranch:()=>{},store:{...store,...storePatch,session}},React.createElement(m[pages[page]],{role,activeBranch,store:{...store,...storePatch,session},context,setPage:()=>{}})))
 }
 // DEN-UI-02 clinical screens require a server-authenticated projection. These records are synthetic.
 function renderClinical(context){
@@ -191,9 +191,12 @@ withHmo('staff',hmoRow())
 // The default smoke role is intentionally unauthenticated and must not expose mutation controls.
 assert.ok(!render('hmo','staff',{hmoCaseId:hmoCase.id}).includes('Record Provider Response'),'unauthenticated Staff cannot record a provider response')
 const hmoStaffSession={serverUserId:'synthetic-smoke-staff',branchScopes:['b1']}
-assert.ok(render('hmo','staff',{hmoCaseId:hmoCase.id},hmoStaffSession).includes('Record Provider Response'),'authorized in-scope Staff retain the manual response action')
-assert.ok(render('hmo','staff',{hmoCaseId:hmoCase.id},hmoStaffSession).includes('Internal contact history'),'Staff see their contact log')
-assert.ok(!render('hmo','staff',{hmoCaseId:hmoCase.id},{...hmoStaffSession,branchScopes:['b2']}).includes('Record Provider Response'),'foreign branch scope cannot record a response')
+// SSR never mounts the provider; model its authenticated lifetime explicitly.
+const hmoAuthStore={getAuthGeneration:()=>1}
+assert.ok(!render('hmo','staff',{hmoCaseId:hmoCase.id},hmoStaffSession,{getAuthGeneration:()=>null}).includes('Record Provider Response'),'expired HMO lifetime cannot authorize a command')
+assert.ok(render('hmo','staff',{hmoCaseId:hmoCase.id},hmoStaffSession,hmoAuthStore).includes('Record Provider Response'),'authorized in-scope Staff retain the manual response action')
+assert.ok(render('hmo','staff',{hmoCaseId:hmoCase.id},hmoStaffSession,hmoAuthStore).includes('Internal contact history'),'Staff see their contact log')
+assert.ok(!render('hmo','staff',{hmoCaseId:hmoCase.id},{...hmoStaffSession,branchScopes:['b2']},hmoAuthStore).includes('Record Provider Response'),'foreign branch scope cannot record a response')
 assert.ok(!render('hmo','owner',{hmoCaseId:hmoCase.id},{serverUserId:'synthetic-smoke-owner'}).includes('Record Provider Response'),'Owner oversight cannot record provider responses')
 withHmo('patient',hmoRow())
 assert.ok(!render('hmo','patient',{hmoCaseId:hmoCase.id}).includes('Internal contact history'))

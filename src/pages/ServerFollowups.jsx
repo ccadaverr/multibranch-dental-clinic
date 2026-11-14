@@ -1,7 +1,7 @@
 import { useClinicalSession } from '../use-clinical-session.js'
 import { clinicalSessionKey, encounterKey, resolveEncounter } from '../encounter.js'
 import React, { useEffect, useState } from 'react'
-import { Button, Card, Field, FilterBar, Modal, Notice, PageHeader } from '../components.jsx'
+import { Button, Card, Field, FilterBar, Modal, Notice, PageHeader, RefreshButton } from '../components.jsx'
 import { createFollowup, followups, patientFollowups, updateFollowup } from '../api-client.js'
 import { AppointmentForm } from './Scheduling.jsx'
 
@@ -135,14 +135,24 @@ function FollowupsBody({ store, role, context, setPage, lifetime }) {
   const [filters, setFilters] = useState({ status: 'active', due: 'all', branch_ref: '' })
   const patientId = context?.patientPublicId || context?.patientId || null
   const {rows, meta, error, load, isCurrent, pendingTasks} = useFollowupList(JSON.stringify([patientId, filters]), () => patientId ? patientFollowups(patientId) : followups({...filters}), patientId, owner, lifetime)
+  const recoveryRoot = React.useRef(null), recoveryFocus = React.useRef(false)
+  const reload = () => { recoveryFocus.current = true; return load() }
+  React.useLayoutEffect(() => {
+    if (!recoveryFocus.current || !rows && !error) return
+    recoveryFocus.current = false
+    if (typeof document !== 'undefined' && document.activeElement === document.body) {
+      const target = recoveryRoot.current?.querySelector('select:not(:disabled),button:not(:disabled)') || recoveryRoot.current
+      target?.focus()
+    }
+  }, [rows, error])
   const c = meta.counts || {}
-  return <div className="st-page">
+  return <div className="st-page" ref={recoveryRoot} tabIndex={-1}>
     {context?.returnEncounter&&<Button variant="ghost" onClick={()=>setPage('treatment',context.returnEncounter)}>Return to encounter</Button>}
     {patientId&&<Notice>Patient follow-up tasks. A recommendation is not a booked appointment; tasks are not linked to a specific treatment in this response.</Notice>}
     <PageHeader kicker={owner ? 'Administration' : 'Patients'} title="Follow-ups"
       text={followupDescription(owner)}/>
     {!patientId&&<p className="fu-counts" aria-live="polite"><b>{c.open ?? '…'}</b> open · <b className={c.overdue ? 'is-bad' : ''}>{c.overdue ?? '…'}</b> overdue · <b>{c.due_today ?? '…'}</b> due today</p>}
-    {error && <Notice tone="error" title="Follow-ups unavailable">{error} <Button variant="soft" onClick={load}>Reload follow-ups</Button></Notice>}
+    {error && <Notice tone="error" title="Follow-ups unavailable">{error} <RefreshButton title="Reload follow-ups" ariaLabel="Reload follow-ups" onClick={reload}/></Notice>}
     <Card>
       {!patientId&&<FilterBar className="st-filters" ariaLabel="Follow-up filters" onClear={(filters.status !== 'active' || filters.due !== 'all' || filters.branch_ref) ? () => setFilters({ status: 'active', due: 'all', branch_ref: '' }) : null}>
         <Field label="Status"><select value={filters.status} onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}><option value="active">Open and contacted</option>{['Open', 'Contacted', 'Booked', 'Closed'].map(s => <option key={s}>{s}</option>)}</select></Field>
@@ -150,12 +160,12 @@ function FollowupsBody({ store, role, context, setPage, lifetime }) {
         <Field label="Branch"><select value={filters.branch_ref} onChange={e => setFilters(f => ({ ...f, branch_ref: e.target.value }))}><option value="">All my branches</option>{branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>
       </FilterBar>}
       {!rows ? !error && <p className="au-muted" role="status">Loading follow-ups…</p> : !rows.length ? <p className="au-muted" role="status">No follow-ups here.</p>
-        : <ul className="fd-list">{rows.map(t => <FollowupRow key={JSON.stringify([t.id, t.patient?.id, t.revision])} t={t} pendingTasks={pendingTasks} owner={owner} role={role} store={store} toast={toast} onChanged={load} isCurrent={isCurrent}/>)}</ul>}
+        : <ul className="fd-list">{rows.map(t => <FollowupRow key={JSON.stringify([t.id, t.patient?.id, t.revision])} t={t} pendingTasks={pendingTasks} owner={owner} role={role} store={store} toast={toast} onChanged={load} onReload={reload} isCurrent={isCurrent}/>)}</ul>}
     </Card>
   </div>
 }
 
-function FollowupRow({ t, pendingTasks, owner, role, store, toast, onChanged, isCurrent }) {
+function FollowupRow({ t, pendingTasks, owner, role, store, toast, onChanged, onReload, isCurrent }) {
   const live = React.useRef(false), pending = React.useRef(false), bookingToken = React.useRef(null)
   React.useLayoutEffect(() => { live.current = true; return () => { live.current = false; bookingToken.current = null } }, [])
   const auth = React.useRef({read: store?.getAuthGeneration, generation: store?.getAuthGeneration?.()})
@@ -212,10 +222,10 @@ function FollowupRow({ t, pendingTasks, owner, role, store, toast, onChanged, is
       {!owner && t.appointment && <span>Booked: {t.appointment.code} · {t.appointment.when}</span>}
       {!owner && t.close_note && <span>Closed: {t.close_note}</span>}
       {closing && <Field label="Why is it closed without a booking?" required><input value={note} disabled={!!busy || needsReload || !!taskRequest || staleRow} maxLength={500} onChange={e => setNote(e.target.value)}/></Field>}
-      {staleRow && !taskRequest && <div role="alert"><p>This follow-up changed. Reload the list before continuing.</p><Button variant="soft" onClick={onChanged}>Reload follow-ups</Button></div>}
-      {taskRequest && taskRequest.phase !== 'pending' && <div role="alert"><p>The earlier follow-up update needs verification. An unchanged task does not confirm that it failed. Reload the list; if it remains unresolved, ask the branch team to review it before another action.</p><Button variant="soft" onClick={onChanged}>Reload follow-ups</Button></div>}
+      {staleRow && !taskRequest && <div role="alert"><p>This follow-up changed. Reload the list before continuing.</p><RefreshButton title="Reload follow-ups" ariaLabel="Reload follow-ups" onClick={onReload}/></div>}
+      {taskRequest && taskRequest.phase !== 'pending' && <div role="alert"><p>The earlier follow-up update needs verification. An unchanged task does not confirm that it failed. Reload the list; if it remains unresolved, ask the branch team to review it before another action.</p><RefreshButton title="Reload follow-ups" ariaLabel="Reload follow-ups" onClick={onReload}/></div>}
       {(busy || taskRequest?.phase === 'pending') && <span role="status">{(busy || taskRequest?.submitted.action) === 'close' ? 'Closing follow-up…' : 'Recording contact…'}</span>}
-      {error && !taskRequest && !staleRow && <div role="alert"><p className="au-error">{error}</p><Button variant="soft" onClick={onChanged}>Reload follow-ups</Button></div>}
+      {error && !taskRequest && !staleRow && <div role="alert"><p className="au-error">{error}</p><RefreshButton title="Reload follow-ups" ariaLabel="Reload follow-ups" onClick={onReload}/></div>}
     </div>
     {canWork && <div className="ns-actions">
       {t.can_book && role === 'staff' && <Button size="sm" disabled={!!busy || needsReload || !!taskRequest || staleRow} onClick={() => { if (!pending.current && !pendingTasks?.tasks.has(t.id) && ownsRow()) { const token = {}; bookingToken.current = token; setBooking(token) } }}>Book follow-up</Button>}

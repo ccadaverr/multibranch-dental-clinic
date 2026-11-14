@@ -238,7 +238,7 @@ const query = params => {
   const entries = Object.entries(params || {}).filter(([, value]) => value !== null && value !== undefined && value !== '')
   return entries.length ? `?${new URLSearchParams(entries).toString()}` : ''
 }
-const command = (path, payload, key) => request(path, { method: 'POST', body: JSON.stringify(payload), headers: key ? { 'Idempotency-Key': key } : {} })
+const command = (path, payload, key, beforeDispatch) => request(path, { method: 'POST', body: JSON.stringify(payload), headers: key ? { 'Idempotency-Key': key } : {}, beforeDispatch })
 export function listAppointments(params) { return request(`/api/appointments${query(params)}`) }
 export function getAppointment(id) { return request(`/api/appointments/${encodeURIComponent(id)}`) }
 export function appointmentAvailability(params) { return request(`/api/appointments/availability${query(params)}`) }
@@ -382,11 +382,11 @@ export function listClaimDecisions(params) { return request(`/api/hmo/claim-deci
 export function hmoGate(visitId) { return request(`/api/visits/${encodeURIComponent(visitId)}/hmo-gate`) }
 export function getHmoMembership(patientId) { return request(`/api/patients/${encodeURIComponent(patientId)}/hmo-membership`) }
 // Membership changes go through an in-scope Visit: the server derives the Patient from it (no Patient id is sent).
-export function setHmoMembership(visitId, payload, key) { return command(`/api/visits/${encodeURIComponent(visitId)}/hmo-membership`, payload, key) }
-export function endHmoMembership(visitId, payload, key) { return command(`/api/visits/${encodeURIComponent(visitId)}/hmo-membership/end`, payload, key) }
-export function openHmoCase(visitId, key) { return command(`/api/visits/${encodeURIComponent(visitId)}/hmo-case`, {}, key) }
-export function hmoSelfPay(visitId, payload, key) { return command(`/api/visits/${encodeURIComponent(visitId)}/hmo/self-pay`, payload, key) }
-export function hmoCaseCommand(id, name, payload, key) { return command(`/api/hmo-cases/${encodeURIComponent(id)}/${name}`, payload, key) }
+export function setHmoMembership(visitId, payload, key, beforeDispatch) { return command(`/api/visits/${encodeURIComponent(visitId)}/hmo-membership`, payload, key, beforeDispatch) }
+export function endHmoMembership(visitId, payload, key, beforeDispatch) { return command(`/api/visits/${encodeURIComponent(visitId)}/hmo-membership/end`, payload, key, beforeDispatch) }
+export function openHmoCase(visitId, key, beforeDispatch) { return command(`/api/visits/${encodeURIComponent(visitId)}/hmo-case`, {}, key, beforeDispatch) }
+export function hmoSelfPay(visitId, payload, key, beforeDispatch) { return command(`/api/visits/${encodeURIComponent(visitId)}/hmo/self-pay`, payload, key, beforeDispatch) }
+export function hmoCaseCommand(id, name, payload, key, beforeDispatch) { return command(`/api/hmo-cases/${encodeURIComponent(id)}/${name}`, payload, key, beforeDispatch) }
 
 // M11 server-authoritative billing. These calls never write invoices, payments or receipts to browser storage.
 // Cursor-paged (newest first): params may carry per_page (1-100), cursor (the previous page's meta.next_cursor), status.
@@ -637,7 +637,7 @@ export function acknowledgeHandover(id) { return json(`/api/handovers/${enc(id)}
 export function cancelHandover(id) { return json(`/api/handovers/${enc(id)}/cancel`, 'POST') }
 export function requestHandover(patientId, fromBranchRef = null) { return json('/api/handovers/request', 'POST', { patient_id: patientId, from_branch_ref: fromBranchRef }) }
 export function offerOnlineAccount(patientId, body) { return json(`/api/patients/${enc(patientId)}/offer-account`, 'POST', body) }
-export function verifyPatientId(patientId, body) { return json(`/api/patients/${enc(patientId)}/verify-id`, 'POST', body) }
+export function verifyPatientId(patientId, body, beforeDispatch) { return request(`/api/patients/${enc(patientId)}/verify-id`, { method:'POST', body:JSON.stringify(body), beforeDispatch }) }
 export function branchPosterUrl(branchRef) { return `${apiBase()}/api/branches/${enc(branchRef)}/poster` }
 // Parents and guardians.
 export function myDependents() { return request('/api/me/dependents') }

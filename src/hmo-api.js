@@ -105,33 +105,33 @@ const hmoFailure = result => {
 const commandResult = result => (result.ok ? { ok: true, row: result.data } : hmoFailure(result))
 
 /** Changes the Patient's (global) membership through one of their Visits in the Staff member's branch scope. */
-export async function setMembership(visitId, { providerName, memberNumber, expectedActiveId }, key) {
-  const result = await api.setHmoMembership(visitId, { provider_name: providerName, member_number: memberNumber, expected_active_id: expectedActiveId ?? null }, key)
+export async function setMembership(visitId, { providerName, memberNumber, expectedActiveId }, key, beforeDispatch) {
+  const result = await api.setHmoMembership(visitId, { provider_name: providerName, member_number: memberNumber, expected_active_id: expectedActiveId ?? null }, key, beforeDispatch)
   return result.ok ? { ok: true, membership: result.data } : hmoFailure(result)
 }
 
-export async function endMembership(visitId, expectedActiveId, key) {
-  const result = await api.endHmoMembership(visitId, { expected_active_id: expectedActiveId }, key)
+export async function endMembership(visitId, expectedActiveId, key, beforeDispatch) {
+  const result = await api.endHmoMembership(visitId, { expected_active_id: expectedActiveId }, key, beforeDispatch)
   return result.ok ? { ok: true, membership: result.data } : hmoFailure(result)
 }
 
-export async function openCase(visitId, key) { return commandResult(await api.openHmoCase(visitId, key)) }
-export async function recordSelfPay(visitId, reason, key) { return commandResult(await api.hmoSelfPay(visitId, { reason }, key)) }
-export async function validateRequirement(hmoCase, ruleId, documentLabel, key) {
+export async function openCase(visitId, key, beforeDispatch) { return commandResult(await api.openHmoCase(visitId, key, beforeDispatch)) }
+export async function recordSelfPay(visitId, reason, key, beforeDispatch) { return commandResult(await api.hmoSelfPay(visitId, { reason }, key, beforeDispatch)) }
+export async function validateRequirement(hmoCase, ruleId, documentLabel, key, beforeDispatch) {
   const payload = { expected_revision: hmoCase.revision }
   if (documentLabel) payload.document_label = documentLabel
-  return commandResult(await api.hmoCaseCommand(hmoCase.id, `requirements/${encodeURIComponent(ruleId)}`, payload, key))
+  return commandResult(await api.hmoCaseCommand(hmoCase.id, `requirements/${encodeURIComponent(ruleId)}`, payload, key, beforeDispatch))
 }
-export async function submitCase(hmoCase, { method, note }, key) { return commandResult(await api.hmoCaseCommand(hmoCase.id, 'submit', { expected_revision: hmoCase.revision, method, note }, key)) }
-export async function recordContact(hmoCase, { method, note, nextAction }, key) { return commandResult(await api.hmoCaseCommand(hmoCase.id, 'contact', { expected_revision: hmoCase.revision, method, note, next_action: nextAction }, key)) }
-export async function escalateCase(hmoCase, key) { return commandResult(await api.hmoCaseCommand(hmoCase.id, 'escalate', { expected_revision: hmoCase.revision }, key)) }
-export async function withdrawCase(hmoCase, reason, key) { return commandResult(await api.hmoCaseCommand(hmoCase.id, 'withdraw', { expected_revision: hmoCase.revision, reason }, key)) }
+export async function submitCase(hmoCase, { method, note }, key, beforeDispatch) { return commandResult(await api.hmoCaseCommand(hmoCase.id, 'submit', { expected_revision: hmoCase.revision, method, note }, key, beforeDispatch)) }
+export async function recordContact(hmoCase, { method, note, nextAction }, key, beforeDispatch) { return commandResult(await api.hmoCaseCommand(hmoCase.id, 'contact', { expected_revision: hmoCase.revision, method, note, next_action: nextAction }, key, beforeDispatch)) }
+export async function escalateCase(hmoCase, key, beforeDispatch) { return commandResult(await api.hmoCaseCommand(hmoCase.id, 'escalate', { expected_revision: hmoCase.revision }, key, beforeDispatch)) }
+export async function withdrawCase(hmoCase, reason, key, beforeDispatch) { return commandResult(await api.hmoCaseCommand(hmoCase.id, 'withdraw', { expected_revision: hmoCase.revision, reason }, key, beforeDispatch)) }
 
 /** Staff-confirmed external provider response for the current submission cycle. */
-export async function recordResponse(hmoCase, { outcome, method, note, providerReference = '', approvedAmount = '', returnedRequirements = [] }, key) {
+export async function recordResponse(hmoCase, { outcome, method, note, providerReference = '', approvedAmount = '', returnedRequirements = [] }, key, beforeDispatch) {
   const payload = { expected_revision: hmoCase.revision, submission_cycle: hmoCase.submissionCycle, outcome, method, note }
   if (providerReference.trim()) payload.provider_reference = providerReference.trim()
   if (outcome === 'Approved') payload.approved_amount = String(approvedAmount).trim()
   if (outcome === 'Returned') payload.returned_requirements = returnedRequirements
-  return commandResult(await api.hmoCaseCommand(hmoCase.id, 'response', payload, key))
+  return commandResult(await api.hmoCaseCommand(hmoCase.id, 'response', payload, key, beforeDispatch))
 }

@@ -13,13 +13,24 @@ const bundle = await build({ entryPoints: ['src/pages/Hmo.jsx'], bundle: true, w
 const { createMembershipLookup, createHmoCommandRunner, createHmoAttemptKeys, captureHmoCase, hmoOperationIsStale, refreshHmoView, HmoPage } = await import('data:text/javascript;base64,' + Buffer.from(bundle.outputFiles[0].text).toString('base64'))
 const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done }); return { resolve, promise } }
 const visit = id => ({ id: `visit-${id}`, patientPublicId: `patient-${id}` })
-const membership = (id, number = `SYNTHETIC-${id}`) => ({ patient: { id: `patient-${id}` }, active: { id: `membership-${id}`, provider_name: 'Synthetic provider', member_number: number }, history: [] })
+const membership = (id, number = `SYNTHETIC-${id}`) => ({ patient: { id: `patient-${id}` }, active: { id: `membership-${id}`, status:'active', provider_name: 'Synthetic provider', member_number: number }, history: [] })
 function runnerFixture(refresh = async () => ({ ok: true })) {
   const output = { busy: [], feedback: [], allowed: true, after: 0 }
   const runner = createHmoCommandRunner({ allowed: () => output.allowed, refresh, onBusy: value => output.busy.push(value), onFeedback: (...args) => output.feedback.push(args) })
   runner.start()
   return { runner, output }
 }
+
+test('GEN-13 a membership read missing active state is unavailable, not no membership', async () => {
+  const states=[],lookup=createMembershipLookup(async()=>({ok:true,membership:{patient:{id:'patient-a'},history:[]}}),state=>states.push(state))
+  assert.equal(await lookup.select(visit('a')),false);assert.equal(states.at(-1).membership,null);assert.ok(states.at(-1).error);lookup.dispose()
+})
+
+test('GEN-13 invalid command receipt never becomes server-confirmed feedback', async () => {
+  const {runner,output}=runnerFixture();let adopted=false
+  assert.equal(await runner.run({command:async()=>({ok:true,membership:membership('b')}),message:'Membership saved.',validate:()=>false,after:()=>{adopted=true}}),false)
+  assert.equal(adopted,false);assert.equal(output.feedback.length,1);assert.equal(output.feedback[0][1],'warning');assert.doesNotMatch(output.feedback[0][0],/server confirmed|Membership saved/);runner.stop()
+})
 
 test('HMO-01 Visit A -> B -> A discards both earlier lookup lifetimes', async () => {
   const requests = [], states = []
@@ -167,7 +178,7 @@ test('HMO-01 source preserves history and locks captured fields with accessible 
   assert.match(source, /<PatientHmoPage store=\{store\} context=\{context\}/)
   assert.match(source, /disabled=\{busy \|\| operationStale \|\| reloadNeeded\}/)
   assert.match(source, /disabled=\{busy \|\| stale\}/)
-  assert.match(source, /key=\{`\$\{visit.id\}:\$\{visit.patientPublicId\}`\}/)
+  assert.match(source, /key=\{`\$\{visit.id\}:\$\{visit.patientPublicId\}:\$\{visit.branchId\}`\}/)
   assert.match(source, /role="alert" tabIndex=\{0\}/)
 })
 

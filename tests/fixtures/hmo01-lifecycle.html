@@ -6,8 +6,8 @@ import {HMO_PROVIDERS} from '/src/phase3-contracts.js'
 import '/src/styles.css'
 import '/src/foundation.css'
 import '/src/polish.css'
-const cases=['a','b'].map((id,index)=>({id:`case-${id}`,server:true,revision:1,submissionCycle:index?0:1,status:index?'Missing Requirements':'Pending',patientId:`patient-${id}`,patientPublicId:`patient-${id}`,patientName:`Synthetic Patient ${id.toUpperCase()}`,branchId:'b1',branch:'Synthetic branch',visitId:`visit-${id}`,clinicDate:'2026-11-06',providerName:'Synthetic provider',requirements:[{id:`req-${id}`,ruleId:'hmo-card',label:'HMO Card',state:'Missing'}],events:[],contacts:[],responses:[],submittedAt:index?null:'2026-11-06T08:00:00+08:00',followUpDueAt:'2026-11-07T08:00:00+08:00'}))
-const memberships=new Map(['a','b'].map(id=>[`patient-${id}`,{patient:{id:`patient-${id}`},active:{id:`membership-${id}`,provider_name:'Synthetic provider',member_number:`PRIVATE-${id.toUpperCase()}`},history:[]}]))
+const cases=['a','b','c'].map((id,index)=>({id:`case-${id}`,server:true,revision:1,submissionCycle:index===1?0:1,status:index===1?'Missing Requirements':'Pending',patientId:`patient-${id}`,patientPublicId:`patient-${id}`,patientName:`Synthetic Patient ${id.toUpperCase()}`,branchId:'b1',branch:'Synthetic branch',visitId:`visit-${id}`,clinicDate:'2026-11-06',providerName:'Synthetic provider',requirements:[{id:`req-${id}`,ruleId:'hmo-card',label:'HMO Card',state:'Missing'}],events:[],contacts:[],responses:[],submittedAt:index===1?null:'2026-11-06T08:00:00+08:00',followUpDueAt:'2026-11-07T08:00:00+08:00'}))
+const memberships=new Map(['a','b','c'].map(id=>[`patient-${id}`,{patient:{id:`patient-${id}`},active:{id:`membership-${id}`,status:'active',provider_name:'Synthetic provider',member_number:`PRIVATE-${id.toUpperCase()}`},history:[]}]))
 window.hmo01={requests:[],holdLoad:false,loads:[],holdCommand:false,release:null,failCommand:false,failRefresh:false}
 window.fetch=async (url,options={})=>{
  const path=new URL(url,location.href).pathname
@@ -22,12 +22,12 @@ window.fetch=async (url,options={})=>{
  if(window.hmo01.failCommand)return Response.json({message:'Synthetic recoverable command refusal'},{status:500})
  if(path.includes('/hmo-membership')){
   const id=path.split('/')[3].replace('visit-','patient-'),old=memberships.get(id),body=JSON.parse(options.body)
-  const next={...old,active:path.endsWith('/end')?null:{id:`replacement-${id}`,provider_name:body.provider_name,member_number:body.member_number}}
+  const next={...old,active:path.endsWith('/end')?null:{id:`replacement-${id}`,status:'active',provider_name:body.provider_name,member_number:body.member_number},history:old.active?[{...old.active,status:'ended'}]:[]}
   memberships.set(id,next);return Response.json({data:next})
  }
  const item=cases.find(row=>path.includes(row.id))
- if(item)item.revision++
- return Response.json({data:{id:item?.id||'case-a'}})
+ if(item){item.revision++;const body=JSON.parse(options.body||'{}');if(path.endsWith('/response')){item.status=body.outcome;item.events.push({kind:'response',submission_cycle:item.submissionCycle,outcome:body.outcome,method:body.method,note:body.note.trim(),provider_reference:body.provider_reference||null,approved_amount:body.approved_amount||null})}}
+ return Response.json({data:item?{id:item.id,status:item.status,revision:item.revision,submission_cycle:item.submissionCycle,patient:{id:item.patientPublicId},visit:{id:item.visitId},branch:{id:item.branchId},events:item.events}:null})
 }
 function Fixture(){
  const [role,setRole]=useState('staff'),[version,setVersion]=useState(0),[context,setContext]=useState(null)
@@ -36,7 +36,7 @@ function Fixture(){
  const person={id:'person'},user={id:'user',personId:'person',role:role==='owner'?'Owner / Admin':'Staff',status:'Active',permissions:role==='owner'?['all']:['hmo'],branchId:'b1'}
  const session={serverUserId:'server-user',userId:'user',role,active:true,branchId:'b1',branchScopes:['b1']}
  const history={id:'historical',legacy:true,patientId:'patient-a',branchId:'b1',providerId:HMO_PROVIDERS[0].id,status:'Approved',requirements:[]}
- const state={persons:[person],users:[user],staff:[{userId:'user',personId:'person',branchId:'b1'}],dentists:[],patients:[{id:'patient-a',name:'Synthetic Patient A'},{id:'patient-b',name:'Synthetic Patient B'}],branches:[{id:'b1',name:'Synthetic branch'}],hmo:[...cases.map(row=>structuredClone(row)),history],claimDecisions:[],appointments:[],treatments:[],queue:[],visits:['a','b'].map(id=>({id:`visit-${id}`,server:true,branchId:'b1',patientPublicId:`patient-${id}`,patientName:`Synthetic Patient ${id.toUpperCase()}`,patientCode:id,clinicDate:'2026-11-06'})),clock:{timestamp:'2026-11-06T10:00:00+08:00'}}
+ const state={persons:[person],users:[user],staff:[{userId:'user',personId:'person',branchId:'b1'}],dentists:[],patients:[{id:'patient-a',name:'Synthetic Patient A'},{id:'patient-b',name:'Synthetic Patient B'},{id:'patient-c',name:'Synthetic Patient C'}],branches:[{id:'b1',name:'Synthetic branch'}],hmo:[...cases.map(row=>structuredClone(row)),history],claimDecisions:[],appointments:[],treatments:[],queue:[],visits:['a','b','c'].map(id=>({id:`visit-${id}`,server:true,branchId:'b1',patientPublicId:`patient-${id}`,patientName:`Synthetic Patient ${id.toUpperCase()}`,patientCode:id,clinicDate:'2026-11-06'})),clock:{timestamp:'2026-11-06T10:00:00+08:00'}}
  const store={state,session,toast(){},appointmentFlow:{refresh:async()=>{
   if(window.hmo01.failRefresh)return{ok:false}
   setVersion(v=>v+1)

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Button, Card, Field, Modal } from '../components.jsx'
+import { Button, Card, Field, Modal, RefreshButton } from '../components.jsx'
 import { dentistName } from '../logic.js'
 import { branchPosterUrl, cancelIntake, confirmIntake, getPatientRecord, intakeCode, pendingIntake, offerOnlineAccount, refreshIntakeCode, requestHandover, verifyPatientId } from '../api-client.js'
 
@@ -181,6 +181,9 @@ function ReviewDialog({ row, reviewInstance, isCurrent, idTypes, toast, onClose,
 }
 
 const ID_TYPES = { philid: 'PhilID / ePhilID', drivers_license: 'Driver’s license', umid: 'UMID', passport: 'Passport', postal: 'Postal ID', prc: 'PRC ID', voters: 'Voter’s ID', senior: 'Senior citizen ID', pwd: 'PWD ID', other: 'Other valid ID' }
+const idReceiptMatches = (body, data) => Object.hasOwn(ID_TYPES, body.id_type) && data?.id_type === body.id_type &&
+  typeof data.id_verified_at === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:Z|[+-]\d\d:\d\d)$/.test(data.id_verified_at) && Number.isFinite(Date.parse(data.id_verified_at)) &&
+  (body.id_type !== 'other' || typeof body.other_details === 'string' && !!body.other_details.trim() && data.other_details === body.other_details)
 
 /** One click at Check-In: the patient's physical ID was checked (first visit). Only the type, who and when are saved. */
 /**
@@ -207,60 +210,85 @@ function OfferAccount({ patientId, email: stored, toast }) {
     <Button size="sm" disabled={busy || !email} onClick={go}>Email a one-time link</Button></div>
 }
 
-export function IdCheck({ patientId, toast = () => {} }) {
+export function IdCheck({ patientId, toast = () => {}, getAuthGeneration }) {
   // Each selection owns a new lifetime, including A -> B -> A. Never reuse a
   // previous patient's inputs or let an unmounted request report feedback.
-  return patientId ? <PatientIdCheck key={patientId} patientId={patientId} toast={toast}/> : null
+  return patientId ? <PatientIdCheck key={JSON.stringify([patientId,getAuthGeneration?.()])} patientId={patientId} toast={toast} getAuthGeneration={getAuthGeneration}/> : null
 }
 
-function PatientIdCheck({ patientId, toast }) {
-  const live = React.useRef(false), verifying = React.useRef(false)
+function PatientIdCheck({ patientId, toast, getAuthGeneration }) {
+  const auth = getAuthGeneration?.()
+  const live = React.useRef(false), verifying = React.useRef(false), reading = React.useRef(false), readGeneration = React.useRef(0)
+  const controls = React.useRef(null), restoreFocus = React.useRef(false)
   const [record, setRecord] = useState(null), [type, setType] = useState('philid'), [otherText, setOtherText] = useState(''), [busy, setBusy] = useState(false)
   const [attempt, setAttempt] = useState(0), [loadError, setLoadError] = useState(null), [failure, setFailure] = useState(null), [otherTouched, setOtherTouched] = useState(false)
   React.useLayoutEffect(() => { live.current = true; return () => { live.current = false } }, [])
+  React.useLayoutEffect(() => {
+    if (!restoreFocus.current || (!record && !loadError)) return
+    restoreFocus.current = false
+    if (typeof document !== 'undefined' && document.activeElement === document.body) {
+      const root = controls.current
+      const target = root?.querySelector('select:not(:disabled),input:not(:disabled),button:not(:disabled)') || root
+      target?.focus()
+    }
+  }, [record, loadError])
   useEffect(() => {
     let current = true
-    setRecord(null); setLoadError(null); setFailure(null)
+    const generation = ++readGeneration.current
+    reading.current = true
+    setRecord(null); setLoadError(null); setFailure(old => old?.kind === 'unconfirmed' ? old : null)
     const load = async () => {
+      if (getAuthGeneration && (auth == null || auth !== getAuthGeneration())) return
       let r
       try { r = await getPatientRecord(patientId) }
       catch { r = {ok: false, message: 'The patient record could not be loaded. Try again.'} }
-      if (!current || !live.current) return
-      if (r.ok && r.data?.id === patientId) setRecord(r.data)
-      else setLoadError(r.ok ? {message: 'The patient record could not be confirmed. Reload it before recording an ID check.'} : r)
+      if (generation === readGeneration.current) reading.current = false
+      if (!current || !live.current || auth !== getAuthGeneration?.()) return
+      const check = r?.data?.id_check
+      const checkMatches = r?.data?.profile_access !== 'full' || Object.hasOwn(r.data, 'id_check') && (check === null ||
+        check && idReceiptMatches({id_type:check.type,other_details:check.other_details}, {id_type:check.type,other_details:check.other_details,id_verified_at:check.at}))
+      if (r?.ok && r.data?.id === patientId && checkMatches) setRecord(r.data)
+      else setLoadError(r?.ok ? {message: 'The patient record could not be confirmed. Reload it before recording an ID check.'} : r || {message:'The patient record could not be loaded. Try again.'})
     }
     load()
     return () => { current = false }
   }, [patientId, attempt])
-  const reload = () => { if (!verifying.current) { setRecord(null); setLoadError(null); setFailure(null); setAttempt(a => a + 1) } }
+  const reload = () => {
+    if (!live.current || verifying.current || reading.current) return
+    reading.current = true; restoreFocus.current = true
+    setRecord(null); setLoadError(null); setAttempt(a => a + 1)
+  }
   const accessError = r => r?.kind === 'unauthenticated' ? 'Your session has ended. Sign in again to check ID status.'
     : r?.kind === 'forbidden' ? 'You do not have permission to view or record this patient’s ID check.'
     : r?.kind === 'validation' ? r.message || 'Check the highlighted fields and try again.'
     : r?.kind === 'server' ? 'The request could not be confirmed. Reload ID status before retrying.' : firstError(r)
-  if (loadError) return <div className="ci-idcheck"><p className="au-error" role="alert">{accessError(loadError)}</p><Button variant="soft" onClick={reload}>Reload ID status</Button></div>
-  if (!record) return <p className="au-muted" role="status">Loading patient ID status…</p>
+  if (loadError) return <div ref={controls} tabIndex={-1} className="ci-idcheck"><p className="au-error" role="alert">{accessError(loadError)}</p><RefreshButton title="Reload ID status" ariaLabel="Reload ID status" onClick={reload}/></div>
+  if (!record) return <p ref={controls} tabIndex={-1} className="au-muted" role="status">Loading patient ID status…</p>
   // Identity-only projections deliberately omit verification details. Missing
   // details must not be presented as an unchecked, writable record.
-  if (record.profile_access !== 'full') return <p className="au-muted" role="status">ID verification details are unavailable with your current access.</p>
+  if (record.profile_access !== 'full') return <p ref={controls} tabIndex={-1} className="au-muted" role="status">ID verification details are unavailable with your current access.</p>
   const minor = record.minor ? <p className="fd-badge is-late">Minor{record.guardians?.length ? `: guardian ${record.guardians.map(g => g.name).join(', ')}` : ': no guardian linked yet'}</p> : null
-  if (record.id_check) return <div className="ci-idcheck">{minor}<p className="au-muted" role="status">ID checked: {ID_TYPES[record.id_check.type] || record.id_check.type}{record.id_check.other_details ? ` (${record.id_check.other_details})` : ''}{record.id_check.by ? ` by ${record.id_check.by}` : ''}. {record.id_check.type === 'senior' && <span className="fd-badge is-info">Senior Citizen Priority Eligible</span>}{record.id_check.type === 'pwd' && <span className="fd-badge is-info">PWD Priority Eligible</span>}</p>
+  if (record.id_check) return <div ref={controls} tabIndex={-1} className="ci-idcheck">{minor}<p className="au-muted" role="status">ID checked: {ID_TYPES[record.id_check.type] || record.id_check.type}{record.id_check.other_details ? ` (${record.id_check.other_details})` : ''}{record.id_check.by ? ` by ${record.id_check.by}` : ''}. {record.id_check.type === 'senior' && <span className="fd-badge is-info">Senior Citizen Priority Eligible</span>}{record.id_check.type === 'pwd' && <span className="fd-badge is-info">PWD Priority Eligible</span>}</p>
     {!record.has_online_account && (record.minor
       ? <p className="au-muted">Under 18: no online account of their own. Their guardian’s account books and pays for them; they can claim their own account at 18.</p>
       : <OfferAccount patientId={patientId} email={record.email} toast={toast}/>)}</div>
   const go = async () => {
-    if (!live.current || verifying.current || record.id_check || ['forbidden', 'unauthenticated', 'unconfirmed'].includes(failure?.kind)) return
+    if (!live.current || reading.current || verifying.current || record.id_check || ['forbidden', 'unauthenticated', 'unconfirmed'].includes(failure?.kind)) return
     if (type === 'other' && !otherText.trim()) { setOtherTouched(true); return }
     const body = { id_type: type, ...(type === 'other' ? { other_details: otherText.trim() } : {}) }
+    const owns = () => live.current && !reading.current && (!getAuthGeneration || auth != null && auth === getAuthGeneration())
+    if (!owns()) return
     verifying.current = true; setBusy(true); setFailure(null)
     let r
-    try { r = await verifyPatientId(patientId, body) }
+    try { r = await verifyPatientId(patientId, body, owns) }
     catch { r = {ok: false, message: 'The ID-check result could not be confirmed. Reload ID status before retrying.'} }
-    if (!live.current) return
+    if (!owns()) { verifying.current = false; if (live.current) setBusy(false); return }
     verifying.current = false
     setBusy(false)
-    if (!r.ok) return setFailure(r)
-    if (!r.data?.id_verified_at || r.data.id_type !== body.id_type ||
-      (body.id_type === 'other' && r.data.other_details !== body.other_details)) {
+    if (!r?.ok) return setFailure(!r?.kind || ['network','server'].includes(r.kind)
+      ? {kind:'unconfirmed', message:'The earlier ID-check outcome is still unverified. An unchanged record does not prove it failed. Reload ID status or ask the branch team to verify before another check.'}
+      : r)
+    if (!idReceiptMatches(body, r.data)) {
       return setFailure({kind: 'unconfirmed', message: 'The ID-check result could not be confirmed. Reload ID status before retrying.'})
     }
     setRecord(x => ({ ...x, id_check: { type: r.data.id_type, other_details: r.data.other_details, at: r.data.id_verified_at } }))
@@ -268,7 +296,7 @@ function PatientIdCheck({ patientId, toast }) {
   }
   const blocked = ['forbidden', 'unauthenticated', 'unconfirmed'].includes(failure?.kind)
   const otherError = failure?.errors?.other_details?.[0] || (type === 'other' && otherTouched && !otherText.trim() ? 'Specify the ID type.' : undefined)
-  return <div className="ci-idcheck" aria-busy={busy}>{minor}
+  return <div ref={controls} tabIndex={-1} className="ci-idcheck" aria-busy={busy}>{minor}
     <p><b>First visit: check the ID.</b> {record.minor ? 'For a minor, check the guardian’s ID.' : ''}</p>
     <div className="ci-id">
       <Field label="ID shown" error={failure?.errors?.id_type?.[0]}><select disabled={busy || blocked} value={type} onChange={e => { setType(e.target.value); setOtherTouched(false); setFailure(null); if (e.target.value !== 'other') setOtherText('') }}>{Object.entries(ID_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>
@@ -278,7 +306,7 @@ function PatientIdCheck({ patientId, toast }) {
       <div className="au-actions"><Button variant="soft" disabled={busy || blocked || (type === 'other' && !otherText.trim())} onClick={go}>{busy ? 'Recording ID check…' : 'ID checked'}</Button></div>
     </div>
     {busy && <p className="au-muted" role="status">Recording the ID check for this patient…</p>}
-    {failure && <><p className="au-error" role="alert">{accessError(failure)}</p><Button variant="soft" onClick={reload}>Reload ID status</Button></>}
+    {failure && <><p className="au-error" role="alert">{accessError(failure)}</p><RefreshButton title="Reload ID status" ariaLabel="Reload ID status" disabled={busy} onClick={reload}/></>}
     <p className="au-muted">This records the ID check only. Check-in is a separate action.</p>
   </div>
 }

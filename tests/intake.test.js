@@ -6,6 +6,7 @@ import { looksClean, parseDate, parseIdText, parseMrz, parsePhilIdQr, scanVerdic
 import { publicViewFromHash } from '../src/public-route.js'
 
 const read = p => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8')
+const idReceiptMatches = variableValue('src/pages/CounterIntake.jsx','idReceiptMatches',{ID_TYPES:variableValue('src/pages/CounterIntake.jsx','ID_TYPES',{})})
 
 test('PhilID QR: only the names and the birth date are read; the PCN is ignored', () => {
   const r = parsePhilIdQr(JSON.stringify({ subject: { lName: 'SPECIMEN', fName: 'JOANNA MARIE', mName: 'REYES', DOB: 'January 17, 1990', PCN: '0000-1111-2222-3333', POB: 'X' } }))
@@ -99,8 +100,8 @@ test('STF-04 counter intake ID check: "other" ID requires specify text and passe
   const calls = [], feedback = [], errors = []
   let record = {id:'patient-A',profile_access:'full'}, busy = false, touched = false
   const bindings = {
-    patientId:'patient-A', record, type:'other', otherText:'   ', failure:null,
-    live:{current:true}, verifying:{current:false}, setBusy:v=>{busy=v}, setFailure:v=>errors.push(v), setOtherTouched:v=>{touched=v},
+    patientId:'patient-A', record, type:'other', otherText:'   ', failure:null,auth:1,getAuthGeneration:()=>1,idReceiptMatches,
+    live:{current:true}, reading:{current:false}, verifying:{current:false}, setBusy:v=>{busy=v}, setFailure:v=>errors.push(v), setOtherTouched:v=>{touched=v},
     verifyPatientId:async(id,body)=>{calls.push({id,body:JSON.parse(JSON.stringify(body))});return {ok:false,kind:'validation'}},
     setRecord:update=>{record=update(record)}, toast:(...args)=>feedback.push(args),
   }
@@ -129,7 +130,7 @@ test('STF-04 counter intake ID check: "other" ID requires specify text and passe
 for(const detail of [undefined,'Different ID type']) test('STF-04 mismatched ID receipt remains unverified: '+String(detail), async()=>{
   let record={id:'patient-A',profile_access:'full'}, failure=null; const feedback=[]
   const go=variableValue('src/pages/CounterIntake.jsx','go',{
-    patientId:'patient-A',record,type:'other',otherText:'Company ID',failure:null,live:{current:true},verifying:{current:false},
+    patientId:'patient-A',record,type:'other',otherText:'Company ID',failure:null,auth:1,getAuthGeneration:()=>1,idReceiptMatches,live:{current:true},reading:{current:false},verifying:{current:false},
     setBusy(){},setOtherTouched(){},setFailure:v=>{failure=v},setRecord:update=>{record=update(record)},toast:(...x)=>feedback.push(x),
     verifyPatientId:async()=>({ok:true,data:{id_type:'other',other_details:detail,id_verified_at:'2026-11-13T08:00:00+08:00'}}),
   },'PatientIdCheck')

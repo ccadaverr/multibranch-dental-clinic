@@ -1,0 +1,33 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synthetic identity and HMO recovery</title></head><body><main id="root"></main><script type="module">
+import React,{useState} from 'react'
+import {createRoot} from 'react-dom/client'
+import {IdCheck} from '/src/pages/CounterIntake.jsx'
+import {HmoPage} from '/src/pages/Hmo.jsx'
+import {FollowupsServerPage} from '/src/pages/ServerFollowups.jsx'
+import '/src/styles.css'
+import '/src/foundation.css'
+import '/src/patient.css'
+import '/src/public-site.css'
+import '/src/polish.css'
+import '/src/patient/portal.css'
+import '/src/landing.css'
+import '/src/automations.css'
+window.qa06={auth:1,feedback:[],refreshes:[],releaseRefresh(i,value){this.refreshes[i].resolve(value)},rejectRefresh(i){this.refreshes[i].reject(new Error('Synthetic read failure'))}}
+function Fixture(){
+ const [mode,setMode]=useState(new URLSearchParams(location.search).get('mode')||'id'),[patient,setPatient]=useState('patient-A'),[role,setRole]=useState('staff'),[scopes,setScopes]=useState(['b1']),[revision,setRevision]=useState(1),[visitBranch,setVisitBranch]=useState('b1'),[decisionPatient,setDecisionPatient]=useState('patient-A')
+ Object.assign(window.qa06,{setMode,setPatient,setRole,setScopes,setRevision,setVisitBranch,setDecisionPatient})
+ const visits=['A','B','C'].map(x=>({id:'visit-'+x,server:true,patientId:'patient-'+x,patientPublicId:'patient-'+x,patientName:'Synthetic Patient '+x,patientCode:'QA-'+x,clinicDate:'2026-11-01',branchId:x==='C'?'b2':x==='A'?visitBranch:'b1'}))
+ const cases=['A','B'].map(x=>({id:'case-'+x,server:true,revision,submissionCycle:1,status:'Pending',patientId:'patient-'+x,patientPublicId:'patient-'+x,patientName:'Synthetic Patient '+x,branchId:'b1',branch:'Synthetic branch',visitId:'visit-'+x,clinicDate:'2026-11-01',providerName:'Synthetic provider',requirements:[],events:[],contacts:[],responses:[],submittedAt:'2026-11-01T08:00:00+08:00',followUpDueAt:'2026-11-02T08:00:00+08:00'}))
+ const user={id:'user',personId:'person',role:role==='owner'?'Owner / Admin':'Staff',status:'Active',permissions:['hmo'],branchId:'b1'}
+ const session={serverUserId:'synthetic-server',userId:'user',role,active:true,branchId:'b1',branchScopes:scopes}
+ const state={persons:[{id:'person'}],users:[user],staff:[{userId:'user',personId:'person',branchId:'b1'}],dentists:[],patients:visits.map(v=>({id:v.patientId,name:v.patientName})),branches:[{id:'b1',name:'Synthetic branch',status:'Open'},{id:'b2',name:'Synthetic other branch',status:'Open'}],visits,hmo:cases,claimDecisions:new URLSearchParams(location.search).has('decisions')?[{visitId:'visit-A',visitStatus:'Waiting',clinicDate:'2026-11-01',patientId:'legacy-A',patientPublicId:decisionPatient,patientName:'Synthetic decision Patient',branchId:'b1',branchName:'Synthetic branch'}]:[],appointments:[],treatments:[],queue:[],clock:{timestamp:'2026-11-01T10:00:00+08:00'}}
+ const store={state,session,getAuthGeneration:()=>window.qa06.auth,toast:(...args)=>window.qa06.feedback.push(args),appointmentFlow:{refresh:()=>new Promise((resolve,reject)=>window.qa06.refreshes.push({resolve,reject}))}}
+ if(mode==='away')return React.createElement('h1',null,'Synthetic destination')
+ if(mode==='hmo')return React.createElement(HmoPage,{store,role,activeBranch:'Synthetic branch'})
+ if(mode==='followups')return React.createElement(FollowupsServerPage,{store,role,setPage:()=>setMode('away')})
+ // Match the Staff-only parent/branch permission boundary; transport remains
+ // synthetic and the actual server is always the final authority.
+ return role==='staff'&&scopes.includes('b1')?React.createElement(IdCheck,{patientId:patient,toast:store.toast,getAuthGeneration:store.getAuthGeneration}):React.createElement('p',null,'Synthetic ID access unavailable')
+}
+createRoot(document.getElementById('root')).render(React.createElement(Fixture))
+</script></body></html>

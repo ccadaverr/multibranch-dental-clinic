@@ -266,7 +266,7 @@ function StaffPatientSummary({ patient, role, branches, toast, store }) {
       {counts&&<div className="span-2"><Notice tone="info" title="Linked records">{[['appointments','appointments'],['visits','visits'],['treatments','treatments'],['invoices','invoices'],['hmo_cases','HMO cases']].map(([key,label])=>`${counts[key]} ${label}`).join(' • ')}{index.limit&&Object.values(counts).some(n=>n>=index.limit)?` (showing up to ${index.limit} per list)`:''}. These records are kept in their own modules and open from the tabs above.</Notice></div>}
       {problem&&<div className="span-2"><Notice tone={problem.tone} title={problem.conflict?'Record changed':undefined}>{problem.message}{problem.conflict&&<> <Button size="sm" variant="ghost" onClick={()=>setAttempt(attempt+1)}>Reload record</Button></>}</Notice></div>}
       {editable&&<Button className="span-2" disabled={saving} onClick={save}>{saving?'Saving…':'Save changes'}</Button>}
-      {editable&&<div className="span-2"><IdCheck patientId={patient.id} toast={toast}/></div>}
+      {editable&&<div className="span-2"><IdCheck patientId={patient.id} toast={toast} getAuthGeneration={store?.getAuthGeneration}/></div>}
       {role==='staff'&&<div className="span-2"><HandoverPanel patientId={patient.id} toast={toast}/></div>}
       {role==='staff'&&full&&<div className="span-2"><section className="st-panel" aria-label="Dental chart"><h3 className="st-sub">Dental chart (read-only)</h3><ChartView patientId={patient.id} canRecord={false} toast={toast} store={store}/></section></div>}
       {role==='staff'&&full&&<div className="span-2"><FollowupPanel patientId={patient.id} toast={toast} store={store} branches={(branches||[]).filter(b=>b.status!=='Closed')}/></div>}
