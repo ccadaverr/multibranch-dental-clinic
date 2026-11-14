@@ -202,13 +202,13 @@ export function SearchInput({ value, onChange, placeholder = 'Search…', ariaLa
   </div>
 }
 
-export function RefreshButton({ onClick, loading = false, title = 'Refresh', ariaLabel = 'Refresh', size = 'md', className = '', ...props }) {
+export function RefreshButton({ onClick, loading = false, disabled = false, title = 'Refresh', ariaLabel = 'Refresh', size = 'md', className = '', ...props }) {
   const [spinning, setSpinning] = React.useState(false)
   const isRefreshing = loading || spinning
   const pending = useRef(false)
 
   const handleClick = async (e) => {
-    if (isRefreshing || pending.current) return
+    if (disabled || isRefreshing || pending.current) return
     pending.current = true
     setSpinning(true)
     try {
@@ -223,7 +223,7 @@ export function RefreshButton({ onClick, loading = false, title = 'Refresh', ari
     className={`icon-btn refresh-btn ${size === 'sm' ? 'refresh-btn-sm' : ''} ${isRefreshing ? 'is-spinning' : ''} ${className}`.trim()}
     title={title}
     aria-label={ariaLabel}
-    disabled={isRefreshing}
+    disabled={disabled || isRefreshing}
     aria-busy={isRefreshing}
     onClick={handleClick}
     {...props}

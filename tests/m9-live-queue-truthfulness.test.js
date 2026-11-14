@@ -68,7 +68,11 @@ test('the queue client flags a response at the server row cap as possibly trunca
   assert.equal((await queueApi.loadQueue('2026-09-19')).truncated, true)
 })
 
-const bundle = await build({ stdin: { contents: "export * from './src/pages/QueueCounts.jsx'; export { setClockSource as setBundledClock } from './src/clock.js'", resolveDir: process.cwd() }, bundle: true, write: false, platform: 'node', format: 'esm' })
+// Hook-using shared controls must use the same React instance as renderToString.
+// An absolute external URL also resolves from the data: bundle below.
+const bundle = await build({ stdin: { contents: "export * from './src/pages/QueueCounts.jsx'; export { setClockSource as setBundledClock } from './src/clock.js'", resolveDir: process.cwd() }, bundle: true, write: false, platform: 'node', format: 'esm',
+  plugins: [{name:'single-renderer-react',setup(b){b.onResolve({filter:/^react$/},()=>({path:import.meta.resolve('react'),external:true}))}}],
+})
 const ui = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`)
 ui.setBundledClock(() => new Date('2026-09-19T02:08:00Z')) // the bundle carries its own clock module
 const branches = [{ id: 'b1', name: 'Dr. Dana Roxas Dental Clinic' }, { id: 'b2', name: 'Roxas - Cardinal Dental Center' }]

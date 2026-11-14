@@ -2,7 +2,7 @@ import { useClinicalSession } from '../use-clinical-session.js'
 import { useClinicalProtection } from '../clinical-navigation.jsx'
 import { clinicalSessionKey, resolveEncounter } from '../encounter.js'
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Button, Card, ConfirmDialog, Field, FilterBar, Modal, Notice, PageHeader } from '../components.jsx'
+import { Button, Card, ConfirmDialog, Field, FilterBar, Modal, Notice, PageHeader, RefreshButton } from '../components.jsx'
 import { createPrescription, downloadPrescriptionPdf, issuePrescription, listPrescriptions, prescription, prescriptionVisits, savePrescriptionLicense, updatePrescription, voidPrescription } from '../api-client.js'
 import '../dentist-clinical.css'
 
@@ -14,7 +14,7 @@ const LINE_FIELDS = Object.keys(EMPTY_LINE)
 const CUSTOM_FIELDS = ['medicine', 'dosage', 'frequency', 'duration']
 const selectedOption = (line, field, catalog) => line[`${field}Other`] || (line[field] && !catalog.includes(line[field])) ? OTHER_OPTION : line[field]
 const chooseOption = (line, field, option) => ({ ...line, [field]: option === OTHER_OPTION ? '' : option, [`${field}Other`]: option === OTHER_OPTION })
-const apiLine = line => Object.fromEntries(LINE_FIELDS.map(field => [field, line[field]]))
+const apiLine = line => Object.fromEntries(LINE_FIELDS.map(field => [field, (line[field] ?? '').trim()]))
 const draftSnapshot = ({lines, note}) => JSON.stringify({lines: lines.map(line => ({
   ...Object.fromEntries(LINE_FIELDS.map(field => [field, line[field] ?? ''])),
   ...Object.fromEntries(CUSTOM_FIELDS.map(field => [`${field}Other`, !!line[`${field}Other`]])),
@@ -204,7 +204,9 @@ function WriteCard({ toast, onDone, editing, onEdited, context, isCurrent, leave
   const visit = (visits || []).find(v => v.id === visitId)
   const set = (i, k, v, custom = false) => setLines(ls => ls.map((l, j) => j === i ? { ...l, [k]: v, ...(custom ? { [`${k}Other`]: true } : {}) } : l))
   const choose = (i, field, option) => setLines(ls => ls.map((l, j) => j === i ? chooseOption(l, field, option) : l))
-  const missingCustomValue = lines.some(line => CUSTOM_FIELDS.some(field => line[`${field}Other`] && !line[field].trim()))
+  // Loaded Draft values can render as Other without a browser-only selection
+  // flag. Whitespace in that case is still a missing Specify value.
+  const missingCustomValue = lines.some(line => CUSTOM_FIELDS.some(field => (line[`${field}Other`] || line[field]) && !(line[field] || '').trim()))
   const changeVisit = id => {
     if (id === visitId) return
     requestLeave(() => {
@@ -294,7 +296,7 @@ function WriteCard({ toast, onDone, editing, onEdited, context, isCurrent, leave
           </Field>
           {medSelect === '__other__' && (
             <Field label="Specify medicine name" required>
-              <input value={l.medicine} maxLength={200} onChange={e => set(i, 'medicine', e.target.value, true)} placeholder="Type medicine name (e.g. Ciprofloxacin)"/>
+              <input required value={l.medicine} maxLength={200} onChange={e => set(i, 'medicine', e.target.value, true)} placeholder="Type medicine name (e.g. Ciprofloxacin)"/>
             </Field>
           )}
 
@@ -332,12 +334,12 @@ function WriteCard({ toast, onDone, editing, onEdited, context, isCurrent, leave
           <div className="st-pair">
             {dosageSelect === '__other__' && (
               <Field label="Specify custom dosage" required>
-                <input value={l.dosage} maxLength={120} onChange={e => set(i, 'dosage', e.target.value, true)} placeholder="e.g. 750mg twice daily"/>
+                <input required value={l.dosage} maxLength={120} onChange={e => set(i, 'dosage', e.target.value, true)} placeholder="e.g. 750mg twice daily"/>
               </Field>
             )}
             {freqSelect === '__other__' && (
               <Field label="Specify custom frequency" required>
-                <input value={l.frequency} maxLength={120} onChange={e => set(i, 'frequency', e.target.value, true)} placeholder="e.g. Every 4 hours"/>
+                <input required value={l.frequency} maxLength={120} onChange={e => set(i, 'frequency', e.target.value, true)} placeholder="e.g. Every 4 hours"/>
               </Field>
             )}
           </div>
@@ -358,7 +360,7 @@ function WriteCard({ toast, onDone, editing, onEdited, context, isCurrent, leave
           </Field>
           {durationSelect === '__other__' && (
             <Field label="Specify custom duration" required>
-              <input value={l.duration} maxLength={120} onChange={e => set(i, 'duration', e.target.value, true)} placeholder="e.g. 10 days or until finished"/>
+              <input required value={l.duration} maxLength={120} onChange={e => set(i, 'duration', e.target.value, true)} placeholder="e.g. 10 days or until finished"/>
             </Field>
           )}
 
@@ -416,9 +418,18 @@ function rxVoidLedger(read, generation) {
 }
 const rxRecordValid = (p, id) => p?.id === id && Object.hasOwn(TONE, p.status) && Number.isSafeInteger(p.revision) && p.revision > 0
 const rxSamePrescription = (p, original) => p?.id === original.id && p.patient?.id === original.patientId && p.visit === original.visit && p.number === original.number
-const rxSnapshotCurrent = (p, known) => !known || p.revision >= known.revision &&
-  (p.revision !== known.revision || p.status === known.status) && (known.status !== 'Void' || p.status === 'Void') &&
-  p.patient?.id === known.patientId && p.visit === known.visit && p.number === known.number
+const rxSnapshotCurrent = (p, known) => {
+  if (!known) return true
+  // The backend assigns the number on Issue and advances revision on both
+  // Draft -> Issued and Issued -> Void. Reads may observe one or both steps;
+  // they never authorize either command or permit a lifecycle reversal.
+  const order = {Draft: 0, Issued: 1, Void: 2}, steps = order[p.status] - order[known.status]
+  const numberMatches = known.status === 'Draft' && p.status !== 'Draft'
+    ? !known.number && typeof p.number === 'string' && !!p.number.trim()
+    : p.number === known.number
+  return steps >= 0 && p.revision - known.revision >= steps && numberMatches &&
+    p.patient?.id === known.patientId && p.visit === known.visit
+}
 const rxVoidState = (p, original) => rxSamePrescription(p, original) && p.status === 'Void' &&
   Number.isSafeInteger(p.revision) && p.revision > original.revision && p.can_void === false &&
   typeof p.voided?.at === 'string' && typeof p.voided.reason === 'string'
@@ -510,9 +521,9 @@ function PrescriptionDialogBody({ id, toast, onClose, onChanged, onEdit, ledger,
     setP(r.data); setVoiding(false); toast?.('Voided. Write a new prescription if one is still needed.', 'success'); onChanged?.()
   }
   return <Modal open title={p ? `${p.number || 'Draft'}${p.patient ? ` · ${p.patient.name}` : ''}` : 'Prescription'} onClose={onClose}>
-    {error && <Notice tone="warning" title="Unavailable">{error} <Button variant="soft" onClick={reload}>Reload prescription</Button></Notice>}
-    {voidError && <div role="alert"><p className="au-error">{voidError}</p>{!error && operation?.phase !== 'recovery' && <Button variant="soft" onClick={reload}>Reload prescription</Button>}</div>}
-    {operation?.phase === 'recovery' && <Notice tone="warning" title="Void result unconfirmed">The original request may have succeeded. Reload to check for a verified Void state; do not repeat it based on an unchanged Issued record. {!error && <Button variant="soft" onClick={reload}>Reload prescription</Button>}</Notice>}
+    {error && <Notice tone="warning" title="Unavailable">{error} <RefreshButton title="Reload prescription" ariaLabel="Reload prescription" onClick={reload}/></Notice>}
+    {voidError && <div role="alert"><p className="au-error">{voidError}</p>{!error && operation?.phase !== 'recovery' && <RefreshButton title="Reload prescription" ariaLabel="Reload prescription" onClick={reload}/>}</div>}
+    {operation?.phase === 'recovery' && <Notice tone="warning" title="Void result unconfirmed">The original request may have succeeded. Reload to check for a verified Void state; do not repeat it based on an unchanged Issued record. {!error && <RefreshButton title="Reload prescription" ariaLabel="Reload prescription" onClick={reload}/>}</Notice>}
     {(busy || operation?.phase === 'pending') && <p role="status">Voiding the original prescription. Closing this dialog does not cancel the transmitted request.</p>}
     {!isCurrent() && <Notice title="Session unavailable">Close this dialog and sign in again before continuing.</Notice>}
     {!p ? !error && isCurrent() && <p className="au-muted" role="status">Loading…</p> : <div className="st-handover">

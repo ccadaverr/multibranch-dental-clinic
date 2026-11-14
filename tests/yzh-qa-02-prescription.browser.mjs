@@ -33,7 +33,7 @@ try{
  assert.equal(await page.getByLabel('Select medicine 1',{exact:true}).inputValue(),'Paracetamol')
  assert.deepEqual(mutations,[]);assert.deepEqual(errors,[])
  await page.getByRole('button',{name:'Save draft',exact:true}).click()
- await page.getByRole('dialog').waitFor();assert.equal(mutations.length,1);assert.equal(mutations[0].p,'/api/prescriptions/2');assert.equal(mutations[0].body.lines[0].medicine,'Paracetamol');assert.equal(issued,false,'Save does not issue')
+ await page.getByRole('dialog').getByText('Draft',{exact:true}).waitFor();assert.equal(mutations.length,1);assert.equal(mutations[0].p,'/api/prescriptions/2');assert.equal(mutations[0].body.lines[0].medicine,'Paracetamol');assert.equal(issued,false,'Save does not issue')
  await page.keyboard.press('Escape');await page.getByRole('button',{name:'Edit draft',exact:true}).nth(1).click();await page.getByText('Edit draft for Synthetic patient 2',{exact:true}).waitFor()
  await page.getByRole('button',{name:'Issue prescription',exact:true}).click();assert.equal(issued,false,'opening confirmation does not issue')
  await page.getByRole('dialog',{name:'Issue and lock prescription?'}).getByRole('button',{name:'Issue prescription',exact:true}).click();await page.getByRole('dialog').getByText('Issued',{exact:true}).waitFor();assert(issued);assert.equal(mutations.filter(m=>m.p.endsWith('/issue')).length,1)

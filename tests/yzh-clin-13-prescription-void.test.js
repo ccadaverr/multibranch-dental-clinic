@@ -44,6 +44,29 @@ function dialog({respond=async()=>ok(voided()),read=async id=>ok(issued(id)),aut
  return {render,calls,reads,feedback,changed,closed,get value(){return value},async flush(){await setImmediate();return render()},fill(){value.setReason('  Synthetic correction  ');value.setVoiding(true);render()},close(){(outer?.dismiss||props.onClose)()},unmount(){body.unmount();root?.unmount()}}
 }
 
+const draftRead=(extra={})=>issued('A',{number:null,status:'Draft',revision:1,can_void:false,can_edit:true,...extra})
+for(const [name,before,after,expected]of [
+ ['Draft to Issued assigns a number',draftRead(),issued(),true],
+ ['Draft to later Void reflects both backend transitions',draftRead(),voided(),true],
+ ['Issued to Void preserves number',issued(),voided(),true],
+ ['unchanged Draft remains readable',draftRead(),draftRead(),true],
+ ['same-revision status change is refused',draftRead(),issued('A',{revision:1}),false],
+ ['Issued cannot return to Draft',issued(),issued('A',{status:'Draft',revision:3,can_edit:true}),false],
+ ['Void cannot return to Issued',voided(),issued('A',{revision:4}),false],
+ ['Issued number cannot change',issued(),issued('A',{revision:3,number:'OTHER'}),false],
+ ['Draft cannot acquire a number without issuance',draftRead(),draftRead({revision:2,number:'OTHER'}),false],
+ ['Issued requires a nonempty assigned number',draftRead(),issued('A',{number:''}),false],
+ ['Draft to Void needs at least two revision advances',draftRead(),voided('A',{revision:2}),false],
+ ['forward state cannot change patient',draftRead(),issued('A',{patient:{id:'other'}}),false],
+ ['forward state cannot change Visit',draftRead(),issued('A',{visit:'other'}),false],
+])test('GEN-09 prescription readback '+name,async()=>{
+ let current=before;const d=dialog({read:async()=>ok(current)});await d.flush();current=after
+ assert.equal(await d.value.reload(),expected);d.render()
+ if(expected){assert.equal(d.value.p.status,after.status);assert.equal(d.value.p.number,after.number)}
+ else assert.match(d.value.error,/did not match/)
+ assert.deepEqual(d.calls,[]);assert.deepEqual(d.feedback,[]);d.unmount()
+})
+
 test('CLIN-13 same-tick duplicate Void dispatches one original command',async()=>{
  const held=deferred(),d=dialog({respond:()=>held.promise});await d.flush();d.fill()
  const command=d.value.doVoid();const duplicate=d.value.doVoid();assert.equal(d.calls.length,1)

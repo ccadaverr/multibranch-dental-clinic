@@ -44,12 +44,33 @@ function EncounterEditor({ store, context, setPage }) {
   const [notice, setNotice] = useState('')
   const gate = useRef(commandGate(commandKey)), live = useRef(true)
   useEffect(()=>{live.current=true;return()=>{live.current=false}},[])
+  const [refreshing, setRefreshing] = useState(false), [refreshError, setRefreshError] = useState('')
+  const refreshPending = useRef(false), refreshOwner = useRef('')
+  refreshOwner.current = JSON.stringify([clinicalSessionKey(session), encounterKey(context), store.getAuthGeneration?.()])
+  const refreshEncounter = async () => {
+    if (!live.current || refreshPending.current) return
+    const owner = refreshOwner.current, auth = store.getAuthGeneration?.()
+    if (store.getAuthGeneration && auth == null) return
+    const owns = () => live.current && refreshOwner.current === owner && auth === store.getAuthGeneration?.()
+    refreshPending.current = true; setRefreshing(true); setRefreshError('')
+    try {
+      const result = await flow?.refresh()
+      if (owns() && result?.ok !== true) setRefreshError('The encounter could not be refreshed. Review the current record before continuing.')
+    } catch {
+      if (owns()) setRefreshError('The encounter could not be refreshed. Review the current record before continuing.')
+    } finally {
+      refreshPending.current = false
+      // No newer read can start while this latch is held. Release its busy UI
+      // even if auth changed; an obsolete result still cannot set feedback.
+      if (live.current) setRefreshing(false)
+    }
+  }
   const dirty = formKey(form)!==formKey(treatmentForm(base,dentist))
   const newer = !!treatment && !!base && (treatment.id!==base.id || treatment.revision!==base.revision || treatment.status!==base.status)
   const vis = useQueueVisibility(store)
   const fresh = store.appointmentsStatus==='ready' && !store.appointmentsTruncated && (treatment || vis.mode==='ready')
   useClinicalProtection(dirty, saving)
-  useVisibleRefresh(flow?.refresh)
+  useVisibleRefresh(refreshEncounter)
   useEffect(()=>{
     if (encounter.ok && !dirty && !saving && !gate.current.retry && (!base || !treatment || treatment.revision>=base.revision && (base.status!=='Completed'||treatment.status==='Completed'))) { setBase(treatment); setForm(treatmentForm(treatment,dentist)) }
   },[treatment?.id,treatment?.revision,treatment?.status])
@@ -79,7 +100,7 @@ function EncounterEditor({ store, context, setPage }) {
     setNotice(result.record.status==='Completed'?'Treatment completion confirmed by the clinic server.':`Saved on the clinic server. Revision ${result.record.revision}.`)
   }
   const line=(index,key,value)=>setForm({...form,procedures:form.procedures.map((p,i)=>i===index?{...p,[key]:value}:p)})
-  if(!encounter.ok)return <div className="enc-workspace"><PageHeader title="Encounter unavailable"/><Notice tone="warning">{encounter.message}{dirty&&' Your unsaved editor is retained in memory while you refresh this encounter.'}</Notice><div className="row-actions"><RefreshButton title="Refresh encounter" ariaLabel="Refresh encounter" onClick={()=>flow?.refresh()}/><Button variant="ghost" onClick={()=>setPage('queue')}>Back to My Queue</Button></div></div>
+  if(!encounter.ok)return <div className="enc-workspace"><PageHeader title="Encounter unavailable"/><Notice tone="warning">{encounter.message}{dirty&&' Your unsaved editor is retained in memory while you refresh this encounter.'}</Notice>{refreshError&&<p role="alert">{refreshError}</p>}<div className="row-actions"><RefreshButton title="Refresh encounter" ariaLabel="Refresh encounter" loading={refreshing} onClick={refreshEncounter}/><Button variant="ghost" onClick={()=>setPage('queue')}>Back to My Queue</Button></div></div>
   const {patient,record,visit}=encounter
   const navContext=encounterContextFor(treatment||queueEntry)
   const performedServices=state.services.filter(s=>s.status==='Active'&&state.branchServices.some(bs=>bs.branchId===record.branchId&&bs.serviceId===s.id&&bs.active!==false)&&state.dentistServiceAssignments.some(a=>a.dentistId===session.dentistId&&a.serviceId===s.id&&a.isAuthorized!==false))
@@ -87,8 +108,9 @@ function EncounterEditor({ store, context, setPage }) {
     <div className="enc-breadcrumb"><Button variant="ghost" size="sm" onClick={()=>setPage('queue')}>My Queue</Button><span> / Encounter</span></div>
     <header className="enc-header"><div><p className="enc-eyebrow">{patient.patientCode || 'Patient encounter'}{queueEntry?.queueNumber!=null?` / Queue ${queueEntry.queueNumber}`:''}</p><h1>{patient.name}</h1><p>{state.branches.find(b=>b.id===record.branchId)?.name} · {treatment?.dentistName||dentist?.name} · {visit.clinicDate}</p></div><Status>{base?.status==='Completed'?'Completed':treatment?.status||visit.status}</Status></header>
     <dl className="enc-identity"><div><dt>Visit</dt><dd>{visit.walkIn?'Walk-in':'Appointment'}{record.appointmentId?' · '+(state.appointments.find(a=>a.id===record.appointmentId)?.code||'Scheduled'):''}</dd></div><div><dt>Requested service</dt><dd>{state.services.find(s=>s.id===(queueEntry?.serviceId||treatment?.requestedServiceId))?.name||'Not available'}</dd></div><div><dt>Documentation</dt><dd>{base?`Revision ${base.revision}`:'Not started'}{dirty?' · Unsaved changes':''}</dd></div></dl>
-    {!fresh&&<Notice tone="warning">The encounter could not be verified as current. Your text is retained; commands are paused. <RefreshButton title="Refresh encounter" ariaLabel="Refresh encounter" onClick={()=>flow?.refresh()}/></Notice>}
-    {problem&&<Notice tone="warning" title="Command not confirmed">{problem.message}{gate.current.retry&&<><p>Retry sends the same command and documentation. Review the latest record before starting a different command.</p><Button disabled={saving||!fresh} onClick={()=>run(gate.current.retry.mode,true)}>Retry same command</Button><Button variant="ghost" onClick={()=>flow?.refresh()}>Check server record</Button><Button variant="ghost" onClick={()=>setReloadOpen(true)}>Review latest record</Button></>}</Notice>}
+    {refreshError&&<p role="alert">{refreshError}</p>}
+    {!fresh&&<Notice tone="warning">The encounter could not be verified as current. Your text is retained; commands are paused. <RefreshButton title="Refresh encounter" ariaLabel="Refresh encounter" loading={refreshing} onClick={refreshEncounter}/></Notice>}
+    {problem&&<Notice tone="warning" title="Command not confirmed">{problem.message}{gate.current.retry&&<><p>Retry sends the same command and documentation. Review the latest record before starting a different command.</p><Button disabled={saving||!fresh} onClick={()=>run(gate.current.retry.mode,true)}>Retry same command</Button><RefreshButton title="Check server record" ariaLabel="Check server record" loading={refreshing} onClick={refreshEncounter}/><Button variant="ghost" onClick={()=>setReloadOpen(true)}>Review latest record</Button></>}</Notice>}
     {notice&&<p className="enc-feedback" role="status">{notice}</p>}
     <div className="enc-layout"><section className="enc-documentation" aria-labelledby="enc-documentation-title">
       <h2 id="enc-documentation-title">Clinical documentation</h2>
@@ -123,6 +145,7 @@ function EncounterEditor({ store, context, setPage }) {
           {form.followupReasonOther && (
             <Field label="Specify reason / instructions" required>
               <input
+                required
                 value={form.followupReason}
                 placeholder="Specify follow-up details..."
                 onChange={e => setForm({ ...form, followupReason: e.target.value })}

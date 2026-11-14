@@ -1,5 +1,5 @@
 import React from 'react'
-import { Card, Icon, MetricRow, Notice, StatCard } from '../components.jsx'
+import { Card, Icon, MetricRow, Notice, RefreshButton, StatCard } from '../components.jsx'
 import { clinicNow } from '../clock.js'
 import { countQueue, queueVisibility } from '../queue-counts.js'
 
@@ -26,7 +26,11 @@ export function useQueueVisibility(store) {
 export function QueueCountsNotice({ vis, store }) {
   if (vis.mode === 'ready' || vis.mode === 'demo') return null
   const tone = vis.mode === 'error' || vis.mode === 'incomplete' ? 'warning' : 'info'
-  return <Notice tone={tone} title={vis.mode === 'loading' ? 'Loading live queue' : 'Live queue counts unavailable'}>{vis.message}{vis.mode !== 'loading' && <> <button type="button" className="text-link" onClick={() => store.appointmentFlow?.refresh()}>Try again</button></>}</Notice>
+  return <Notice tone={tone} title={vis.mode === 'loading' ? 'Loading live queue' : 'Live queue counts unavailable'}>{vis.message}{vis.mode !== 'loading' && <> <RefreshButton title="Refresh live queue counts" ariaLabel="Refresh live queue counts" onClick={async () => {
+    // The store owns projection errors and latest-read adoption. Keep its
+    // unavailable notice on an unexpected read failure; never infer zero counts.
+    try { await store.appointmentFlow?.refresh() } catch { /* The current unavailable notice remains. */ }
+  }}/></>}</Notice>
 }
 
 const branchOf = (state, activeBranch) => state.branches.find(b => b.name === activeBranch) || null

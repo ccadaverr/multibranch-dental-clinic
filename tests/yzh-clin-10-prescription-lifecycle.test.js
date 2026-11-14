@@ -127,5 +127,24 @@ for (const replacements of [1,2]) test(`auth lifetime changes ${replacements} ti
   assert.deepEqual(e.feedback,[]);assert.deepEqual(e.done,[]);e.unmount()
 })
 
+for (const field of ['medicine','dosage','frequency','duration']) for (const blank of ['', '   ']) test(`GEN-07 ${field} Other ${JSON.stringify(blank)} refuses the actual Save handler`, async () => {
+  const e=editor();e.value.setLines([{medicine:'Synthetic medicine',dosage:'',frequency:'',duration:'',instructions:'',[field]:blank,[field+'Other']:true}]);e.render()
+  await e.value.save(false);e.render()
+  assert.equal(e.calls.length,0);assert.match(e.value.err,/Specify the selected Other/);e.unmount()
+})
+
+for (const field of ['medicine','dosage','frequency','duration']) test(`GEN-07 loaded whitespace ${field} cannot bypass Specify without a UI flag`, async () => {
+  const e=editor();e.value.setLines([{medicine:'Synthetic medicine',dosage:'',frequency:'',duration:'',instructions:'',[field]:'   '}]);e.render()
+  await e.value.save(false);e.render();assert.equal(e.calls.length,0);assert.match(e.value.err,/Specify the selected Other/);e.unmount()
+})
+
+test('GEN-07 submitted clinical strings are trimmed without changing draft text or payload vocabulary', async () => {
+  const e=editor({respond:async()=>({ok:false,message:'Synthetic refusal'})})
+  const line={medicine:'  Synthetic medicine  ',dosage:'  Synthetic dosage  ',frequency:'  Synthetic frequency  ',duration:'  Synthetic duration  ',instructions:'  First line\nSecond line  ',medicineOther:true,dosageOther:true,frequencyOther:true,durationOther:true}
+  e.value.setLines([line]);e.render();await e.value.save(false);e.render()
+  assert.deepEqual(e.calls[0].body.lines,[{medicine:'Synthetic medicine',dosage:'Synthetic dosage',frequency:'Synthetic frequency',duration:'Synthetic duration',instructions:'First line\nSecond line'}])
+  assert.deepEqual(wire(e.value.lines),[line]);assert.equal(e.value.err,'Synthetic refusal');e.unmount()
+})
+
 // Keep historical CLIN-05/R2 and RX-01 files intact and run them separately in
 // the approved test phase. Navigation/DOM/PDF assertions are in the browser file.
