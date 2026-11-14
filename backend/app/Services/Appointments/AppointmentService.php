@@ -12,6 +12,7 @@ use App\Models\DentistProfile;
 use App\Models\Patient;
 use App\Models\Service;
 use App\Models\User;
+use App\Services\Followups\Followups;
 use App\Services\Scheduling\SchedulingService;
 use App\Services\Scheduling\SlotRequest;
 use App\Support\ClinicClock;
@@ -38,9 +39,28 @@ final class AppointmentService
 
     public function create(User $actor, Patient $patient, Branch $branch, Service $service, ?DentistProfile $dentist, array $input, ?string $key): JsonResponse
     {
+        $selected = array_key_exists('followup_task_id', $input) || array_key_exists('followup_expected_revision', $input);
+        if ($selected) {
+            // Defense for service callers too; the HTTP request validates the public contract first.
+            abort_unless($actor->role === Role::Staff, 403);
+            \Illuminate\Support\Facades\Validator::make(array_merge($input, ['idempotency_key' => $key]), [
+                'followup_task_id' => ['required', 'string', 'ulid'],
+                'followup_expected_revision' => ['required', 'integer', 'min:1', 'max:2147483647'],
+                'idempotency_key' => ['required', 'string', 'max:255', 'regex:/\A[\x21-\x7E]+\z/'],
+            ])->validate();
+            $input['followup_expected_revision'] = (int) $input['followup_expected_revision'];
+            // Do not check status/revision here: a successful authorized retry must replay its original proof.
+            Followups::selectedForBooking($actor, $branch, $input['followup_task_id']);
+        }
         $payload = ['patient' => $patient->id, 'branch' => $branch->id, 'service' => $service->id, 'dentist' => $dentist?->id] + $input;
 
-        return $this->idempotent($actor, $key, 'appointment.create', $payload, function () use ($actor, $patient, $branch, $service, $dentist, $input) {
+        return $this->idempotent($actor, $key, 'appointment.create', $payload, function () use ($actor, $patient, $branch, $service, $dentist, $input, $selected) {
+            if ($selected) {
+                // Refuse an already obsolete intent promptly, without taking a task lock before appointment/slot locks.
+                // This snapshot cannot authorize the transition; the locked record is rechecked immediately before linking.
+                $snapshot = Followups::selectedForBooking($actor, $branch, $input['followup_task_id']);
+                Followups::validateSelectedBooking($snapshot, $patient, $branch, $input['followup_expected_revision']);
+            }
             $isPatient = $actor->role === Role::Patient;
             // F7 (R2-17): a consultation-first or hidden service is not booked online; the front desk still can.
             if ($isPatient && ($service->online_booking ?? 'bookable') !== 'bookable') {
@@ -120,17 +140,26 @@ final class AppointmentService
                 ]);
             }
 
+            $meta = [];
             if ($payOnline) {
                 $checkout = $payMongo->createAppointmentCheckoutSession($appointment, $actor);
                 $appointment->checkout_url = $checkout['checkout_url'] ?? null;
                 $appointment->checkout_session_id = $checkout['checkout_session_id'] ?? null;
             } else {
                 \App\Services\Automations\FillFreedSlots::claimByBooking($appointment);
-                \App\Services\Followups\Followups::booked($appointment); // M20: the patient's open follow-up is now Booked
+                if ($selected) {
+                    // Match ordinary/settlement order: appointment → slot openings → exact task. A late refusal rolls
+                    // back every provisional write, including the appointment, slot claims, history and command key.
+                    $task = Followups::selectedForBooking($actor, $branch, $input['followup_task_id'], lock: true);
+                    Followups::validateSelectedBooking($task, $patient, $branch, $input['followup_expected_revision']);
+                    $meta['followup_link'] = Followups::bookSelected($task, $appointment, $actor);
+                } else {
+                    Followups::booked($appointment); // Ordinary booking keeps automatic matching.
+                }
                 $this->notifyPatient($appointment, $actor, 'appointment_confirmation');
             }
 
-            return [$appointment, 201];
+            return [$appointment, 201, $meta];
         });
     }
 
@@ -533,11 +562,13 @@ final class AppointmentService
         return IdempotentCommand::run(
             AppointmentCommandKey::class, $actor, $key, $command, $payload,
             function () use ($work) {
-                [$appointment, $status] = $work();
+                $result = $work();
+                [$appointment, $status] = $result;
                 $fresh = $appointment->fresh(array_merge(self::RELATIONS, ['activeCheckoutSession']));
                 $fresh->checkout_url = $appointment->checkout_url ?? $fresh->activeCheckoutSession?->checkout_url;
                 $fresh->checkout_session_id = $appointment->checkout_session_id ?? $fresh->activeCheckoutSession?->provider_session_id;
                 $body = (new AppointmentResource($fresh))->response()->getData(true);
+                if (! empty($result[2])) $body['meta'] = ($body['meta'] ?? []) + $result[2];
 
                 return [$body, $status, ['appointment_id' => $appointment->id]];
             },

@@ -1,0 +1,61 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synthetic clinical Follow-ups acceptance</title></head><body><main id="root"></main><script type="module">
+import React,{useState,useRef} from 'react'
+import {createRoot} from 'react-dom/client'
+import {flushSync} from 'react-dom'
+import {FollowupsServerPage,FollowupPanel} from '/src/pages/ServerFollowups.jsx'
+import {createAppointmentFlow} from '/src/appointment-flow.js'
+import {setClockSource} from '/src/clock.js'
+import {apiBase} from '/src/api-client.js'
+import {SELECTED_FOLLOWUP_BACKEND_COMMIT} from '/src/appointments-api.js'
+import '/src/styles.css'
+import '/src/foundation.css'
+import '/src/patient.css'
+import '/src/public-site.css'
+import '/src/polish.css'
+import '/src/patient/portal.css'
+import '/src/landing.css'
+import '/src/automations.css'
+setClockSource(()=>new Date('2026-11-12T10:00:00+08:00'))
+const P='01ARZ3NDEKTSV4RRFFQ69G5FAB', A='01ARZ3NDEKTSV4RRFFQ69G5FAW', B='01ARZ3NDEKTSV4RRFFQ69G5FAV', AP='01ARZ3NDEKTSV4RRFFQ69G5FAA'
+const make=(id,revision,due_on)=>({id,revision,due_on,status:'Open',can_book:true,can_contact:true,can_close:true,patient:{id:P,name:'Synthetic patient',code:'SYN-P'},branch:{id:'b1',name:'Synthetic branch'},service:{id:'svc1',name:'Synthetic service'},reason:'Synthetic follow-up',assignee:'Synthetic team',appointment:null})
+const fixture=window.clinical={events:[],ids:{P,A,B,AP},auth:1,feedback:[],requests:[],rows:[make(A,3,'2026-11-13'),make(B,7,'2026-11-20')],reviewMode:'valid',holdReview:false,posts:[],unexpected:[]}
+const readAuth=()=>fixture.auth
+window.fetch=async(url,options={})=>{
+  const path=new URL(url,location.href).pathname,method=options.method||'GET'
+  fixture.requests.push({path,method,body:options.body?JSON.parse(options.body):null,credentials:options.credentials})
+  if(path==='/sanctum/csrf-cookie'){document.cookie='XSRF-TOKEN=synthetic-csrf; path=/';return new Response(null,{status:204})}
+  if(path==='/api/followups'&&method==='GET')return Response.json({data:fixture.rows,meta:{counts:{open:2,overdue:0,due_today:0}}})
+  if(path===`/api/patients/${P}/followups`&&method==='GET'){
+    const result=fixture.reviewResult||{data:fixture.rows}
+    const mode=fixture.reviewMode
+    if(fixture.holdReview)await new Promise(resolve=>{fixture.releaseReview=resolve})
+    if(mode==='network')throw Error('Synthetic read unavailable')
+    return Response.json(mode==='forbidden'?{message:'Do not expose this raw diagnostic'}:result,{status:mode==='forbidden'?403:200})
+  }
+  if(path.startsWith('/api/followups/')&&method==='PATCH'){
+    const old=fixture.rows.find(t=>path.endsWith('/'+t.id)),body=JSON.parse(options.body)
+    const row={...old,revision:old.revision+1,status:body.action==='contacted'?'Contacted':'Closed',can_contact:false,can_book:body.action==='contacted',close_note:body.note||''}
+    fixture.rows=fixture.rows.map(t=>t.id===old.id?row:t)
+    return Response.json({data:row})
+  }
+  if(path==='/api/appointments'&&method==='POST')fixture.posts.push(JSON.parse(options.body))
+  fixture.unexpected.push({path,method});throw Error('Unexpected synthetic request')
+}
+function Fixture(){
+  const latest=useRef(null)
+  const [session,setSession]=useState({serverUserId:'synthetic-staff',userId:'staff',role:'staff',active:true,branchId:'b1',branchScopes:['b1']})
+  const [config,setConfig]=useState({mounted:true,permission:true}),[,version]=useState(0)
+  fixture.setSession=patch=>flushSync(()=>setSession(s=>({...s,...patch})))
+  fixture.configure=patch=>flushSync(()=>setConfig(c=>({...c,...patch})))
+  fixture.rerender=()=>flushSync(()=>version(v=>v+1))
+  const state={persons:[{id:'person'}],users:[{id:'staff',personId:'person',role:session.role==='owner'?'Owner / Admin':session.role==='dentist'?'Dentist':'Staff',status:'Active',branchId:'b1',permissions:config.permission?['appointments']:[]}],staff:[{userId:'staff',personId:'person',branchId:'b1'}],branches:[{id:'b1',name:'Synthetic branch',status:'Open'},{id:'b2',name:'Synthetic second branch',status:'Open'}],services:[{id:'svc1',name:'Synthetic service',duration:30,status:'Active'}],branchServices:[{branchId:'b1',serviceId:'svc1'}],patients:[],appointments:[],dentists:[],dentistServiceAssignments:[]}
+  // Deliberately forged claims are passed to the page and store. Production must ignore both.
+  const claim={commit:SELECTED_FOLLOWUP_BACKEND_COMMIT,apiBase:apiBase()}
+  latest.current={state,session}
+  const appointmentFlow=createAppointmentFlow({getState:()=>latest.current.state,getSession:()=>latest.current.session,getAuthGeneration:readAuth,getActions:()=>({recordAppointmentEvent:(...args)=>fixture.events.push(args)}),refresh:async()=>({ok:true})})
+  fixture.flowAvailable=typeof appointmentFlow.beginSelectedFollowup==='function'
+  const store={state,session,appointmentFlow,getAuthGeneration:readAuth,verifiedFollowupBackend:claim,toast:(...args)=>fixture.feedback.push(args)}
+  return React.createElement(React.Fragment,null,React.createElement('p',null,'Synthetic clinical fixture. No live clinic service or database.'),config.mounted?(new URLSearchParams(location.search).get('mode')==='panel'?React.createElement(FollowupPanel,{role:session.role,store,patientId:P,branches:state.branches,toast:store.toast}):React.createElement(FollowupsServerPage,{role:session.role,store,context:{},setPage:()=>{},verifiedFollowupBackend:claim})):React.createElement('p',null,'Page unmounted'))
+}
+createRoot(document.getElementById('root')).render(React.createElement(Fixture))
+</script></body></html>

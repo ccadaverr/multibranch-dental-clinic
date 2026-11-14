@@ -4,12 +4,47 @@ import React, { useEffect, useState } from 'react'
 import { Button, Card, Field, FilterBar, Modal, Notice, PageHeader, RefreshButton } from '../components.jsx'
 import { createFollowup, followups, patientFollowups, updateFollowup } from '../api-client.js'
 import { AppointmentForm } from './Scheduling.jsx'
+import { canSchedule, schedulingActorKey } from '../appointment-ui.js'
 
 const firstError = r => !r || ['network', 'server'].includes(r.kind) ? 'The follow-up request could not be confirmed. Reload the list before retrying.'
   : (r.kind === 'validation' ? Object.values(r.errors || {})[0]?.[0] || r.message : r.message) || 'That did not work.'
 const day = d => d ? new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' }) : ''
 const manilaToday = () => new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10)
 const TONE = { Open: 'is-pending', Contacted: 'is-info', Booked: 'is-ok', Closed: 'is-done' }
+const publicTaskId = value => typeof value === 'string' && value.length === 26 && /^[0-7][0-9a-hjkmnp-tv-z]{25}$/i.test(value)
+
+// Shape/context checks only. Clinical eligibility and linkage remain server-authoritative.
+function clinicalBookingSelection(task, role, store) {
+  if (role !== 'staff' || store?.session?.role !== 'staff' || !canSchedule(store, task?.branch?.id) ||
+      !publicTaskId(task?.id) || !publicTaskId(task?.patient?.id) ||
+      !Number.isInteger(task?.revision) || task.revision < 1 || task.revision > 2147483647 ||
+      !['Open', 'Contacted'].includes(task.status) || task.can_book !== true || task.appointment != null ||
+      typeof task.branch?.id !== 'string' || !task.branch.id ||
+      !store.state.branches?.some(b => b.id === task.branch.id && b.status === 'Open') ||
+      (task.service != null && (typeof task.service.id !== 'string' || !task.service.id))) return null
+  return Object.freeze({taskId: task.id, expectedRevision: task.revision, patientPublicId: task.patient.id, branchId: task.branch.id})
+}
+
+// A capped list can establish an exact current relationship, never the earlier command's receipt or absence.
+function currentFollowupReview(result, selected) {
+  if (result?.ok !== true || !Array.isArray(result.data) || !publicTaskId(selected?.taskId) ||
+      !publicTaskId(selected?.patientPublicId) || !Number.isInteger(selected?.expectedRevision) || selected.expectedRevision < 1 ||
+      selected.expectedRevision > 2147483647 || !Object.hasOwn(TONE, selected.observedStatus)) return null
+  const rows = result.data.filter(t => t?.id === selected.taskId)
+  if (rows.length !== 1) return null
+  const task = rows[0]
+  if (task.patient?.id !== selected.patientPublicId || task.branch?.id !== selected.branchId ||
+      !Number.isInteger(task.revision) || task.revision < selected.expectedRevision || task.revision > 2147483647 ||
+      // R2 contact, booking, closure and reopening all advance revision.
+      (task.revision === selected.expectedRevision && task.status !== selected.observedStatus) ||
+      !Object.hasOwn(TONE, task.status) ||
+      (task.status === 'Booked' && !publicTaskId(task.appointment?.id)) ||
+      (['Open', 'Contacted'].includes(task.status) && task.appointment != null)) return null
+  return {status: task.status, revision: task.revision,
+    appointment: publicTaskId(task.appointment?.id) ? {id: task.appointment.id,
+      code: typeof task.appointment.code === 'string' ? task.appointment.code : '',
+      when: typeof task.appointment.when === 'string' ? task.appointment.when : ''} : null}
+}
 
 const followupDescription = owner => owner ? 'Follow-ups the dentists asked for: how many are open and overdue. The reasons are visible only to the branch teams.'
         : 'Patients the dentist asked to see again. Call or message them, then book a follow-up appointment and check the task’s status.'
@@ -110,8 +145,8 @@ function useFollowupList(key, request, patientId = null, owner = false, lifetime
 
 /**
  * M20 Patient Follow-Up (clinic server). Tasks come from a completed treatment's follow-up (automatically) or are added by a Dentist
- * or the front desk. "Book follow-up" opens the normal booking form with the patient, branch and service preselected; the server
- * chooses the eligible task to link. Reload its authoritative status after booking. Closing without a booking needs a note.
+ * or the front desk. "Book follow-up" captures an exact server task for the shared selected-booking form.
+ * Activation stays closed until running-backend compatibility can be established. No ordinary matcher fallback.
  * The Owner sees counts and dates only.
  */
 function FollowupSessionUnavailable({role}) {
@@ -151,6 +186,7 @@ function FollowupsBody({ store, role, context, setPage, lifetime }) {
     {patientId&&<Notice>Patient follow-up tasks. A recommendation is not a booked appointment; tasks are not linked to a specific treatment in this response.</Notice>}
     <PageHeader kicker={owner ? 'Administration' : 'Patients'} title="Follow-ups"
       text={followupDescription(owner)}/>
+    {role === 'staff' && <BookingRecoveryNotice/>}
     {!patientId&&<p className="fu-counts" aria-live="polite"><b>{c.open ?? '…'}</b> open · <b className={c.overdue ? 'is-bad' : ''}>{c.overdue ?? '…'}</b> overdue · <b>{c.due_today ?? '…'}</b> due today</p>}
     {error && <Notice tone="error" title="Follow-ups unavailable">{error} <RefreshButton title="Reload follow-ups" ariaLabel="Reload follow-ups" onClick={reload}/></Notice>}
     <Card>
@@ -160,7 +196,7 @@ function FollowupsBody({ store, role, context, setPage, lifetime }) {
         <Field label="Branch"><select value={filters.branch_ref} onChange={e => setFilters(f => ({ ...f, branch_ref: e.target.value }))}><option value="">All my branches</option>{branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>
       </FilterBar>}
       {!rows ? !error && <p className="au-muted" role="status">Loading follow-ups…</p> : !rows.length ? <p className="au-muted" role="status">No follow-ups here.</p>
-        : <ul className="fd-list">{rows.map(t => <FollowupRow key={JSON.stringify([t.id, t.patient?.id, t.revision])} t={t} pendingTasks={pendingTasks} owner={owner} role={role} store={store} toast={toast} onChanged={load} onReload={reload} isCurrent={isCurrent}/>)}</ul>}
+        : <ul className="fd-list">{rows.map(t => <FollowupRow key={JSON.stringify([t.id, t.patient?.id, t.branch?.id, t.revision, t.service?.id, t.due_on, schedulingActorKey(store)])} t={t} pendingTasks={pendingTasks} owner={owner} role={role} store={store} toast={toast} onChanged={load} onReload={reload} isCurrent={isCurrent}/>)}</ul>}
     </Card>
   </div>
 }
@@ -169,7 +205,11 @@ function FollowupRow({ t, pendingTasks, owner, role, store, toast, onChanged, on
   const live = React.useRef(false), pending = React.useRef(false), bookingToken = React.useRef(null)
   React.useLayoutEffect(() => { live.current = true; return () => { live.current = false; bookingToken.current = null } }, [])
   const auth = React.useRef({read: store?.getAuthGeneration, generation: store?.getAuthGeneration?.()})
-  const ownsRow = () => live.current && isCurrent() && Number.isSafeInteger(auth.current.generation) && auth.current.read?.() === auth.current.generation && store?.getAuthGeneration === auth.current.read
+  const latest = React.useRef({store, task:t}); latest.current = {store, task:t}
+  const actor = React.useRef(store?.session ? schedulingActorKey(store) : null)
+  const rowKey = task => JSON.stringify([task.id,task.patient?.id,task.branch?.id,task.revision,task.service?.id])
+  const rowContext = React.useRef(rowKey(t))
+  const ownsRow = () => live.current && isCurrent() && Number.isSafeInteger(auth.current.generation) && auth.current.read?.() === auth.current.generation && latest.current.store?.getAuthGeneration === auth.current.read && (actor.current === null || schedulingActorKey(latest.current.store) === actor.current) && rowKey(latest.current.task) === rowContext.current
   const taskRequest = pendingTasks?.tasks.get(t.id)
   const staleRow = !followupSnapshotCurrent(pendingTasks, t)
   const observedPendingTask = taskRequest?.phase === 'pending'
@@ -184,10 +224,39 @@ function FollowupRow({ t, pendingTasks, owner, role, store, toast, onChanged, on
   }, [taskRequest])
   const canWork = !owner && ['staff', 'dentist'].includes(role)
   const [needsReload, setNeedsReload] = useState(false)
+  const [review, setReview] = useState(null)
+  const reviewPending = React.useRef(false), reviewFeedback = React.useRef(null)
+  useEffect(() => { if (review) reviewFeedback.current?.focus() }, [review])
   const [closing, setClosing] = useState(false), [note, setNote] = useState(''), [booking, setBooking] = useState(null), [busy, setBusy] = useState(''), [error, setError] = useState('')
   const closeBooking = () => { bookingToken.current = null; setBooking(null) }
   const ownsBooking = () => ownsRow() && !!booking && bookingToken.current === booking
-  const bookingStore = {...store, toast: (...args) => { if (ownsBooking()) toast?.(...args) }}
+  const ownsSelectedBooking = () => ownsBooking() && !!booking.selection &&
+    booking.selection.taskId === latest.current.task.id && booking.selection.expectedRevision === latest.current.task.revision &&
+    booking.selection.patientPublicId === latest.current.task.patient?.id && booking.selection.branchId === latest.current.task.branch?.id &&
+    booking.prefill.serviceId === (latest.current.task.service?.id || '')
+  const bookingStore = {...store, toast: (...args) => { if (ownsSelectedBooking()) toast?.(...args) }}
+  const selection = clinicalBookingSelection(t, role, store)
+  const reviewCurrent = async () => {
+    if (!ownsRow() || reviewPending.current || busy || role !== 'staff' || !canSchedule(store, t.branch?.id) || !publicTaskId(t.id) || !publicTaskId(t.patient?.id)) return
+    const observed = () => {
+      const known = pendingTasks.verified.get(t.id)
+      return known?.patientId === t.patient.id && known.branchId === t.branch.id && known.revision >= t.revision ? known : t
+    }
+    const snapshot = observed()
+    const selected = Object.freeze({taskId:t.id, expectedRevision:snapshot.revision, observedStatus:snapshot.status, patientPublicId:t.patient.id, branchId:t.branch.id})
+    reviewPending.current = true; setBusy('review'); setReview(null)
+    let result
+    try { result = await patientFollowups(selected.patientPublicId) } catch { result = null }
+    reviewPending.current = false
+    if (!ownsRow()) return
+    // A newer accepted snapshot may have arrived while this read was pending.
+    const latestObserved = observed()
+    const current = currentFollowupReview(result, latestObserved.revision > selected.expectedRevision
+      ? {...selected, expectedRevision:latestObserved.revision, observedStatus:latestObserved.status} : selected)
+    // Reuse list continuity only: do not settle an earlier command or rebase a booking.
+    if (current) rememberFollowup(pendingTasks, {id:selected.taskId, patient:{id:selected.patientPublicId}, branch:{id:selected.branchId}, revision:current.revision, status:current.status})
+    setBusy(''); setReview(current || {unavailable:true})
+  }
   const act = async (action, body = {}) => {
     if (!ownsRow() || pending.current || pendingTasks?.tasks.has(t.id) || !canWork || (action === 'contacted' ? !t.can_contact : !t.can_close)) return
     if (!followupSnapshotCurrent(pendingTasks, t)) return setError('This follow-up changed. Reload the list before continuing.')
@@ -224,11 +293,25 @@ function FollowupRow({ t, pendingTasks, owner, role, store, toast, onChanged, on
       {closing && <Field label="Why is it closed without a booking?" required><input value={note} disabled={!!busy || needsReload || !!taskRequest || staleRow} maxLength={500} onChange={e => setNote(e.target.value)}/></Field>}
       {staleRow && !taskRequest && <div role="alert"><p>This follow-up changed. Reload the list before continuing.</p><RefreshButton title="Reload follow-ups" ariaLabel="Reload follow-ups" onClick={onReload}/></div>}
       {taskRequest && taskRequest.phase !== 'pending' && <div role="alert"><p>The earlier follow-up update needs verification. An unchanged task does not confirm that it failed. Reload the list; if it remains unresolved, ask the branch team to review it before another action.</p><RefreshButton title="Reload follow-ups" ariaLabel="Reload follow-ups" onClick={onReload}/></div>}
-      {(busy || taskRequest?.phase === 'pending') && <span role="status">{(busy || taskRequest?.submitted.action) === 'close' ? 'Closing follow-up…' : 'Recording contact…'}</span>}
+      {(busy || taskRequest?.phase === 'pending') && <span role="status">{busy === 'review' ? 'Loading current follow-up state…' : (busy || taskRequest?.submitted.action) === 'close' ? 'Closing follow-up…' : 'Recording contact…'}</span>}
+      {review && <div ref={reviewFeedback} tabIndex={-1} role={review.unavailable ? 'alert' : 'status'}>
+        {review.unavailable ? <p>The current task could not be verified from this authorized list. Missing, stale or inaccessible data does not prove that an earlier booking failed. Ask the front desk to reconcile it.</p>
+          : <><p>Current task status: {review.status}.{review.appointment && <> Linked appointment: {review.appointment.code || 'Recorded appointment'}{review.appointment.when ? ` · ${review.appointment.when}` : ''}.</>}</p><p>{review.appointment ? 'This shows the current relationship; it does not verify the original booking command.' : 'No linked appointment is shown in this response. This does not prove an earlier booking failed.'} Do not create a replacement for an unresolved booking.</p></>}
+      </div>}
       {error && !taskRequest && !staleRow && <div role="alert"><p className="au-error">{error}</p><RefreshButton title="Reload follow-ups" ariaLabel="Reload follow-ups" onClick={onReload}/></div>}
     </div>
     {canWork && <div className="ns-actions">
-      {t.can_book && role === 'staff' && <Button size="sm" disabled={!!busy || needsReload || !!taskRequest || staleRow} onClick={() => { if (!pending.current && !pendingTasks?.tasks.has(t.id) && ownsRow()) { const token = {}; bookingToken.current = token; setBooking(token) } }}>Book follow-up</Button>}
+      {t.can_book && role === 'staff' && <Button size="sm" disabled={!selection || !!busy || needsReload || !!taskRequest || staleRow} onClick={() => {
+        if (!bookingToken.current && !pending.current && !pendingTasks?.tasks.has(t.id) && ownsRow()) {
+          const selected = clinicalBookingSelection(latest.current.task, role, latest.current.store)
+          if (!selected) return
+          const captured = latest.current.task
+          const task = Object.freeze({...captured,patient:Object.freeze({...captured.patient}),branch:Object.freeze({...captured.branch}),service:captured.service ? Object.freeze({...captured.service}) : null})
+          const token = Object.freeze({selection:selected, task, prefill:Object.freeze({patientPublicId:t.patient.id,patientName:`${t.patient.name} • ${t.patient.code}`,branchId:t.branch.id,serviceId:t.service?.id || '',date:t.due_on})})
+          bookingToken.current = token; setBooking(token)
+        }
+      }}>Book follow-up</Button>}
+      {role === 'staff' && canSchedule(store, t.branch?.id) && <Button size="sm" variant="soft" disabled={!!busy} onClick={reviewCurrent}>Review current task</Button>}
       {t.can_contact && <Button size="sm" variant="soft" disabled={!!busy || needsReload || !!taskRequest || staleRow} onClick={() => act('contacted')}>Contacted</Button>}
       {t.can_close && !closing && <Button size="sm" variant="ghost" disabled={!!busy || needsReload || !!taskRequest || staleRow} onClick={() => (t.appointment ? act('close') : setClosing(true))}>Close</Button>}
       {closing && <>
@@ -237,11 +320,26 @@ function FollowupRow({ t, pendingTasks, owner, role, store, toast, onChanged, on
       </>}
     </div>}
     {booking && <Modal open wide title={`Book a follow-up for ${t.patient.name}`} onClose={closeBooking}>
-      <AppointmentForm role={role} store={bookingStore} prefill={{ patientPublicId: t.patient.id, patientName: `${t.patient.name} • ${t.patient.code}`, branchId: t.branch.id, serviceId: t.service?.id || '', date: t.due_on }}
-        submitLabel="Book the follow-up" onSaved={() => { if (!ownsBooking()) return; closeBooking(); toast?.('Appointment booked. Reloading follow-up status.', 'success'); onChanged() }}/>
+      <Notice tone="warning" title="Selected booking is not activated">This connection has not been verified for exact follow-up booking. No appointment can be submitted here. Contact the clinic system administrator. An earlier unverified booking must be reviewed before starting another.</Notice>
+      <p>Selected patient: {booking.prefill.patientName}. Branch: {booking.task.branch.name}.{booking.task.service && <> Service: {booking.task.service.name}.</>} Requested date: {day(booking.prefill.date)}.</p>
+      {/* No caller-created attestation is accepted here. The shared form stays closed until a separately reviewed running-backend gate exists. */}
+      <SelectedFollowupBooking role={role} store={bookingStore} booking={booking}
+        submitLabel="Book the follow-up" onSaved={(record, receipt) => { if (!ownsSelectedBooking()) return; pendingTasks.settlement++; rememberFollowup(pendingTasks, {id:booking.selection.taskId,patient:{id:booking.selection.patientPublicId},branch:{id:booking.selection.branchId},revision:receipt.followupLink.revision,status:'Booked'}); closeBooking(); toast?.('Selected follow-up booking verified. Reloading current task status.', 'success'); onChanged() }}/>
     </Modal>}
   </li>
 }
+
+function SelectedFollowupBooking({booking, role, store, onSaved, submitLabel}) {
+  const t = booking.task
+  return <AppointmentForm role={role} store={store} prefill={{ patientPublicId: t.patient.id, patientName: `${t.patient.name} • ${t.patient.code}`, branchId: t.branch.id, serviceId: t.service?.id || '', date: t.due_on }}
+    serverFollowupSelection={booking.selection} onSaved={onSaved} submitLabel={submitLabel}/>
+}
+
+function BookingRecoveryNotice() {
+  return <Notice tone="warning" title="Unverified earlier booking?">A booking whose result was not verified may already exist. Do not start a replacement booking. Review the current task and ask the front desk to reconcile it. Closing, navigating away or reloading loses a booking form’s retry details; current task information is not a receipt for the earlier command.</Notice>
+}
+
+export { clinicalBookingSelection, currentFollowupReview }
 
 const STANDARD_REASONS = [
   'Post-Op Check',
@@ -278,7 +376,14 @@ function PatientFollowupPanel({ patientId, branches = [], toast, store, role, li
   const effectiveReason = reasonCategory === 'Other' ? customReason.trim() : reasonCategory
   const branchRef = f.branch_ref || branches[0]?.id || ''
 
+  const recoveryRoot=React.useRef(null), recoveryFocus=React.useRef(false)
+  React.useLayoutEffect(()=>{
+    if(!recoveryFocus.current || !rows && !error)return
+    recoveryFocus.current=false
+    if(typeof document!=='undefined' && document.activeElement===document.body)recoveryRoot.current?.focus()
+  },[rows,error])
   const reload = async () => {
+    recoveryFocus.current=true
     const operation = pending.current
     const confirmed = await load()
     if (!live.current || !isCurrent() || !confirmed || pending.current !== operation || operation?.kind === 'request') return
@@ -341,11 +446,12 @@ function PatientFollowupPanel({ patientId, branches = [], toast, store, role, li
     pending.current = operation; setNeedsReload(true)
     await reload()
   }
-  return <section className="st-panel" aria-labelledby={`fu-${patientId}`}>
+  return <section className="st-panel" ref={recoveryRoot} tabIndex={-1} aria-labelledby={`fu-${patientId}`}>
     <h3 id={`fu-${patientId}`} className="st-sub">Follow-ups</h3>
+    {role === 'staff' && <BookingRecoveryNotice/>}
     {error && <Notice tone="error" title="Follow-ups unavailable">{error} <Button variant="soft" onClick={reload}>Reload follow-ups</Button></Notice>}
     {!rows ? !error && <p className="au-muted" role="status">Loading follow-ups…</p> : !rows.length ? <p className="au-muted" role="status">No follow-ups for this patient.</p>
-      : <ul className="fd-list">{rows.map(t => <FollowupRow key={JSON.stringify([t.id, t.patient?.id, t.revision])} t={t} pendingTasks={pendingTasks} owner={owner} role={role} store={store} toast={toast} onChanged={reload} isCurrent={isCurrent}/>)}</ul>}
+      : <ul className="fd-list">{rows.map(t => <FollowupRow key={JSON.stringify([t.id, t.patient?.id, t.branch?.id, t.revision, t.service?.id, t.due_on, schedulingActorKey(store)])} t={t} pendingTasks={pendingTasks} owner={owner} role={role} store={store} toast={toast} onChanged={reload} onReload={reload} isCurrent={isCurrent}/>)}</ul>}
     {creation && !adding && <Notice tone="warning" title={creation.phase === 'pending' ? 'Follow-up Add pending' : 'Follow-up Add needs review'}>The earlier Add remains protected. Reload to review the list; do not assume an empty list means it failed. <Button variant="soft" onClick={reload}>Reload follow-ups</Button></Notice>}
     {canCreate && (adding ? <form className="au-form" aria-busy={busy} onSubmit={add}>
       <Field label="Branch" required><select required disabled={busy || needsReload} value={branchRef} onChange={e => setF(x => ({ ...x, branch_ref: e.target.value }))}>{!branches.length && <option value="">No available branch</option>}{branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>

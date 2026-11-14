@@ -4,6 +4,7 @@ namespace App\Http\Requests\Appointment;
 
 use App\Enums\Role;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 // Create an appointment. A Patient books for themself (no Patient identifier) and never chooses a Dentist; Staff/Owner
 // name the Patient and may either select a Dentist or let the deterministic assignment choose one. Status, source,
@@ -12,7 +13,13 @@ class StoreAppointmentRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        return ! $this->selectsFollowup() || $this->user()->role === Role::Staff;
+    }
+
+    public function selectsFollowup(): bool
+    {
+        // Presence, including explicit null/empty values, selects the strict contract.
+        return array_key_exists('followup_task_id', $this->all()) || array_key_exists('followup_expected_revision', $this->all());
     }
 
     public function rules(): array
@@ -35,6 +42,8 @@ class StoreAppointmentRequest extends FormRequest
             'dentist_ref' => ['nullable', 'string', 'exists:dentist_profiles,legacy_ref'],
             'pay_at_clinic' => ['nullable', 'boolean'],
             'consultation_acknowledged' => $patient ? ['prohibited'] : ['nullable', 'boolean'],
+            'followup_task_id' => [Rule::requiredIf($this->selectsFollowup()), 'string', 'ulid'],
+            'followup_expected_revision' => [Rule::requiredIf($this->selectsFollowup()), 'integer', 'min:1', 'max:2147483647'],
 
             'id' => ['prohibited'],
             'status' => ['prohibited'],

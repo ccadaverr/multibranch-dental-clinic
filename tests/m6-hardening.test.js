@@ -1,4 +1,5 @@
 import React from 'react'
+import { canSchedule } from '../src/appointment-ui.js'
 import { productionExpression, jsxAttribute } from './support/source-behavior.js'
 import test, { beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
@@ -77,20 +78,28 @@ test('a Dentist cannot book the follow-up: nothing reaches the server and the fo
 })
 
 test('the follow-up screen (M20, clinic server) offers booking to the front desk only', () => {
-  const t={id:'task-A',revision:7,can_book:true,patient:{id:'patient-A',name:'Synthetic Patient',code:'SYNTHETIC'},branch:{id:'b1'},service:{id:'svc1'},due_on:'2026-11-13'}
-  const pending={current:false}, bookingToken={current:null}, pendingTasks={tasks:new Map()}; let booking=null, current=true
-  const bindings={React,Button:'button',t,role:'staff',busy:'',needsReload:false,taskRequest:null,staleRow:false,pending,pendingTasks,bookingToken,ownsRow:()=>current,setBooking:v=>{booking=v}}
-  const control=()=>productionExpression('src/pages/ServerFollowups.jsx',n=>n.type==='LogicalExpression'&&n.right?.type==='JSXElement'&&n.right.openingElement.name.name==='Button'&&n.right.children.some(c=>c.type==='JSXText'&&c.value.trim()==='Book follow-up'),bindings)
+  const file='src/pages/ServerFollowups.jsx',patientId='01ARZ3NDEKTSV4RRFFQ69G5FAB',taskId='01ARZ3NDEKTSV4RRFFQ69G5FAV'
+  const t={id:taskId,revision:7,status:'Open',can_book:true,patient:{id:patientId,name:'Synthetic Patient',code:'SYNTHETIC'},branch:{id:'b1'},service:{id:'svc1'},due_on:'2026-11-13',appointment:null}
+  const store={session:{serverUserId:'synthetic',userId:'staff',role:'staff',active:true,branchId:'b1',branchScopes:['b1']},state:{persons:[{id:'person'}],users:[{id:'staff',personId:'person',role:'Staff',status:'Active',branchId:'b1',permissions:['appointments']}],staff:[{userId:'staff',personId:'person',branchId:'b1'}],branches:[{id:'b1',status:'Open'}]}}
+  const publicTaskId=productionExpression(file,(n,parent)=>parent?.type==='VariableDeclarator'&&parent.id.name==='publicTaskId'&&parent.init===n)
+  const select=productionExpression(file,n=>n.type==='FunctionDeclaration'&&n.id?.name==='clinicalBookingSelection',{canSchedule,publicTaskId})
+  const selection=select(t,'staff',store),pending={current:false},bookingToken={current:null},pendingTasks={tasks:new Map()};let booking=null,current=true
+  const bindings={React,Button:'button',t,store,selection,clinicalBookingSelection:select,latest:{current:{store,task:t}},role:'staff',busy:'',needsReload:false,taskRequest:null,staleRow:false,pending,pendingTasks,bookingToken,ownsRow:()=>current,setBooking:v=>{booking=v}}
+  const control=()=>productionExpression(file,n=>n.type==='LogicalExpression'&&n.right?.type==='JSXElement'&&n.right.openingElement.name.name==='Button'&&n.right.children.some(c=>c.type==='JSXText'&&c.value.trim()==='Book follow-up'),bindings)
   const button=control();assert.equal(button.type,'button');assert.equal(button.props.disabled,false)
-  button.props.onClick(); assert.equal(booking,bookingToken.current);assert.ok(booking)
-  for(const role of ['dentist','patient','owner']) {bindings.role=role;assert.equal(control(),false)}
+  button.props.onClick();assert.equal(booking,bookingToken.current);assert.ok(Object.isFrozen(booking));assert.ok(Object.isFrozen(booking.task));assert.notEqual(booking.task,t)
+  const captured=booking;button.props.onClick();assert.equal(booking,captured,'duplicate confirmation cannot replace frozen intent')
+  const prefill=jsxAttribute(file,'AppointmentForm','prefill',{t,booking})
+  assert.deepEqual(JSON.parse(JSON.stringify(prefill)),{patientPublicId:patientId,patientName:'Synthetic Patient • SYNTHETIC',branchId:'b1',serviceId:'svc1',date:'2026-11-13'})
+  assert.equal(jsxAttribute(file,'AppointmentForm','serverFollowupSelection',{booking}),booking.selection);assert.deepEqual(booking.selection,selection)
+  for(const role of ['dentist','patient','owner']){bindings.role=role;assert.equal(control(),false)}
   bindings.role='staff';t.can_book=false;assert.equal(control(),false);t.can_book=true
-  for(const blocked of ['needsReload','staleRow']) {bindings[blocked]=true;assert.equal(control().props.disabled,true);bindings[blocked]=false}
-  booking=null;current=false;control().props.onClick();assert.equal(booking,null)
-  current=true;pending.current=true;control().props.onClick();assert.equal(booking,null)
-  pending.current=false;pendingTasks.tasks.set(t.id,{});control().props.onClick();assert.equal(booking,null)
-  const prefill=jsxAttribute('src/pages/ServerFollowups.jsx','AppointmentForm','prefill',{t})
-  assert.deepEqual(JSON.parse(JSON.stringify(prefill)),{patientPublicId:'patient-A',patientName:'Synthetic Patient • SYNTHETIC',branchId:'b1',serviceId:'svc1',date:'2026-11-13'})
+  for(const blocked of ['needsReload','staleRow']){bindings[blocked]=true;assert.equal(control().props.disabled,true);bindings[blocked]=false}
+  const reset=()=>{booking=null;bookingToken.current=null}
+  reset();current=false;control().props.onClick();assert.equal(booking,null)
+  reset();current=true;pending.current=true;control().props.onClick();assert.equal(booking,null)
+  reset();pending.current=false;pendingTasks.tasks.set(t.id,{});control().props.onClick();assert.equal(booking,null)
+  bindings.selection=null;assert.equal(control().props.disabled,true,'invalid exact selection remains disabled')
 })
 
 test('a Patient has no active follow-up self-booking control', async () => {

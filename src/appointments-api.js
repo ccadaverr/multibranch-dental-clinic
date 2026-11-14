@@ -158,7 +158,7 @@ export async function fetchRecommendation({ serviceId, branchId = null, coords =
 
 const commandResult = result => (result.ok ? { ok: true, row: result.data } : normalizeFailure(result))
 
-export async function createAppointment({ branchId, serviceId, date, start, notes = null, patientPublicId = null, dentistId = null, forPatientId = null, consultationAcknowledged = null, payAtClinic = false, paymentChoice = null }, key) {
+function appointmentPayload({ branchId, serviceId, date, start, notes = null, patientPublicId = null, dentistId = null, forPatientId = null, consultationAcknowledged = null, payAtClinic = false, paymentChoice = null }) {
   const payload = { branch_ref: branchId, service_ref: serviceId, date, start_time: start }
   if (notes) payload.notes = notes
   if (patientPublicId) payload.patient_id = patientPublicId
@@ -167,7 +167,52 @@ export async function createAppointment({ branchId, serviceId, date, start, note
   if (consultationAcknowledged !== null) payload.consultation_acknowledged = !!consultationAcknowledged
   if (payAtClinic) payload.pay_at_clinic = true
   if (paymentChoice === 'online') payload.pay_at_clinic = false
-  return commandResult(await api.createAppointment(payload, key))
+  return payload
+}
+
+export async function createAppointment(form, key) {
+  return commandResult(await api.createAppointment(appointmentPayload(form), key))
+}
+
+// Release gate, not a server capability probe. The caller must supply verified deployment evidence for this
+// exact API target. It defaults closed; never test an older backend by sending a potentially ignored selection.
+export const SELECTED_FOLLOWUP_BACKEND_COMMIT = 'e2654fafb1d30b6e50d3c1e475b2a3c0af227457'
+const publicUlid = value => typeof value === 'string' && /^[0-7][0-9a-hjkmnp-tv-z]{25}$/i.test(value)
+const taskRevision = value => Number.isInteger(value) && value >= 1 && value <= 2147483647
+
+export function selectedFollowupProblem(form, selection, backend, key) {
+  if (backend?.commit !== SELECTED_FOLLOWUP_BACKEND_COMMIT || backend?.apiBase !== api.apiBase()) {
+    return 'Selected follow-up booking is unavailable until this clinic connection has been verified. Contact the clinic system administrator.'
+  }
+  if (!publicUlid(selection?.taskId) || !taskRevision(selection?.expectedRevision) ||
+      !publicUlid(selection?.patientPublicId) || typeof selection?.branchId !== 'string' || !selection.branchId ||
+      selection.patientPublicId !== form?.patientPublicId || selection.branchId !== form?.branchId || form?.forPatientId) {
+    return 'The selected follow-up context is incomplete or changed. Close this form and reload the selected follow-up.'
+  }
+  if (key !== undefined && (typeof key !== 'string' || !/^[\x21-\x7e]{1,255}$/.test(key) || /[\r\n]/.test(key))) {
+    return 'The booking attempt could not be identified. Close this form and reload the selected follow-up.'
+  }
+  return ''
+}
+
+/** The original transaction receipt, not a current task GET. R2 increments exactly once before serializing. */
+export function selectedFollowupReceipt(result, form, selection) {
+  const row = result?.row, proof = result?.meta?.followup_link
+  if (!result?.ok || !publicUlid(row?.id) || proof?.task_id !== selection?.taskId ||
+      proof?.appointment_id !== row.id || proof?.status !== 'Booked' || !taskRevision(proof?.revision) ||
+      proof.revision !== selection.expectedRevision + 1 || row.patient?.id !== form.patientPublicId ||
+      row.branch?.id !== form.branchId || row.service?.id !== form.serviceId ||
+      row.date !== form.date || row.start_time !== form.start || (form.dentistId && row.dentist?.id !== form.dentistId)) return null
+  return Object.freeze({ task_id: proof.task_id, appointment_id: proof.appointment_id, status: proof.status, revision: proof.revision })
+}
+
+/** Narrow detailed-response adapter. Ordinary callers retain {ok, row}; cookie/CSRF transport is unchanged. */
+export async function createSelectedFollowupAppointment(form, { selection, backend, key } = {}) {
+  const problem = selectedFollowupProblem(form, selection, backend, key ?? null)
+  if (problem) return { ok: false, kind: 'validation', code: 'selected_context_invalid', message: problem }
+  const payload = { ...appointmentPayload(form), followup_task_id: selection.taskId, followup_expected_revision: selection.expectedRevision }
+  const result = await api.createAppointment(payload, key)
+  return result.ok ? { ok: true, row: result.data, meta: result.meta } : normalizeFailure(result)
 }
 
 export async function rescheduleAppointment(appointment, { date, start, dentistId = null }, key) {
