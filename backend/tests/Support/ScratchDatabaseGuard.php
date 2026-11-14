@@ -6,6 +6,11 @@ final class ScratchDatabaseGuard
 {
     public static function assertSafe($app): void
     {
+        if (getenv('DENTALOPS_LOCAL_TARGET')) {
+            require_once __DIR__.'/IsolatedDatabaseGuard.php';
+            IsolatedDatabaseGuard::assertSafe($app);
+            return;
+        }
         if (! $app->environment('testing')) {
             throw new \RuntimeException('Refusing database work outside the testing environment.');
         }

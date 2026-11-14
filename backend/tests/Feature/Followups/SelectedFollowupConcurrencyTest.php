@@ -61,9 +61,7 @@ final class SelectedFollowupConcurrencyTest extends TestCase
                     if ($number === 1 && $scenario === 'ordinary_competitor') unset($payload['followup_task_id'], $payload['followup_expected_revision']);
                     $key = 'aud10-'.$scenario.'-'.($scenario === 'same_key' ? 0 : $number);
                     $process = new Process([PHP_BINARY, base_path('tests/Support/aud10_booking_worker.php')], base_path(),
-                        ['APP_ENV' => 'testing', 'DB_CONNECTION' => 'pgsql', 'DB_DATABASE' => 'dental_clinic_scratch', 'DB_URL' => '',
-                            'CACHE_STORE' => 'array', 'SESSION_DRIVER' => 'array', 'QUEUE_CONNECTION' => 'sync',
-                            'MAIL_MAILER' => 'array', 'BROADCAST_CONNECTION' => 'null'],
+                        $this->workerEnvironment(),
                         json_encode(['worker' => $name, 'token' => $token, 'payload' => $payload, 'key' => $key], JSON_THROW_ON_ERROR), 30);
                     $process->start();
                     $workers[] = $process;
@@ -150,9 +148,7 @@ final class SelectedFollowupConcurrencyTest extends TestCase
                     'payload' => $payload, 'key' => 'aud10-overlap-'.$kind,
                     'barrier' => $kind === 'selected' ? 'before_appointment_insert' : 'after_appointment_insert'], JSON_THROW_ON_ERROR)."\n");
                 $process = new Process([PHP_BINARY, base_path('tests/Support/aud10_booking_worker.php')], base_path(),
-                    ['APP_ENV' => 'testing', 'DB_CONNECTION' => 'pgsql', 'DB_DATABASE' => 'dental_clinic_scratch', 'DB_URL' => '',
-                        'CACHE_STORE' => 'array', 'SESSION_DRIVER' => 'array', 'QUEUE_CONNECTION' => 'sync',
-                        'MAIL_MAILER' => 'array', 'BROADCAST_CONNECTION' => 'null'], $input, 30);
+                    $this->workerEnvironment(), $input, 30);
                 $workers[$kind] = $process;
                 $inputs[$kind] = $input;
                 $process->start();
@@ -207,4 +203,15 @@ final class SelectedFollowupConcurrencyTest extends TestCase
             foreach ($workers as $worker) if ($worker->isRunning()) $worker->stop();
         }
     }
+    /** Child processes must inherit the exact already-guarded endpoint, not a hardcoded unrelated scratch database. */
+    private function workerEnvironment(): array
+    {
+        $pg = config('database.connections.pgsql');
+        return ['APP_ENV' => 'testing', 'DB_CONNECTION' => 'pgsql', 'DB_DATABASE' => $pg['database'],
+            'DB_HOST' => $pg['host'], 'DB_PORT' => (string) $pg['port'], 'DB_USERNAME' => $pg['username'],
+            'DB_PASSWORD' => $pg['password'], 'DB_URL' => '', 'CACHE_STORE' => 'array',
+            'SESSION_DRIVER' => 'array', 'QUEUE_CONNECTION' => 'sync', 'MAIL_MAILER' => 'array',
+            'BROADCAST_CONNECTION' => 'null', 'DENTALOPS_LOCAL_TARGET' => getenv('DENTALOPS_LOCAL_TARGET') ?: ''];
+    }
+
 }

@@ -19,6 +19,15 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        \Illuminate\Support\Facades\Event::listen(\Illuminate\Console\Events\CommandStarting::class,
+            [\App\Support\LocalMigrationProfile::class, 'starting']);
+        \Illuminate\Support\Facades\Event::listen(\Illuminate\Database\Events\MigrationStarted::class,
+            [\App\Support\LocalMigrationProfile::class, 'migration']);
+        if (env('DENTALOPS_LOCAL_TARGET')) {
+            // Laravel deliberately omits Symfony command events during tests; this prohibition also covers that path.
+            \Illuminate\Support\Facades\DB::prohibitDestructiveCommands();
+            \Illuminate\Support\Facades\Mail::extend('local_capture', fn () => new \App\Mail\LocalCaptureTransport());
+        }
         if (file_exists(storage_path('cacert.pem'))) {
             \Illuminate\Support\Facades\Http::globalOptions([
                 'verify' => storage_path('cacert.pem'),

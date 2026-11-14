@@ -307,7 +307,7 @@ final class SelectedFollowupBookingTest extends TestCase
     public function test_ordinary_payment_hold_and_settlement_keep_automatic_matching_once(string $path): void
     {
         // Synthetic fixture values only; all provider traffic is faked and stray HTTP is refused.
-        config(['services.paymongo.secret_key' => 'aud10_fake_provider_credential',
+        config(['services.paymongo.secret_key' => 'sk_test_aud10_synthetic_fixture',
             'services.paymongo.webhook_secret' => 'aud10_fake_webhook_credential', 'services.paymongo.mode' => 'test',
             'services.paymongo.payment_method_types' => 'gcash', 'services.paymongo.base_url' => 'https://api.paymongo.com',
             'app.frontend_url' => 'http://localhost:5173']);

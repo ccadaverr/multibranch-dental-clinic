@@ -27,6 +27,10 @@ abstract class TestCase extends BaseTestCase
     {
         parent::setUp();
 
+        if (getenv('DENTALOPS_LOCAL_TARGET')) {
+            \Illuminate\Support\Facades\Http::preventStrayRequests();
+        }
+
         // Simulates a request from the future Vite SPA (Backend Foundation 1B) so Sanctum's
         // EnsureFrontendRequestsAreStateful middleware recognizes the request as stateful and starts a real
         // session, exactly as it will for the browser-based frontend later. See SANCTUM_STATEFUL_DOMAINS in

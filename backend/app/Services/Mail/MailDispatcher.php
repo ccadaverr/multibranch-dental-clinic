@@ -27,7 +27,7 @@ use Illuminate\Support\Facades\Mail;
 class MailDispatcher
 {
     public const REAL_TRANSPORTS = ['smtp', 'sendmail', 'ses', 'ses-v2', 'postmark', 'resend', 'mailgun'];
-    public const LOCAL_TRANSPORTS = ['log', 'array'];
+    public const LOCAL_TRANSPORTS = ['log', 'array', 'local_capture'];
 
     public function __construct(private readonly AuditService $audit) {}
 

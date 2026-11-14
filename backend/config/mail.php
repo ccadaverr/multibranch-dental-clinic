@@ -37,6 +37,9 @@ return [
 
     'mailers' => [
 
+        // Opt-in local environment only; hardcoded loopback capture, no external delivery claim.
+        'local_capture' => ['transport' => 'local_capture'],
+
         'smtp' => [
             'transport' => 'smtp',
             'scheme' => env('MAIL_SCHEME'),

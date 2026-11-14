@@ -72,16 +72,6 @@ final class QueueBackfill
         if (! $ids) {
             return 0;
         }
-        DB::transaction(function () use ($ids) {
-            $queues = QueueEntry::whereIn('id', $ids)->pluck('dentist_queue_id')->unique()->all();
-            // The history trigger forbids deletes during normal operation; a schema rollback is the one exception.
-            DB::statement('ALTER TABLE queue_entry_history DISABLE TRIGGER queue_entry_history_no_update_delete');
-            QueueEntryHistory::whereIn('queue_entry_id', $ids)->delete();
-            DB::statement('ALTER TABLE queue_entry_history ENABLE TRIGGER queue_entry_history_no_update_delete');
-            QueueEntry::whereIn('id', $ids)->delete();
-            DB::table('dentist_queues')->whereIn('id', $queues)->whereNotExists(fn ($q) => $q->from('queue_entries')->whereColumn('queue_entries.dentist_queue_id', 'dentist_queues.id'))->delete();
-        });
-
-        return count($ids);
+        throw new \RuntimeException('Queue backfill cannot be rolled back by deleting append-only history. Restore a verified snapshot instead.');
     }
 }

@@ -19,7 +19,7 @@ use Illuminate\Support\Facades\Mail;
  */
 class DemoCheck extends Command
 {
-    protected $signature = 'demo:check {--tunnel= : public tunnel host (default: NGROK_DOMAIN, or the running ngrok tunnel)} {--send= : also send one real diagnostic email to this address}';
+    protected $signature = 'demo:check {--tunnel= : public tunnel host (default: NGROK_DOMAIN, or the running ngrok tunnel)} {--send= : also send one real diagnostic email to this address} {--local-only : Omit external delivery, payment and tunnel checks}';
 
     protected $description = 'Pre-defense check of processes, email, PayMongo, tunnel, webhook, demo data and queue';
 
@@ -39,10 +39,14 @@ class DemoCheck extends Command
 
         $this->environment();
         $this->processes();
-        $this->smtp();
-        [$webhooks] = $this->payMongo();
-        $tunnel = $this->tunnel();
-        $this->webhook($webhooks, $tunnel);
+        if ($this->option('local-only')) {
+            $this->result('WARN', 'External email delivery, payment provider and tunnel acceptance were not executed (local-only mode).');
+        } else {
+            $this->smtp();
+            [$webhooks] = $this->payMongo();
+            $tunnel = $this->tunnel();
+            $this->webhook($webhooks, $tunnel);
+        }
         $this->demoData();
         $this->placeholderBranches();
         $this->branchContacts();

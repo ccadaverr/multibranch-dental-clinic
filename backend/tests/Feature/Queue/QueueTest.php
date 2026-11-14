@@ -127,7 +127,7 @@ class QueueTest extends TestCase
         $visitB = Visit::create(['patient_id' => $this->p['B']->id, 'branch_id' => $this->b['b1']->id, 'source' => 'walk_in', 'status' => 'Checked In', 'arrived_at' => now(), 'clinic_date' => '2026-09-28']);
         $attempt(['visit_id' => $visitB->id, 'queue_number' => 1]);           // number already used in this queue
         $attempt(['visit_id' => $visitB->id, 'queue_number' => 0]);           // numbers start at 1
-        foreach (['In Treatment', 'Completed', 'No-show'] as $status) {
+        foreach (['Unknown', 'Completed', 'Booked'] as $status) {
             $attempt(['visit_id' => $visitB->id, 'status' => $status]);       // not queue states
         }
         $attempt(['visit_id' => $visitB->id, 'status' => 'Served']);          // Served needs closed_at
@@ -150,7 +150,7 @@ class QueueTest extends TestCase
 
     // ---- ORDERING / PRIORITY ---------------------------------------------------------------------------------------
 
-    public function test_order_is_priority_then_exact_arrival_then_queue_number(): void
+    public function test_order_is_exact_arrival_then_queue_number_even_when_priority_changes(): void
     {
         $this->actingAsUser('staffB1');
         foreach (['A', 'B', 'C', 'D'] as $i => $patient) {
@@ -163,15 +163,15 @@ class QueueTest extends TestCase
         Visit::query()->update(['arrived_at' => CarbonImmutable::parse('2026-09-28 10:00:00', 'Asia/Manila')]);
         $this->assertEquals(['A' => 1, 'B' => 2, 'C' => 3, 'D' => 4], $this->positions());
 
-        $this->command($this->entryFor('C'), 'priority', null, null, ['priority' => 'Urgent', 'reason' => 'Front desk: accessibility need'])->assertOk()->assertJsonPath('data.position', 1);
+        $this->command($this->entryFor('C'), 'priority', null, null, ['priority' => 'Priority', 'reason' => 'Front desk: accessibility need'])->assertOk()->assertJsonPath('data.position', 3);
         $this->command($this->entryFor('D'), 'priority', null, null, ['priority' => 'Priority', 'reason' => 'Front desk: elderly patient'])->assertOk();
-        $this->assertEquals(['C' => 1, 'D' => 2, 'A' => 3, 'B' => 4], $this->positions());
+        $this->assertEquals(['A' => 1, 'B' => 2, 'C' => 3, 'D' => 4], $this->positions());
 
         // Temporarily Away has no position; returning keeps the original arrival order.
         $this->command($this->entryFor('A'), 'away')->assertOk()->assertJsonPath('data.position', null);
-        $this->assertEquals(['C' => 1, 'D' => 2, 'A' => null, 'B' => 3], $this->positions());
+        $this->assertEquals(['A' => null, 'B' => 1, 'C' => 2, 'D' => 3], $this->positions());
         $this->command($this->entryFor('A'), 'return')->assertOk()->assertJsonPath('data.status', 'Waiting');
-        $this->assertEquals(['C' => 1, 'D' => 2, 'A' => 3, 'B' => 4], $this->positions());
+        $this->assertEquals(['A' => 1, 'B' => 2, 'C' => 3, 'D' => 4], $this->positions());
     }
 
     public function test_priority_is_staff_or_owner_only_needs_a_reason_and_is_recorded(): void
@@ -204,13 +204,12 @@ class QueueTest extends TestCase
         // Call patient A: A is now Called at position 1.
         $this->command($entryA, 'call')->assertOk()->assertJsonPath('data.status', 'Called');
 
-        // Prioritize waiting patient C to Urgent: C moves ahead of waiting patient B (to position 2),
-        // but NEVER displaces patient A who is already Called at position 1.
+        // STF-15: a supported priority label never moves C ahead of earlier arrivals A or B.
         $this->command($entryC, 'priority', null, null, [
-            'priority' => 'Urgent',
+            'priority' => 'Priority',
             'reason' => 'Senior citizen priority [Senior Citizen · ID/eligibility verified]',
-        ])->assertOk()->assertJsonPath('data.position', 2);
-        $this->assertEquals(['A' => 1, 'C' => 2, 'B' => 3], $this->positions());
+        ])->assertOk()->assertJsonPath('data.position', 3);
+        $this->assertEquals(['A' => 1, 'B' => 2, 'C' => 3], $this->positions());
 
         // Attempting to change priority on a patient already Called or Treatment Ready is rejected.
         $this->command($entryA, 'priority', null, null, [
@@ -219,9 +218,9 @@ class QueueTest extends TestCase
         ])->assertStatus(422)->assertJsonPath('code', 'already_called');
 
         $this->command($entryA, 'ready')->assertOk()->assertJsonPath('data.status', 'Treatment Ready');
-        $this->assertEquals(['A' => 1, 'C' => 2, 'B' => 3], $this->positions());
+        $this->assertEquals(['A' => 1, 'B' => 2, 'C' => 3], $this->positions());
         $this->command($entryA, 'priority', null, null, [
-            'priority' => 'Urgent',
+            'priority' => 'Priority',
             'reason' => 'Late priority attempt',
         ])->assertStatus(422)->assertJsonPath('code', 'already_called');
     }
@@ -254,7 +253,7 @@ class QueueTest extends TestCase
         $entry = $this->entryFor('A');
         $this->travelTo(CarbonImmutable::parse('2026-09-29 10:00:00', 'Asia/Manila'));
         $this->command($entry, 'call')->assertStatus(422)->assertJsonPath('code', 'not_today');
-        $this->command($entry, 'priority', null, null, ['priority' => 'Urgent', 'reason' => 'x'])->assertStatus(422)->assertJsonPath('code', 'not_today');
+        $this->command($entry, 'priority', null, null, ['priority' => 'Priority', 'reason' => 'x'])->assertStatus(422)->assertJsonPath('code', 'not_today');
         $this->getJson('/api/queue')->assertOk()->assertJsonCount(0, 'data');
         $this->getJson('/api/queue?date=2026-09-28')->assertOk()->assertJsonCount(1, 'data')
             // M9: the bounded list states whether it was cut off, so clients never treat a cut-off day as complete.
@@ -422,7 +421,7 @@ class QueueTest extends TestCase
 
     // ---- BACKFILL ----------------------------------------------------------------------------------------------------
 
-    public function test_backfill_uses_server_visits_only_and_is_idempotent_and_reversible(): void
+    public function test_backfill_uses_server_visits_only_is_idempotent_and_cannot_erase_history(): void
     {
         $visit = fn (string $patient, string $dentist, string $status, string $at) => Visit::create([
             'patient_id' => $this->p[$patient]->id, 'branch_id' => $this->b['b1']->id, 'source' => 'walk_in', 'status' => $status,
@@ -448,8 +447,15 @@ class QueueTest extends TestCase
         $this->assertSame('2026-09-28T09:20:00+08:00', $treating->queueEntry->closed_at->setTimezone('Asia/Manila')->toIso8601String());
         $this->assertSame(0, app(QueueBackfill::class)->run()['created'], 'idempotent');
 
-        $this->assertSame(3, app(QueueBackfill::class)->rollback());
-        $this->assertSame([0, 0], [QueueEntry::count(), DB::table('dentist_queues')->count()]);
+        $before = [QueueEntry::orderBy('id')->get()->toJson(), QueueEntryHistory::orderBy('id')->get()->toJson()];
+        try {
+            app(QueueBackfill::class)->rollback();
+            $this->fail('Backfill rollback must not erase append-only history.');
+        } catch (RuntimeException $error) {
+            $this->assertStringContainsString('cannot be rolled back by deleting append-only history', $error->getMessage());
+        }
+        $this->assertSame($before, [QueueEntry::orderBy('id')->get()->toJson(), QueueEntryHistory::orderBy('id')->get()->toJson()]);
+        $this->assertSame(3, QueueEntry::count());
     }
 
     public function test_queue_history_is_append_only(): void
