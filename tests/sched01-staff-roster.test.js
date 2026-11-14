@@ -77,7 +77,7 @@ test('SCHED-01 source guards capture the target, block duplicate saves and suppr
   const editor = source.slice(source.indexOf('export function StaffShiftProfile('), source.indexOf('function WeeklyGrid('))
   assert.match(editor, /!allowed.current \|\| !live.current \|\| pending.current/)
   assert.match(editor, /const id = staff.id, payload =/)
-  assert.match(editor, /await updateStaffProfile\(id, payload\)/)
+  assert.match(editor, /await updateStaffProfile\(id, payload, owns\)/)
   assert.match(editor, /if \(!live.current \|\| !allowed.current\) return/)
   assert.match(editor, /if \(result.data\?\.id !== id\)/)
   assert.match(editor, /if \(!result.ok\) \{ setError\(firstError\(result\)\); return \}/)

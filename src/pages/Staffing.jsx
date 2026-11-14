@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Button, Card, ConfirmDialog, Field, FilterBar, Notice, PageHeader } from '../components.jsx'
+import { Button, Card, ConfirmDialog, Field, FilterBar, Notice, PageHeader, RefreshButton } from '../components.jsx'
 import {
   addScheduleException, cancelLeave, copyProfileHours, decideLeave, leaveCalendar, leaveConflicts, leaveRequests, myLeave, notifyLeaveAffected,
   notifyScheduleAffected, removeScheduleException, requestLeave, saveWeeklyHours, scheduleAffected, updateStaffProfile, workSchedules,
@@ -117,7 +117,7 @@ function WorkScheduleSession({ store, role }) {
       </div>
     )}
     {scheduleRole === 'staff' && role !== 'dentist' ? (
-      <StaffScheduleProfiles key={staffSessionKey} role={role} session={store?.session}/>
+      <StaffScheduleProfiles key={staffSessionKey} role={role} session={store?.session} getAuthGeneration={store.getAuthGeneration}/>
     ) : (
       !data ? (loading && <p className="au-muted" role="status">Loading work schedules…</p>) : !data.dentists.length ? <Notice>No dentists to show for your branches.</Notice> : <>
         {loading && <p role="status">Refreshing work schedules…</p>}
@@ -173,16 +173,16 @@ export function staffShiftSummary(row) {
 
 const useStaffLayoutEffect = typeof window === 'undefined' ? useEffect : React.useLayoutEffect
 
-export function StaffScheduleProfiles({ role, session }) {
+export function StaffScheduleProfiles({ role, session, getAuthGeneration }) {
   const [snapshot, setSnapshot] = useState(null), [error, setError] = useState(''), [selected, setSelected] = useState(''), [saving, setSaving] = useState(false)
   const live = useRef(false), generation = useRef(0)
   const authorized = !!session?.serverUserId && session.active && session.role === role && ['owner', 'staff'].includes(role)
   const load = async () => {
     if (!live.current || !authorized) return
-    const request = ++generation.current
+    const request = ++generation.current, auth = getAuthGeneration?.()
     try {
       const result = await workSchedules()
-      if (!live.current || generation.current !== request) return
+      if (!live.current || generation.current !== request || (getAuthGeneration && (auth == null || auth !== getAuthGeneration()))) return
       if (!result.ok || !Array.isArray(result.data?.staff)) {
         if (['unauthenticated', 'forbidden'].includes(result.kind)) setSnapshot(null)
         setError(result.message || 'Staff shift profiles could not be loaded.'); return
@@ -199,7 +199,7 @@ export function StaffScheduleProfiles({ role, session }) {
     {error && <div role="alert" tabIndex={0}><p>{error} {snapshot && 'Showing the last loaded profiles.'}</p><Button variant="ghost" onClick={load}>Retry staff profiles</Button></div>}
     {!snapshot ? !error && <p role="status">Loading Staff profiles…</p> : !staff.length ? <p>No Staff shift profiles are available in your branch scope.</p> : <>
       <Field label="Staff member"><select value={summary.id} disabled={saving} onChange={e => setSelected(e.target.value)}>{staff.map(s => <option key={s.id} value={s.id}>{s.name || 'Staff member'} · {s.branch?.name || 'No branch recorded'}</option>)}</select></Field>
-      <StaffShiftProfile key={summary.id} staff={summary} role={role} branches={snapshot.branches || []} canEdit={role === 'owner' && !error}
+      <StaffShiftProfile key={summary.id} staff={summary} role={role} branches={snapshot.branches || []} canEdit={role === 'owner' && !error} getAuthGeneration={getAuthGeneration}
         onPending={setSaving} onSaved={record => {
           // Adopt only this profile's authoritative response, never the currently selected row.
           generation.current++
@@ -209,25 +209,42 @@ export function StaffScheduleProfiles({ role, session }) {
   </Card>
 }
 
-export function StaffShiftProfile({ staff, role, branches, canEdit, onPending = () => {}, onSaved = () => {} }) {
+export function StaffShiftProfile({ staff, role, branches, canEdit, getAuthGeneration, onPending = () => {}, onSaved = () => {} }) {
   const [editing, setEditing] = useState(false), [start, setStart] = useState(staff.start), [end, setEnd] = useState(staff.end), [branch, setBranch] = useState(staff.branchRef)
   const [saving, setSaving] = useState(false), [error, setError] = useState(''), [success, setSuccess] = useState('')
   const live = useRef(false), pending = useRef(false), allowed = useRef(false), controls = useRef(null), restoreFocus = useRef(false)
+  const currentProfile = useRef(''), reviewedProfile = useRef('')
+  currentProfile.current = JSON.stringify([staff.id, staff.branchRef, staff.start, staff.end, staff.available])
   allowed.current = role === 'owner' && canEdit
   useStaffLayoutEffect(() => { live.current = true; return () => { live.current = false } }, [])
   useStaffLayoutEffect(() => { if (restoreFocus.current && !editing) { controls.current?.querySelector('button')?.focus(); restoreFocus.current = false } }, [editing])
   const save = async event => {
     event.preventDefault()
     if (!allowed.current || !live.current || pending.current) return
+    if (reviewedProfile.current !== currentProfile.current) { setError('This Staff profile changed. Cancel, review the current profile and open Change shift profile again.'); return }
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(start) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(end) || end <= start) {
+      setError('The shift end must be after its start.'); return
+    }
+    const review = reviewedProfile.current
+    const auth = getAuthGeneration?.()
+    const owns = () => live.current && allowed.current && currentProfile.current === review &&
+      (!getAuthGeneration || (auth != null && auth === getAuthGeneration()))
     const id = staff.id, payload = { shift_start: start, shift_end: end }
     // Presence of branch_ref instructs the server to synchronize authorization scopes.
     if (branch && branch !== staff.branchRef) payload.branch_ref = branch
     pending.current = true; setSaving(true); onPending(true); setError(''); setSuccess('')
     try {
-      const result = await updateStaffProfile(id, payload)
+      const result = await updateStaffProfile(id, payload, owns)
       if (!live.current || !allowed.current) return
+      if (getAuthGeneration && (auth == null || auth !== getAuthGeneration())) return
+      if (currentProfile.current !== review) { setError('The Staff profile changed while saving. Close and reopen Staff schedules to verify the result.'); return }
       if (!result.ok) { setError(firstError(result)); return }
       if (result.data?.id !== id) { setError('The saved profile could not be confirmed. Close and reopen Staff schedules to reload.'); return }
+      const saved = staffShiftSummary(result.data || {})
+      if (saved.start !== payload.shift_start || saved.end !== payload.shift_end ||
+        saved.branchRef !== (payload.branch_ref ?? staff.branchRef)) {
+        setError('The saved profile could not be confirmed. Close and reopen Staff schedules to reload.'); return
+      }
       onSaved(result.data)
       restoreFocus.current = true; setEditing(false); setSuccess(`Shift profile saved for ${staff.name}. Weekly coverage remains unavailable.`)
     } catch { if (live.current && allowed.current) setError('Could not save this shift profile. Your changes are still in the form.') }
@@ -242,6 +259,7 @@ export function StaffShiftProfile({ staff, role, branches, canEdit, onPending = 
     {success && <p role="status">{success}</p>}
     {error && <p id="staff-shift-error" role="alert" tabIndex={0}>{error}</p>}
     {role === 'owner' && canEdit && <div ref={controls}><Button variant="soft" onClick={() => {
+      reviewedProfile.current = currentProfile.current
       setStart(staff.start); setEnd(staff.end); setBranch(staff.branchRef); setError(''); setSuccess(''); setEditing(true)
     }} disabled={saving || editing}>Change shift profile</Button></div>}
     {role === 'owner' && canEdit && editing && <form onSubmit={save} className="au-form" aria-label={`Edit shift for ${staff.name}`} aria-describedby={error ? 'staff-shift-error' : undefined} aria-busy={saving}>
@@ -384,6 +402,10 @@ function Exceptions({ data, dentist, toast, onSaved, canEdit = true, getAuthGene
 const STATUS_TONE = { Pending: 'is-late', Approved: 'is-ok', Declined: 'is-bad', Cancelled: '' }
 
 export function LeavePage({ store, role }) {
+  return <LeaveSession key={JSON.stringify([role, schedulingActorKey(store || {})])} store={store} role={role}/>
+}
+
+function LeaveSession({ store, role }) {
   const toast = store?.toast || (() => {})
   const requester = role === 'staff' || role === 'dentist'
   const [tick, setTick] = useState(0), changed = () => setTick(t => t + 1)
@@ -391,19 +413,34 @@ export function LeavePage({ store, role }) {
     <PageHeader kicker={role === 'owner' ? 'Administration' : 'Team'} title={role === 'owner' ? 'Leave requests' : 'Leave'}
       text="Vacation, sick and other leave. Approved leave of a dentist removes their time from booking at once; approving never cancels an appointment. Leave balances are not tracked."/>
     <TeamStrip key={tick}/>
-    {requester && <MyLeave toast={toast} onChanged={changed}/>}
+    {requester && <MyLeave toast={toast} onChanged={changed} getAuthGeneration={store?.getAuthGeneration}/>}
     {role !== 'dentist' && <Approvals toast={toast} role={role} onChanged={changed} branches={(store?.state?.branches || []).filter(b => b.status !== 'Closed')}/>}
   </div>
 }
 
 function TeamStrip() {
   const from = manilaToday(), to = addDays(from, 13)
-  const [rows, setRows] = useState(null)
-  useEffect(() => { leaveCalendar(from, to).then(r => setRows(r.ok ? r.data : [])) }, [])
+  const [rows, setRows] = useState(null), [error, setError] = useState(''), [loading, setLoading] = useState(false)
+  const live = useRef(false), generation = useRef(0), pending = useRef(false)
+  const load = async () => {
+    if (!live.current || pending.current) return
+    const ticket = ++generation.current
+    pending.current = ticket; setLoading(true); setRows(null); setError('')
+    try {
+      const r = await leaveCalendar(from, to)
+      if (!live.current || ticket !== generation.current) return
+      if (!r.ok || !Array.isArray(r.data)) { setRows(null); setError('Leave calendar could not be loaded. Availability is unverified.'); return }
+      setRows(r.data)
+    } catch { if (live.current && ticket === generation.current) { setRows(null); setError('Leave calendar could not be loaded. Availability is unverified.') } }
+    finally { if (pending.current === ticket) pending.current = false; if (live.current && ticket === generation.current) setLoading(false) }
+  }
+  useStaffLayoutEffect(() => { live.current = true; load(); return () => { live.current = false; generation.current++; pending.current = false } }, [from])
   const days = useMemo(() => Array.from({ length: 14 }, (_, i) => addDays(from, i)), [from])
   const away = d => (rows || []).filter(r => r.starts_at.slice(0, 10) <= d && (r.ends_at.slice(11, 16) === '00:00' ? addDays(r.ends_at.slice(0, 10), -1) : r.ends_at.slice(0, 10)) >= d)
   return <Card title="Who is away" subtitle="The next two weeks. Approved leave is solid, pending is dashed.">
-    {!rows ? <p className="au-muted" role="status">Loading…</p> : <>
+    {error && <div role="alert"><p>{error}</p><Button variant="ghost" disabled={loading} onClick={load}>Retry leave calendar</Button></div>}
+    {loading && <p className="au-muted" role="status">Loading leave calendar…</p>}
+    {rows && <>
       <div className="st-strip" role="list" aria-label="Who is away, next two weeks">{days.map(d => {
         const list = away(d)
         return <div key={d} role="listitem" className="st-strip-day"><b>{longDate(d).replace(/,.*/, '')}<small>{d.slice(8)}</small></b>
@@ -415,43 +452,91 @@ function TeamStrip() {
   </Card>
 }
 
-function MyLeave({ toast, onChanged }) {
+export function leaveRequestConfirmed(body, data) {
+  const start = `${body.start_date}T${body.start_time || '00:00'}:00+08:00`
+  const end = `${body.end_time ? body.end_date : addDays(body.end_date, 1)}T${body.end_time || '00:00'}:00+08:00`
+  return typeof data?.id === 'string' && !!data.id && data.status === 'Pending' && data.type === body.type &&
+    data.starts_at === start && data.ends_at === end && (data.private_note || null) === body.private_note
+}
+
+function MyLeave({ toast, onChanged, getAuthGeneration }) {
   const [rows, setRows] = useState(null), [denied, setDenied] = useState(false)
   const [f, setF] = useState({ type: 'vacation', start_date: '', end_date: '', partial: false, start_time: '09:00', end_time: '12:00', private_note: '' })
   const [err, setErr] = useState(''), [busy, setBusy] = useState('')
+  const [readError, setReadError] = useState(''), [reloading, setReloading] = useState(false), [unverified, setUnverified] = useState(false)
+  const live = useRef(false), pending = useRef(false), readGeneration = useRef(0), uncertain = useRef(false)
+  useStaffLayoutEffect(() => { live.current = true; return () => { live.current = false } }, [])
   const set = (k, v) => setF(x => ({ ...x, [k]: v }))
-  const load = () => myLeave().then(r => { if (r.ok) { setRows(r.data); onChanged?.() } else if (r.kind === 'forbidden') setDenied(true) })
+  const load = async () => {
+    const ticket = ++readGeneration.current
+    const auth = getAuthGeneration?.()
+    setReloading(true)
+    try {
+      const r = await myLeave()
+      if (!live.current || ticket !== readGeneration.current || (getAuthGeneration && (auth == null || auth !== getAuthGeneration()))) return
+      if (r.ok && Array.isArray(r.data)) { setRows(r.data); setReadError(''); uncertain.current = false; setUnverified(false); onChanged?.() }
+      else if (['unauthenticated', 'forbidden'].includes(r.kind)) { setRows(null); setDenied(true) }
+      else setReadError('My leave could not be refreshed. Previously loaded requests may be out of date.')
+    } catch { if (live.current && ticket === readGeneration.current) setReadError('My leave could not be refreshed. Previously loaded requests may be out of date.') }
+    finally { if (live.current && ticket === readGeneration.current) setReloading(false) }
+  }
   useEffect(() => { load() }, [])
   if (denied) return null
   const submit = async e => {
-    e.preventDefault(); setErr('')
+    e.preventDefault()
+    if (!live.current || pending.current || uncertain.current) return
+    setErr('')
     if (f.type === 'other' && !f.private_note.trim()) return setErr('Please explain the reason for “Other” leave.')
     if (!f.start_date || f.start_date < manilaToday()) return setErr('Choose today or a later date.')
     const endDate = f.partial ? f.start_date : (f.end_date || f.start_date)
     if (endDate < f.start_date) return setErr('The until date cannot be before the from date.')
     if (f.partial && (!f.start_time || !f.end_time || f.end_time <= f.start_time)) return setErr('The end time must be after the start time.')
-    setBusy('add')
-    const r = await requestLeave({ type: f.type, start_date: f.start_date, end_date: endDate, private_note: f.private_note.trim() || null, ...(f.partial ? { start_time: f.start_time, end_time: f.end_time } : {}) })
-    setBusy('')
-    if (!r.ok) return setErr(firstError(r))
-    toast('Leave requested. An authorized approver can review it.', 'success')
-    setF(x => ({ ...x, start_date: '', end_date: '', private_note: '' })); load()
+    pending.current = true; setBusy('add')
+    const body = { type: f.type, start_date: f.start_date, end_date: endDate, private_note: f.private_note.trim() || null, ...(f.partial ? { start_time: f.start_time, end_time: f.end_time } : {}) }
+    const auth = getAuthGeneration?.(), owns = () => live.current && (!getAuthGeneration || (auth != null && auth === getAuthGeneration()))
+    const unknown = () => { readGeneration.current++; setReloading(false); uncertain.current = true; setUnverified(true); setErr('The leave request outcome is unverified. Refresh My leave and review the requests before submitting again.') }
+    try {
+      const r = await requestLeave(body, owns)
+      if (!owns()) return
+      if (!r.ok) { if (['network', 'server'].includes(r.kind)) unknown(); else setErr(firstError(r)); return }
+      if (!leaveRequestConfirmed(body, r.data)) return unknown()
+      toast('Leave requested. An authorized approver can review it.', 'success')
+      setF(x => ({ ...x, start_date: '', end_date: '', private_note: '' })); load()
+    } catch { if (owns()) unknown() }
+    finally { pending.current = false; if (live.current) setBusy('') }
   }
-  return <Card title="My leave">
+  const cancel = async leave => {
+    if (!live.current || pending.current || uncertain.current || !leave.can_cancel) return
+    pending.current = true; setBusy(leave.id)
+    const auth = getAuthGeneration?.(), owns = () => live.current && (!getAuthGeneration || (auth != null && auth === getAuthGeneration()))
+    const unknown = () => { readGeneration.current++; setReloading(false); uncertain.current = true; setUnverified(true); toast('The cancellation outcome is unverified. Refresh My leave before retrying.', 'warning') }
+    try {
+      const r = await cancelLeave(leave.id, owns)
+      if (!owns()) return
+      if (!r.ok) { if (['network', 'server'].includes(r.kind)) unknown(); else toast(firstError(r), 'warning'); return }
+      if (r.data?.id !== leave.id || r.data.status !== 'Cancelled') return unknown()
+      toast('Leave cancelled. Check current availability before booking.', 'success'); load()
+    } catch { if (owns()) unknown() }
+    finally { pending.current = false; if (live.current) setBusy('') }
+  }
+  return <Card title="My leave" actions={<RefreshButton ariaLabel="Refresh My leave" title="Refresh My leave" onClick={load} loading={reloading} disabled={!!busy || reloading}/>}>
+    {readError && <p role="alert">{readError}</p>}
     <form className="au-form" onSubmit={submit}>
+      <fieldset className="au-form" disabled={!!busy} style={{border: 0, padding: 0, margin: 0, minWidth: 0}}>
       <Field label="Type"><select value={f.type} onChange={e => set('type', e.target.value)}><option value="vacation">Vacation</option><option value="sick">Sick</option><option value="other">Other</option></select></Field>
       <div className="st-pair"><Field label="From" required><input type="date" min={manilaToday()} value={f.start_date} onChange={e => setF(x => ({ ...x, start_date: e.target.value, end_date: x.end_date && x.end_date < e.target.value ? '' : x.end_date }))} required/></Field>
         <Field label="To (last day)"><input type="date" min={f.start_date || manilaToday()} value={f.partial ? f.start_date : f.end_date} disabled={f.partial} onChange={e => set('end_date', e.target.value)}/></Field></div>
       <label className="au-check"><input type="checkbox" checked={f.partial} onChange={e => set('partial', e.target.checked)}/> Only part of the day</label>
       {f.partial && <div className="st-pair"><Field label="From (time on selected date)"><input type="time" value={f.start_time} onChange={e => set('start_time', e.target.value)}/></Field>
         <Field label="Until (time on selected date)"><input type="time" value={f.end_time} onChange={e => set('end_time', e.target.value)}/></Field></div>}
-      <Field label={f.type === 'other' ? 'Specify reason' : 'Private note (optional)'} required={f.type === 'other'} hint="Seen only by you and the approver. Never emailed."><textarea maxLength={500} placeholder={f.type === 'other' ? 'e.g., Family emergency, bereavement, medical appointment' : ''} value={f.private_note} onChange={e => set('private_note', e.target.value)}/></Field>
+      <Field label={f.type === 'other' ? 'Specify reason' : 'Private note (optional)'} required={f.type === 'other'} hint="Seen only by you and the approver. Never emailed."><textarea required={f.type === 'other'} maxLength={500} placeholder={f.type === 'other' ? 'e.g., Family emergency, bereavement, medical appointment' : ''} value={f.private_note} onChange={e => set('private_note', e.target.value)}/></Field>
       {err && <p className="au-error" role="alert">{err}</p>}
-      <div className="au-actions"><Button type="submit" disabled={busy === 'add' || !f.start_date || f.start_date < manilaToday() || (!f.partial && f.end_date && f.end_date < f.start_date) || (f.partial && (!f.start_time || !f.end_time || f.end_time <= f.start_time)) || (f.type === 'other' && !f.private_note.trim())}>{busy === 'add' ? 'Sending…' : 'Request leave'}</Button></div>
+      <div className="au-actions"><Button type="submit" disabled={unverified || busy === 'add' || !f.start_date || f.start_date < manilaToday() || (!f.partial && f.end_date && f.end_date < f.start_date) || (f.partial && (!f.start_time || !f.end_time || f.end_time <= f.start_time)) || (f.type === 'other' && !f.private_note.trim())}>{busy === 'add' ? 'Sending…' : 'Request leave'}</Button></div>
+      </fieldset>
     </form>
     {!rows ? <p className="au-muted" role="status">Loading…</p> : !rows.length ? <p className="au-muted">No leave requested yet.</p> : <ul className="fd-list">{rows.map(l => <li key={l.id}>
       <div><b>{l.label}</b><span>{l.type_label} · <span className={`fd-badge ${STATUS_TONE[l.status]}`}>{l.status}</span>{l.decided_by ? ` · by ${l.decided_by}` : ''}</span>{l.private_note && <span>Note: {l.private_note}</span>}</div>
-      {l.can_cancel && <Button size="sm" variant="ghost" disabled={busy === l.id} onClick={async () => { setBusy(l.id); const r = await cancelLeave(l.id); setBusy(''); if (!r.ok) return toast(firstError(r), 'warning'); toast('Leave cancelled. The time is bookable again.', 'success'); load() }}>Cancel</Button>}
+      {l.can_cancel && <Button size="sm" variant="ghost" disabled={!!busy || unverified} onClick={() => cancel(l)}>Cancel</Button>}
     </li>)}</ul>}
   </Card>
 }

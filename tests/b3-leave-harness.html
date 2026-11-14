@@ -5,16 +5,21 @@
   <title>Leave interaction harness</title>
   <div id="root"></div>
   <script type="module">
-    import React from 'react'
+    import React, { useState } from 'react'
     import { createRoot } from 'react-dom/client'
     import { LeavePage } from '/src/pages/Staffing.jsx'
     import '/src/styles.css'
     import '/src/foundation.css'
 
-    const role = new URLSearchParams(location.search).get('role') || 'staff'
-    createRoot(document.getElementById('root')).render(React.createElement(LeavePage, {
-      role,
-      store: { state: { branches: [] }, toast: () => {} },
-    }))
+    function Fixture() {
+      const [role, setRole] = useState(new URLSearchParams(location.search).get('role') || 'staff')
+      const [account, setAccount] = useState('A')
+      window.leaveFixture = { setRole, setAccount, feedback: window.leaveFixture?.feedback || [] }
+      return React.createElement(LeavePage, {role, store: {
+        state: { branches: [] }, session: { serverUserId: `synthetic-${account}`, userId: account, role, active: true },
+        getAuthGeneration: () => account, toast: (...args) => window.leaveFixture.feedback.push(args),
+      }})
+    }
+    createRoot(document.getElementById('root')).render(React.createElement(Fixture))
   </script>
 </html>

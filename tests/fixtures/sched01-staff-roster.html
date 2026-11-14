@@ -1,7 +1,7 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SCHED-01 synthetic Staff shift fixture</title></head><body><div id="root"></div><script type="module">
 import React,{useState} from 'react'
 import {createRoot} from 'react-dom/client'
-import {StaffScheduleProfiles} from '/src/pages/Staffing.jsx'
+import {StaffScheduleProfiles,StaffShiftProfile,staffShiftSummary} from '/src/pages/Staffing.jsx'
 import '/src/styles.css'
 import '/src/foundation.css'
 import '/src/automations.css'
@@ -36,5 +36,10 @@ function Fixture(){
  const session={serverUserId:`server-${account}`,userId:`user-${account}`,role,active:true,branchScopes:['b1']}
  return mounted?React.createElement(StaffScheduleProfiles,{key:JSON.stringify([account,role]),session,role}):React.createElement('p',null,'Fixture unmounted')
 }
-createRoot(document.getElementById('root')).render(React.createElement(Fixture))
+function DirectFixture(){
+ const [row,setRow]=useState(staff[0])
+ window.sched01.replaceProfile=patch=>{const next={...row,...patch};Object.assign(staff[0],next);setRow(next)}
+ return React.createElement(StaffShiftProfile,{staff:staffShiftSummary(row),role:'owner',canEdit:true,branches,onSaved:record=>setRow({...row,shift_start:record.shiftStart,shift_end:record.shiftEnd,branch:{id:record.branchId,name:record.branch}})})
+}
+createRoot(document.getElementById('root')).render(React.createElement(new URLSearchParams(location.search).has('direct')?DirectFixture:Fixture))
 </script></body></html>
