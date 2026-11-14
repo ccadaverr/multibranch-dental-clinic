@@ -112,7 +112,11 @@ export async function fetchReferenceData(role) {
 // saveBranch/setBranchService/savePersonnel, whose own independent local validation is not provably
 // identical to the backend's and must not be re-run against an already-server-confirmed payload.
 
-export async function syncBranchUpdate(legacyRef, form) {
+const unconfirmedBranchChange=()=>({ok:false,kind:'unconfirmed',message:'The branch change could not be confirmed. Keep your edits and review the branch before retrying.'})
+// Branch coordinates are stored to six decimal places; a valid server-rounded pin remains authoritative.
+const sameBranchCoordinate=(sent,received)=>sent===null?received===null:typeof received==='number' && Number.isFinite(received) && Number.isFinite(sent) && Math.abs(sent-received)<=0.000000500001
+
+export async function syncBranchUpdate(legacyRef, form, beforeDispatch) {
   const payload = {}
   if (form.branchCode !== undefined) payload.branch_code = form.branchCode
   if (form.name !== undefined) payload.name = form.name
@@ -135,14 +139,18 @@ export async function syncBranchUpdate(legacyRef, form) {
     if (Object.keys(week).length) payload.weekly_hours = week
   }
 
-  const result = await api.updateBranch(legacyRef, payload)
+  const result = await api.updateBranch(legacyRef, payload, beforeDispatch)
   if (!result.ok) return result
-  return { ok: true, record: mapBranch(result.data) }
+  const row=result.data
+  if(row?.id!==legacyRef || payload.branch_code!==undefined && row.branch_code!==payload.branch_code ||
+    Object.hasOwn(payload,'latitude') && (!sameBranchCoordinate(payload.latitude,row.latitude) || !sameBranchCoordinate(payload.longitude,row.longitude)))return unconfirmedBranchChange()
+  return { ok: true, record: mapBranch(row) }
 }
 
-export async function syncBranchServiceToggle(branchId, serviceId, active) {
-  const result = await api.setBranchService({ branch_ref: branchId, service_ref: serviceId, active })
+export async function syncBranchServiceToggle(branchId, serviceId, active, beforeDispatch) {
+  const result = await api.setBranchService({ branch_ref: branchId, service_ref: serviceId, active }, beforeDispatch)
   if (!result.ok) return result
+  if(result.data?.branch_ref!==branchId || result.data.service_ref!==serviceId || typeof result.data.active!=='boolean' || result.data.active!==active)return unconfirmedBranchChange()
   return { ok: true, record: mapBranchService(result.data) }
 }
 

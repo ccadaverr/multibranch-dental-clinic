@@ -9,6 +9,8 @@ import '/src/foundation.css'
 import '/src/patient.css'
 import '/src/polish.css'
 import '/src/patient/portal.css'
+const fixture=window.ownerBranches={auth:1,adopted:[],feedback:[]}
+const readAuth=()=>fixture.auth
 const week = { 1: { open: '08:00', close: '17:00' }, 2: { open: '08:00', close: '17:00' } }
 function Fixture() {
   const [branches, setBranches] = useState(Array.from({length: 3}, (_, i) => ({ id: `b${i+1}`, branchCode: `BRC-${'ABC'[i]}`, name: `Synthetic branch ${i+1}`, city: 'Test city', address: 'Synthetic address', phone: 'Test phone', email: '', status: ['Open', 'Temporarily Closed', 'Inactive'][i], threshold: 80, open: '08:00', close: '17:00', weeklyHours: week, latitude: null, longitude: null })))
@@ -17,8 +19,8 @@ function Fixture() {
   const services = Array.from({length:4}, (_, i) => ({id:`svc${i+1}`, name:`Synthetic service ${i+1}`, duration:30, category:'Test category', status:'Active'}))
   return React.createElement(React.Fragment, null,
     React.createElement('p', {role:'status'}, notice),
-    React.createElement(BranchesPage, {store: { session: {serverUserId:'synthetic-owner',userId:'owner',role:'owner',active:true}, state: {branches, services, branchServices, persons:[{id:'owner-person'}], users:[{id:'owner',personId:'owner-person',role:'Owner / Admin',status:'Active',permissions:['all']}],staff:[]}, toast: setNotice, actions: {
-      adoptBranchFromServer(id, record) { setBranches(rows => rows.map(row => row.id === id ? record : row)); return {ok:true} },
+    React.createElement(BranchesPage, {store: { getAuthGeneration:readAuth,session: {serverUserId:'synthetic-owner',userId:'owner',role:'owner',active:true}, state: {branches, services, branchServices, persons:[{id:'owner-person'}], users:[{id:'owner',personId:'owner-person',role:'Owner / Admin',status:'Active',permissions:['all']}],staff:[]}, toast:(...args)=>{fixture.feedback.push(args);setNotice(args[0])}, actions: {
+      adoptBranchFromServer(id, record) { fixture.adopted.push({id,record});setBranches(rows => rows.map(row => row.id === id ? record : row)); return {ok:true} },
       adoptBranchServiceFromServer(branchId, serviceId, record) { setBranchServices(rows => [...rows.filter(row => !(row.branchId===branchId && row.serviceId===serviceId)),record]); return {ok:true} }
     }}}))
 }

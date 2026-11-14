@@ -206,12 +206,12 @@ export function listBranchServices() { return request('/api/branch-services') }
 export function listStaff() { return request('/api/staff') }
 export function listDentists() { return request('/api/dentists') }
 
-export function updateBranch(legacyRef, payload) {
-  return request(`/api/branches/${encodeURIComponent(legacyRef)}`, { method: 'PATCH', body: JSON.stringify(payload) })
+export function updateBranch(legacyRef, payload, beforeDispatch) {
+  return request(`/api/branches/${encodeURIComponent(legacyRef)}`, { method: 'PATCH', body: JSON.stringify(payload), beforeDispatch })
 }
 
-export function setBranchService(payload) {
-  return request('/api/branch-services', { method: 'POST', body: JSON.stringify(payload) })
+export function setBranchService(payload, beforeDispatch) {
+  return request('/api/branch-services', { method: 'POST', body: JSON.stringify(payload), beforeDispatch })
 }
 
 export function updateStaffProfile(legacyRef, payload, beforeDispatch) {
@@ -243,7 +243,7 @@ export function listAppointments(params) { return request(`/api/appointments${qu
 export function getAppointment(id) { return request(`/api/appointments/${encodeURIComponent(id)}`) }
 export function appointmentAvailability(params) { return request(`/api/appointments/availability${query(params)}`) }
 export function appointmentRecommendation(params) { return request(`/api/appointments/recommendation${query(params)}`) }
-export function createAppointment(payload, key) { return command('/api/appointments', payload, key) }
+export function createAppointment(payload, key, beforeDispatch) { return command('/api/appointments', payload, key, beforeDispatch) }
 export function rescheduleAppointment(id, payload, key) { return command(`/api/appointments/${encodeURIComponent(id)}/reschedule`, payload, key) }
 export function cancelAppointmentRemote(id, payload, key) { return command(`/api/appointments/${encodeURIComponent(id)}/cancel`, payload, key) }
 // Appointment-only lifecycle command: the pre-arrival 'no-show' (Check-In and treatment progression are Visit commands).

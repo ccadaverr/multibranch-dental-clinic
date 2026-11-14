@@ -36,7 +36,7 @@ export function createAppointmentFlow({ getState, getSession, getActions, refres
     // One mounted selected workflow owns this command; no browser persistence or local clinical mutation.
     beginSelectedFollowup(form, { selection, backend, isCurrent, key = appointmentsApi.commandKey(), timeoutMs = 30000 } = {}) {
       const intent = Object.freeze({ ...form }), selected = Object.freeze({ ...selection }), target = Object.freeze({ ...backend })
-      const actor = () => ({ session: getSession(), state: getState() })
+      const actor = () => ({ session: getSession(), state: getState(), getAuthGeneration })
       const identity = schedulingActorKey(actor())
       const owns = () => typeof isCurrent === 'function' && isCurrent() && getSession()?.role === 'staff' &&
         identity === schedulingActorKey(actor()) && canSchedule(actor(), selected.branchId)
@@ -72,7 +72,7 @@ export function createAppointmentFlow({ getState, getSession, getActions, refres
           try {
             let result
             try { result = await bounded(() => owns()
-              ? api.createSelectedFollowupAppointment(intent, { selection: selected, backend: target, key })
+              ? api.createSelectedFollowupAppointment(intent, { selection: selected, backend: target, key, beforeDispatch: owns })
               : { ok: false, outcome: 'obsolete' }) }
             catch { result = { ok: false, kind: 'network' } }
             if (!owns()) { phase = 'obsolete'; return { ok: false, outcome: phase } }

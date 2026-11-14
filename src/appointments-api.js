@@ -199,6 +199,9 @@ export function selectedFollowupProblem(form, selection, backend, key) {
 export function selectedFollowupReceipt(result, form, selection) {
   const row = result?.row, proof = result?.meta?.followup_link
   if (!result?.ok || !publicUlid(row?.id) || proof?.task_id !== selection?.taskId ||
+      // R2 permits selected booking only for Staff and creates Confirmed revision 1.
+      // A current appointment GET or contradictory lifecycle cannot replace that transaction receipt.
+      row.status !== 'Confirmed' || row.revision !== 1 ||
       proof?.appointment_id !== row.id || proof?.status !== 'Booked' || !taskRevision(proof?.revision) ||
       proof.revision !== selection.expectedRevision + 1 || row.patient?.id !== form.patientPublicId ||
       row.branch?.id !== form.branchId || row.service?.id !== form.serviceId ||
@@ -207,11 +210,11 @@ export function selectedFollowupReceipt(result, form, selection) {
 }
 
 /** Narrow detailed-response adapter. Ordinary callers retain {ok, row}; cookie/CSRF transport is unchanged. */
-export async function createSelectedFollowupAppointment(form, { selection, backend, key } = {}) {
+export async function createSelectedFollowupAppointment(form, { selection, backend, key, beforeDispatch } = {}) {
   const problem = selectedFollowupProblem(form, selection, backend, key ?? null)
   if (problem) return { ok: false, kind: 'validation', code: 'selected_context_invalid', message: problem }
   const payload = { ...appointmentPayload(form), followup_task_id: selection.taskId, followup_expected_revision: selection.expectedRevision }
-  const result = await api.createAppointment(payload, key)
+  const result = await api.createAppointment(payload, key, beforeDispatch)
   return result.ok ? { ok: true, row: result.data, meta: result.meta } : normalizeFailure(result)
 }
 

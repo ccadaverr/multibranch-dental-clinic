@@ -136,7 +136,7 @@ function BranchConfiguration({ store }) {
     const id=selected
     setSaveError('')
     try{
-      const result=await syncBranchUpdate(id,form)
+      const result=await syncBranchUpdate(id,form,()=>owner.current(ticket) && selectedRef.current===id && canAccessPage(state,store.session,'branches'))
       if(!owner.current(ticket))return
       if(!result.ok){const message=result.message||'Could not save branch changes.';setSaveError(message);toast(message,'warning');return}
       if(result.record?.id!==id){setSaveError('The saved branch could not be confirmed. Refresh before retrying.');return}
@@ -154,7 +154,7 @@ function BranchConfiguration({ store }) {
     const id=selected
     setSaveError('')
     try{
-      const result=await syncBranchServiceToggle(id,serviceId,!serviceActive(serviceId))
+      const result=await syncBranchServiceToggle(id,serviceId,!serviceActive(serviceId),()=>owner.current(ticket) && selectedRef.current===id && canAccessPage(state,store.session,'branches'))
       if(!owner.current(ticket))return
       if(!result.ok){const message=result.message||'Could not update service availability.';setSaveError(message);toast(message,'warning');return}
       if(result.record?.branchId!==id||result.record?.serviceId!==serviceId){setSaveError('The saved service availability could not be confirmed. Refresh before retrying.');return}

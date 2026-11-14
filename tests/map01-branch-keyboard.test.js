@@ -49,7 +49,30 @@ test('MAP-01 source guard retains authoritative publish and map synchronization'
   const source = readFileSync('src/pages/Admin.jsx', 'utf8')
   assert.match(source, /if \(coordinateError\) return toast\(coordinateError, 'warning'\)/)
   assert.match(source, /const id=selected/)
-  assert.match(source, /await syncBranchUpdate\(id,form\)/)
+  // Inspect the call shape without fixing its arity to the old, unguarded implementation.
+  const { parse } = require('@babel/parser')
+  let publish
+  const visit = (node, parent) => {
+    if (!node || typeof node !== 'object') return
+    if (node.type === 'CallExpression' && node.callee.name === 'syncBranchUpdate') publish = { node, parent }
+    for (const value of Object.values(node)) {
+      if (Array.isArray(value)) value.forEach(child => visit(child, node))
+      else if (value && typeof value === 'object') visit(value, node)
+    }
+  }
+  visit(parse(source, { sourceType: 'module', plugins: ['jsx'] }))
+  assert.equal(publish.parent.type, 'AwaitExpression')
+  assert.deepEqual(publish.node.arguments.slice(0, 2).map(arg => arg.name), ['id', 'form'])
+  const callback = publish.node.arguments[2]
+  assert.equal(callback.type, 'ArrowFunctionExpression')
+  const guard = new Function('owner', 'ticket', 'selectedRef', 'id', 'canAccessPage', 'state', 'store',
+    'return (' + source.slice(callback.start, callback.end) + ')')
+  for (const [current, selected, allowed, expected] of [[true,'b1',true,true],[false,'b1',true,false],[true,'b2',true,false],[true,'b1',false,false]]) {
+    const ticket = {}, state = {}, store = { session: {} }
+    const beforeDispatch = guard({ current: value => { assert.equal(value, ticket); return current } }, ticket, { current: selected }, 'b1',
+      (actualState, session, page) => { assert.equal(actualState, state); assert.equal(session, store.session); assert.equal(page, 'branches'); return allowed }, state, store)
+    assert.equal(beforeDispatch(), expected)
+  }
   assert.match(source, /if\(!result.ok\).*setSaveError\(message\);toast\(message,'warning'\);return/)
   assert.match(source, /actions.adoptBranchFromServer\(id,result.record\)/)
   assert.match(source, /if\(!owner.current\(ticket\)\)return/)
