@@ -70,22 +70,41 @@ function WorkScheduleSession({ store, role }) {
   const auth = store.getAuthGeneration?.()
   selectedRef.current = selected
   const owner = useRequestOwner(selected, store.getAuthGeneration)
+  const reading = useRef(null), roleTabsId = React.useId()
+  const roleKey = event => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+    event.preventDefault()
+    const next = event.key === 'Home' ? 'dentist' : event.key === 'End' ? 'staff' : event.currentTarget.dataset.scheduleRole === 'dentist' ? 'staff' : 'dentist'
+    setScheduleRole(next)
+    event.currentTarget.parentElement.querySelector(`[data-schedule-role="${next}"]`)?.focus()
+  }
   const load = async () => {
-    const request = ++generation.current, auth = store.getAuthGeneration?.()
-    setLoading(true)
+    if (!live.current || reading.current) return false
+    const auth = store.getAuthGeneration?.()
+    if (store.getAuthGeneration && auth == null) return false
+    const request = ++generation.current
+    reading.current = request; setLoading(true)
     try {
       const r = await workSchedules()
-      if (!live.current || request !== generation.current || auth !== store.getAuthGeneration?.()) return
-      if (!r.ok || !Array.isArray(r.data?.dentists) || !Array.isArray(r.data?.branches) || !Array.isArray(r.data?.exceptions) || !r.data?.weekdays) {
-        setError(r.message || 'Work schedules could not be loaded.'); return
+      if (!live.current || request !== generation.current || auth !== store.getAuthGeneration?.()) return false
+      if (!r?.ok || !Array.isArray(r.data?.dentists) || !Array.isArray(r.data?.branches) || !Array.isArray(r.data?.exceptions) || !r.data?.weekdays) {
+        if (r?.ok || ['unauthenticated','forbidden'].includes(r?.kind)) { setData(null); setAffected(null) }
+        setError('Work schedules could not be loaded. Retry before changing a schedule.'); return false
       }
       setData(r.data); setError(''); setApproved(r.data.wording_approved)
       const ownDentist = role === 'dentist' ? (r.data.dentists.find(d => d.id === store?.session?.dentistId || d.userId === store?.session?.userId)) : null
       setSelected(s => r.data.dentists.some(d => d.id === s) ? s : ownDentist?.id || r.data.dentists[0]?.id || '')
-    } catch { if (live.current && request === generation.current) setError('Work schedules could not be loaded. Try again.') }
-    finally { if (live.current && request === generation.current) setLoading(false) }
+      return true
+    } catch { if (live.current && request === generation.current && auth === store.getAuthGeneration?.()) setError('Work schedules could not be loaded. Try again.'); return false }
+    finally {
+      if (reading.current === request) reading.current = null
+      if (live.current && request === generation.current) {
+        if (auth !== store.getAuthGeneration?.()) { setData(null); setAffected(null); setError('Your session changed. Refresh your session before viewing schedules.') }
+        setLoading(false)
+      }
+    }
   }
-  React.useLayoutEffect(() => { live.current = true; load(); return () => { live.current = false; generation.current++; affectedGeneration.current++ } }, [])
+  React.useLayoutEffect(() => { live.current = true; load(); return () => { live.current = false; generation.current++; affectedGeneration.current++; reading.current = null } }, [])
   const dentist = data?.dentists.find(d => d.id === selected)
   const dutyBranches = role === 'staff'
     ? (dentist?.branches || []).filter(branch => data?.duty?.rows?.some(row => row.dentist_id === dentist.id && row.branch_id === branch.id))
@@ -98,24 +117,26 @@ function WorkScheduleSession({ store, role }) {
       if (live.current && request === affectedGeneration.current && selectedRef.current === id && auth === store.getAuthGeneration?.() && r.ok) { setAffected(r.data.affected); setApproved(r.data.wording_approved) }
     } catch { /* The affected list remains unavailable; no care action is inferred. */ }
   }
-  useEffect(() => { setAffected(null); refreshAffected(); return () => { affectedGeneration.current++ } }, [selected])
+  useEffect(() => { setAffected(null); refreshAffected(); return () => { affectedGeneration.current++ } }, [selected, data])
   const after = r => { if (!live.current || selectedRef.current !== dentist?.id || auth !== store.getAuthGeneration?.()) return; affectedGeneration.current++; if (r.data?.affected) setAffected(r.data.affected); load() }
   const currentToast = (...args) => { if (live.current && selectedRef.current === dentist?.id && auth === store.getAuthGeneration?.()) toast(...args) }
   const editable = dentist?.branches.some(b => b.editable)
-  const canEdit = role === 'owner' && editable && !error
+  const canEdit = role === 'owner' && editable && !error && !loading
   const staffSessionKey = JSON.stringify([store?.session?.serverUserId, store?.session?.userId, store?.session?.role, store?.session?.active, store?.session?.branchScopes])
 
   return <div className="st-page">
     <PageHeader kicker={role === 'dentist' ? 'My hours' : role === 'owner' ? 'Administration' : 'Team'} title={role === 'dentist' ? 'My work hours' : 'Work schedules'}
+      aside={<RefreshButton title={error ? 'Retry work schedules' : 'Refresh work schedules'} ariaLabel={error ? 'Retry work schedules' : 'Refresh work schedules'} loading={loading} onClick={load}/>}
       text="Each dentist’s weekly hours per branch, and dated exceptions. Online booking, the front desk, walk-ins and the calendar use only these hours, inside the branch’s opening hours and minus approved leave. A change never cancels an appointment."/>
     {role === 'staff' && <Notice tone="info" title="Staff shift profiles are read-only">Only the Clinic Owner can change Staff shift profiles. A profile's hours do not confirm weekday coverage. Request time off under Leave.</Notice>}
-    {error && <div role="alert"><Notice tone="warning" title="Unavailable">{error} {data && 'Showing the last loaded schedule.'} <Button variant="ghost" disabled={loading} onClick={load}>Retry work schedules</Button></Notice></div>}
+    {error && <div role="alert"><Notice tone="warning" title="Unavailable">{error} {data && 'Showing the last loaded schedule.'}</Notice></div>}
     {role !== 'dentist' && (
       <div className="st-role-toggle" role="tablist" aria-label="Schedule role selector" style={{display:'flex',gap:'8px',marginBottom:'12px'}}>
-        <Button variant={scheduleRole === 'dentist' ? 'primary' : 'soft'} size="sm" onClick={() => setScheduleRole('dentist')} role="tab" aria-selected={scheduleRole === 'dentist'}>Dentist schedules</Button>
-        <Button variant={scheduleRole === 'staff' ? 'primary' : 'soft'} size="sm" onClick={() => setScheduleRole('staff')} role="tab" aria-selected={scheduleRole === 'staff'}>Staff schedules</Button>
+        <Button variant={scheduleRole === 'dentist' ? 'primary' : 'soft'} id={`${roleTabsId}-dentist`} data-schedule-role="dentist" aria-controls={`${roleTabsId}-panel`} tabIndex={scheduleRole === 'dentist' ? 0 : -1} onKeyDown={roleKey} onClick={() => setScheduleRole('dentist')} role="tab" aria-selected={scheduleRole === 'dentist'}>Dentist schedules</Button>
+        <Button variant={scheduleRole === 'staff' ? 'primary' : 'soft'} id={`${roleTabsId}-staff`} data-schedule-role="staff" aria-controls={`${roleTabsId}-panel`} tabIndex={scheduleRole === 'staff' ? 0 : -1} onKeyDown={roleKey} onClick={() => setScheduleRole('staff')} role="tab" aria-selected={scheduleRole === 'staff'}>Staff schedules</Button>
       </div>
     )}
+    <div id={`${roleTabsId}-panel`} role={role !== 'dentist' ? 'tabpanel' : undefined} aria-labelledby={role !== 'dentist' ? `${roleTabsId}-${scheduleRole}` : undefined}>
     {scheduleRole === 'staff' && role !== 'dentist' ? (
       <StaffScheduleProfiles key={staffSessionKey} role={role} session={store?.session} getAuthGeneration={store.getAuthGeneration}/>
     ) : (
@@ -145,12 +166,13 @@ function WorkScheduleSession({ store, role }) {
         </Card>
         {dentist && <WeeklyGrid dentist={dentist} data={data} key={`weekly:${dentist.id}`} toast={currentToast} onSaved={after} canEdit={canEdit} role={role} getAuthGeneration={store.getAuthGeneration}/>}
         {dentist && <Card title="Affected appointments" subtitle="The next 90 days: booked times this dentist no longer covers.">
-          <AffectedAppointments rows={affected} key={dentist.id} wordingApproved={approved} toast={currentToast} canAct={role !== 'dentist'} onChanged={() => { if (live.current && selectedRef.current === dentist.id && auth === store.getAuthGeneration?.()) refreshAffected() }}
+          <AffectedAppointments rows={affected} key={dentist.id} wordingApproved={approved} toast={currentToast} canAct={role !== 'dentist' && !error && !loading} onChanged={() => { if (live.current && selectedRef.current === dentist.id && auth === store.getAuthGeneration?.()) refreshAffected() }}
             onNotify={() => notifyScheduleAffected(dentist.id)}/>
         </Card>}
         <Exceptions data={data} dentist={dentist} key={`exceptions:${dentist?.id || 'none'}`} toast={currentToast} onSaved={after} canEdit={canEdit} getAuthGeneration={store.getAuthGeneration}/>
       </>
     )}
+    </div>
   </div>
 }
 
@@ -174,32 +196,51 @@ export function staffShiftSummary(row) {
 const useStaffLayoutEffect = typeof window === 'undefined' ? useEffect : React.useLayoutEffect
 
 export function StaffScheduleProfiles({ role, session, getAuthGeneration }) {
-  const [snapshot, setSnapshot] = useState(null), [error, setError] = useState(''), [selected, setSelected] = useState(''), [saving, setSaving] = useState(false)
-  const live = useRef(false), generation = useRef(0)
+  const [snapshot, setSnapshot] = useState(null), [error, setError] = useState(''), [selected, setSelected] = useState(''), [saving, setSaving] = useState(false), [loading, setLoading] = useState(true)
+  const live = useRef(false), generation = useRef(0), reading = useRef(null)
   const authorized = !!session?.serverUserId && session.active && session.role === role && ['owner', 'staff'].includes(role)
   const load = async () => {
-    if (!live.current || !authorized) return
-    const request = ++generation.current, auth = getAuthGeneration?.()
+    if (!live.current || !authorized || reading.current || saving) return false
+    const auth = getAuthGeneration?.()
+    if (getAuthGeneration && auth == null) { setSnapshot(null); setError('Your session is unavailable. Sign in again before viewing Staff profiles.'); setLoading(false); return false }
+    const ticket = {request: ++generation.current, auth}
+    reading.current = ticket; setLoading(true)
+    const current = () => live.current && generation.current === ticket.request && auth === getAuthGeneration?.()
     try {
       const result = await workSchedules()
-      if (!live.current || generation.current !== request || (getAuthGeneration && (auth == null || auth !== getAuthGeneration()))) return
-      if (!result.ok || !Array.isArray(result.data?.staff)) {
-        if (['unauthenticated', 'forbidden'].includes(result.kind)) setSnapshot(null)
-        setError(result.message || 'Staff shift profiles could not be loaded.'); return
+      if (!current()) return false
+      const rows = result?.data?.staff
+      const ids = new Set()
+      const valid = Array.isArray(rows) && Array.isArray(result?.data?.branches) && rows.every(row => {
+        if (typeof row?.id !== 'string' || !row.id.trim() || ids.has(row.id)) return false
+        ids.add(row.id); return true
+      })
+      if (!result?.ok || !valid) {
+        if (['unauthenticated', 'forbidden'].includes(result?.kind) || result?.ok) setSnapshot(null)
+        setError('Staff shift profiles could not be loaded or matched. Retry before editing.'); return false
       }
-      setSnapshot(result.data); setError('')
-    } catch { if (live.current && generation.current === request) setError('Staff shift profiles could not be loaded.') }
+      setSnapshot(result.data); setError(''); return true
+    } catch { if (current()) setError('Staff shift profiles could not be loaded.'); return false }
+    finally {
+      if (reading.current === ticket) reading.current = null
+      if (live.current && generation.current === ticket.request) {
+        if (auth !== getAuthGeneration?.()) { setSnapshot(null); setError('Your session changed. Refresh your session before viewing Staff profiles.') }
+        setLoading(false)
+      }
+    }
   }
-  useStaffLayoutEffect(() => { live.current = true; load(); return () => { live.current = false; generation.current++ } }, [])
+  useStaffLayoutEffect(() => { live.current = true; load(); return () => { live.current = false; generation.current++; reading.current = null } }, [])
   const staff = staffScheduleProfiles(snapshot, session, role)
   const current = staff.find(s => s.id === selected) || staff[0]
   const summary = current ? staffShiftSummary(current) : null
   if (!authorized) return <Notice title="Clinic server required">Staff shift profiles require an active Staff or Owner server session. Historical workspace profiles are not shown as live schedules.</Notice>
-  return <Card title="Staff shift profiles" subtitle="Profile hours and assignment; weekday coverage is not provided.">
-    {error && <div role="alert" tabIndex={0}><p>{error} {snapshot && 'Showing the last loaded profiles.'}</p><Button variant="ghost" onClick={load}>Retry staff profiles</Button></div>}
-    {!snapshot ? !error && <p role="status">Loading Staff profiles…</p> : !staff.length ? <p>No Staff shift profiles are available in your branch scope.</p> : <>
+  return <Card title="Staff shift profiles" subtitle="Profile hours and assignment; weekday coverage is not provided."
+    actions={<RefreshButton title={error ? 'Retry staff profiles' : 'Refresh staff profiles'} ariaLabel={error ? 'Retry staff profiles' : 'Refresh staff profiles'} loading={loading} disabled={saving} onClick={load}/>} >
+    {error && <div role="alert" tabIndex={0}><p>{error} {snapshot && 'Showing the last loaded profiles.'}</p></div>}
+    {snapshot && loading && <p role="status">Refreshing Staff profiles…</p>}
+    {!snapshot ? loading && <p role="status">Loading Staff profiles…</p> : !staff.length ? <p>No Staff shift profiles are available in your branch scope.</p> : <>
       <Field label="Staff member"><select value={summary.id} disabled={saving} onChange={e => setSelected(e.target.value)}>{staff.map(s => <option key={s.id} value={s.id}>{s.name || 'Staff member'} · {s.branch?.name || 'No branch recorded'}</option>)}</select></Field>
-      <StaffShiftProfile key={summary.id} staff={summary} role={role} branches={snapshot.branches || []} canEdit={role === 'owner' && !error} getAuthGeneration={getAuthGeneration}
+      <StaffShiftProfile key={summary.id} staff={summary} role={role} branches={snapshot.branches || []} canEdit={role === 'owner' && !error && !loading} getAuthGeneration={getAuthGeneration}
         onPending={setSaving} onSaved={record => {
           // Adopt only this profile's authoritative response, never the currently selected row.
           generation.current++

@@ -58,7 +58,7 @@ function StaffDashboard({ activeBranch, setPage, state, session, store }) {
       <StatCard label="HMO needs action" value={pendingHmo.length} hint={`${overdueHmo.length} beyond follow-up threshold`} tone="amber" icon={<Icon name="shield" size={18}/>}/>
       <StatCard label="Open inquiries" value={session?.serverUserId?(serverInquiries===null?'…':serverInquiries==='unavailable'?'Unavailable':serverInquiries):demoOpenInquiries.length} hint={session?.serverUserId&&serverInquiries==='unavailable'?'The inquiry count could not be loaded':'Assigned to you'} tone="purple" icon={<Icon name="message" size={18}/>}/>
     </div>
-    <StaffOnDuty session={session} activeBranch={activeBranch}/>
+    <StaffOnDuty session={session} activeBranch={activeBranch} getAuthGeneration={store.getAuthGeneration}/>
     <div className="ops-grid">
       <Card title="Today’s patient flow" subtitle="Upcoming arrivals and current statuses" actions={<button className="text-link" onClick={()=>setPage('appointments')}>View all appointments</button>}>
         <div className="schedule-board elevated">{todays.slice(0,6).map(a=><div key={a.id} className="schedule-chip"><div className="schedule-time-pill">{displayTime(a.start)}</div><div><strong>{patientName(a.patientId,state.patients)}</strong><small>{a.service} • {dentistName(a.dentistId,state.dentists)}</small></div><Status>{a.status}</Status></div>)}</div>

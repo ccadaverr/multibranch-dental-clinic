@@ -7,7 +7,7 @@ import { build } from 'esbuild'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 
-// Authored, not executed. Synthetic SSR/source contracts; browser scenarios below remain deferred.
+// Database-free synthetic SSR/source contracts; browser workflow uses the fixture below.
 const require = createRequire(import.meta.url)
 const bundle = await build({ entryPoints: ['src/pages/Staffing.jsx'], bundle: true, write: false, platform: 'node', format: 'esm', loader: { '.css': 'empty' }, plugins: [{ name: 'react', setup(b) { b.onResolve({ filter: /^react$/ }, () => ({ path: pathToFileURL(require.resolve('react')).href, external: true })) } }] })
 const { staffShiftSummary, staffScheduleProfiles, StaffShiftProfile, StaffScheduleProfiles } = await import('data:text/javascript;base64,' + Buffer.from(bundle.outputFiles[0].text).toString('base64'))
@@ -101,7 +101,7 @@ test('SCHED-01 source guards preserve keyboard form feedback and Dentist workflo
 // Deferred browser entry point for the synthetic fixture; invoke only during authorized acceptance.
 export async function runSched01Browser(page, base = 'http://127.0.0.1:5176') {
   await page.goto(`${base}/tests/fixtures/sched01-staff-roster.html`)
-  const select = page.getByLabel('Staff member', { exact: true })
+  const select = page.getByRole('combobox', { name: 'Staff member', exact: true })
   await select.waitFor()
   await select.selectOption('s2'); await select.selectOption('s1'); await select.selectOption('s2')
   await page.getByRole('button', { name: 'Change shift profile', exact: true }).click()
@@ -111,12 +111,12 @@ export async function runSched01Browser(page, base = 'http://127.0.0.1:5176') {
   await page.getByRole('button', { name: 'Change shift profile', exact: true }).click()
   await page.getByLabel('Shift start', { exact: true }).fill('09:15')
   await page.getByLabel('Shift end', { exact: true }).fill('18:15')
-  await page.getByLabel('Assigned branch', { exact: true }).selectOption('b2')
+  await page.getByRole('combobox', { name: 'Assigned branch', exact: true }).selectOption('b2')
   await page.evaluate(() => { window.sched01.fail = true })
   await page.getByRole('button', { name: 'Save shift profile', exact: true }).click()
   await page.getByRole('alert').waitFor()
   assert.equal(await page.getByLabel('Shift start', { exact: true }).inputValue(), '09:15')
-  assert.equal(await page.getByLabel('Assigned branch', { exact: true }).inputValue(), 'b2')
+  assert.equal(await page.getByRole('combobox', { name: 'Assigned branch', exact: true }).inputValue(), 'b2')
   await page.evaluate(() => { window.sched01.fail = false; window.sched01.hold = true })
   await page.getByRole('button', { name: 'Save shift profile', exact: true }).click()
   await page.waitForFunction(() => window.sched01.requests.length === 2 && window.sched01.release)
@@ -126,21 +126,27 @@ export async function runSched01Browser(page, base = 'http://127.0.0.1:5176') {
   assert.equal(await page.evaluate(() => window.sched01.requests.length), 2)
   // Losing the editor's Owner context must suppress a delayed response and its success feedback.
   await page.evaluate(() => window.sched01.setRole('staff'))
-  await page.getByLabel('Staff member', { exact: true }).waitFor()
+  await page.getByRole('combobox', { name: 'Staff member', exact: true }).waitFor()
   await page.evaluate(() => { window.sched01.hold = false; window.sched01.release() })
   assert.equal(await page.getByRole('button', { name: 'Change shift profile', exact: true }).count(), 0)
   await page.evaluate(() => window.sched01.setRole('owner'))
-  await page.getByLabel('Staff member', { exact: true }).waitFor()
+  await page.getByRole('combobox', { name: 'Staff member', exact: true }).waitFor()
   await page.getByRole('button', { name: 'Change shift profile', exact: true }).click()
   await page.getByRole('button', { name: 'Save shift profile', exact: true }).click()
   await page.getByRole('status').filter({ hasText: 'Shift profile saved for Synthetic Staff A.' }).waitFor()
   assert.equal(await page.getByRole('button', { name: 'Change shift profile', exact: true }).evaluate(el => el === document.activeElement), true)
   const calls = await page.evaluate(() => window.sched01.requests)
   assert.ok(calls.every(call => call.id === 's1'))
-  assert.deepEqual(calls.at(-1).body, { shift_start: '09:15', shift_end: '18:15', branch_ref: 'b2' })
+  // The first explicit reassignment and its unchanged retry retain the branch.
+  assert.deepEqual(calls[0].body, { shift_start: '09:15', shift_end: '18:15', branch_ref: 'b2' })
+  assert.deepEqual(calls[1].body, calls[0].body)
+  // The authoritative reload already shows b2. A later shift-only save must
+  // not repeat an assignment instruction (which can replace account scopes).
+  assert.deepEqual(calls.at(-1).body, { shift_start: '09:15', shift_end: '18:15' })
+  assert.equal(await page.locator('dl dd').filter({ hasText: 'Synthetic Branch B' }).count(), 1)
   await page.evaluate(() => window.sched01.setRole('staff'))
-  await page.getByLabel('Staff member', { exact: true }).waitFor()
-  assert.deepEqual(await page.getByLabel('Staff member', { exact: true }).locator('option').evaluateAll(options => options.map(option => option.value)), ['s2'])
+  await page.getByRole('combobox', { name: 'Staff member', exact: true }).waitFor()
+  assert.deepEqual(await page.getByRole('combobox', { name: 'Staff member', exact: true }).locator('option').evaluateAll(options => options.map(option => option.value)), ['s2'])
   for (const width of [390, 768, 1024, 1440]) {
     await page.setViewportSize({ width, height: 900 })
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)

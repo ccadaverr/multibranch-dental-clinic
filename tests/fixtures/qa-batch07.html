@@ -1,0 +1,32 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synthetic roster and duty recovery</title></head><body><main id="root"></main><script type="module">
+import React,{useRef,useState} from 'react'
+import {createRoot} from 'react-dom/client'
+import {StaffScheduleProfiles,WorkSchedulesPage} from '/src/pages/Staffing.jsx'
+import {StaffOnDuty} from '/src/pages/StaffOnDuty.jsx'
+import {setClockSource} from '/src/clock.js'
+import '/src/styles.css'
+import '/src/foundation.css'
+import '/src/patient.css'
+import '/src/public-site.css'
+import '/src/polish.css'
+import '/src/patient/portal.css'
+import '/src/landing.css'
+import '/src/automations.css'
+window.qa07={auth:1,feedback:[],instant:'2026-11-14T10:00:00+08:00'}
+setClockSource(()=>new Date(window.qa07.instant))
+function Fixture(){
+ const mode=new URLSearchParams(location.search).get('mode')||'profiles'
+ const [role,setRole]=useState(mode==='duty'?'staff':'owner'),[account,setAccount]=useState('A'),[scopes,setScopes]=useState(['b1']),[branch,setBranch]=useState('All Branches'),[mounted,setMounted]=useState(true)
+ Object.assign(window.qa07,{setRole,setAccount,setScopes,setBranch,setMounted})
+ const getAuthGeneration=useRef(()=>window.qa07.auth).current
+ const person={id:'person-'+account},user={id:'user-'+account,personId:person.id,role:role==='owner'?'Owner / Admin':role==='dentist'?'Dentist':'Staff',status:'Active',permissions:role==='owner'?['all']:['schedules'],branchId:'b1'}
+ const session={serverUserId:'server-'+account,userId:user.id,role,active:true,branchId:'b1',branchScopes:scopes,dentistId:role==='dentist'?'d1':null}
+ const state={persons:[person],users:[user],staff:[{userId:user.id,personId:person.id,branchId:'b1'}],dentists:[],branches:[{id:'b1',name:'Synthetic branch'}],appointments:[],clock:{timestamp:window.qa07.instant}}
+ const store={state,session,getAuthGeneration,toast:(...args)=>window.qa07.feedback.push(args)}
+ if(!mounted)return React.createElement('h1',null,'Synthetic destination')
+ if(mode==='duty')return React.createElement(StaffOnDuty,{session,activeBranch:branch,getAuthGeneration})
+ if(mode==='work')return React.createElement(WorkSchedulesPage,{store,role})
+ return React.createElement(StaffScheduleProfiles,{key:JSON.stringify([role,account,scopes]),role,session,getAuthGeneration})
+}
+createRoot(document.getElementById('root')).render(React.createElement(Fixture))
+</script></body></html>
