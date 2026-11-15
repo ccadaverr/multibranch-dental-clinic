@@ -26,6 +26,7 @@ class StaffProfileResource extends JsonResource
             'shiftStart' => $this->shift_start,
             'shiftEnd' => $this->shift_end,
             'available' => $this->available,
+            'revision' => \App\Services\Scheduling\StaffShiftRevision::for($this->resource),
         ];
     }
 }

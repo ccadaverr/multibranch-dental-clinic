@@ -11,7 +11,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 const require = createRequire(import.meta.url)
 const bundle = await build({ entryPoints: ['src/pages/Staffing.jsx'], bundle: true, write: false, platform: 'node', format: 'esm', loader: { '.css': 'empty' }, plugins: [{ name: 'react', setup(b) { b.onResolve({ filter: /^react$/ }, () => ({ path: pathToFileURL(require.resolve('react')).href, external: true })) } }] })
 const { staffShiftSummary, staffScheduleProfiles, StaffShiftProfile, StaffScheduleProfiles } = await import('data:text/javascript;base64,' + Buffer.from(bundle.outputFiles[0].text).toString('base64'))
-const row = { id: 's1', name: 'Synthetic Staff A', title: 'Receptionist', branch: { id: 'b1', name: 'Synthetic Branch A' }, shift_start: '08:30', shift_end: '17:45', available: true }
+const row = { id: 's1', name: 'Synthetic Staff A', title: 'Receptionist', branch: { id: 'b1', name: 'Synthetic Branch A' }, shift_start: '08:30', shift_end: '17:45', available: true, revision: 'a'.repeat(64) }
 const session = { serverUserId: 'account-staff', role: 'staff', active: true, branchScopes: ['b1'] }
 const htmlFor = (record = row, role = 'staff', canEdit = false) => renderToStaticMarkup(React.createElement(StaffShiftProfile, { staff: staffShiftSummary(record), role, canEdit, branches: [{ id: 'b1', name: 'Synthetic Branch A' }] }))
 
@@ -35,10 +35,11 @@ test('SCHED-01 missing information is not replaced with invented hours or availa
   assert.match(htmlFor({ id: 'missing' }), /Availability not provided/)
 })
 
-test('SCHED-01 server defaults are disclosed without claiming confirmed weekday coverage', () => {
+test('SCHED-01 stored hours and missing hours are distinguished without claiming weekday coverage', () => {
   const html = htmlFor({ ...row, shift_start: '09:00', shift_end: '18:00' })
-  assert.match(html, /may substitute 09:00–18:00/)
-  assert.match(html, /does not identify which values are defaults/)
+  assert.match(html, /stored profile hours/)
+  assert.match(html, /Missing hours remain unavailable/)
+  assert.doesNotMatch(html, /may substitute/)
   assert.match(html, /do not confirm attendance or coverage/)
   assert.doesNotMatch(html, /<ul class="st-week"/)
 })
@@ -80,7 +81,10 @@ test('SCHED-01 source guards capture the target, block duplicate saves and suppr
   assert.match(editor, /await updateStaffProfile\(id, payload, owns\)/)
   assert.match(editor, /if \(!live.current \|\| !allowed.current\) return/)
   assert.match(editor, /if \(result.data\?\.id !== id\)/)
-  assert.match(editor, /if \(!result.ok\) \{ setError\(firstError\(result\)\); return \}/)
+  assert.match(editor, /if \(!result.ok\)/)
+  assert.match(editor, /retainedCommand.current \|\| staffShiftCommand/)
+  assert.match(editor, /confirmedStaffShift\(result, id, payload, staff.branchRef\)/)
+  assert.match(editor, /setConflict\(result.kind === 'conflict'\)/)
   assert.doesNotMatch(editor, /setEditing\(false\);\s*setError\(firstError/)
   assert.match(source, /key=\{summary.id\}/)
   assert.match(source, /<select value=\{summary.id\} disabled=\{saving\}/)
@@ -138,11 +142,14 @@ export async function runSched01Browser(page, base = 'http://127.0.0.1:5176') {
   const calls = await page.evaluate(() => window.sched01.requests)
   assert.ok(calls.every(call => call.id === 's1'))
   // The first explicit reassignment and its unchanged retry retain the branch.
-  assert.deepEqual(calls[0].body, { shift_start: '09:15', shift_end: '18:15', branch_ref: 'b2' })
-  assert.deepEqual(calls[1].body, calls[0].body)
+  assert.deepEqual({ ...calls[0].body, operation_id: undefined }, { shift_start: '09:15', shift_end: '18:15', branch_ref: 'b2', expected_revision: 'a'.repeat(64), operation_id: undefined })
+  assert.deepEqual({ ...calls[1].body, operation_id: undefined }, { ...calls[0].body, operation_id: undefined })
   // The authoritative reload already shows b2. A later shift-only save must
   // not repeat an assignment instruction (which can replace account scopes).
-  assert.deepEqual(calls.at(-1).body, { shift_start: '09:15', shift_end: '18:15' })
+  assert.equal(calls.at(-1).body.shift_start, '09:15')
+  assert.equal(calls.at(-1).body.shift_end, '18:15')
+  assert.equal(Object.hasOwn(calls.at(-1).body, 'branch_ref'), false)
+  assert.equal(calls.at(-1).body.expected_revision, 'b'.repeat(64))
   assert.equal(await page.locator('dl dd').filter({ hasText: 'Synthetic Branch B' }).count(), 1)
   await page.evaluate(() => window.sched01.setRole('staff'))
   await page.getByRole('combobox', { name: 'Staff member', exact: true }).waitFor()

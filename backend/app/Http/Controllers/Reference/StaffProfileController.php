@@ -5,12 +5,16 @@ namespace App\Http\Controllers\Reference;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Reference\UpdateStaffProfileRequest;
 use App\Http\Resources\Reference\StaffProfileResource;
+use App\Models\AuditLog;
 use App\Models\Branch;
 use App\Models\StaffProfile;
+use App\Models\User;
 use App\Models\UserBranchScope;
 use App\Services\Audit\AuditService;
+use App\Services\Scheduling\StaffShiftRevision;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class StaffProfileController extends Controller
 {
@@ -29,9 +33,40 @@ class StaffProfileController extends Controller
     public function update(UpdateStaffProfileRequest $request, StaffProfile $staffProfile)
     {
         return DB::transaction(function () use ($request, $staffProfile) {
+            // Recheck authority after waiting; middleware authorization can precede a concurrent revocation.
+            $actor = User::whereKey($request->user()->id)->lockForUpdate()->first();
+            abort_unless($actor && $actor->role->value === 'owner' && $actor->account_status === 'Active'
+                && $actor->auth_version === $request->user()->auth_version, 403);
             // Serialize this profile's assignments before locking the linked account used by scope replacement.
             $current = StaffProfile::whereKey($staffProfile->id)->lockForUpdate()->firstOrFail();
-            $attributes = $request->safe()->except('branch_ref');
+            $attributes = $request->safe()->except(['branch_ref', 'expected_revision', 'operation_id']);
+            $operation = $request->validated('operation_id');
+            $command = $request->validated();
+            ksort($command);
+            $fingerprint = hash('sha256', json_encode($command, JSON_THROW_ON_ERROR));
+            if ($operation) {
+                $prior = AuditLog::where('action', 'staff_profile.updated')->where('auditable_type', 'StaffProfile')
+                    ->where('auditable_public_id', $current->legacy_ref)->where('actor_user_id', $actor->id)
+                    ->where('payload->operation_id', $operation)->first();
+                if ($prior) {
+                    if (($prior->payload['fingerprint'] ?? null) !== $fingerprint) {
+                        return response()->json(['code' => 'staff_operation_conflict', 'message' => 'This operation was already used with different changes. Reload and review the profile.'], 409);
+                    }
+                    // This is the original committed receipt, even if the profile changed again afterwards.
+                    return response()->json(['data' => $prior->payload['receipt'] + ['revision' => StaffShiftRevision::combine($prior->payload['state_digest'], $prior->id)],
+                        'meta' => ['operation_id' => $operation, 'replayed' => true]]);
+                }
+                if (! hash_equals(StaffShiftRevision::for($current), $request->validated('expected_revision'))) {
+                    return response()->json(['code' => 'staff_revision_conflict', 'message' => 'This Staff profile changed. Your draft is preserved. Refresh and review the current profile before saving again.'], 409);
+                }
+            }
+
+            // Validate the complete resulting interval, including single-field PATCHes against stored hours.
+            $start = substr((string) ($attributes['shift_start'] ?? $current->shift_start), 0, 5);
+            $end = substr((string) ($attributes['shift_end'] ?? $current->shift_end), 0, 5);
+            if ($start >= $end) {
+                throw ValidationException::withMessages(['shift_end' => ['The shift end must be after its start.']]);
+            }
 
             if ($request->has('branch_ref')) {
                 $attributes['branch_id'] = $request->validated('branch_ref')
@@ -63,7 +98,19 @@ class StaffProfileController extends Controller
                 }
             }
 
-            return response()->json(['data' => new StaffProfileResource($current->fresh(['person', 'branch']))]);
+            $current = $current->fresh(['person', 'branch']);
+            $receipt = (new StaffProfileResource($current))->resolve($request);
+            unset($receipt['revision']);
+            $audit = app(AuditService::class)->record([
+                'action' => 'staff_profile.updated', 'category' => 'administrative', 'actor' => $actor,
+                'auditable_type' => 'StaffProfile', 'auditable_public_id' => $current->legacy_ref,
+                'branch_id' => $current->branch_id,
+                'payload' => ['operation_id' => $operation, 'fingerprint' => $fingerprint,
+                    'receipt' => $receipt, 'state_digest' => StaffShiftRevision::stateDigest($current->getAttributes())],
+            ]);
+
+            return response()->json(['data' => $receipt + ['revision' => StaffShiftRevision::digest($current->getAttributes(), $audit->id)],
+                'meta' => ['operation_id' => $operation, 'replayed' => false]]);
         });
     }
 }

@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {productionExpression,variableValue} from './support/source-behavior.js'
 import {requestLeave,cancelLeave,updateStaffProfile,__resetCsrfCacheForTests} from '../src/api-client.js'
+import {staffShiftCommand,confirmedStaffShift} from '../src/staff-shift-command.js'
 
 const confirmed=productionExpression('src/pages/Staffing.jsx',n=>n.type==='FunctionDeclaration'&&n.id?.name==='leaveRequestConfirmed',{
  addDays:(d,n)=>new Date(Date.parse(d+'T00:00:00Z')+n*864e5).toISOString().slice(0,10),
@@ -15,9 +16,12 @@ for(const [date,next]of [['2026-12-31','2027-01-01'],['2028-02-29','2028-03-01']
  const body={type:'vacation',start_date:date,end_date:date,private_note:null}
  assert.equal(confirmed(body,{id:'leave-A',type:'vacation',status:'Pending',starts_at:date+'T00:00:00+08:00',ends_at:next+'T00:00:00+08:00',private_note:null}),true)
 })
-function shift(reply=async()=>({ok:true,data:{id:'staff-A',branchId:'b1',branch:'Synthetic branch',shiftStart:'09:15:00',shiftEnd:'18:15:00'}})){
+const shiftOperation='11111111-1111-4111-8111-111111111111'
+function shift(reply=async()=>({ok:true,data:{id:'staff-A',branchId:'b1',branch:'Synthetic branch',shiftStart:'09:15:00',shiftEnd:'18:15:00',revision:'b'.repeat(64)},meta:{operation_id:shiftOperation,replayed:false}})){
  const calls=[],errors=[],saved=[],success=[],b={
-  staff:{id:'staff-A',name:'Synthetic Staff',branchRef:'b1'},start:'09:15',end:'18:15',branch:'b1',
+  staff:{id:'staff-A',name:'Synthetic Staff',branchRef:'b1',revision:'a'.repeat(64)},start:'09:15',end:'18:15',branch:'b1',
+  conflict:false,uncertain:false,retainedCommand:{current:null},staffShiftCommand,confirmedStaffShift,commandKey:()=>shiftOperation,
+  setUncertain:v=>{b.uncertain=v},setConflict:v=>{b.conflict=v},
   allowed:{current:true},live:{current:true},pending:{current:false},currentProfile:{current:'review-A'},reviewedProfile:{current:'review-A'},getAuthGeneration:()=>1,
   setSaving(){},setEditing(){},setError:v=>errors.push(v),setSuccess:v=>success.push(v),onPending(){},onSaved:r=>saved.push(r),restoreFocus:{current:false},
   firstError:r=>r.message,staffShiftSummary:r=>({id:r.id,start:r.shiftStart?.slice(0,5),end:r.shiftEnd?.slice(0,5),branchRef:r.branchId??''}),
@@ -27,7 +31,7 @@ function shift(reply=async()=>({ok:true,data:{id:'staff-A',branchId:'b1',branch:
  return{b,save,calls,errors,saved,success}
 }
 test('OWN-11 shift-only update omits branch instruction and adopts exact receipt',async()=>{
- const f=shift();await f.save();assert.deepEqual(JSON.parse(JSON.stringify(f.calls)),[{id:'staff-A',body:{shift_start:'09:15',shift_end:'18:15'}}]);assert.equal(f.saved.length,1);assert.match(f.success.at(-1),/Shift profile saved/)
+ const f=shift();await f.save();assert.deepEqual(JSON.parse(JSON.stringify(f.calls)),[{id:'staff-A',body:{shift_start:'09:15',shift_end:'18:15',expected_revision:'a'.repeat(64),operation_id:shiftOperation}}]);assert.equal(f.saved.length,1);assert.match(f.success.at(-1),/Shift profile saved/)
 })
 for(const [name,patch]of [['wrong ID',{id:'other'}],['wrong hours',{shiftStart:'08:15:00'}],['wrong branch',{branchId:'b2'}]])test('OWN-11 '+name+' receipt never becomes success',async()=>{
  const f=shift(async()=>({ok:true,data:{id:'staff-A',branchId:'b1',shiftStart:'09:15:00',shiftEnd:'18:15:00',...patch}}));await f.save();assert.deepEqual(f.saved,[]);assert.match(f.errors.at(-1),/could not be confirmed/);assert.equal(f.success.filter(Boolean).length,0)
@@ -47,6 +51,17 @@ for(const changed of ['allowed','live','currentProfile'])test('OWN-11 late save 
 test('OWN-11 same-tick repeated save dispatches once',async()=>{
  let release;const f=shift(()=>new Promise(r=>{release=r})),first=f.save();await f.save();assert.equal(f.calls.length,1)
  release({ok:true,data:{id:'staff-A',branchId:'b1',shiftStart:'09:15:00',shiftEnd:'18:15:00'}});await first
+})
+test('OWN-11 uncertain save retries the identical operation and preserves its draft',async()=>{
+ const f=shift(async()=>({ok:false,kind:'network'}));await f.save()
+ assert.equal(f.b.uncertain,true);assert.equal(f.saved.length,0)
+ const command=JSON.stringify(f.calls[0]);await f.save()
+ assert.equal(JSON.stringify(f.calls[1]),command)
+ assert.match(f.errors.at(-1),/Retry this save/)
+})
+test('OWN-11 stale revision preserves the form and prevents another dispatch until reviewed',async()=>{
+ const f=shift(async()=>({ok:false,kind:'conflict',message:'Refresh and review'}));await f.save();await f.save()
+ assert.equal(f.b.conflict,true);assert.equal(f.calls.length,1);assert.equal(f.saved.length,0)
 })
 for(const [name,run,path,method,body]of [
  ['leave request',guard=>requestLeave(partial,guard),'/api/leave','POST',partial],

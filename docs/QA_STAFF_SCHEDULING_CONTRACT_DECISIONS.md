@@ -1,5 +1,7 @@
 # Staff scheduling QA — supported contract and remaining decisions
 
+**2026-11-15 Joevan extension:** the flat-profile revision/replay gaps described in this historical snapshot now have a source implementation in [ROSTER_DUTY_API_V1.md](contracts/ROSTER_DUTY_API_V1.md). PostgreSQL acceptance is still pending. The unresolved weekday/exception/duty policy decisions below remain open; this extension does not establish a dated Staff roster or close OWN-11.
+
 Scope: OWN-11 (Joevan / Richmon), STF-07 (Jaztin / Celin). Original definitions are in `FINALS-QA-REVISIONS.md` revisions OWN-11 and STF-07. Source inspection and synthetic frontend tests establish the behavior below; no database, deployed backend or persisted acceptance was executed.
 
 ## Supported now

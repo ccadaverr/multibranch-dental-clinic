@@ -6,6 +6,7 @@ import {
 } from '../api-client.js'
 import { commandKey, rescheduleAppointment } from '../appointments-api.js'
 import { dutyForBranch } from '../work-hours-duty.js'
+import { confirmedStaffShift, staffShiftCommand, validStaffRevision } from '../staff-shift-command.js'
 import '../den12-work-hours.css'
 import { schedulingActorKey, useRequestOwner } from '../appointment-ui.js'
 import { canAccessPage } from '../safeguards.js'
@@ -190,7 +191,7 @@ export function staffShiftSummary(row) {
     branch: typeof row.branch === 'object' ? row.branch?.name || 'No branch recorded' : row.branch || 'No branch recorded',
     branchRef: typeof row.branch === 'object' ? row.branch?.id || '' : row.branchId || '',
     start: time(row.shift_start ?? row.shiftStart), end: time(row.shift_end ?? row.shiftEnd),
-    available: typeof row.available === 'boolean' ? row.available : null }
+    available: typeof row.available === 'boolean' ? row.available : null, revision: row.revision }
 }
 
 const useStaffLayoutEffect = typeof window === 'undefined' ? useEffect : React.useLayoutEffect
@@ -244,7 +245,7 @@ export function StaffScheduleProfiles({ role, session, getAuthGeneration }) {
         onPending={setSaving} onSaved={record => {
           // Adopt only this profile's authoritative response, never the currently selected row.
           generation.current++
-          setSnapshot(previous => ({ ...previous, staff: previous.staff.map(row => row.id === record.id ? { ...row, branch: record.branchId ? { id: record.branchId, name: record.branch } : null, shift_start: record.shiftStart, shift_end: record.shiftEnd, available: record.available } : row) }))
+          setSnapshot(previous => ({ ...previous, staff: previous.staff.map(row => row.id === record.id ? { ...row, branch: record.branchId ? { id: record.branchId, name: record.branch } : null, shift_start: record.shiftStart, shift_end: record.shiftEnd, available: record.available, revision: record.revision } : row) }))
         }}/>
     </>}
   </Card>
@@ -253,15 +254,17 @@ export function StaffScheduleProfiles({ role, session, getAuthGeneration }) {
 export function StaffShiftProfile({ staff, role, branches, canEdit, getAuthGeneration, onPending = () => {}, onSaved = () => {} }) {
   const [editing, setEditing] = useState(false), [start, setStart] = useState(staff.start), [end, setEnd] = useState(staff.end), [branch, setBranch] = useState(staff.branchRef)
   const [saving, setSaving] = useState(false), [error, setError] = useState(''), [success, setSuccess] = useState('')
+  const [uncertain, setUncertain] = useState(false), [conflict, setConflict] = useState(false)
+  const retainedCommand = useRef(null)
   const live = useRef(false), pending = useRef(false), allowed = useRef(false), controls = useRef(null), restoreFocus = useRef(false)
   const currentProfile = useRef(''), reviewedProfile = useRef('')
-  currentProfile.current = JSON.stringify([staff.id, staff.branchRef, staff.start, staff.end, staff.available])
+  currentProfile.current = JSON.stringify([staff.id, staff.branchRef, staff.start, staff.end, staff.available, staff.revision])
   allowed.current = role === 'owner' && canEdit
   useStaffLayoutEffect(() => { live.current = true; return () => { live.current = false } }, [])
   useStaffLayoutEffect(() => { if (restoreFocus.current && !editing) { controls.current?.querySelector('button')?.focus(); restoreFocus.current = false } }, [editing])
   const save = async event => {
     event.preventDefault()
-    if (!allowed.current || !live.current || pending.current) return
+    if (!allowed.current || !live.current || pending.current || conflict) return
     if (reviewedProfile.current !== currentProfile.current) { setError('This Staff profile changed. Cancel, review the current profile and open Change shift profile again.'); return }
     if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(start) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(end) || end <= start) {
       setError('The shift end must be after its start.'); return
@@ -270,48 +273,54 @@ export function StaffShiftProfile({ staff, role, branches, canEdit, getAuthGener
     const auth = getAuthGeneration?.()
     const owns = () => live.current && allowed.current && currentProfile.current === review &&
       (!getAuthGeneration || (auth != null && auth === getAuthGeneration()))
-    const id = staff.id, payload = { shift_start: start, shift_end: end }
-    // Presence of branch_ref instructs the server to synchronize authorization scopes.
-    if (branch && branch !== staff.branchRef) payload.branch_ref = branch
+    const id = staff.id, payload = retainedCommand.current || staffShiftCommand(staff, start, end, branch, commandKey())
+    retainedCommand.current = payload
     pending.current = true; setSaving(true); onPending(true); setError(''); setSuccess('')
     try {
       const result = await updateStaffProfile(id, payload, owns)
       if (!live.current || !allowed.current) return
       if (getAuthGeneration && (auth == null || auth !== getAuthGeneration())) return
       if (currentProfile.current !== review) { setError('The Staff profile changed while saving. Close and reopen Staff schedules to verify the result.'); return }
-      if (!result.ok) { setError(firstError(result)); return }
-      if (result.data?.id !== id) { setError('The saved profile could not be confirmed. Close and reopen Staff schedules to reload.'); return }
-      const saved = staffShiftSummary(result.data || {})
-      if (saved.start !== payload.shift_start || saved.end !== payload.shift_end ||
-        saved.branchRef !== (payload.branch_ref ?? staff.branchRef)) {
+      if (!result.ok) {
+        const unknown = ['network', 'server'].includes(result.kind)
+        setUncertain(unknown); setConflict(result.kind === 'conflict')
+        if (!unknown) retainedCommand.current = null
+        setError(unknown ? 'The save could not be confirmed. Your draft is preserved. Retry this save to recover its original result.' : firstError(result)); return
+      }
+      if (result.data?.id !== id) { setUncertain(true); setError('The saved profile could not be confirmed. Retry this save to recover its original result.'); return }
+      if (!confirmedStaffShift(result, id, payload, staff.branchRef)) {
+        setUncertain(true)
         setError('The saved profile could not be confirmed. Close and reopen Staff schedules to reload.'); return
       }
+      retainedCommand.current = null; setUncertain(false); setConflict(false)
       onSaved(result.data)
       restoreFocus.current = true; setEditing(false); setSuccess(`Shift profile saved for ${staff.name}. Weekly coverage remains unavailable.`)
-    } catch { if (live.current && allowed.current) setError('Could not save this shift profile. Your changes are still in the form.') }
+    } catch { if (live.current && allowed.current) { setUncertain(true); setError('The save could not be confirmed. Your changes are still in the form. Retry this save to recover its original result.') } }
     finally { pending.current = false; if (live.current) { setSaving(false); onPending(false) } }
   }
   return <div className="st-gap">
     <h3>{staff.name}</h3><p className="au-muted">{staff.title}</p>
     <dl><dt>Assigned branch</dt><dd>{staff.branch}</dd><dt>Shift hours returned by the server</dt><dd>{staff.start && staff.end ? `${t12(staff.start)}–${t12(staff.end)}` : 'Shift hours unavailable'}</dd>
       <dt>Profile availability</dt><dd>{staff.available === true ? 'Marked available' : staff.available === false ? 'Marked unavailable' : 'Availability not provided'}</dd></dl>
-    <p>The schedule response may substitute 09:00–18:00 when stored shift hours are missing. It does not identify which values are defaults. These hours do not confirm attendance or coverage.</p>
+    <p>These are stored profile hours. Missing hours remain unavailable. These hours do not confirm attendance or coverage.</p>
     <Notice title="Weekly Staff roster unavailable">No per-weekday Staff duty roster is provided. Working days, days off and weekly coverage cannot be determined from this shift interval.</Notice>
     {success && <p role="status">{success}</p>}
     {error && <p id="staff-shift-error" role="alert" tabIndex={0}>{error}</p>}
     {role === 'owner' && canEdit && <div ref={controls}><Button variant="soft" onClick={() => {
       reviewedProfile.current = currentProfile.current
+      retainedCommand.current = null; setUncertain(false); setConflict(false)
       setStart(staff.start); setEnd(staff.end); setBranch(staff.branchRef); setError(''); setSuccess(''); setEditing(true)
-    }} disabled={saving || editing}>Change shift profile</Button></div>}
+    }} disabled={saving || editing || !validStaffRevision(staff.revision)}>Change shift profile</Button></div>}
+    {role === 'owner' && !validStaffRevision(staff.revision) && <p role="status">Refresh Staff profiles before editing. Safe shift updates are unavailable in this session.</p>}
     {role === 'owner' && canEdit && editing && <form onSubmit={save} className="au-form" aria-label={`Edit shift for ${staff.name}`} aria-describedby={error ? 'staff-shift-error' : undefined} aria-busy={saving}>
       <fieldset disabled={saving} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
-        <div className="st-pair"><Field label="Shift start"><input autoFocus type="time" value={start} onChange={e => setStart(e.target.value)} required/></Field><Field label="Shift end"><input type="time" value={end} onChange={e => setEnd(e.target.value)} required/></Field></div>
-        <Field label="Assigned branch"><select value={branch} onChange={e => setBranch(e.target.value)}>
+        <div className="st-pair"><Field label="Shift start"><input autoFocus type="time" value={start} disabled={uncertain || conflict} onChange={e => setStart(e.target.value)} required/></Field><Field label="Shift end"><input type="time" value={end} disabled={uncertain || conflict} onChange={e => setEnd(e.target.value)} required/></Field></div>
+        <Field label="Assigned branch"><select value={branch} disabled={uncertain || conflict} onChange={e => setBranch(e.target.value)}>
           <option value="" disabled>No assigned branch</option>
           {staff.branchRef && !branches.some(b => b.id === staff.branchRef) && <option value={staff.branchRef}>{staff.branch}</option>}
           {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
         </select></Field>
-        <div className="ns-actions"><Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save shift profile'}</Button><Button variant="ghost" onClick={() => { restoreFocus.current = true; setEditing(false); setError('') }}>Cancel</Button></div>
+        <div className="ns-actions"><Button type="submit" disabled={saving || conflict}>{saving ? 'Saving…' : uncertain ? 'Retry this save' : 'Save shift profile'}</Button><Button variant="ghost" disabled={uncertain} onClick={() => { retainedCommand.current = null; restoreFocus.current = true; setEditing(false); setError('') }}>Cancel</Button></div>
       </fieldset>
     </form>}
   </div>

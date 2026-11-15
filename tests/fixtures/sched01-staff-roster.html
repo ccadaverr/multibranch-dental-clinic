@@ -6,10 +6,12 @@ import '/src/styles.css'
 import '/src/foundation.css'
 import '/src/automations.css'
 const staff=[{id:'s1',name:'Synthetic Staff A',title:'Receptionist',branch:{id:'b1',name:'Synthetic Branch A'},shift_start:'08:30',shift_end:'17:30',available:true},{id:'s2',name:'Synthetic Staff B',title:'Assistant',branch:{id:'b1',name:'Synthetic Branch A'},shift_start:'10:00',shift_end:'19:00',available:false},{id:'s3',name:'Synthetic foreign Staff',branch:{id:'b2',name:'Synthetic Branch B'},shift_start:null,shift_end:null}]
-staff.push({id:'s4',name:'Synthetic unassigned Staff',branch:null,shift_start:'08:30',shift_end:'17:30'})
+staff.forEach(row=>{row.revision='a'.repeat(64)})
+staff.push({id:'s4',name:'Synthetic unassigned Staff',branch:null,shift_start:'08:30',shift_end:'17:30',revision:'a'.repeat(64)})
 staff.push({id:'s5',name:'Synthetic Staff at unlisted branch',branch:{id:'b-unlisted',name:'Synthetic unlisted branch'},shift_start:'08:30',shift_end:'17:30'})
 const branches=[{id:'b1',name:'Synthetic Branch A'},{id:'b2',name:'Synthetic Branch B'}]
 window.sched01={requests:[],hold:false,fail:false,release:null,completed:0,wrongId:false,throwSave:false}
+const receipts=new Map()
 window.fetch=async (url,options={})=>{
  const path=new URL(url,location.href).pathname
  if(path==='/sanctum/csrf-cookie')return new Response(null,{status:204})
@@ -24,9 +26,15 @@ window.fetch=async (url,options={})=>{
   if(window.sched01.wrongId)return Response.json({data:{id:'wrong-profile'}})
   const current=staff.find(row=>row.id===id)
   if(!current)return Response.json({message:'Not found'},{status:404})
+  if(receipts.has(body.operation_id))return Response.json({...receipts.get(body.operation_id),meta:{operation_id:body.operation_id,replayed:true}})
+  if(current.revision!==body.expected_revision)return Response.json({code:'staff_revision_conflict',message:'Synthetic profile changed. Refresh and review.'},{status:409})
   current.shift_start=body.shift_start;current.shift_end=body.shift_end
   if(Object.hasOwn(body,'branch_ref'))current.branch=branches.find(branch=>branch.id===body.branch_ref)||null
-  return Response.json({data:{id,name:current.name,title:current.title,branchId:current.branch?.id??null,branch:current.branch?.name??'All Branches',shiftStart:current.shift_start+':00',shiftEnd:current.shift_end+':00',available:current.available}})
+  current.revision='b'.repeat(64)
+  const receipt={data:{id,name:current.name,title:current.title,branchId:current.branch?.id??null,branch:current.branch?.name??'All Branches',shiftStart:current.shift_start+':00',shiftEnd:current.shift_end+':00',available:current.available,revision:current.revision},meta:{operation_id:body.operation_id,replayed:false}}
+  receipts.set(body.operation_id,receipt)
+  if(window.sched01.dropAfterCommit){window.sched01.dropAfterCommit=false;throw new Error('Synthetic response lost after commit')}
+  return Response.json(receipt)
  }
  return Response.json({message:'Unexpected fixture request'},{status:500})
 }
