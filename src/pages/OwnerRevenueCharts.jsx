@@ -92,22 +92,23 @@ function RevenueReport({ weekly = false, params, today }) {
   </Card>
 }
 
-export function OwnerRevenueCharts({ branchId, branchName, period, serverSession, validBranch = true }) {
+export function OwnerRevenueCharts({ branchId, branchName, period, serverSession, validBranch = true, dashboard = false, showWeekly = true }) {
   const today = clinicDate()
   const [weekDate, setWeekDate] = useState(today)
   if (!serverSession) return <Notice>Sign in with an Owner account to load revenue from payment and refund records.</Notice>
   if (!validBranch) return <Notice tone="warning">Select an available branch to view revenue.</Notice>
-  const validWeek = validDate(weekDate) && weekDate <= today
+  const selectedWeek=dashboard?today:weekDate
+  const validWeek = validDate(selectedWeek) && selectedWeek <= today
   return <section className="owner-revenue" aria-label={`Revenue analytics: ${branchName || 'All Branches'}`}>
-    <OwnerPerformanceOverview branchId={branchId} branchName={branchName} today={today}/>
-    <p className="muted-copy">Daily revenue follows the report period. The weekly summary uses its own Monday–Saturday date selection and the same branch filter; Sunday is excluded.</p>
-    <p className="muted-copy">Charts use payment and refund dates. Paid-invoice KPIs below use invoice creation dates and may differ.</p>
-    <div className="owner-revenue-grid">
-      <RevenueReport key={`daily:${branchId || 'all'}:${period}`} params={{ period: period.toLowerCase(), branch_id: branchId }} today={today}/>
-      <div><Field label="Week containing date"><input type="date" aria-label="Week containing date" value={weekDate} max={today} onChange={e => setWeekDate(e.target.value)}/></Field>
-        {validWeek ? <RevenueReport key={`weekly:${branchId || 'all'}:${weekDate}`} weekly params={{ date: weekDate, branch_id: branchId }} today={today}/>
+    {!dashboard&&<OwnerPerformanceOverview branchId={branchId} branchName={branchName} today={today}/>}
+    <p className="muted-copy">Daily revenue follows the report period.{showWeekly?' The weekly summary uses Monday–Saturday and the same branch filter; Sunday is excluded.':''}</p>
+    <p className="muted-copy">Charts use payment and refund dates.{!dashboard?' Paid-invoice KPIs below use invoice creation dates and may differ.':''}</p>
+    <div className={showWeekly?'owner-revenue-grid':''}>
+      <RevenueReport key={`daily:${branchId || 'all'}:${period}:${today}`} params={{ period: period.toLowerCase(), branch_id: branchId }} today={today}/>
+      {showWeekly&&<div>{!dashboard&&<Field label="Week containing date"><input type="date" aria-label="Week containing date" value={weekDate} max={today} onChange={e => setWeekDate(e.target.value)}/></Field>}
+        {validWeek ? <RevenueReport key={`weekly:${branchId || 'all'}:${selectedWeek}`} weekly params={{ date: selectedWeek, branch_id: branchId }} today={today}/>
           : <Notice tone="warning">Choose a valid date no later than today.</Notice>}
-      </div>
+      </div>}
     </div>
   </section>
 }

@@ -15,6 +15,7 @@ import { clinicNow } from '../clock.js'
 import { fetchDailyRevenue, fetchWeeklyRevenueHistogram } from '../analytics-api.js'
 import { DentistHome } from './DentistHome.jsx'
 import { StaffOnDuty } from './StaffOnDuty.jsx'
+import {OwnerRevenueCharts} from './OwnerRevenueCharts.jsx'
 
 export function DashboardPage({ role, activeBranch, setPage, store }) {
   const { state }=store
@@ -764,6 +765,7 @@ export function WeeklyRevenueHistogram({
 }
 
 export function OwnerDashboard({ activeBranch, setPage, state, session, store }) {
+  const [revenuePeriod,setRevenuePeriod]=React.useState('week')
   const branchData=state.branches.filter(b=>activeBranch==='All Branches'||b.name===activeBranch).map(b=>branchCapacity(b.name,state))
   const qvis=useQueueVisibility(store)
   const serverQueue=qvis.mode!=='demo'
@@ -785,21 +787,12 @@ export function OwnerDashboard({ activeBranch, setPage, state, session, store })
       <StatCard label="Appointments today" value={appointments.length} hint="Across visible branches" icon={<Icon name="calendar" size={18}/>}/>
       <StatCard label={serverQueue?'Awaiting treatment':'Waiting patients'} value={serverQueue?(qCounts?qCounts.awaiting:qvis.mode==='loading'?'…':'Unavailable'):branchData.reduce((s,c)=>s+c.waiting,0)} hint={serverQueue?(qCounts?'Waiting + Called + Treatment Ready':qvis.message):'Live patient flow'} tone="blue" icon={<Icon name="queue" size={18}/>}/>
       <StatCard label="HMO pending" value={pendingHmo.length} hint={`${pendingHmo.filter(h=>pendingHours(h,state.clock)>=12).length} beyond threshold`} tone="amber" icon={<Icon name="shield" size={18}/>}/>
-      <StatCard label="Paid revenue" value={peso.format(revenue)} hint="Recorded demo transactions" tone="purple" icon={<Icon name="wallet" size={18}/>}/>
+      {!session?.serverUserId&&<StatCard label="Paid revenue" value={peso.format(revenue)} hint="Recorded demo transactions" tone="purple" icon={<Icon name="wallet" size={18}/>}/>}
     </div>
-    <div className={isSaturday ? 'grid-2 top-gap' : 'top-gap'}>
-      <DailyRevenueChart
-        activeBranch={activeBranch}
-        activeBranchId={activeBranchId}
-        isServerSession={!!session?.serverUserId}
-      />
-      {isSaturday && (
-        <WeeklyRevenueHistogram
-          activeBranch={activeBranch}
-          activeBranchId={activeBranchId}
-          currentDate={clinicDate()}
-        />
-      )}
+    <div className="top-gap">
+      <label className="field"><span>Revenue chart period</span><select aria-label="Revenue chart period" value={revenuePeriod} onChange={e=>setRevenuePeriod(e.target.value)}><option value="week">This Week</option><option value="month">This Month</option><option value="year">This Year</option></select></label>
+      <OwnerRevenueCharts key={JSON.stringify([session?.serverUserId,store?.getAuthGeneration?.()])} branchId={activeBranchId} branchName={activeBranch} period={revenuePeriod}
+        serverSession={!!session?.serverUserId} validBranch={activeBranch==='All Branches'||!!activeBranchId} dashboard showWeekly={isSaturday}/>
     </div>
     <div className="owner-dashboard-grid top-gap">
       {serverQueue?<QueueByBranch store={store} activeBranch={activeBranch} vis={qvis} actions={<button className="text-link" onClick={()=>setPage('capacity')}>Branch details</button>}/>:<Card title="Branch workload" subtitle="Compare patient flow and staffing at a glance" actions={<button className="text-link" onClick={()=>setPage('capacity')}>Capacity details</button>}>

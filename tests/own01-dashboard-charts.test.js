@@ -52,7 +52,7 @@ test('OWN-01: Dashboards.jsx exports required helpers and chart components', () 
 
   // Saturday condition logic in OwnerDashboard
   assert.match(code, /const isSaturday = isSaturdayManila\(clinicDate\(\)\)/, 'OwnerDashboard must check if today is Saturday in Manila time')
-  assert.match(code, /\{isSaturday && \(\s*<WeeklyRevenueHistogram/, 'Weekly histogram must only appear on Saturdays')
+  assert.match(code, /dashboard showWeekly=\{isSaturday\}/, 'Validated weekly histogram must only appear on Saturdays')
 })
 
 // 2. Unit and Component Verification
@@ -331,9 +331,9 @@ test('OWN-01: OwnerDashboard renders WeeklyRevenueHistogram on Saturday and omit
     store,
   }))
 
-  assert.match(saturdayHtml, /Daily Revenue Trend/, 'Daily revenue chart must be present on Saturday')
-  assert.match(saturdayHtml, /Saturday Weekly Summary/, 'Saturday weekly summary must be present on Saturday')
-  assert.match(saturdayHtml, /grid-2 top-gap/, 'Both charts must be laid out in grid-2 top-gap on Saturday')
+  assert.match(saturdayHtml, /Daily revenue/, 'Daily revenue chart must be present on Saturday')
+  assert.match(saturdayHtml, /Monday–Saturday revenue summary/, 'Saturday weekly summary must be present on Saturday')
+  assert.match(saturdayHtml, /owner-revenue-grid/, 'Both validated charts must share the existing responsive chart grid')
 
   // 2. On Wednesday (2026-09-30):
   m.setBundledClock(() => new Date('2026-09-30T08:00:00+08:00'))
@@ -345,15 +345,15 @@ test('OWN-01: OwnerDashboard renders WeeklyRevenueHistogram on Saturday and omit
     store,
   }))
 
-  assert.match(weekdayHtml, /Daily Revenue Trend/, 'Daily revenue chart must be present on Wednesday')
-  assert.doesNotMatch(weekdayHtml, /Saturday Weekly Summary/, 'Saturday weekly summary must NOT be present on Wednesday')
-  assert.doesNotMatch(weekdayHtml, /grid-2 top-gap/, 'Must not use grid-2 top-gap when only daily chart is rendered')
+  assert.match(weekdayHtml, /Daily revenue/, 'Daily revenue chart must be present on Wednesday')
+  assert.doesNotMatch(weekdayHtml, /Monday–Saturday revenue summary/, 'Saturday weekly summary must NOT be present on Wednesday')
+  assert.doesNotMatch(weekdayHtml, /owner-revenue-grid/, 'Must not use a two-chart grid for the daily chart alone')
 
   // 3. Existing dashboard elements outside charts remain intact
   assert.match(weekdayHtml, /Executive dashboard/)
   assert.match(weekdayHtml, /Appointments today/)
   assert.match(weekdayHtml, /HMO pending/)
-  assert.match(weekdayHtml, /Paid revenue/)
+  assert.doesNotMatch(weekdayHtml, /Recorded demo transactions/, 'Live Owner must never receive a local-demo revenue KPI')
   assert.match(weekdayHtml, /Scheduling health/)
   assert.match(weekdayHtml, /Patient communication/)
 })
