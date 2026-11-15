@@ -73,6 +73,23 @@ class LocalSystemTargetTest(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     local.verify(self.config, self.runtime, 'dental_clinic_test')
 
+    def test_visit_fixture_refuses_test_profile_before_snapshot_or_write(self):
+        args = ['local-system.py', '--target', str(self.manifest), '--profile', 'test', 'visit-fixture']
+        with patch.object(sys, 'argv', args), patch.object(local, 'verify'), patch.object(local, 'migrations'), \
+                patch.object(local, 'backup') as backup, patch.object(local.subprocess, 'check_output') as launch:
+            with self.assertRaisesRegex(ValueError, 'only in the verified demo'):
+                local.main()
+            backup.assert_not_called()
+            launch.assert_not_called()
+
+    def test_billing_contention_refuses_regular_profile_before_launching_workers(self):
+        args = ['local-system.py', '--target', str(self.manifest), '--profile', 'test', 'billing-concurrency']
+        with patch.object(sys, 'argv', args), patch.object(local, 'verify'), patch.object(local, 'migrations'), \
+                patch.object(local.subprocess, 'run') as launch:
+            with self.assertRaisesRegex(ValueError, 'separate clone-test'):
+                local.main()
+            launch.assert_not_called()
+
     def test_backup_remains_available_while_source_migrations_are_awaiting_review(self):
         args = ['local-system.py', '--target', str(self.manifest), '--profile', 'test', 'backup']
         with patch.object(sys, 'argv', args), patch.object(local, 'verify') as verify, \

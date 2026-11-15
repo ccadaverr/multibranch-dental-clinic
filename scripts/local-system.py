@@ -133,7 +133,7 @@ def main():
     parser.add_argument('--target', required=True, help='Private manifest for a newly provisioned, owned local cluster')
     parser.add_argument('--profile', choices=['demo', 'test'], default='demo')
     parser.add_argument('--filter', help='Optional PHPUnit test-name filter; explicit reviewed files remain required')
-    parser.add_argument('action', choices=['status', 'start', 'stop', 'backup', 'migrate', 'seed', 'seed-demo', 'test', 'clone-test', 'concurrency', 'verify-schema', 'verify-guard', 'serve', 'ui', 'mailbox', 'worker', 'scheduler'])
+    parser.add_argument('action', choices=['status', 'start', 'stop', 'backup', 'migrate', 'seed', 'seed-demo', 'visit-fixture', 'test', 'clone-test', 'concurrency', 'billing-concurrency', 'verify-schema', 'verify-guard', 'serve', 'ui', 'mailbox', 'worker', 'scheduler'])
     parser.add_argument('tests', nargs='*')
     args = parser.parse_args()
     c, runtime = target(args.target)
@@ -149,7 +149,7 @@ def main():
     selected = migrations(c) if args.action != 'backup' else []
     # Separate profiles may run independently. One profile never runs overlapping suites or schema/seed work.
     lock = None
-    if args.action in ['migrate', 'seed', 'seed-demo', 'test', 'clone-test', 'concurrency', 'verify-schema', 'verify-guard', 'backup']:
+    if args.action in ['migrate', 'seed', 'seed-demo', 'visit-fixture', 'test', 'clone-test', 'concurrency', 'billing-concurrency', 'verify-schema', 'verify-guard', 'backup']:
         lock = open(runtime / (database + '.lock'), 'a')
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -177,6 +177,21 @@ def main():
             'GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO dentalops_app')
         print('Held migrations remain pending, never marked executed:', ', '.join(sorted(HELD)))
         backup(c, runtime, database)
+    elif args.action == 'visit-fixture':
+        if args.profile != 'demo':
+            raise ValueError('Synthetic visit prerequisites belong only in the verified demo profile.')
+        backup(c, runtime, database)
+        fixture_env = environment(c, runtime, 'demo')
+        fixture_env['DENTALOPS_LOCAL_VISIT_FIXTURE'] = '1'
+        fixture_env['DENTALOPS_LOCAL_TARGET'] = str(Path(args.target).resolve())
+        fixture = subprocess.check_output([c['php'], 'tests/Support/local_visit_fixture.php'],
+                                         cwd=ROOT / 'backend', env=fixture_env, text=True)
+        # Parse before publishing; no passwords, keys, tokens or financial outcomes are included.
+        data = json.loads(fixture)
+        output = runtime / 'visit-fixture.json'
+        output.write_text(json.dumps(data, indent=2))
+        output.chmod(0o600)
+        print('Synthetic prerequisite manifest:', output)
     elif args.action in ['seed', 'seed-demo']:
         if args.profile != 'demo':
             raise ValueError('Demo seeding is never performed in the transactional test database.')
@@ -184,7 +199,7 @@ def main():
         seeder = 'DemoClinicSeeder' if args.action == 'seed-demo' else 'DatabaseSeeder'
         subprocess.run([c['php'], 'artisan', 'db:seed', '--class=' + seeder, '--force', '--no-interaction'],
                        cwd=ROOT / 'backend', env=environment(c, runtime, args.profile), check=True)
-    elif args.action in ['test', 'verify-schema', 'verify-guard', 'concurrency']:
+    elif args.action in ['test', 'verify-schema', 'verify-guard', 'concurrency', 'billing-concurrency']:
         if args.action == 'verify-schema':
             args.tests = ['tests/Feature/Queue/PreservationMigrationTest.php']
         if args.action == 'verify-guard':
@@ -193,6 +208,10 @@ def main():
             if not runtime.name.startswith('contention-'):
                 raise ValueError('Run committed contention fixtures only in a separate clone-test target.')
             args.tests = ['tests/Feature/Followups/SelectedFollowupConcurrencyTest.php']
+        if args.action == 'billing-concurrency':
+            if not runtime.name.startswith('contention-'):
+                raise ValueError('Run settlement contention only in a separate clone-test target.')
+            args.tests = ['tests/Feature/Billing/SettlementContentionTest.php']
         if args.profile != 'test' or not args.tests:
             raise ValueError('Choose test profile and explicit reviewed test paths; no blanket Feature/concurrency/reset suite.')
         for name in args.tests:
@@ -206,6 +225,8 @@ def main():
             test_env['DENTALOPS_SCHEMA_VERIFICATION'] = '1'
         if args.action == 'concurrency':
             test_env['AUD10_DISPOSABLE_POSTGRES_ACCEPTANCE'] = '1'
+        if args.action == 'billing-concurrency':
+            test_env['BILLING_DISPOSABLE_POSTGRES_ACCEPTANCE'] = '1'
         subprocess.run([c['php'], 'vendor/bin/phpunit', '-c', 'phpunit.xml', '--bootstrap', 'tests/Support/IsolatedTestBootstrap.php',
                         '--cache-directory', str(runtime / 'cache/phpunit'), *(['--filter', args.filter] if args.filter else []), *args.tests],
                        cwd=ROOT / 'backend', env=test_env, check=True)

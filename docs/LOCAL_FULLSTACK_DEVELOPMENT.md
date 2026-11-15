@@ -87,3 +87,34 @@ The original `scripts/predefense-check.sh --local-only` performs local checks wi
 - Historical queue values remain preserved; STF-14/STF-15's destructive “remove everywhere” wording is not claimed complete. Active FIFO and unsupported Urgent-command refusal are tested.
 - External inbox/payment/provider acceptance, PostgreSQL production-version/deployment compatibility and broader concurrency remain separate milestones. AUD-10 also needs trusted deployed capability and durable reload/unknown-outcome recovery before activation.
 - No push, deployment, real patient data or external provider dispatch is authorized by this local profile.
+
+## Visit → at-clinic settlement acceptance (Sprint02)
+
+The established billing system now has guarded Staff commands, exact receipt/readback confirmation and same-key unknown-outcome recovery. See [Sprint02 acceptance and limits](LOCAL_VISIT_SETTLEMENT_SPRINT02.md).
+
+```bash
+python3 scripts/local-system.py --target "$TARGET" --profile demo visit-fixture
+# Uses only the verified owned demo; snapshots first. Creates/reopens a clearly labelled
+# synthetic branch, accounts and roster, never lifecycle/financial results.
+DENTALOPS_LOCAL_TARGET="$TARGET" PLAYWRIGHT_MODULE="/absolute/path/to/playwright" \
+  LOCAL_SYSTEM_EVIDENCE="/private/new-visit-evidence-directory" \
+  LOCAL_VISIT_DROP_PAYMENT_RESPONSE=1 node tests/local-visit.browser.mjs
+# Same evidence directory: readback, role isolation, keyboard/labels and five widths.
+DENTALOPS_LOCAL_TARGET="$TARGET" PLAYWRIGHT_MODULE="/absolute/path/to/playwright" \
+  LOCAL_SYSTEM_EVIDENCE="/private/new-visit-evidence-directory" \
+  node tests/local-visit-visibility.browser.mjs
+```
+
+`visit-fixture` saves an ID-only `visit-fixture.json` in the private runtime. Synthetic sign-ins are `sprint02.staff@example.test`, `sprint02.dentist@example.test`, `sprint02.patient@example.test`, using the existing private demo login password. It reuses existing M13 demo pricing; these are not newly confirmed clinic fees. The browser blocks external origins. Response loss is injected only after the real local server commits, then the UI retries the original command. A fresh evidence directory runs a new journey; an existing journal resumes/read-checks prior commands. Avoid running the same evidence journal concurrently.
+
+After acceptance, use the existing Owner branch status command/settings to mark only `sprint02` **Inactive**; retain all historical records. Missing contacts on an active synthetic branch correctly fail the ordinary clinic predefense check. Never fill in invented clinic contact details or weaken the check. The fixture action deliberately reopens this synthetic branch when another journey is requested.
+
+For settlement contention, create a **new** `clone-test` target, then:
+
+```bash
+python3 scripts/local-system.py --target "$CLONE_TARGET" --profile test billing-concurrency
+python3 scripts/local-system.py --target "$CLONE_TARGET" --profile test backup
+python3 scripts/local-system.py --target "$CLONE_TARGET" --profile test stop
+```
+
+This lane refuses the regular runtime and requires empty committed fixture tables; no migrations/resets/cleanup run. It proves real row-lock waiting for different keys, same-key replay and contradictory reuse. The historical reset-based `ConcurrentBillingTest` is not run by this profile. No selected-follow-up activation is enabled.

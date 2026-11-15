@@ -14,7 +14,7 @@ function stubFetch(...responses) {
 beforeEach(() => { calls = []; globalThis.document = { cookie: 'XSRF-TOKEN=t' }; api.__resetCsrfCacheForTests() })
 
 const page = readFileSync(new URL('../src/pages/PatientCare.jsx', import.meta.url), 'utf8')
-const staffPage = readFileSync(new URL('../src/pages/FinanceCommunication.jsx', import.meta.url), 'utf8')
+const staffPage = readFileSync(new URL('../src/pages/ServerBilling.jsx', import.meta.url), 'utf8')
 const client = readFileSync(new URL('../src/api-client.js', import.meta.url), 'utf8')
 const review = readFileSync(new URL('../src/pages/ReviewAndPay.jsx', import.meta.url), 'utf8')
 
@@ -67,7 +67,7 @@ test('a failed invoice load is an explicit error with Retry on the Patient page 
 test('billing commands go through named server endpoints with idempotency keys and no browser writes', () => {
   for (const name of ['createBillingDraft', 'reviewBillingInvoice', 'issueBillingInvoice', 'recordBillingPayment']) assert.match(client, new RegExp(`export function ${name}\\(`))
   assert.match(client, /These calls never write invoices, payments or receipts to browser storage/)
-  assert.match(staffPage, /uid\('m11'\)/, 'every Staff billing command carries a fresh command id (Idempotency-Key)')
+  assert.match(staffPage, /key: commandKey/, 'each Staff billing intent carries an Idempotency-Key retained for retry')
 })
 
 test('invoice lists are cursor-paged: bounded requests, honest "showing N" text, load-older with recoverable errors', async () => {
@@ -85,7 +85,7 @@ test('invoice lists are cursor-paged: bounded requests, honest "showing N" text,
     assert.match(source, /Older invoices are available/)
     assert.match(source, /That is all/)
     assert.match(source, /next_cursor/)
-    assert.match(source, /filter\(row=>!\(previous\|\|\[\]\)\.some/, 'older pages are merged without duplicates')
+    assert.match(source, /filter\(row\s*=>\s*!\(previous\s*\|\|\s*\[\]\)\.some/, 'older pages are merged without duplicates')
   }
   assert.match(page, /per_page:PAGE/)
   assert.doesNotMatch(client.replace(/\/\/.*$/gm, ''), /\/api\/invoices[^'`]*limit=/)

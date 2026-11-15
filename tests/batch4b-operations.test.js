@@ -57,15 +57,14 @@ test('M17 ServerMessages close conversation uses ConfirmDialog with state preser
   confirmation=captured;callback('onConfirm')();assert.equal(confirmation,false);assert.deepEqual(calls,[captured]);assert.equal(calls[0],captured,'confirmation carries the reviewed snapshot, never the latest selected row')
 })
 
-test('M11 FinanceCommunication invoice issuance uses ConfirmDialog with state preservation on cancel', () => {
-  const finance = read('src/pages/FinanceCommunication.jsx')
-  assert.match(finance, /issueConfirmInvoice/)
-  assert.match(finance, /<ConfirmDialog open=\{!!issueConfirmInvoice\}/)
-  assert.match(finance, /title="Issue this invoice\?"/)
-  // Cancel clears issueConfirmInvoice without modifying invoice state
-  assert.match(finance, /onCancel=\{\(\)=>setIssueConfirmInvoice\(null\)\}/)
-  // Confirm proceeds with invoice issuance
-  assert.match(finance, /run\(issueBillingInvoice,target\.id/)
+test('M11 invoice confirmation preserves the exact reviewed intent and cancel sends no command', () => {
+  const captured=Object.freeze({mode:'issue',base:{id:'invoice-A',revision:7},payload:undefined}), calls=[]
+  let confirmation=captured
+  const bindings={confirm:captured,locked:false,setConfirm:v=>{confirmation=v},run:(...args)=>calls.push(args)}
+  const callback=name=>jsxAttribute('src/pages/ServerBilling.jsx','ConfirmDialog',name,bindings)
+  callback('onCancel')();assert.equal(confirmation,null);assert.deepEqual(calls,[])
+  confirmation=captured;callback('onConfirm')();assert.equal(confirmation,null);assert.deepEqual(calls,[['issue',captured.base,undefined]])
+  bindings.locked=true;callback('onConfirm')();assert.equal(calls.length,1,'pending/unknown intents cannot confirm a new command')
 })
 
 test('M12 HMO case escalation uses ConfirmDialog with state preservation on cancel', () => {

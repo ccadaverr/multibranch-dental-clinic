@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Button, Icon } from '../../components.jsx'
 import { downloadBillingPdf, getBillingInvoice, myBillingInvoices, resendBillingReceipt } from '../../api-client.js'
+import { confirmedBillingReceipt } from '../../billing-command.js'
 import { paymentMethodLabel } from '../../payment-method.js'
 import { useVisibleRefresh } from '../../use-visible-refresh.js'
 import { ReviewAndPay } from '../../pages/ReviewAndPay.jsx'
@@ -12,7 +13,8 @@ const view = i => ({ id: i.id, invoiceNo: i.invoice_number, date: i.issued_at ||
   hmoCoverage: i.hmo_coverage_amount, patientResponsibility: i.patient_responsibility_amount, paidAmount: i.paid_amount, balance: i.balance,
   settlementType: i.settlement_type || null,
   items: (i.lines || []).map(l => ({ key: l.id, name: l.service?.name || 'Service', quantity: l.quantity, unit: l.unit_price, amount: l.line_total })),
-  receipt: i.receipt ? { number: i.receipt.number, amount: i.receipt.amount, method: paymentMethodLabel(i.receipt.method), reference: i.receipt.external_reference || i.payment?.external_reference || null, paidAt: i.receipt.issued_at } : null })
+  receiptUnavailable: !!i.receipt && !confirmedBillingReceipt(i),
+  receipt: confirmedBillingReceipt(i) ? { number: i.receipt.number, amount: i.receipt.amount, method: paymentMethodLabel(i.receipt.method), reference: i.receipt.external_reference || i.payment?.external_reference || null, paidAt: i.receipt.issued_at } : null })
 const stamp = iso => iso ? `${dateLong(String(iso).slice(0, 10))}` : ''
 
 /**
@@ -93,9 +95,9 @@ export function BillingPage({ context, toast }) {
   return <div className="pp-page">
     <PageHead eyebrow="Billing" title="Invoices and receipts" text="Invoices appear after your visit. Pay online securely with PayMongo, or at the clinic."/>
     {linkState === 'checking' && <div className="pp-banner info" role="status"><Icon name="clock" size={18}/><span><b>Confirming your payment.</b> Your invoice shows as paid only after the clinic receives PayMongo’s confirmation. This usually takes a few seconds.</span></div>}
-    {linkState === 'paid' && <div className="pp-banner ok" role="status"><Icon name="check" size={18}/><span><b>Payment received.</b> Your invoice is settled and your receipt is on its way to your email.</span></div>}
+    {linkState === 'paid' && <div className="pp-banner ok" role="status"><Icon name="check" size={18}/><span><b>Payment received.</b> Your invoice is settled. Your Payment Receipt is available below.</span></div>}
     {linkState === 'timeout' && <div className="pp-banner warn" role="status"><Icon name="alert" size={18}/><span><b>Payment pending.</b> We have not received PayMongo’s confirmation yet. Check again in a few minutes; message the front desk if you were charged and it still shows unpaid.</span></div>}
-    {linkState === 'cancelled' && <div className="pp-banner warn" role="status"><Icon name="alert" size={18}/><span><b>Payment cancelled.</b> Nothing was charged and your balance is unchanged.</span></div>}
+    {linkState === 'cancelled' && <div className="pp-banner warn" role="status"><Icon name="alert" size={18}/><span><b>Payment cancelled.</b> Online checkout was cancelled. The invoice below shows the clinic’s current payment status.</span></div>}
     {linkState === 'unavailable' && <div className="pp-banner warn" role="status"><Icon name="alert" size={18}/><span>That invoice could not be opened from your account. Your invoices are listed below.</span></div>}
 
     {error && <ErrorState text={error} onRetry={() => setAttempt(a => a + 1)}/>}
@@ -111,10 +113,11 @@ export function BillingPage({ context, toast }) {
         {inv.status === 'Issued' && Number(inv.paidAmount) > 0 && <p className="pp-row"><span>Less: booking deposit applied</span><span>−{money(inv.paidAmount)}</span></p>}
         <p className="pp-row pp-total"><span>{inv.status === 'Paid' ? 'Paid' : 'To pay'}</span><b>{money(inv.status === 'Paid' ? inv.patientResponsibility ?? inv.total : inv.balance)}</b></p>
         <div className="pp-actions">
+          {inv.receiptUnavailable && <p role="alert">The receipt could not be verified. Refresh or contact the front desk.</p>}
           {inv.status === 'Issued' && Number(inv.balance) > 0 && <Button onClick={() => setReviewId(inv.id)}>Review and pay</Button>}
-          <Button size="sm" variant="soft" icon="download" disabled={downloading === `${inv.id}:receipt` || downloading === `${inv.id}:invoice`} onClick={() => download(inv.id, inv.receipt ? 'receipt' : 'invoice')}>
-            {downloading === `${inv.id}:receipt` || downloading === `${inv.id}:invoice` ? 'Preparing…' : 'Download Receipt'}
-          </Button>
+          {['Issued', 'Paid'].includes(inv.status) && <Button size="sm" variant="soft" icon="download" disabled={downloading === `${inv.id}:receipt` || downloading === `${inv.id}:invoice`} onClick={() => download(inv.id, inv.receipt ? 'receipt' : 'invoice')}>
+            {downloading === `${inv.id}:receipt` || downloading === `${inv.id}:invoice` ? 'Preparing…' : inv.receipt ? 'Download Receipt' : 'Download Invoice'}
+          </Button>}
           {inv.receipt && <Button size="sm" variant="ghost" icon="mail" disabled={resending === inv.id} onClick={() => resend(inv.id)}>{resending === inv.id ? 'Sending…' : 'Resend receipt'}</Button>}
           {inv.receipt && <Button size="sm" variant="ghost" aria-expanded={openId === inv.id} aria-controls={`rct-${inv.id}`} onClick={() => setOpenId(openId === inv.id ? null : inv.id)}>{openId === inv.id ? 'Hide details' : 'View details'}</Button>}
         </div>
@@ -131,7 +134,7 @@ export function BillingPage({ context, toast }) {
             ...(Number(inv.hmoCoverage) > 0 ? [['HMO coverage', `−${money(inv.hmoCoverage)}`]] : []),
             ...(inv.settlementType === 'booking_deposit' || inv.settlementType === 'partial_booking_deposit' ? [['Adjustment', 'Booking deposit applied']] : []),
           ].map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}
-          <p className="pp-hint">The receipt PDF was also sent to your email. You can download it or request a resend above.</p>
+          <p className="pp-hint">Download your Payment Receipt or request an email copy above. Email delivery is reported separately.</p>
         </dl>}
       </li>)}
     </ul>

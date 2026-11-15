@@ -393,11 +393,11 @@ export function hmoCaseCommand(id, name, payload, key, beforeDispatch) { return 
 export function listBillingInvoices(params) { return request(`/api/invoices${query(params)}`) }
 export function getBillingInvoice(id) { return request(`/api/invoices/${encodeURIComponent(id)}`) }
 export function listBillingTreatments() { return request('/api/billing/treatments') }
-export function createBillingDraft(treatmentId, key) { return command(`/api/invoices/from-treatment/${encodeURIComponent(treatmentId)}`, {}, key) }
-export function reviewBillingInvoice(id, payload, key) { return command(`/api/invoices/${encodeURIComponent(id)}/review`, payload, key) }
-export function applyBillingDiscount(id, payload, key) { return command(`/api/invoices/${encodeURIComponent(id)}/discount`, payload, key) }
-export function issueBillingInvoice(id, payload, key) { return command(`/api/invoices/${encodeURIComponent(id)}/issue`, payload, key) }
-export function recordBillingPayment(id, payload, key) { return command(`/api/invoices/${encodeURIComponent(id)}/payment`, payload, key) }
+export function createBillingDraft(treatmentId, key, beforeDispatch) { return command(`/api/invoices/from-treatment/${encodeURIComponent(treatmentId)}`, {}, key, beforeDispatch) }
+export function reviewBillingInvoice(id, payload, key, beforeDispatch) { return command(`/api/invoices/${encodeURIComponent(id)}/review`, payload, key, beforeDispatch) }
+export function applyBillingDiscount(id, payload, key, beforeDispatch) { return command(`/api/invoices/${encodeURIComponent(id)}/discount`, payload, key, beforeDispatch) }
+export function issueBillingInvoice(id, payload, key, beforeDispatch) { return command(`/api/invoices/${encodeURIComponent(id)}/issue`, payload, key, beforeDispatch) }
+export function recordBillingPayment(id, payload, key, beforeDispatch) { return command(`/api/invoices/${encodeURIComponent(id)}/payment`, payload, key, beforeDispatch) }
 // Review and Pay: accepted methods in plain words and the billing-address prefill (Patient who owns the invoice, or scoped Staff).
 /** Downloads an invoice or receipt PDF (the emailed document) and saves it in the browser. {ok} or a normal failure. */
 export async function downloadBillingPdf(invoiceId, kind = 'invoice') {
