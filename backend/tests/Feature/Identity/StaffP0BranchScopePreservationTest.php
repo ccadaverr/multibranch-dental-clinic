@@ -67,7 +67,7 @@ class StaffP0BranchScopePreservationTest extends TestCase
         $before = $this->scopes();
         $audits = $this->auditCount();
 
-        $this->patchJson('/api/staff/s-p0', $payload)->assertOk()->assertJsonPath('data.branchId', 'b1');
+        $this->patchJson('/api/staff/s-p0', \Tests\Support\StaffProfileCommand::body('s-p0', $payload))->assertOk()->assertJsonPath('data.branchId', 'b1');
 
         $this->assertSame($before, $this->scopes());
         $this->assertSame($audits, $this->auditCount());
@@ -85,7 +85,7 @@ class StaffP0BranchScopePreservationTest extends TestCase
         $before = $this->scopes();
         $audits = $this->auditCount();
 
-        $this->patchJson('/api/staff/s-p0', ['branch_ref' => null, 'shift_start' => '10:00', 'shift_end' => '17:00'])
+        $this->patchJson('/api/staff/s-p0', \Tests\Support\StaffProfileCommand::body('s-p0', ['branch_ref' => null, 'shift_start' => '10:00', 'shift_end' => '17:00']))
             ->assertOk()->assertJsonPath('data.branchId', null)->assertJsonPath('data.shiftStart', '10:00:00');
 
         $this->assertSame($before, $this->scopes());
@@ -95,7 +95,7 @@ class StaffP0BranchScopePreservationTest extends TestCase
     public function test_real_reassignment_replaces_scopes_and_retry_preserves_subsequent_scope_edits(): void
     {
         $audits = $this->auditCount();
-        $this->patchJson('/api/staff/s-p0', ['branch_ref' => 'b2'])->assertOk()->assertJsonPath('data.branchId', 'b2');
+        $this->patchJson('/api/staff/s-p0', \Tests\Support\StaffProfileCommand::body('s-p0', ['branch_ref' => 'b2']))->assertOk()->assertJsonPath('data.branchId', 'b2');
         $this->assertSame([$this->b['b2']->id], array_column($this->scopes(), 'branch_id'));
         $this->assertSame($audits + 1, $this->auditCount());
         $this->assertSame(['branch_refs' => ['b2']], AuditLog::where('action', 'account.branch_scopes_changed')->latest('id')->firstOrFail()->payload);
@@ -103,7 +103,7 @@ class StaffP0BranchScopePreservationTest extends TestCase
         // A later independent authorization must survive a retry of the accepted profile assignment.
         UserBranchScope::firstOrCreate(['user_id' => $this->u['staffB1']->id, 'branch_id' => $this->b['b1']->id]);
         $before = $this->scopes();
-        $this->patchJson('/api/staff/s-p0', ['branch_ref' => 'b2'])->assertOk();
+        $this->patchJson('/api/staff/s-p0', \Tests\Support\StaffProfileCommand::body('s-p0', ['branch_ref' => 'b2']))->assertOk();
         $this->assertSame($before, $this->scopes());
         $this->assertSame($audits + 1, $this->auditCount());
     }

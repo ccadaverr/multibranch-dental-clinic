@@ -181,11 +181,11 @@ for (const collection of ['staff', 'dentists']) test(`${collection} supported ed
     : { licenseNo: 'DEMO-TEST-123', specialty: 'Orthodontics', branchIds: ['b2'], assistantStaffId: null,
         shiftStart: '10:00', shiftEnd: '17:00', available: false }
   const expected = isStaff
-    ? { title: 'Receptionist', branch_ref: 'b2', shift_start: '10:00', shift_end: '17:00', available: false }
+    ? { title: 'Receptionist', branch_ref: 'b2', shift_start: '10:00', shift_end: '17:00', available: false, expected_revision: 'a'.repeat(64), operation_id: '11111111-1111-4111-8111-111111111111' }
     : { license_no: 'DEMO-TEST-123', specialty: 'Orthodontics', branch_ids: ['b2'], assistant_staff_ref: null,
         shift_start: '10:00', shift_end: '17:00', available: false }
   const confirmed = isStaff
-    ? { ...API_STAFF, title: draft.staffType, branchId: 'b2', shiftStart: '10:00:00', shiftEnd: '17:00:00', available: false }
+    ? { ...API_STAFF, title: draft.staffType, branchId: 'b2', shiftStart: '10:00:00', shiftEnd: '17:00:00', available: false, revision: 'b'.repeat(64) }
     : { ...API_DENTIST, license_no: draft.licenseNo, specialty: draft.specialty, branch_ids: ['b2'],
         assistantStaffId: null, shiftStart: '10:00:00', shiftEnd: '17:00:00', available: false }
   globalThis.fetch = async (url, options = {}) => {
@@ -193,7 +193,7 @@ for (const collection of ['staff', 'dentists']) test(`${collection} supported ed
     assert.equal(String(url).endsWith(`/api/${collection}/${confirmed.id}`), true)
     assert.equal(options.method, 'PATCH')
     assert.deepEqual(JSON.parse(options.body), expected)
-    return jsonResponse(confirmed)
+    return isStaff ? { ok: true, status: 200, json: async () => ({ data: confirmed, meta: { operation_id: expected.operation_id, replayed: false } }) } : jsonResponse(confirmed)
   }
   let state = normalizeClinicState({ ...personsAndUsersFixture(), branches: [mapBranch(API_BRANCH), { ...mapBranch(API_BRANCH), id: 'b2', name: 'Roxas - Cardinal Dental Center' }],
     services: [], branchServices: [], dentistServiceAssignments: [], dentists: [mapDentistProfile(API_DENTIST)], staff: [mapStaffProfile(API_STAFF)], patients: [],
@@ -204,12 +204,22 @@ for (const collection of ['staff', 'dentists']) test(`${collection} supported ed
   const actions = createWorkflowActions({ getState: () => state, getSession: () => session,
     commit: patch => { state = normalizeClinicState({ ...state, ...patch }) } })
   const before = structuredClone(state[collection])
-  const result = await syncPersonnelUpdate(collection, confirmed.id, draft)
+  const result = await syncPersonnelUpdate(collection, confirmed.id, isStaff ? { ...draft, revision: expected.expected_revision, operationId: expected.operation_id } : draft)
   assert.equal(result.ok, true)
   assert.deepEqual(state[collection], before, 'API completion alone must not optimistically mutate state')
   assert.equal(actions.adoptPersonnelFromServer(collection, confirmed.id, result.record).ok, true)
   for (const [key, value] of Object.entries(draft)) assert.deepEqual(state[collection][0][key], value, key)
   assert.deepEqual(result.record, (isStaff ? mapStaffProfile : mapDentistProfile)(JSON.parse(JSON.stringify(confirmed))))
+})
+
+test('Staff personnel bridge refuses missing observation rather than fetching a newer revision behind the draft', async t => {
+  const originalFetch = globalThis.fetch
+  t.after(() => { globalThis.fetch = originalFetch })
+  let sent = false
+  globalThis.fetch = async () => { sent = true; throw Error('Unexpected dispatch') }
+  const result = await syncPersonnelUpdate('staff', 's1', { shiftStart: '09:00', shiftEnd: '17:00' })
+  assert.equal(result.code, 'staff_precondition_required')
+  assert.equal(sent, false)
 })
 test('every Owner branch status survives API transport, mapping, adoption and reload without aliases', async t => {
   const canonical = ['Open', 'Temporarily Closed', 'Inactive']

@@ -11,6 +11,7 @@
 // so personId/userId resolve against the existing local collections with no merge step required — the
 // display name a Patient/Staff/Owner sees is unchanged from before this phase.
 import * as api from './api-client.js'
+import { validStaffRevision } from './staff-shift-command.js'
 
 export function mapBranch(row) {
   return {
@@ -46,7 +47,7 @@ export function mapStaffProfile(row) {
     // staffType is the legacy Staff-title field; it is not a Dentist specialty or license.
     role: row.title || '',
     branchId: row.branchId || null, shiftStart: row.shiftStart?.slice(0, 5), shiftEnd: row.shiftEnd?.slice(0, 5),
-    available: row.available,
+    available: row.available, revision: row.revision,
   }
 }
 
@@ -154,19 +155,29 @@ export async function syncBranchServiceToggle(branchId, serviceId, active, befor
   return { ok: true, record: mapBranchService(result.data) }
 }
 
-export async function syncPersonnelUpdate(collection, legacyRef, form) {
+export async function syncPersonnelUpdate(collection, legacyRef, form, beforeDispatch) {
   if (collection === 'staff') {
+    if (!validStaffRevision(form?.revision) || !form?.operationId) return { ok: false, kind: 'conflict', code: 'staff_precondition_required', message: 'Reload and review the current Staff profile before saving.' }
     const payload = {}
     // The Admin.jsx staff-edit form edits `staffType` — maps onto the API's `title` field, which is what
     // staff_profiles.title (bugfix — see the add_title_to_staff_profiles_table migration) actually stores.
-    if (form.staffType !== undefined) payload.title = form.staffType
-    if (form.branchId !== undefined) payload.branch_ref = form.branchId
+    if (form.staffType !== undefined) payload.title = typeof form.staffType === 'string' ? form.staffType.trim() || null : form.staffType
+    if (form.branchId !== undefined && (!Object.hasOwn(form, 'observedBranchId') || form.branchId !== form.observedBranchId)) payload.branch_ref = form.branchId
     if (form.shiftStart !== undefined) payload.shift_start = form.shiftStart
     if (form.shiftEnd !== undefined) payload.shift_end = form.shiftEnd
     if (form.available !== undefined) payload.available = form.available
 
-    const result = await api.updateStaffProfile(legacyRef, payload)
+    payload.expected_revision = form.revision
+    payload.operation_id = form.operationId
+    const result = await api.updateStaffProfile(legacyRef, payload, beforeDispatch)
     if (!result.ok) return result
+    const row = result.data
+    if (row?.id !== legacyRef || !validStaffRevision(row.revision) || result.meta?.operation_id !== form.operationId || typeof result.meta?.replayed !== 'boolean' ||
+      Object.hasOwn(payload, 'title') && row.title !== payload.title ||
+      Object.hasOwn(payload, 'branch_ref') && row.branchId !== payload.branch_ref ||
+      Object.hasOwn(payload, 'shift_start') && row.shiftStart?.slice(0, 5) !== payload.shift_start ||
+      Object.hasOwn(payload, 'shift_end') && row.shiftEnd?.slice(0, 5) !== payload.shift_end ||
+      Object.hasOwn(payload, 'available') && row.available !== payload.available) return { ok: false, kind: 'network', message: 'The saved personnel profile could not be confirmed. Retry the same save to recover its result.' }
     return { ok: true, record: mapStaffProfile(result.data) }
   }
 

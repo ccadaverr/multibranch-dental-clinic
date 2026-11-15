@@ -37,7 +37,7 @@ class StaffShiftRecoveryTest extends TestCase
         $command = $this->command();
         $first = $this->patchJson('/api/staff/shift-recovery', $command)->assertOk()->assertJsonPath('meta.replayed', false)->json('data');
         $this->assertNotSame($command['expected_revision'], $first['revision']);
-        $this->patchJson('/api/staff/shift-recovery', ['title' => 'Assistant'])->assertOk();
+        $this->patchJson('/api/staff/shift-recovery', \Tests\Support\StaffProfileCommand::body('shift-recovery', ['title' => 'Assistant']))->assertOk();
         $this->patchJson('/api/staff/shift-recovery', $command)->assertOk()->assertJsonPath('meta.replayed', true)->assertExactJson([
             'data' => $first, 'meta' => ['operation_id' => $command['operation_id'], 'replayed' => true],
         ]);
@@ -59,9 +59,9 @@ class StaffShiftRecoveryTest extends TestCase
 
     public function test_single_field_patches_validate_against_persisted_other_endpoint(): void
     {
-        $this->patchJson('/api/staff/shift-recovery', ['shift_start' => '18:00'])->assertUnprocessable()->assertJsonValidationErrors('shift_end');
-        $this->patchJson('/api/staff/shift-recovery', ['shift_end' => '08:00'])->assertUnprocessable()->assertJsonValidationErrors('shift_end');
-        $this->patchJson('/api/staff/shift-recovery', ['shift_end' => '19:00'])->assertOk()->assertJsonPath('data.shiftEnd', '19:00:00');
+        $this->patchJson('/api/staff/shift-recovery', \Tests\Support\StaffProfileCommand::body('shift-recovery', ['shift_start' => '18:00']))->assertUnprocessable()->assertJsonValidationErrors('shift_end');
+        $this->patchJson('/api/staff/shift-recovery', \Tests\Support\StaffProfileCommand::body('shift-recovery', ['shift_end' => '08:00']))->assertUnprocessable()->assertJsonValidationErrors('shift_end');
+        $this->patchJson('/api/staff/shift-recovery', \Tests\Support\StaffProfileCommand::body('shift-recovery', ['shift_end' => '19:00']))->assertOk()->assertJsonPath('data.shiftEnd', '19:00:00');
         $this->patchJson('/api/staff/shift-recovery', ['operation_id' => $this->command()['operation_id']])->assertUnprocessable()->assertJsonValidationErrors('expected_revision');
         $this->patchJson('/api/staff/shift-recovery', ['expected_revision' => $this->command()['expected_revision']])->assertUnprocessable()->assertJsonValidationErrors('operation_id');
     }
@@ -79,5 +79,14 @@ class StaffShiftRecoveryTest extends TestCase
         $this->assertSame('10:00', $row['shift_start']);
         $this->assertSame('18:00', $row['shift_end']);
         $this->assertMatchesRegularExpression('/^[a-f0-9]{64}$/', $row['revision']);
+    }
+
+    public function test_legacy_writer_is_refused_without_overwriting_newer_changes(): void
+    {
+        $this->patchJson('/api/staff/shift-recovery', $this->command())->assertOk();
+        $this->patchJson('/api/staff/shift-recovery', ['shift_start' => '08:00', 'shift_end' => '16:00'])
+            ->assertConflict()->assertJsonPath('code', 'staff_precondition_required');
+        $this->assertSame('10:00:00', StaffProfile::where('legacy_ref', 'shift-recovery')->sole()->shift_start);
+        $this->assertSame(1, AuditLog::where('action', 'staff_profile.updated')->count());
     }
 }

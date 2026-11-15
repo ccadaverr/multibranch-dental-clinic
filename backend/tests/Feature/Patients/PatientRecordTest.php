@@ -414,7 +414,7 @@ class PatientRecordTest extends TestCase
 
         // Owner changes staffB1's assigned branch to b2 via StaffProfile update.
         $this->actingAsUser('owner');
-        $this->patchJson('/api/staff/'.$staffProfile->legacy_ref, ['branch_ref' => 'b2'])
+        $this->patchJson('/api/staff/'.$staffProfile->legacy_ref, \Tests\Support\StaffProfileCommand::body($staffProfile->legacy_ref, ['branch_ref' => 'b2']))
             ->assertOk()
             ->assertJsonPath('data.branchId', 'b2');
 

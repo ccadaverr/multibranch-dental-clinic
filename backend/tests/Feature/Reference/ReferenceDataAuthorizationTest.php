@@ -130,6 +130,7 @@ class ReferenceDataAuthorizationTest extends TestCase
                 'staff update' => ['patch', '/api/staff/'.$this->staffProfile('s-'.$suffix)->legacy_ref, ['available' => false]],
                 'dentist update' => ['patch', '/api/dentists/'.$this->dentistProfile('d-'.$suffix)->legacy_ref, ['available' => false]],
             };
+            if ($kind === 'staff update') $body = \Tests\Support\StaffProfileCommand::body('s-'.$suffix, $body);
 
             Sanctum::actingAs($this->userWithRole($role));
             $response = $this->json($method, $route, $body);
@@ -151,7 +152,7 @@ class ReferenceDataAuthorizationTest extends TestCase
         Sanctum::actingAs($this->userWithRole(Role::Owner));
 
         $this->patchJson('/api/branches/b1', ['city' => 'Updated City'])->assertOk()->assertJsonPath('data.id', 'b1');
-        $this->patchJson('/api/staff/s1', ['available' => false])->assertOk()->assertJsonPath('data.id', 's1');
+        $this->patchJson('/api/staff/s1', \Tests\Support\StaffProfileCommand::body('s1', ['available' => false]))->assertOk()->assertJsonPath('data.id', 's1');
         $this->patchJson('/api/dentists/d1', ['available' => false])->assertOk()->assertJsonPath('data.id', 'd1');
     }
 

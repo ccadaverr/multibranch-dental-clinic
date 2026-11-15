@@ -41,6 +41,10 @@ class StaffProfileController extends Controller
             $current = StaffProfile::whereKey($staffProfile->id)->lockForUpdate()->firstOrFail();
             $attributes = $request->safe()->except(['branch_ref', 'expected_revision', 'operation_id']);
             $operation = $request->validated('operation_id');
+            if (! $operation) {
+                return response()->json(['code' => 'staff_precondition_required',
+                    'message' => 'Refresh and review the Staff profile before saving. An observed revision and operation ID are required.'], 409);
+            }
             $command = $request->validated();
             ksort($command);
             $fingerprint = hash('sha256', json_encode($command, JSON_THROW_ON_ERROR));

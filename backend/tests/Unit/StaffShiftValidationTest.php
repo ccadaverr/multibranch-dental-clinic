@@ -11,13 +11,13 @@ use PHPUnit\Framework\TestCase;
 /** Actual request rules, without creating an application or opening a database connection. */
 class StaffShiftValidationTest extends TestCase
 {
-    public function test_comparison_and_operation_are_required_together_without_breaking_legacy_clients(): void
+    public function test_comparison_pair_syntax_leaves_missing_both_to_the_structured_controller_refusal(): void
     {
         $factory = new Factory(new Translator(new ArrayLoader, 'en'));
         $rules = (new UpdateStaffProfileRequest)->rules();
         $body = ['shift_start' => '09:00', 'shift_end' => '17:00'];
         $comparison = ['expected_revision' => str_repeat('a', 64), 'operation_id' => '11111111-1111-4111-8111-111111111111'];
-        $this->assertTrue($factory->make($body, $rules)->passes());
+        $this->assertTrue($factory->make($body, $rules)->passes(), 'Missing both reaches the controller409; this does not authorize a legacy write.');
         $this->assertTrue($factory->make($body + $comparison, $rules)->passes());
         foreach (array_keys($comparison) as $field) {
             $partial = $comparison;

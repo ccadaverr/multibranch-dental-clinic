@@ -20,7 +20,7 @@ class UpdateStaffProfileRequest extends FormRequest
             'shift_start' => ['sometimes', 'date_format:H:i'],
             'shift_end' => ['sometimes', 'date_format:H:i'],
             'available' => ['sometimes', 'boolean'],
-            // Opt-in comparison/replay extension; legacy personnel clients remain compatible.
+            // Validate the pair; the controller returns a structured409 when both are absent.
             'expected_revision' => ['required_with:operation_id', 'string', 'regex:/^[a-f0-9]{64}$/'],
             'operation_id' => ['required_with:expected_revision', 'uuid', 'lowercase'],
 

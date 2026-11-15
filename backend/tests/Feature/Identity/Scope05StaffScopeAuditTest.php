@@ -40,7 +40,7 @@ class Scope05StaffScopeAuditTest extends TestCase
     {
         $this->actingAsUser('owner');
 
-        return $this->patchJson('/api/staff/s-a', $payload);
+        return $this->patchJson('/api/staff/s-a', \Tests\Support\StaffProfileCommand::body('s-a', $payload));
     }
 
     private function audits()
@@ -126,7 +126,7 @@ class Scope05StaffScopeAuditTest extends TestCase
         ]);
         $count = UserBranchScope::count();
         $this->actingAsUser('owner');
-        $this->patchJson('/api/staff/s-unlinked', ['branch_ref' => 'b2'])->assertOk();
+        $this->patchJson('/api/staff/s-unlinked', \Tests\Support\StaffProfileCommand::body('s-unlinked', ['branch_ref' => 'b2']))->assertOk();
         $this->assertSame(0, $this->audits()->count());
         $this->assertSame($count, UserBranchScope::count());
     }

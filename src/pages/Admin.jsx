@@ -1,5 +1,5 @@
 import { liveRecords } from '../appointment-projection.js'
-import { appointmentWindow } from '../appointments-api.js'
+import { appointmentWindow, commandKey } from '../appointments-api.js'
 import { pendingHours } from '../phase3-contracts.js'
 import { automationSnapshot } from '../orchestration.js'
 import React, { useMemo, useRef, useState } from 'react'
@@ -14,7 +14,9 @@ import { createUserAccountRemote, deleteUserAccountRemote, fetchUserAccounts, up
 import { DEFAULT_COUNTRY, normalizePhoneNumber, sanitizePhoneInput } from '../phone.js'
 import { fetchAutomationSnapshot, dispatchAutomationRule, downloadAutomationCsv } from '../automation-api.js'
 import { fetchExecutiveSummary, fetchBranchPerformance, downloadAnalyticsCsv } from '../analytics-api.js'
-import { sendTestEmail } from '../api-client.js'
+import { sendTestEmail, listStaff, workSchedules } from '../api-client.js'
+import { personnelDutyRows } from '../personnel-duty.js'
+import { mapStaffProfile } from '../reference-data-bridge.js'
 import { EmployeeInvitations } from './EmployeeInvitations.jsx'
 import { BranchAccessDialog } from './BranchAccessDialog.jsx'
 import '../owner-branches.css'
@@ -324,6 +326,24 @@ export function TeamPage({ store }) {
   const [tab,setTab]=useState('dentists')
   const [editDentist,setEditDentist]=useState(null)
   const [editStaff,setEditStaff]=useState(null)
+  const [staffError,setStaffError]=useState(''),[staffUncertain,setStaffUncertain]=useState(false),[staffConflict,setStaffConflict]=useState(false)
+  const staffCommand=useRef(null)
+  const staffOwner=useRequestOwner(JSON.stringify([editStaff?.id,schedulingActorKey(store)]),store.getAuthGeneration)
+  const dutyContext=JSON.stringify([store.session?.serverUserId,store.session?.role,store.session?.active,store.getAuthGeneration?.()])
+  const [personnelDuty,setPersonnelDuty]=useState(null)
+  const dutyRequest=useRef(0),dutyLive=useRef(false)
+  const loadDuty=async()=>{
+    if(!dutyLive.current||!store.session?.serverUserId||!canAccessPage(state,store.session,'team'))return
+    const request=++dutyRequest.current,auth=store.getAuthGeneration?.()
+    setPersonnelDuty({context:dutyContext,loading:true})
+    try{
+      const result=await workSchedules()
+      if(!dutyLive.current||request!==dutyRequest.current||auth!==store.getAuthGeneration?.())return
+      setPersonnelDuty({context:dutyContext,loading:false,duty:result.ok?result.data?.duty:null,error:result.ok?'':'Doctor duty could not be loaded. Retry before relying on today’s duty.'})
+    }catch{if(dutyLive.current&&request===dutyRequest.current)setPersonnelDuty({context:dutyContext,loading:false,error:'Doctor duty could not be loaded. Try again.'})}
+  }
+  React.useEffect(()=>{dutyLive.current=true;loadDuty();return()=>{dutyLive.current=false;dutyRequest.current++}},[dutyContext])
+  const currentDuty=personnelDuty?.context===dutyContext?personnelDuty:null
 
   const linkedUser=userId=>state.users.find(u=>u.id===userId)
   const accountStatus=profile=>{
@@ -349,18 +369,50 @@ export function TeamPage({ store }) {
     if(!result.ok)return toast(result.message||'Could not save personnel changes.','warning')
     const adopted=actions.adoptPersonnelFromServer('dentists',editDentist.id,result.record)
     if(!adopted.ok)return toast(adopted.message,'warning')
-    toast('Personnel changes saved.','success');setEditDentist(null)
+    toast('Personnel changes saved.','success');setEditDentist(null);loadDuty()
   }
   const saveStaff=async()=>{
-    const result=await syncPersonnelUpdate('staff',editStaff?.id,editStaff)
-    if(!result.ok)return toast(result.message||'Could not save personnel changes.','warning')
-    const adopted=actions.adoptPersonnelFromServer('staff',editStaff.id,result.record)
-    if(!adopted.ok)return toast(adopted.message,'warning')
-    toast('Personnel changes saved.','success');setEditStaff(null)
+    if(staffConflict||!canAccessPage(state,store.session,'team'))return
+    const ticket=staffOwner.begin();if(!ticket)return
+    const draft=staffCommand.current||{...editStaff,operationId:commandKey()}
+    staffCommand.current=draft;setStaffError('')
+    try{
+      const result=await syncPersonnelUpdate('staff',draft.id,draft,()=>staffOwner.current(ticket))
+      if(!staffOwner.current(ticket))return
+      if(!result.ok){
+        const unknown=['network','server'].includes(result.kind)
+        setStaffUncertain(unknown);setStaffConflict(result.kind==='conflict')
+        if(!unknown)staffCommand.current=null
+        const problem=result.kind==='validation'?Object.values(result.errors||{})[0]?.[0]:result.message
+        setStaffError(unknown?'The save could not be confirmed. Your draft is retained. Retry this save to recover its original result.':problem||'Could not save personnel changes.');return
+      }
+      const adopted=actions.adoptPersonnelFromServer('staff',draft.id,result.record)
+      if(!adopted.ok){setStaffUncertain(true);setStaffError(adopted.message);return}
+      staffCommand.current=null;setStaffUncertain(false)
+      toast('Personnel changes saved.','success');setEditStaff(null)
+    }catch{if(staffOwner.current(ticket)){setStaffUncertain(true);setStaffError('The save could not be confirmed. Retry this save to recover the original result.')}}
+    finally{staffOwner.finish(ticket)}
+  }
+  const reloadStaff=async()=>{
+    const ticket=staffOwner.begin();if(!ticket)return
+    try{
+      const result=await listStaff()
+      if(!staffOwner.current(ticket))return
+      const row=result.ok&&result.data?.find(s=>s.id===editStaff.id)
+      if(!row){setStaffError('The current Staff profile could not be loaded. Your draft is preserved.');return}
+      const record=mapStaffProfile(row)
+      const adopted=actions.adoptPersonnelFromServer('staff',row.id,record)
+      if(!adopted.ok){setStaffError(adopted.message);return}
+      // Explicit review discards the refused draft; never silently rebase it onto a new revision.
+      setEditStaff({...editStaff,...record,observedBranchId:record.branchId,branch:row.branch})
+      staffCommand.current=null;setStaffConflict(false);setStaffError('Current profile loaded. Review it before saving.')
+    }catch{if(staffOwner.current(ticket))setStaffError('The current Staff profile could not be loaded. Your draft is preserved.')}
+    finally{staffOwner.finish(ticket)}
   }
 
   return <>
-    <PageHeader title="Dentist & Staff Management" text="Personnel records are linked to account access. This screen manages Staff and Dentist profiles, operational shifts, branch assignments, and availability used by scheduling and capacity workflows."/>
+    <PageHeader title="Dentist & Staff Management" text="Personnel records are linked to account access. This screen manages Staff and Dentist profiles, operational shifts, branch assignments, and availability used by scheduling and capacity workflows." aside={<Button variant="soft" disabled={currentDuty?.loading} onClick={loadDuty}>{currentDuty?.loading?'Loading duty…':'Refresh duty'}</Button>}/>
+    {currentDuty?.error&&<p role="alert">{currentDuty.error}</p>}
     <Notice tone="info" title="Account & personnel synchronization">Create the account first in <b>Access & Roles</b>. Dentist and staff accounts automatically receive a linked personnel profile here. <b>Active</b> comes from the account; <b>Available</b> reflects operational scheduling status.</Notice>
     <Tabs tabs={[{key:'dentists',label:'Dentists',count:state.dentists.length},{key:'staff',label:'Staff',count:state.staff.length}]} active={tab} onChange={setTab}/>
     {tab==='dentists'?<Card title="Dentist profiles & availability" subtitle="License Number • Specialty • Linked Account • Operational availability">
@@ -373,7 +425,10 @@ export function TeamPage({ store }) {
         {key:'shift',label:'Shift',render:d=>`${d.shiftStart}–${d.shiftEnd}`},
         {key:'active',label:'Active',render:d=><Status>{accountStatus(d)}</Status>},
         {key:'availability',label:'Available',render:d=><Status>{availableStatus(d)}</Status>},
-        {key:'dutyStatus',label:'Duty status',render:d=><span className={`fd-badge ${availableStatus(d)==='Available'?'is-ok':'is-muted'}`}>{availableStatus(d)==='Available'?'Doctor is on duty today':'Off duty'}</span>},
+        {key:'dutyStatus',label:'Duty today by branch',render:d=>{
+          const rows=personnelDutyRows(currentDuty?.duty,d.id,d.branchIds,clinicDate())
+          return rows.length?<div>{rows.map(row=><div key={row.branchId}><b>{row.branchName||state.branches.find(b=>b.id===row.branchId)?.name||'Assigned branch'}</b><span className={`fd-badge ${row.status==='on'?'is-ok':'is-muted'}`}>{row.status==='on'?'Doctor is on duty today':row.status==='off'?'Off duty today':'Duty status unavailable'}</span>{row.estimated&&<small>Profile hours (estimated)</small>}</div>)}</div>:<span>Duty status unavailable</span>
+        }},
         {key:'action',label:'Action',render:d=><Button size="sm" variant="ghost" onClick={()=>setEditDentist({...d})}>Edit Profile</Button>}
       ]}/>
     </Card>:<Card title="Clinic Staff profiles" subtitle="Every row is linked to its account when account access exists">
@@ -385,7 +440,7 @@ export function TeamPage({ store }) {
         {key:'shift',label:'Shift',render:s=>`${s.shiftStart}–${s.shiftEnd}`},
         {key:'active',label:'Active',render:s=><Status>{accountStatus(s)}</Status>},
         {key:'availability',label:'Available',render:s=><Status>{availableStatus(s)}</Status>},
-        {key:'action',label:'Action',render:s=><Button size="sm" variant="ghost" onClick={()=>setEditStaff({...s})}>Edit Profile</Button>}
+        {key:'action',label:'Action',render:s=><Button size="sm" variant="ghost" onClick={()=>{staffCommand.current=null;setStaffError('');setStaffUncertain(false);setStaffConflict(false);setEditStaff({...s,observedBranchId:s.branchId})}}>Edit Profile</Button>}
       ]}/>
     </Card>}
 
@@ -405,8 +460,8 @@ export function TeamPage({ store }) {
       </div>}
     </Modal>
 
-    <Modal open={!!editStaff} onClose={()=>setEditStaff(null)} title="Edit staff profile" subtitle="Update the Staff title, branch assignment, shift, and operational availability used by scheduling.">
-      {editStaff&&<div className="form-grid">
+    <Modal open={!!editStaff} onClose={()=>{if(!staffOwner.busy&&!staffUncertain)setEditStaff(null)}} title="Edit staff profile" subtitle="Update the Staff title, branch assignment, shift, and operational availability used by scheduling.">
+      {editStaff&&<><fieldset disabled={staffOwner.busy||staffUncertain||staffConflict} className="form-grid" style={{border:0,padding:0,minWidth:0}}>
         <Field label="User / display name" hint={`Linked user: ${editStaff.userId}`}><input value={editStaff.name} disabled/></Field>
         <Field label="Staff title"><input value={editStaff.staffType||''} onChange={e=>setEditStaff({...editStaff,staffType:e.target.value})}/></Field>
         <Field label="Branch"><select value={editStaff.branch} onChange={e=>setEditStaff({...editStaff,branch:e.target.value,branchId:state.branches.find(b=>b.name===e.target.value)?.id||null})}><option>All Branches</option>{state.branches.map(b=><option key={b.id}>{b.name}</option>)}</select></Field>
@@ -414,8 +469,11 @@ export function TeamPage({ store }) {
         <Field label="Shift end"><input type="time" value={editStaff.shiftEnd} onChange={e=>setEditStaff({...editStaff,shiftEnd:e.target.value})}/></Field>
         <label className="check-control span-2"><input type="checkbox" checked={!!editStaff.available} onChange={e=>setEditStaff({...editStaff,available:e.target.checked})}/><span><b>Available for operations</b><small>Availability is separate from the account's Active/Inactive status.</small></span></label>
         {branchConflict(editStaff)&&<Notice tone="warning">Current shift conflicts with the selected branch operating hours.</Notice>}
-        <Button className="span-2" onClick={saveStaff}>Save & Synchronize Profile</Button>
-      </div>}
+      </fieldset>
+      {staffError&&<p role="alert">{staffError}</p>}
+      <Button disabled={staffOwner.busy||staffConflict} onClick={saveStaff}>{staffOwner.busy?'Saving…':staffUncertain?'Retry this save':'Save & Synchronize Profile'}</Button>
+      {staffConflict&&<Button disabled={staffOwner.busy} variant="soft" onClick={reloadStaff}>Discard draft and reload profile</Button>}
+      </>}
     </Modal>
   </>
 }

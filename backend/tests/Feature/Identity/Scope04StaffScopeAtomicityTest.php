@@ -45,7 +45,7 @@ class Scope04StaffScopeAtomicityTest extends TestCase
     {
         $this->actingAsUser('owner');
 
-        return $this->patchJson('/api/staff/s-a', $payload);
+        return $this->patchJson('/api/staff/s-a', \Tests\Support\StaffProfileCommand::body('s-a', $payload));
     }
 
     public function test_reassignment_replaces_scopes_and_retry_does_not_duplicate_rows(): void
@@ -118,7 +118,7 @@ class Scope04StaffScopeAtomicityTest extends TestCase
         ]);
         $counts = [User::count(), UserBranchScope::count()];
         $this->actingAsUser('owner');
-        $this->patchJson('/api/staff/s-unlinked', ['branch_ref' => 'b2'])->assertOk()->assertJsonPath('data.branchId', 'b2');
+        $this->patchJson('/api/staff/s-unlinked', \Tests\Support\StaffProfileCommand::body('s-unlinked', ['branch_ref' => 'b2']))->assertOk()->assertJsonPath('data.branchId', 'b2');
         $this->assertSame($counts, [User::count(), UserBranchScope::count()]);
     }
 
