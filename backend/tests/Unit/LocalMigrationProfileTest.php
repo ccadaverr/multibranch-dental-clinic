@@ -56,6 +56,20 @@ final class LocalMigrationProfileTest extends TestCase
         }
     }
 
+    public function test_leave_receipts_are_an_explicit_opt_in_with_all_original_paths_required(): void
+    {
+        $approved=['2026_11_18_000100_create_notification_archives.php','2026_11_19_000100_create_staff_roster_drafts.php','2026_11_20_000100_add_leave_command_recovery.php'];
+        for($mask=0;$mask<8;$mask++){
+            $extensions=[];foreach($approved as $i=>$file)if($mask&(1<<$i))$extensions[]=$file;
+            $target=$this->target();$target['operations_migrations']=$extensions;
+            foreach($extensions as $file)$target['selected_migrations'][]=substr($file,0,-4);
+            $paths=LocalMigrationProfile::paths($target);
+            $this->assertCount(2+count($extensions),$paths);LocalMigrationProfile::assertSelection('migrate',$paths,$target);
+        }
+        $target['operations_migrations'][]=$approved[0];
+        $this->expectException(RuntimeException::class);LocalMigrationProfile::paths($target);
+    }
+
     #[DataProvider('denied')]
     public function test_default_held_or_destructive_commands_are_refused(string $command, array $paths): void
     {

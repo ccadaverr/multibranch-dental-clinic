@@ -65,7 +65,7 @@ test('OWN-11 stale revision preserves the form and prevents another dispatch unt
 })
 for(const [name,run,path,method,body]of [
  ['leave request',guard=>requestLeave(partial,guard),'/api/leave','POST',partial],
- ['leave cancellation',guard=>cancelLeave('leave-A',guard),'/api/leave/leave-A/cancel','POST',undefined],
+ ['leave cancellation',guard=>cancelLeave('leave-A',{expected_revision:1,operation_id:shiftOperation},guard),'/api/leave/leave-A/cancel','POST',{expected_revision:1,operation_id:shiftOperation}],
  ['shift update',guard=>updateStaffProfile('staff-A',{shift_start:'09:15',shift_end:'18:15'},guard),'/api/staff/staff-A','PATCH',{shift_start:'09:15',shift_end:'18:15'}],
 ])for(const stale of [false,true])test('QA scheduling dispatch '+name+' '+(stale?'refuses context changed during CSRF':'retains exact method and body'),async()=>{
  const old=globalThis.fetch,calls=[];let current=true,release,started

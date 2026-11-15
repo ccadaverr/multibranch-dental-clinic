@@ -21,6 +21,7 @@ HELD = {
 }
 OPERATIONS_MIGRATIONS = ['2026_11_18_000100_create_notification_archives.php']
 ROSTER_DRAFT_MIGRATIONS = ['2026_11_19_000100_create_staff_roster_drafts.php']
+LEAVE_RECOVERY_MIGRATIONS = ['2026_11_20_000100_add_leave_command_recovery.php']
 
 def target(path):
     p = Path(path)
@@ -73,7 +74,8 @@ def migrations(c):
     files = sorted((ROOT / 'backend/database/migrations').glob('*.php'))
     files += sorted((ROOT / 'backend/database/compatibility').glob('*.php'))
     extensions = c.get('operations_migrations', [])
-    if extensions not in [[], OPERATIONS_MIGRATIONS, ROSTER_DRAFT_MIGRATIONS, OPERATIONS_MIGRATIONS + ROSTER_DRAFT_MIGRATIONS]:
+    approved = OPERATIONS_MIGRATIONS + ROSTER_DRAFT_MIGRATIONS + LEAVE_RECOVERY_MIGRATIONS
+    if extensions != [name for name in approved if name in extensions]:
         raise ValueError('Unreviewed Operations migration selection.')
     files += [ROOT / 'backend/database/operations' / name for name in extensions]
     observed = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in files}
@@ -140,7 +142,7 @@ def main():
     parser.add_argument('--target', required=True, help='Private manifest for a newly provisioned, owned local cluster')
     parser.add_argument('--profile', choices=['demo', 'test'], default='demo')
     parser.add_argument('--filter', help='Optional PHPUnit test-name filter; explicit reviewed files remain required')
-    parser.add_argument('action', choices=['status', 'start', 'stop', 'backup', 'migrate', 'seed', 'seed-demo', 'visit-fixture', 'test', 'clone-test', 'concurrency', 'billing-concurrency', 'prescription-concurrency', 'operations-contention', 'roster-draft-contention', 'leave-authority-contention', 'verify-schema', 'verify-guard', 'serve', 'ui', 'mailbox', 'worker', 'scheduler'])
+    parser.add_argument('action', choices=['status', 'start', 'stop', 'backup', 'migrate', 'seed', 'seed-demo', 'visit-fixture', 'test', 'clone-test', 'concurrency', 'billing-concurrency', 'prescription-concurrency', 'operations-contention', 'roster-draft-contention', 'leave-authority-contention', 'leave-recovery-contention', 'verify-schema', 'verify-guard', 'serve', 'ui', 'mailbox', 'worker', 'scheduler'])
     parser.add_argument('tests', nargs='*')
     args = parser.parse_args()
     c, runtime = target(args.target)
@@ -156,7 +158,7 @@ def main():
     selected = migrations(c) if args.action != 'backup' else []
     # Separate profiles may run independently. One profile never runs overlapping suites or schema/seed work.
     lock = None
-    if args.action in ['migrate', 'seed', 'seed-demo', 'visit-fixture', 'test', 'clone-test', 'concurrency', 'billing-concurrency', 'prescription-concurrency', 'operations-contention', 'roster-draft-contention', 'leave-authority-contention', 'verify-schema', 'verify-guard', 'backup']:
+    if args.action in ['migrate', 'seed', 'seed-demo', 'visit-fixture', 'test', 'clone-test', 'concurrency', 'billing-concurrency', 'prescription-concurrency', 'operations-contention', 'roster-draft-contention', 'leave-authority-contention', 'leave-recovery-contention', 'verify-schema', 'verify-guard', 'backup']:
         lock = open(runtime / (database + '.lock'), 'a')
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -206,7 +208,11 @@ def main():
         seeder = 'DemoClinicSeeder' if args.action == 'seed-demo' else 'DatabaseSeeder'
         subprocess.run([c['php'], 'artisan', 'db:seed', '--class=' + seeder, '--force', '--no-interaction'],
                        cwd=ROOT / 'backend', env=environment(c, runtime, args.profile), check=True)
-    elif args.action in ['test', 'verify-schema', 'verify-guard', 'concurrency', 'billing-concurrency', 'prescription-concurrency', 'operations-contention', 'roster-draft-contention', 'leave-authority-contention']:
+    elif args.action in ['test', 'verify-schema', 'verify-guard', 'concurrency', 'billing-concurrency', 'prescription-concurrency', 'operations-contention', 'roster-draft-contention', 'leave-authority-contention', 'leave-recovery-contention']:
+        if args.action == 'leave-recovery-contention':
+            if not runtime.name.startswith('contention-') or not set(LEAVE_RECOVERY_MIGRATIONS) <= set(c.get('operations_migrations', [])):
+                raise ValueError('Leave recovery contention requires a fresh leave-recovery clone-test target.')
+            args.tests = ['tests/Feature/Staffing/LeaveRecoveryContentionTest.php']
         if args.action == 'leave-authority-contention':
             if not runtime.name.startswith('contention-'):
                 raise ValueError('Leave authority contention requires a fresh clone-test target.')
@@ -254,7 +260,7 @@ def main():
             test_env['PRESCRIPTION_DISPOSABLE_POSTGRES_ACCEPTANCE'] = '1'
         if args.action == 'operations-contention':
             test_env['OPERATIONS_DISPOSABLE_POSTGRES_ACCEPTANCE'] = '1'
-        if args.action in ['roster-draft-contention', 'leave-authority-contention']:
+        if args.action in ['roster-draft-contention', 'leave-authority-contention', 'leave-recovery-contention']:
             test_env['OPERATIONS_DISPOSABLE_POSTGRES_ACCEPTANCE'] = '1'
         subprocess.run([c['php'], 'vendor/bin/phpunit', '-c', 'phpunit.xml', '--bootstrap', 'tests/Support/IsolatedTestBootstrap.php',
                         '--cache-directory', str(runtime / 'cache/phpunit'), *(['--filter', args.filter] if args.filter else []), *args.tests],

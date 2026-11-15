@@ -17,7 +17,7 @@ use Tests\TestCase;
 /** M15 Leave Management, frozen at Monday 2026-09-28 10:00 Asia/Manila (SchedulingFixture). */
 class LeaveTest extends TestCase
 {
-    use RefreshDatabase, SchedulingFixture;
+    use RefreshDatabase, SchedulingFixture, \Tests\Support\ObservedLeaveCommands;
 
     private const NOTE = 'Family matter, please keep private';
 
@@ -35,7 +35,7 @@ class LeaveTest extends TestCase
 
     private function request(array $body = [])
     {
-        return $this->postJson('/api/leave', $body + ['type' => 'vacation', 'start_date' => '2026-09-30', 'end_date' => '2026-09-30', 'private_note' => self::NOTE]);
+        return $this->postLeave('/api/leave', $body + ['type' => 'vacation', 'start_date' => '2026-09-30', 'end_date' => '2026-09-30', 'private_note' => self::NOTE]);
     }
 
     private function approverSetting(string $value): void
@@ -52,7 +52,7 @@ class LeaveTest extends TestCase
         $this->assertCount(18, $this->slots('2026-09-30')); // pending leave blocks nothing
 
         $this->actingAsUser('owner');
-        $this->postJson("/api/leave/$id/decide", ['decision' => 'approve'])->assertOk()->assertJsonPath('data.status', 'Approved');
+        $this->postLeave("/api/leave/$id/decide", ['decision' => 'approve'])->assertOk()->assertJsonPath('data.status', 'Approved');
         $this->actingAsUser('staffB1');
         $this->assertCount(0, $this->slots('2026-09-30'));
         $this->assertSame(['d2'], $this->slots('2026-09-30', null)->pluck('dentist.id')->unique()->values()->all()); // "any available" skips d1
@@ -61,11 +61,11 @@ class LeaveTest extends TestCase
         $day = collect($this->getJson('/api/appointments/calendar?branch_ref=b1&service_ref=svc1&dentist_ref=d1&month=2026-09')->assertOk()->json('data.days'))->firstWhere('date', '2026-09-30');
         $this->assertSame(['date' => '2026-09-30', 'status' => 'off', 'reason' => 'The dentist is not working this day.'], $day);
         // Booking d1 directly is refused with the leave reason.
-        $this->postJson('/api/appointments', ['patient_id' => $this->p['A']->public_id, 'branch_ref' => 'b1', 'service_ref' => 'svc1', 'dentist_ref' => 'd1', 'date' => '2026-09-30', 'start_time' => '10:00'])
+        $this->postLeave('/api/appointments', ['patient_id' => $this->p['A']->public_id, 'branch_ref' => 'b1', 'service_ref' => 'svc1', 'dentist_ref' => 'd1', 'date' => '2026-09-30', 'start_time' => '10:00'])
             ->assertStatus(422);
 
         $this->actingAsUser('dentist1');
-        $this->postJson("/api/leave/$id/cancel")->assertOk()->assertJsonPath('data.status', 'Cancelled');
+        $this->postLeave("/api/leave/$id/cancel")->assertOk()->assertJsonPath('data.status', 'Cancelled');
         $this->actingAsUser('staffB1');
         $this->assertCount(18, $this->slots('2026-09-30'));
     }
@@ -75,7 +75,7 @@ class LeaveTest extends TestCase
         $this->actingAsUser('dentist1');
         $id = $this->request(['start_time' => '13:00', 'end_time' => '15:00', 'type' => 'other'])->assertCreated()->json('data.id');
         $this->actingAsUser('owner');
-        $this->postJson("/api/leave/$id/decide", ['decision' => 'approve'])->assertOk();
+        $this->postLeave("/api/leave/$id/decide", ['decision' => 'approve'])->assertOk();
         $this->actingAsUser('staffB1');
         $times = $this->slots('2026-09-30')->pluck('start_time')->all();
         $this->assertContains('12:30', $times);
@@ -115,17 +115,17 @@ class LeaveTest extends TestCase
             ->assertStatus(422)->assertJsonValidationErrors('start_date');
 
         $this->actingAsUser('owner');
-        $this->postJson('/api/leave', ['type' => 'vacation', 'start_date' => '2026-10-02', 'end_date' => '2026-10-02'])
+        $this->postLeave('/api/leave', ['type' => 'vacation', 'start_date' => '2026-10-02', 'end_date' => '2026-10-02'])
             ->assertForbidden();
         $pending = collect($this->getJson('/api/leave?status=Pending')->assertOk()->json('data'))->keyBy('id');
         $this->assertSame('2026-09-30T13:00:00+08:00', $pending[$dentistId]['starts_at']);
         $this->assertSame('2026-10-01T12:00:00+08:00', $pending[$staffId]['ends_at']);
         $this->assertTrue($pending[$dentistId]['can_decide']);
         $this->assertTrue($pending[$staffId]['can_decide']);
-        $this->postJson("/api/leave/$dentistId/decide", ['decision' => 'approve'])
+        $this->postLeave("/api/leave/$dentistId/decide", ['decision' => 'approve'])
             ->assertOk()->assertJsonPath('data.status', 'Approved')
             ->assertJsonPath('data.ends_at', '2026-09-30T15:00:00+08:00');
-        $this->postJson("/api/leave/$staffId/decide", ['decision' => 'approve'])
+        $this->postLeave("/api/leave/$staffId/decide", ['decision' => 'approve'])
             ->assertOk()->assertJsonPath('data.status', 'Approved');
     }
 
@@ -138,19 +138,19 @@ class LeaveTest extends TestCase
         $before = $this->getJson("/api/leave/$id/conflicts")->assertOk();
         $this->assertSame([$booked->public_id], array_column($before->json('data.appointments'), 'id'));
         $this->assertSame('d2', $before->json('data.appointments.0.cover.0.id'));
-        $approved = $this->postJson("/api/leave/$id/decide", ['decision' => 'approve'])->assertOk();
+        $approved = $this->postLeave("/api/leave/$id/decide", ['decision' => 'approve'])->assertOk();
         $this->assertSame([$booked->public_id], array_column($approved->json('data.appointments'), 'id'));
         $this->assertSame('Confirmed', $booked->fresh()->status);
 
-        $this->postJson("/api/leave/$id/notify")->assertStatus(422)->assertJsonPath('code', 'wording_not_approved');
+        $this->postLeave("/api/leave/$id/notify")->assertStatus(422)->assertJsonPath('code', 'wording_not_approved');
         MessageTemplate::where('key', 'dentist_unavailable_notice')->update(['approved_at' => now(), 'approved_by_user_id' => $this->u['owner']->id]);
-        $sent = $this->postJson("/api/leave/$id/notify")->assertOk();
+        $sent = $this->postLeave("/api/leave/$id/notify")->assertOk();
         $this->assertSame(1, $sent->json('data.emailed') + $sent->json('data.in_app_only'));
         $this->assertSame('Confirmed', $booked->fresh()->status);
 
         // The front desk moves it to the suggested cover with the normal reschedule command.
         $this->actingAsUser('staffB1');
-        $this->postJson("/api/appointments/{$booked->public_id}/reschedule", ['expected_revision' => $booked->revision, 'date' => '2026-09-30', 'start_time' => '11:00', 'dentist_ref' => 'd2'])->assertOk();
+        $this->postLeave("/api/appointments/{$booked->public_id}/reschedule", ['expected_revision' => $booked->revision, 'date' => '2026-09-30', 'start_time' => '11:00', 'dentist_ref' => 'd2'])->assertOk();
         $this->actingAsUser('owner');
         $this->getJson("/api/leave/$id/conflicts")->assertOk()->assertJsonCount(0, 'data.appointments');
     }
@@ -166,7 +166,7 @@ class LeaveTest extends TestCase
         // Owner only (default): the front desk cannot see or decide.
         $this->actingAsUser('staffB1');
         $this->getJson('/api/leave')->assertForbidden();
-        $this->postJson("/api/leave/$id/decide", ['decision' => 'approve'])->assertForbidden();
+        $this->postLeave("/api/leave/$id/decide", ['decision' => 'approve'])->assertForbidden();
         // The team strip shows names and dates only.
         $strip = $this->getJson('/api/leave/calendar?from=2026-09-28&to=2026-10-04')->assertOk();
         $this->assertStringNotContainsString(self::NOTE, $strip->getContent());
@@ -178,7 +178,7 @@ class LeaveTest extends TestCase
         $this->assertSame([], $this->getJson('/api/leave')->assertOk()->json('data'));
         $this->actingAsUser('staffB1');
         $this->assertSame(self::NOTE, $this->getJson('/api/leave')->assertOk()->json('data.0.private_note'));
-        $this->postJson("/api/leave/$id/decide", ['decision' => 'decline'])->assertOk()->assertJsonPath('data.status', 'Declined');
+        $this->postLeave("/api/leave/$id/decide", ['decision' => 'decline'])->assertOk()->assertJsonPath('data.status', 'Declined');
         $this->assertTrue(UserNotification::where('user_id', $this->u['dentist1']->id)->where('kind', 'leave_decided')->exists());
 
         $this->assertStringNotContainsString(self::NOTE, AuditLog::where('action', 'like', 'leave.%')->get()->toJson());
@@ -195,10 +195,10 @@ class LeaveTest extends TestCase
         $this->approverSetting('owner_or_front_desk');
         $this->actingAsUser('staffB1');
         $id = $this->request(['type' => 'sick'])->assertCreated()->json('data.id');
-        $this->postJson("/api/leave/$id/decide", ['decision' => 'approve'])->assertForbidden();
+        $this->postLeave("/api/leave/$id/decide", ['decision' => 'approve'])->assertForbidden();
         $this->actingAsUser('owner');
-        $this->postJson("/api/leave/$id/decide", ['decision' => 'approve'])->assertOk()->assertJsonCount(0, 'data.appointments');
-        $this->postJson("/api/leave/$id/decide", ['decision' => 'decline'])->assertStatus(422); // decided once
+        $this->postLeave("/api/leave/$id/decide", ['decision' => 'approve'])->assertOk()->assertJsonCount(0, 'data.appointments');
+        $this->postLeave("/api/leave/$id/decide", ['decision' => 'decline'])->assertStatus(422); // decided once
         $this->actingAsUser('staffB1');
         $this->assertCount(18, $this->slots('2026-09-30'));
         $this->request(['start_date' => '2026-09-30', 'end_date' => '2026-10-02'])->assertStatus(422); // overlaps approved leave

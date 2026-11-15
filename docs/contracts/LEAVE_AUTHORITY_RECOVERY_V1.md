@@ -1,5 +1,7 @@
 # Leave mutation authority and audit — v1 continuation
 
+Batch05 continuation: the legacy revision/recovery limitations below are historical. [Leave command API v2](LEAVE_COMMAND_API_V2.md) now implements required lifecycle revisions, encrypted exact replay receipts, migrated consumers and transactional follow-on intents. Original policies remain unchanged.
+
 Implemented on Joevan's local feature branch, awaiting integration. Existing routes, JSON inputs, states and eligibility remain unchanged:
 
 - `POST /api/leave`: existing linked Staff/Dentist requester, validated dates/times/type/private note. Returns201 with Pending leave.

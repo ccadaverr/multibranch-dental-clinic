@@ -636,8 +636,9 @@ export function requestLeave(body, beforeDispatch) { return request('/api/leave'
 export function leaveRequests(filters = {}) { const q = new URLSearchParams(Object.entries(filters).filter(([, v]) => v)).toString(); return request(`/api/leave${q ? `?${q}` : ''}`) }
 export function leaveCalendar(from, to) { return request(`/api/leave/calendar?from=${enc(from)}&to=${enc(to)}`) }
 export function leaveConflicts(id) { return request(`/api/leave/${enc(id)}/conflicts`) }
-export function decideLeave(id, decision) { return json(`/api/leave/${enc(id)}/decide`, 'POST', { decision }) }
-export function cancelLeave(id, beforeDispatch) { return request(`/api/leave/${enc(id)}/cancel`, { method: 'POST', beforeDispatch }) }
+export function getLeave(id) { return request(`/api/leave/${enc(id)}`) }
+export function decideLeave(id, decision, command, beforeDispatch) { return request(`/api/leave/${enc(id)}/decide`, {method:'POST',body:JSON.stringify({...command,decision}),beforeDispatch}) }
+export function cancelLeave(id, command, beforeDispatch) { return request(`/api/leave/${enc(id)}/cancel`, {method:'POST',body:JSON.stringify(command),beforeDispatch}) }
 export function notifyLeaveAffected(id) { return json(`/api/leave/${enc(id)}/notify`, 'POST') }
 // M25 Patient Handovers
 export function handovers(filters = {}) { const q = new URLSearchParams(Object.entries(filters).filter(([, v]) => v)).toString(); return request(`/api/handovers${q ? `?${q}` : ''}`) }

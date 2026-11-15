@@ -1,5 +1,6 @@
 """Explicit Operations opt-in cannot silently add migrations to the base preservation profile."""
 import hashlib
+import itertools
 import importlib.util
 from pathlib import Path
 import unittest
@@ -31,6 +32,17 @@ class OperationsProfileTest(unittest.TestCase):
         bad = self.manifest(True)
         bad['migration_hashes'][local.OPERATIONS_MIGRATIONS[0]] = 'wrong'
         with self.assertRaises(ValueError): local.migrations(bad)
+
+    def test_every_explicit_extension_subset_retains_hashes_and_holds(self):
+        approved=local.OPERATIONS_MIGRATIONS+local.ROSTER_DRAFT_MIGRATIONS+local.LEAVE_RECOVERY_MIGRATIONS
+        for size in range(4):
+            for subset in itertools.combinations(approved,size):
+                selected=local.migrations(self.manifest(list(subset)))
+                self.assertEqual(83+size,len(selected))
+                self.assertFalse(local.HELD.intersection(f.name for f in selected))
+        for invalid in [list(reversed(approved)),approved+[approved[0]],['unknown.php']]:
+            bad=self.manifest([]);bad['operations_migrations']=invalid
+            with self.assertRaises(ValueError):local.migrations(bad)
 
 
 if __name__ == '__main__': unittest.main()

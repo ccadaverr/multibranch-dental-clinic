@@ -193,6 +193,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
         Route::post('/', [\App\Http\Controllers\LeaveController::class, 'store'])->middleware(['role:staff,dentist', 'throttle:20,1']);
         Route::get('/', [\App\Http\Controllers\LeaveController::class, 'index'])->middleware('role:staff,owner');
         Route::get('/calendar', [\App\Http\Controllers\LeaveController::class, 'calendar'])->middleware('role:staff,owner,dentist');
+        Route::get('/{leaveRequest}', [\App\Http\Controllers\LeaveController::class, 'show'])->middleware('role:staff,owner,dentist');
         Route::get('/{leaveRequest}/conflicts', [\App\Http\Controllers\LeaveController::class, 'conflicts'])->middleware('role:staff,owner,dentist');
         Route::post('/{leaveRequest}/decide', [\App\Http\Controllers\LeaveController::class, 'decide'])->middleware(['role:staff,owner', 'throttle:30,1']);
         Route::post('/{leaveRequest}/cancel', [\App\Http\Controllers\LeaveController::class, 'cancel'])->middleware(['role:staff,owner,dentist', 'throttle:30,1']);

@@ -9,6 +9,7 @@ use App\Models\StaffProfile;
 use App\Models\User;
 use App\Models\UserBranchScope;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Symfony\Component\Process\Process;
 use Tests\Feature\Appointments\SchedulingFixture;
 use Tests\TestCase;
@@ -42,6 +43,7 @@ class LeaveAuthorityContentionTest extends TestCase
             $action=$frontDesk?'decide':$scenario;
             $path=$action==='create'?'/api/leave':'/api/leave/'.$leave->public_id.'/'.$action;
             $body=match($action){'decide'=>['decision'=>'approve'],'create'=>['type'=>'vacation','start_date'=>'2027-02-10','end_date'=>'2027-02-10','start_time'=>'13:00','end_time'=>'15:00'],default=>[]};
+            $body+=['expected_revision'=>$action==='create'?0:1,'operation_id'=>(string)Str::uuid()];
             $workers=$names=[]; DB::beginTransaction();
             try {
                 $locked=User::whereKey($actor->id)->lockForUpdate()->firstOrFail();

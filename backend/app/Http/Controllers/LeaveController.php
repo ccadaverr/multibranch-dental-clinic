@@ -15,6 +15,7 @@ use App\Services\Mail\MailOutbox;
 use App\Services\Notifications\NotificationCenter;
 use App\Services\Scheduling\ScheduleNotices;
 use App\Services\Scheduling\SchedulingService;
+use App\Services\Scheduling\LeaveCommands;
 use App\Support\ClinicClock;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -40,7 +41,14 @@ class LeaveController extends Controller
         abort_unless($dentist || $staff, 403, 'Only dentists and staff members request leave.');
         $rows = LeaveRequest::where('requester_user_id', $user->id)->with(['requester.person', 'decider.person', 'dentist.person'])->orderByDesc('starts_at')->limit(100)->get();
 
-        return response()->json(['data' => $rows->map(fn (LeaveRequest $l) => $this->view($l, $user))->values(), 'meta' => ['types' => LeaveRequest::TYPES]]);
+        return response()->json(['data' => $rows->map(fn (LeaveRequest $l) => $this->view($l, $user))->values(), 'meta' => ['types' => LeaveRequest::TYPES, 'commands_available'=>LeaveCommands::available()]]);
+    }
+
+    public function show(Request $request, LeaveRequest $leaveRequest): JsonResponse
+    {
+        $user=$request->user();
+        abort_unless($leaveRequest->requester_user_id===$user->id || $this->canDecide($user,$leaveRequest),403);
+        return response()->json(['data'=>$this->view($leaveRequest->load(['requester.person','decider.person','dentist.person']),$user),'meta'=>['commands_available'=>LeaveCommands::available()]]);
     }
 
     public function store(Request $request): JsonResponse
@@ -51,7 +59,8 @@ class LeaveController extends Controller
         $data = $request->validate(['type' => ['required', 'in:vacation,sick,other'], 'start_date' => ['required', 'date_format:Y-m-d'], 'end_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:start_date'],
             'start_time' => ['nullable', 'date_format:H:i', 'required_with:end_time'], 'end_time' => ['nullable', 'date_format:H:i', 'required_with:start_time'],
             'private_note' => ['nullable', 'required_if:type,other', 'string', 'max:500']]);
-        if ($data['start_date'] < ClinicClock::today()) throw ValidationException::withMessages(['start_date' => ['Choose today or a later date.']]);
+        $command=LeaveCommands::input($request,true);
+        $data=array_replace(['private_note'=>null,'start_time'=>null,'end_time'=>null],$data);
         if (ClinicClock::addDays($data['start_date'], 366) < $data['end_date']) throw ValidationException::withMessages(['end_date' => ['Choose at most one year.']]);
         // Partial: single-day leave from start_time to end_time on start_date. Full days: midnight to midnight (Asia/Manila).
         $partial = ! empty($data['start_time']);
@@ -62,22 +71,23 @@ class LeaveController extends Controller
         $ends = $partial ? ClinicClock::at($data['end_date'], $data['end_time']) : ClinicClock::at($data['end_date'], '00:00')->addDay();
         if ($ends->lessThanOrEqualTo($starts)) throw ValidationException::withMessages(['end_time' => ['The end must be after the start.']]);
 
-        $leave = DB::transaction(function () use ($user, $data, $starts, $ends) {
+        return DB::transaction(function () use ($user, $data, $starts, $ends, $command) {
             $user = $this->lockedActor($user);
             [$dentist, $staff] = $this->profiles($user);
             abort_unless($dentist || $staff, 403, 'Only dentists and staff members request leave.');
+            $fingerprint=LeaveCommands::fingerprint('create',null,$data+$command);
+            if ($prior=LeaveCommands::replay($user,$command['operation_id'],$fingerprint)) return $prior;
+            if ($data['start_date'] < ClinicClock::today()) throw ValidationException::withMessages(['start_date' => ['Choose today or a later date.']]);
             $overlap = LeaveRequest::where('requester_user_id', $user->id)->whereIn('status', ['Pending', 'Approved'])
                 ->where('starts_at', '<', SchedulingService::ts($ends))->where('ends_at', '>', SchedulingService::ts($starts))->exists();
             if ($overlap) throw ValidationException::withMessages(['start_date' => ['You already have leave requested or approved in this period.']]);
 
             $leave = LeaveRequest::create(['requester_user_id' => $user->id, 'dentist_profile_id' => $dentist?->id, 'staff_profile_id' => $staff?->id, 'type' => $data['type'],
-                'starts_at' => $starts, 'ends_at' => $ends, 'private_note' => $data['private_note'] ?? null, 'status' => 'Pending']);
-            $this->audit($user, 'leave.requested', $leave);
-            return $leave;
+                'starts_at' => $starts, 'ends_at' => $ends, 'private_note' => $data['private_note'] ?? null, 'status' => 'Pending', 'revision'=>1]);
+            $audit=$this->audit($user, 'leave.requested', $leave, ['operation_id'=>$command['operation_id']]);
+            foreach ($this->approvers($leave) as $approver) $this->tell($approver, $leave, 'leave_requested', 'Leave request', ($user->person?->fullName() ?? 'A team member').' asked for leave: '.$this->range($leave).'.', 'leave', $user);
+            return LeaveCommands::save($user,$leave,'create',$command,$fingerprint,$this->view($leave->fresh(['requester.person','dentist.person']),$user),$audit,201);
         });
-        foreach ($this->approvers($leave) as $approver) $this->tell($approver, $leave, 'leave_requested', 'Leave request', ($user->person?->fullName() ?? 'A team member').' asked for leave: '.$this->range($leave).'.', 'leave', $user);
-
-        return response()->json(['data' => $this->view($leave->fresh(['requester.person', 'dentist.person']), $user)], 201);
     }
 
     /** Approvers: requests they may decide, with filters (status, branch, from/to). */
@@ -95,7 +105,7 @@ class LeaveController extends Controller
             ->filter(fn (LeaveRequest $l) => empty($data['branch_ref']) || in_array($data['branch_ref'], $this->branchRefs($l), true))->values();
 
         return response()->json(['data' => $rows->map(fn (LeaveRequest $l) => $this->view($l, $user))->values(), 'meta' => ['types' => LeaveRequest::TYPES,
-            'approver' => AutomationCatalog::setting('staffing')?->settings['leave_approver'] ?? 'owner', 'wording_approved' => MessageTemplates::approved(ScheduleNotices::TEMPLATE)]]);
+            'approver' => AutomationCatalog::setting('staffing')?->settings['leave_approver'] ?? 'owner', 'wording_approved' => MessageTemplates::approved(ScheduleNotices::TEMPLATE), 'commands_available'=>LeaveCommands::available()]]);
     }
 
     /** Team calendar strip: who is away (approved) or asked to be (pending) in a date range. Names and dates only. */
@@ -127,21 +137,23 @@ class LeaveController extends Controller
         $user = $request->user();
         $data = $request->validate(['decision' => ['required', 'in:approve,decline']]);
         abort_unless($this->canDecide($user, $leaveRequest), 403, 'You cannot decide this request.');
+        $command=LeaveCommands::input($request);
         $to = $data['decision'] === 'approve' ? 'Approved' : 'Declined';
-        DB::transaction(function () use ($leaveRequest, $user, $to) {
+        return DB::transaction(function () use ($leaveRequest, $user, $to, $data, $command) {
             $user = $this->lockedActor($user);
             $current = LeaveRequest::whereKey($leaveRequest->id)->lockForUpdate()->first();
             abort_unless($current && $this->canDecide($user, $current), 403, 'You cannot decide this request.');
+            $fingerprint=LeaveCommands::fingerprint($data['decision'],$current->public_id,$data+$command);
+            if ($prior=LeaveCommands::replay($user,$command['operation_id'],$fingerprint)) return $prior;
+            if ($current->revision !== (int)$command['expected_revision']) return LeaveCommands::conflict('leave_revision_conflict','This leave changed. Your decision was not applied. Reload and review before deciding again.');
             if ($current->status !== 'Pending') throw ValidationException::withMessages(['decision' => ["This request is already {$current->status}. Reload the list."]]);
-            $current->update(['status' => $to, 'decided_by_user_id' => $user->id, 'decided_at' => now()]);
-            $this->audit($user, $to === 'Approved' ? 'leave.approved' : 'leave.declined', $current);
+            $current->update(['status' => $to, 'decided_by_user_id' => $user->id, 'decided_at' => now(), 'revision'=>$current->revision+1]);
+            $audit=$this->audit($user, $to === 'Approved' ? 'leave.approved' : 'leave.declined', $current, ['operation_id'=>$command['operation_id']]);
+            $leave=$current->fresh(['requester.person','decider.person','dentist.person']);
+            $this->tell($leave->requester, $leave, 'leave_decided', 'Leave '.strtolower($to), 'Your leave '.$this->range($leave).' was '.strtolower($to).'.', 'leave', $user);
+            $receipt=$this->view($leave,$user)+['appointments'=>$to==='Approved'?$this->conflicting($leave,$user)->map(fn(Appointment $a)=>ScheduleNotices::view($a))->values()->all():[]];
+            return LeaveCommands::save($user,$leave,$data['decision'],$command,$fingerprint,$receipt,$audit);
         });
-        $leave = $leaveRequest->fresh(['requester.person', 'decider.person', 'dentist.person']);
-        $this->tell($leave->requester, $leave, 'leave_decided', 'Leave '.strtolower($to), 'Your leave '.$this->range($leave).' was '.strtolower($to).'.', 'leave', $user);
-
-        // Approval never cancels anything: the affected appointments come back for the approver to resolve.
-        return response()->json(['data' => $this->view($leave, $user) + ['appointments' => $to === 'Approved'
-            ? $this->conflicting($leave, $user)->map(fn (Appointment $a) => ScheduleNotices::view($a))->values() : []]]);
     }
 
     /** The requester (or an approver) cancels a pending or approved request; approved leave frees the dentist's time again. */
@@ -149,19 +161,22 @@ class LeaveController extends Controller
     {
         $user = $request->user();
         abort_unless($leaveRequest->requester_user_id === $user->id || $this->canDecide($user, $leaveRequest), 403);
-        DB::transaction(function () use ($leaveRequest, $user) {
+        $command=LeaveCommands::input($request);
+        return DB::transaction(function () use ($leaveRequest, $user, $command) {
             $user = $this->lockedActor($user);
             $current = LeaveRequest::whereKey($leaveRequest->id)->lockForUpdate()->first();
             abort_unless($current && ($current->requester_user_id === $user->id || $this->canDecide($user, $current)), 403);
+            $fingerprint=LeaveCommands::fingerprint('cancel',$current->public_id,$command);
+            if ($prior=LeaveCommands::replay($user,$command['operation_id'],$fingerprint)) return $prior;
+            if ($current->revision !== (int)$command['expected_revision']) return LeaveCommands::conflict('leave_revision_conflict','This leave changed. Your cancellation was not applied. Reload and review before cancelling again.');
             if (! in_array($current->status, ['Pending', 'Approved'], true)) throw ValidationException::withMessages(['status' => ["This request is already {$current->status}."]]);
             if ($current->ends_at->lessThanOrEqualTo(now())) throw ValidationException::withMessages(['status' => ['This leave has already ended.']]);
-            $current->update(['status' => 'Cancelled', 'cancelled_by_user_id' => $user->id, 'cancelled_at' => now()]);
-            $this->audit($user, 'leave.cancelled', $current);
+            $current->update(['status' => 'Cancelled', 'cancelled_by_user_id' => $user->id, 'cancelled_at' => now(), 'revision'=>$current->revision+1]);
+            $audit=$this->audit($user, 'leave.cancelled', $current, ['operation_id'=>$command['operation_id']]);
+            $leave=$current->fresh(['requester.person','decider.person','dentist.person']);
+            if ($leave->requester_user_id !== $user->id) $this->tell($leave->requester, $leave, null, 'Leave cancelled', 'Your leave '.$this->range($leave).' was cancelled by '.($user->person?->fullName() ?? 'an approver').'.', 'leave', $user);
+            return LeaveCommands::save($user,$leave,'cancel',$command,$fingerprint,$this->view($leave,$user),$audit);
         });
-        $leave = $leaveRequest->fresh(['requester.person', 'decider.person', 'dentist.person']);
-        if ($leave->requester_user_id !== $user->id) $this->tell($leave->requester, $leave, null, 'Leave cancelled', 'Your leave '.$this->range($leave).' was cancelled by '.($user->person?->fullName() ?? 'an approver').'.', 'leave', $user);
-
-        return response()->json(['data' => $this->view($leave, $user)]);
     }
 
     /** One action: email the patients of the appointments this approved leave affects a reschedule link. */
@@ -185,7 +200,8 @@ class LeaveController extends Controller
     /** Match the authenticated authority again after any lock wait, before mutating leave. */
     private function lockedActor(User $observed): User
     {
-        $current = User::whereKey($observed->id)->lockForUpdate()->first();
+        // Serialize account changes without blocking FK key-share locks for notices to another actor.
+        $current = User::whereKey($observed->id)->lock('FOR NO KEY UPDATE')->first();
         abort_unless($current && $current->account_status === 'Active' && $current->auth_version === $observed->auth_version
             && $current->role === $observed->role && $current->person_id === $observed->person_id, 403, 'Your access changed. Sign in again before changing leave.');
 
@@ -279,7 +295,7 @@ class LeaveController extends Controller
     {
         $mayReadNote = $l->requester_user_id === $viewer->id || $this->canDecide($viewer, $l);
 
-        return ['id' => $l->public_id, 'type' => $l->type, 'type_label' => LeaveRequest::TYPES[$l->type] ?? $l->type, 'status' => $l->status,
+        return ['id' => $l->public_id, 'revision'=>$l->revision, 'type' => $l->type, 'type_label' => LeaveRequest::TYPES[$l->type] ?? $l->type, 'status' => $l->status,
             'starts_at' => ClinicClock::local($l->starts_at)->toIso8601String(), 'ends_at' => ClinicClock::local($l->ends_at)->toIso8601String(), 'label' => $this->range($l),
             'requester' => ['name' => $l->requester?->person?->fullName(), 'role' => $l->dentist_profile_id ? 'Dentist' : 'Staff', 'dentist_id' => $l->dentist?->legacy_ref],
             'branches' => $this->branchRefs($l), 'private_note' => $mayReadNote ? $l->private_note : null, 'has_note' => (bool) $l->private_note,
@@ -307,16 +323,16 @@ class LeaveController extends Controller
     {
         if (! $to) return;
         $kind = $template === 'leave_requested' ? 'leave_requested' : 'leave_decided';
-        app(NotificationCenter::class)->staffNotice($to, $kind, $title, $body, $page, $l->public_id, "leave:{$l->public_id}:{$l->status}:{$to->id}");
+        app(NotificationCenter::class)->staffNoticeOrFail($to, $kind, $title, $body, $page, $l->public_id, "leave:{$l->public_id}:{$l->status}:{$to->id}");
         if ($template && MessageTemplates::approved($template)) {
             app(MailOutbox::class)->queue($template, "{$template}:{$l->public_id}:{$l->status}:{$to->id}", $l, null, $to, $actor);
         }
     }
 
     /** Who, what and when only: never the private note. */
-    private function audit(User $actor, string $action, LeaveRequest $l, array $extra = []): void
+    private function audit(User $actor, string $action, LeaveRequest $l, array $extra = []): \App\Models\AuditLog
     {
-        app(AuditService::class)->recordAdministrative($action, $actor, $l->dentist, ['leave' => $l->public_id, 'requester' => $l->requester?->public_id ?? $l->requester_user_id,
+        return app(AuditService::class)->recordAdministrative($action, $actor, $l->dentist, ['leave' => $l->public_id, 'requester' => $l->requester?->public_id ?? $l->requester_user_id,
             'type' => $l->type, 'from' => ClinicClock::local($l->starts_at)->toIso8601String(), 'to' => ClinicClock::local($l->ends_at)->toIso8601String(), 'status' => $l->status] + $extra);
     }
 }

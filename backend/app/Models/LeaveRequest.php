@@ -20,7 +20,7 @@ class LeaveRequest extends Model
     protected function casts(): array
     {
         return ['starts_at' => 'immutable_datetime', 'ends_at' => 'immutable_datetime', 'decided_at' => 'immutable_datetime', 'cancelled_at' => 'immutable_datetime',
-            'patients_notified_at' => 'immutable_datetime', 'private_note' => 'encrypted'];
+            'patients_notified_at' => 'immutable_datetime', 'private_note' => 'encrypted', 'revision' => 'integer'];
     }
 
     public function uniqueIds(): array { return ['public_id']; }

@@ -159,7 +159,13 @@ class NotificationCenter
         $this->write($user, 'record_shared', 'Your record was shared', "Your patient record was shared with $branchName so they can continue your care.", 'visits', null, $dedupe);
     }
 
-    private function write(User $user, string $kind, string $title, ?string $body, ?string $page, ?string $targetId, string $dedupe): void
+    /** Leave commands require durable notice intents before issuing a replay receipt. Other callers retain best-effort behavior. */
+    public function staffNoticeOrFail(User $user, string $kind, string $title, ?string $body, string $page, ?string $targetId, string $dedupe): void
+    {
+        $this->write($user, $kind, $title, $body, $page, $targetId, $dedupe, true);
+    }
+
+    private function write(User $user, string $kind, string $title, ?string $body, ?string $page, ?string $targetId, string $dedupe, bool $strict=false): void
     {
         try {
             DB::transaction(fn () => UserNotification::firstOrCreate(['dedupe_key' => $dedupe], [
@@ -167,6 +173,7 @@ class NotificationCenter
                 'target_page' => $page, 'target_id' => $targetId, 'created_at' => now(),
             ]));
         } catch (\Throwable $e) {
+            if ($strict) throw $e;
             report($e); // in a savepoint: the event that caused it still commits
         }
     }

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+﻿import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Card, ConfirmDialog, Field, FilterBar, Notice, PageHeader, RefreshButton } from '../components.jsx'
 import {
   addScheduleException, cancelLeave, copyProfileHours, decideLeave, leaveCalendar, leaveConflicts, leaveRequests, myLeave, notifyLeaveAffected,
@@ -8,6 +8,9 @@ import { commandKey, rescheduleAppointment } from '../appointments-api.js'
 import { dutyForBranch } from '../work-hours-duty.js'
 import { confirmedStaffShift, staffShiftCommand, validStaffRevision } from '../staff-shift-command.js'
 import { StaffRosterDraft } from './StaffRosterDraft.jsx'
+import {useLeaveCommand} from '../use-leave-command.js'
+import {validLeaveRevision} from '../leave-command.js'
+import {getLeave} from '../api-client.js'
 import '../den12-work-hours.css'
 import { schedulingActorKey, useRequestOwner } from '../appointment-ui.js'
 import { canAccessPage } from '../safeguards.js'
@@ -467,7 +470,7 @@ function LeaveSession({ store, role }) {
       text="Vacation, sick and other leave. Approved leave of a dentist removes their time from booking at once; approving never cancels an appointment. Leave balances are not tracked."/>
     <TeamStrip key={tick}/>
     {requester && <MyLeave toast={toast} onChanged={changed} getAuthGeneration={store?.getAuthGeneration}/>}
-    {role !== 'dentist' && <Approvals toast={toast} role={role} onChanged={changed} branches={(store?.state?.branches || []).filter(b => b.status !== 'Closed')}/>}
+    {role !== 'dentist' && <Approvals toast={toast} role={role} onChanged={changed} getAuthGeneration={store?.getAuthGeneration} branches={(store?.state?.branches || []).filter(b => b.status !== 'Closed')}/>}
   </div>
 }
 
@@ -513,133 +516,170 @@ export function leaveRequestConfirmed(body, data) {
 }
 
 function MyLeave({ toast, onChanged, getAuthGeneration }) {
-  const [rows, setRows] = useState(null), [denied, setDenied] = useState(false)
+  const [rows, setRows] = useState(null), [denied, setDenied] = useState(false),[commandsAvailable,setCommandsAvailable]=useState(false)
   const [f, setF] = useState({ type: 'vacation', start_date: '', end_date: '', partial: false, start_time: '09:00', end_time: '12:00', private_note: '' })
-  const [err, setErr] = useState(''), [busy, setBusy] = useState('')
-  const [readError, setReadError] = useState(''), [reloading, setReloading] = useState(false), [unverified, setUnverified] = useState(false)
-  const live = useRef(false), pending = useRef(false), readGeneration = useRef(0), uncertain = useRef(false)
-  useStaffLayoutEffect(() => { live.current = true; return () => { live.current = false } }, [])
-  const set = (k, v) => setF(x => ({ ...x, [k]: v }))
-  const load = async () => {
-    const ticket = ++readGeneration.current
-    const auth = getAuthGeneration?.()
+  const [err,setErr]=useState(''),[busy,setBusy]=useState(''),[readError,setReadError]=useState(''),[reloading,setReloading]=useState(false)
+  const live=useRef(false),pending=useRef(false),readGeneration=useRef(0)
+  const command=useLeaveCommand(getAuthGeneration)
+  useStaffLayoutEffect(()=>{live.current=true;return()=>{live.current=false;readGeneration.current++}},[])
+  const set=(k,v)=>setF(x=>({...x,[k]:v}))
+  const load=async(confirmed=false)=>{
+    if((command.uncertain&&confirmed!==true)||pending.current)return
+    const ticket=++readGeneration.current,auth=getAuthGeneration?.()
     setReloading(true)
     try {
-      const r = await myLeave()
-      if (!live.current || ticket !== readGeneration.current || (getAuthGeneration && (auth == null || auth !== getAuthGeneration()))) return
-      if (r.ok && Array.isArray(r.data)) { setRows(r.data); setReadError(''); uncertain.current = false; setUnverified(false); onChanged?.() }
-      else if (['unauthenticated', 'forbidden'].includes(r.kind)) { setRows(null); setDenied(true) }
+      const r=await myLeave()
+      if(!live.current||ticket!==readGeneration.current||(getAuthGeneration&&(auth==null||auth!==getAuthGeneration())))return
+      if(r.ok&&Array.isArray(r.data)){setRows(r.data);setCommandsAvailable(r.meta?.commands_available===true&&r.data.every(l=>validLeaveRevision(l.revision)));setReadError('');command.reviewed();onChanged?.()}
+      else if(['unauthenticated','forbidden'].includes(r.kind)){setRows(null);setDenied(true)}
       else setReadError('My leave could not be refreshed. Previously loaded requests may be out of date.')
-    } catch { if (live.current && ticket === readGeneration.current) setReadError('My leave could not be refreshed. Previously loaded requests may be out of date.') }
-    finally { if (live.current && ticket === readGeneration.current) setReloading(false) }
+    }catch{if(live.current&&ticket===readGeneration.current)setReadError('My leave could not be refreshed. Try again.')}
+    finally{if(live.current&&ticket===readGeneration.current)setReloading(false)}
   }
-  useEffect(() => { load() }, [])
-  if (denied) return null
-  const submit = async e => {
+  useEffect(()=>{load()},[])
+  const complete=saved=>{
+    if(!saved||!live.current)return
+    if(saved.status==='Pending'){toast('Leave requested. An authorized approver can review it.','success');setF(x=>({...x,start_date:'',end_date:'',private_note:''}))}
+    else toast('Leave cancelled. Current availability must be reloaded.','success')
+  }
+  const perform=async(action,leave,body)=>{
+    if(pending.current)return
+    pending.current=true;readGeneration.current++;setReloading(false);setBusy(action==='create'?'add':leave?.id||'retry')
+    let saved
+    try{saved=await command.run(action,leave?.id,leave?.revision,body);complete(saved)}
+    finally{pending.current=false;if(live.current){setBusy('');if(saved)load(true)}}
+  }
+  const recover=()=>perform()
+  const submit=async e=>{
     e.preventDefault()
-    if (!live.current || pending.current || uncertain.current) return
+    if(!live.current||pending.current||command.locked||!commandsAvailable)return
     setErr('')
-    if (f.type === 'other' && !f.private_note.trim()) return setErr('Please explain the reason for “Other” leave.')
-    if (!f.start_date || f.start_date < manilaToday()) return setErr('Choose today or a later date.')
+    if(f.type==='other'&&!f.private_note.trim())return setErr('Please explain the reason for Other leave.')
+    if(!f.start_date||f.start_date<manilaToday())return setErr('Choose today or a later date.')
     const endDate = f.partial ? f.start_date : (f.end_date || f.start_date)
     if (endDate < f.start_date) return setErr('The until date cannot be before the from date.')
     if (f.partial && (!f.start_time || !f.end_time || f.end_time <= f.start_time)) return setErr('The end time must be after the start time.')
-    pending.current = true; setBusy('add')
-    const body = { type: f.type, start_date: f.start_date, end_date: endDate, private_note: f.private_note.trim() || null, ...(f.partial ? { start_time: f.start_time, end_time: f.end_time } : {}) }
-    const auth = getAuthGeneration?.(), owns = () => live.current && (!getAuthGeneration || (auth != null && auth === getAuthGeneration()))
-    const unknown = () => { readGeneration.current++; setReloading(false); uncertain.current = true; setUnverified(true); setErr('The leave request outcome is unverified. Refresh My leave and review the requests before submitting again.') }
-    try {
-      const r = await requestLeave(body, owns)
-      if (!owns()) return
-      if (!r.ok) { if (['network', 'server'].includes(r.kind)) unknown(); else setErr(firstError(r)); return }
-      if (!leaveRequestConfirmed(body, r.data)) return unknown()
-      toast('Leave requested. An authorized approver can review it.', 'success')
-      setF(x => ({ ...x, start_date: '', end_date: '', private_note: '' })); load()
-    } catch { if (owns()) unknown() }
-    finally { pending.current = false; if (live.current) setBusy('') }
+    const body={type:f.type,start_date:f.start_date,end_date:endDate,private_note:f.private_note.trim()||null,...(f.partial?{start_time:f.start_time,end_time:f.end_time}:{})}
+    await perform('create',null,body)
   }
-  const cancel = async leave => {
-    if (!live.current || pending.current || uncertain.current || !leave.can_cancel) return
-    pending.current = true; setBusy(leave.id)
-    const auth = getAuthGeneration?.(), owns = () => live.current && (!getAuthGeneration || (auth != null && auth === getAuthGeneration()))
-    const unknown = () => { readGeneration.current++; setReloading(false); uncertain.current = true; setUnverified(true); toast('The cancellation outcome is unverified. Refresh My leave before retrying.', 'warning') }
-    try {
-      const r = await cancelLeave(leave.id, owns)
-      if (!owns()) return
-      if (!r.ok) { if (['network', 'server'].includes(r.kind)) unknown(); else toast(firstError(r), 'warning'); return }
-      if (r.data?.id !== leave.id || r.data.status !== 'Cancelled') return unknown()
-      toast('Leave cancelled. Check current availability before booking.', 'success'); load()
-    } catch { if (owns()) unknown() }
-    finally { pending.current = false; if (live.current) setBusy('') }
-  }
-  return <Card title="My leave" actions={<RefreshButton ariaLabel="Refresh My leave" title="Refresh My leave" onClick={load} loading={reloading} disabled={!!busy || reloading}/>}>
+  const cancel=leave=>{if(leave.can_cancel&&!command.locked)perform('cancel',leave)}
+  if(denied)return null
+  return <Card title="My leave" actions={<RefreshButton ariaLabel="Refresh My leave" title="Refresh My leave" onClick={load} loading={reloading} disabled={!!busy || reloading || command.uncertain}/>}>
+    {command.error && <p role="alert">{command.error}</p>}
+    {command.uncertain && <Button onClick={recover}>Retry original leave command</Button>}
+    {command.receipt && <p role="status">Confirmed {command.receipt.status}, revision {command.receipt.revision}. Current requests are refreshed separately.</p>}
+    {!commandsAvailable && rows && <Notice>Revision-safe leave changes are unavailable. Refresh after the server capability is restored.</Notice>}
     {readError && <p role="alert">{readError}</p>}
     <form className="au-form" onSubmit={submit}>
-      <fieldset className="au-form" disabled={!!busy} style={{border: 0, padding: 0, margin: 0, minWidth: 0}}>
+      <fieldset className="au-form" disabled={!!busy || command.locked || !commandsAvailable} style={{border: 0, padding: 0, margin: 0, minWidth: 0}}>
       <Field label="Type"><select value={f.type} onChange={e => set('type', e.target.value)}><option value="vacation">Vacation</option><option value="sick">Sick</option><option value="other">Other</option></select></Field>
-      <div className="st-pair"><Field label="From" required><input type="date" min={manilaToday()} value={f.start_date} onChange={e => setF(x => ({ ...x, start_date: e.target.value, end_date: x.end_date && x.end_date < e.target.value ? '' : x.end_date }))} required/></Field>
+      <div className="st-pair"><Field label="From" required><input aria-label="From" type="date" min={manilaToday()} value={f.start_date} onChange={e => setF(x => ({ ...x, start_date: e.target.value, end_date: x.end_date && x.end_date < e.target.value ? '' : x.end_date }))} required/></Field>
         <Field label="To (last day)"><input type="date" min={f.start_date || manilaToday()} value={f.partial ? f.start_date : f.end_date} disabled={f.partial} onChange={e => set('end_date', e.target.value)}/></Field></div>
       <label className="au-check"><input type="checkbox" checked={f.partial} onChange={e => set('partial', e.target.checked)}/> Only part of the day</label>
       {f.partial && <div className="st-pair"><Field label="From (time on selected date)"><input type="time" value={f.start_time} onChange={e => set('start_time', e.target.value)}/></Field>
         <Field label="Until (time on selected date)"><input type="time" value={f.end_time} onChange={e => set('end_time', e.target.value)}/></Field></div>}
       <Field label={f.type === 'other' ? 'Specify reason' : 'Private note (optional)'} required={f.type === 'other'} hint="Seen only by you and the approver. Never emailed."><textarea required={f.type === 'other'} maxLength={500} placeholder={f.type === 'other' ? 'e.g., Family emergency, bereavement, medical appointment' : ''} value={f.private_note} onChange={e => set('private_note', e.target.value)}/></Field>
       {err && <p className="au-error" role="alert">{err}</p>}
-      <div className="au-actions"><Button type="submit" disabled={unverified || busy === 'add' || !f.start_date || f.start_date < manilaToday() || (!f.partial && f.end_date && f.end_date < f.start_date) || (f.partial && (!f.start_time || !f.end_time || f.end_time <= f.start_time)) || (f.type === 'other' && !f.private_note.trim())}>{busy === 'add' ? 'Sending…' : 'Request leave'}</Button></div>
+      <div className="au-actions"><Button type="submit" disabled={command.locked || !commandsAvailable || busy === 'add' || !f.start_date || f.start_date < manilaToday() || (!f.partial && f.end_date && f.end_date < f.start_date) || (f.partial && (!f.start_time || !f.end_time || f.end_time <= f.start_time)) || (f.type === 'other' && !f.private_note.trim())}>{busy === 'add' ? 'Sending…' : 'Request leave'}</Button></div>
       </fieldset>
     </form>
     {!rows ? <p className="au-muted" role="status">Loading…</p> : !rows.length ? <p className="au-muted">No leave requested yet.</p> : <ul className="fd-list">{rows.map(l => <li key={l.id}>
-      <div><b>{l.label}</b><span>{l.type_label} · <span className={`fd-badge ${STATUS_TONE[l.status]}`}>{l.status}</span>{l.decided_by ? ` · by ${l.decided_by}` : ''}</span>{l.private_note && <span>Note: {l.private_note}</span>}</div>
-      {l.can_cancel && <Button size="sm" variant="ghost" disabled={!!busy || unverified} onClick={() => cancel(l)}>Cancel</Button>}
+      <div><b>{l.label}</b><span>{l.type_label} (revision {l.revision ?? "unavailable"}) · <span className={`fd-badge ${STATUS_TONE[l.status]}`}>{l.status}</span>{l.decided_by ? ` · by ${l.decided_by}` : ''}</span>{l.private_note && <span>Note: {l.private_note}</span>}</div>
+      {l.can_cancel && <Button size="sm" variant="ghost" disabled={!!busy || command.locked || !validLeaveRevision(l.revision)} onClick={() => cancel(l)}>Cancel</Button>}
     </li>)}</ul>}
   </Card>
 }
 
-function Approvals({ toast, role, branches, onChanged }) {
-  const [rows, setRows] = useState(null), [meta, setMeta] = useState({}), [denied, setDenied] = useState(false), [filters, setFilters] = useState({ status: 'Pending', branch_ref: '' })
-  const [open, setOpen] = useState(null)
-  const load = () => leaveRequests(filters).then(r => { if (r.ok) { setRows(r.data); setMeta(r.meta || {}); onChanged?.() } else if (r.kind === 'forbidden') setDenied(true) })
-  useEffect(() => { load() }, [filters.status, filters.branch_ref])
-  if (denied) return role === 'staff' ? <Notice tone="info" title="Leave approvals">The Owner approves leave requests. The Owner can let the front desk approve them too (Automations → Work schedules, leave and handovers).</Notice> : null
+function Approvals({ toast, role, branches, onChanged, getAuthGeneration }) {
+  const [rows,setRows]=useState(null),[meta,setMeta]=useState({}),[denied,setDenied]=useState(false),[filters,setFilters]=useState({status:'Pending',branch_ref:''})
+  const [open,setOpen]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState(''),[held,setHeld]=useState(false)
+  const live=useRef(false),generation=useRef(0),currentKey=useRef(''),pendingIds=useRef(new Set())
+  const key=JSON.stringify(filters);currentKey.current=key
+  const setRowPending=React.useCallback((id,value)=>{value?pendingIds.current.add(id):pendingIds.current.delete(id);setHeld(pendingIds.current.size>0)},[])
+  const load=async()=>{
+    if(!live.current||pendingIds.current.size)return
+    const ticket=++generation.current,auth=getAuthGeneration?.(),capturedKey=key
+    const owns=()=>live.current&&ticket===generation.current&&capturedKey===currentKey.current&&(!getAuthGeneration||(auth!=null&&auth===getAuthGeneration()))
+    setLoading(true);setError('')
+    try {
+      const r=await leaveRequests(filters)
+      if(!owns())return
+      if(r.ok&&Array.isArray(r.data)){setRows(r.data);setMeta(r.meta||{});setDenied(false);onChanged?.()}
+      else if(['unauthenticated','forbidden'].includes(r.kind)){setRows(null);setDenied(true)}
+      else{setRows(null);setError('Leave requests could not be loaded. Try again.')}
+    }catch{if(owns()){setRows(null);setError('Leave requests could not be loaded. Try again.')}}
+    finally{if(owns())setLoading(false)}
+  }
+  useStaffLayoutEffect(()=>{live.current=true;return()=>{live.current=false;generation.current++}},[])
+  useEffect(()=>{setRows(null);setOpen(null);load();return()=>{generation.current++}},[key])
+  if(denied)return <Notice title="Leave approvals unavailable">Your current account cannot inspect these leave requests. Refresh your session before trying again.</Notice>
   return <Card title={role === 'owner' ? 'Leave requests' : 'Leave requests to decide'} subtitle={meta.approver === 'owner_or_front_desk' ? 'Decided by the Owner or the front desk of the requester’s branch.' : 'Decided by the Owner.'}>
-    <FilterBar className="st-filters" ariaLabel="Filter leave requests" onClear={(filters.status !== 'Pending' || filters.branch_ref) ? () => setFilters({ status: 'Pending', branch_ref: '' }) : null}>
-      <Field label="Status"><select value={filters.status} onChange={e => setFilters(x => ({ ...x, status: e.target.value }))}><option value="">All</option>{['Pending', 'Approved', 'Declined', 'Cancelled'].map(s => <option key={s}>{s}</option>)}</select></Field>
-      <Field label="Branch"><select value={filters.branch_ref} onChange={e => setFilters(x => ({ ...x, branch_ref: e.target.value }))}><option value="">All branches</option>{branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>
+    <FilterBar className="st-filters" ariaLabel="Filter leave requests" onClear={!held && (filters.status !== 'Pending' || filters.branch_ref) ? () => setFilters({ status: 'Pending', branch_ref: '' }) : null}>
+      <Field label="Status"><select aria-label="Leave status" disabled={held} value={filters.status} onChange={e => setFilters(x => ({ ...x, status: e.target.value }))}><option value="">All</option>{['Pending', 'Approved', 'Declined', 'Cancelled'].map(s => <option key={s}>{s}</option>)}</select></Field>
+      <Field label="Branch"><select aria-label="Leave branch" disabled={held} value={filters.branch_ref} onChange={e => setFilters(x => ({ ...x, branch_ref: e.target.value }))}><option value="">All branches</option>{branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>
     </FilterBar>
-    {!rows ? <p className="au-muted" role="status">Loading…</p> : !rows.length ? <p className="au-muted">No requests here.</p> : <ul className="fd-list">{rows.map(l => <LeaveRow key={l.id} l={l} role={role} open={open === l.id} onToggle={() => setOpen(open === l.id ? null : l.id)} toast={toast} wordingApproved={meta.wording_approved}
+    {error && <p role="alert">{error}</p>}
+    <Button variant="ghost" onClick={load} disabled={held||loading}>Refresh leave requests</Button>
+    {loading ? <p role="status">Loading leave requests...</p> : !rows ? <p className="au-muted">Leave requests are unavailable.</p> : !rows.length ? <p className="au-muted">No requests here.</p> : <ul className="fd-list">{rows.map(l => <LeaveRow key={l.id} l={l} role={role} open={open === l.id} onToggle={() => setOpen(open === l.id ? null : l.id)} toast={toast} wordingApproved={meta.wording_approved} getAuthGeneration={getAuthGeneration} onPending={setRowPending} commandsAvailable={meta.commands_available===true}
       onChanged={decided => { if (decided && filters.status && decided !== filters.status) { setOpen(l.id); setFilters(x => ({ ...x, status: '' })) } else load() }}/>)}</ul>}
   </Card>
 }
 
-function LeaveRow({ l, role, open, onToggle, toast, onChanged, wordingApproved }) {
-  const [conflicts, setConflicts] = useState(null), [busy, setBusy] = useState(''), [confirmDecision, setConfirmDecision] = useState(null)
-  const loadConflicts = () => l.requester.role === 'Dentist' && leaveConflicts(l.id).then(r => { if (r.ok) setConflicts(r.data.appointments) })
-  useEffect(() => { if (open) loadConflicts() }, [open])
-  const decide = async decision => {
-    setBusy(decision)
-    const r = await decideLeave(l.id, decision)
-    setBusy('')
-    if (!r.ok) return toast(firstError(r), 'warning')
-    toast(decision === 'approve' ? `Approved. ${l.requester.role === 'Dentist' ? 'Their booking time is blocked now.' : ''}` : 'Declined.', 'success')
-    if (decision === 'approve' && r.data.appointments?.length) setConflicts(r.data.appointments)
-    onChanged(r.data.status) // keeps the row (and its affected visits) on screen after the decision
+function LeaveRow({ l: source, role, open, onToggle, toast, onChanged, wordingApproved, getAuthGeneration, onPending, commandsAvailable }) {
+  const [l,setLeave]=useState(source),[conflicts,setConflicts]=useState(null),[busy,setBusy]=useState(''),[confirmDecision,setConfirmDecision]=useState(null)
+  const [reviewBusy,setReviewBusy]=useState(false),[readError,setReadError]=useState('')
+  const command=useLeaveCommand(getAuthGeneration),live=useRef(false),readGeneration=useRef(0),current=useRef('')
+  current.current=JSON.stringify([l.id,l.revision])
+  useStaffLayoutEffect(()=>{live.current=true;return()=>{live.current=false;readGeneration.current++}},[])
+  useEffect(()=>{if(!command.locked)setLeave(source)},[source])
+  useEffect(()=>{onPending?.(l.id,command.busy||command.uncertain);return()=>onPending?.(l.id,false)},[l.id,command.busy,command.uncertain,onPending])
+  const loadConflicts=async()=>{
+    if(l.requester.role!=='Dentist')return
+    const ticket=++readGeneration.current,key=current.current,auth=getAuthGeneration?.()
+    const owns=()=>live.current&&ticket===readGeneration.current&&key===current.current&&(!getAuthGeneration||(auth!=null&&auth===getAuthGeneration()))
+    setReadError('');setConflicts(null)
+    try{const r=await leaveConflicts(l.id);if(!owns())return;if(r.ok&&Array.isArray(r.data?.appointments))setConflicts(r.data.appointments);else setReadError('Affected appointments could not be loaded. Try again.')}
+    catch{if(owns())setReadError('Affected appointments could not be loaded. Try again.')}
   }
-  const doCancel = async () => {
-    setBusy('cancel')
-    const r = await cancelLeave(l.id)
-    setBusy('')
-    if (!r.ok) return toast(firstError(r), 'warning')
-    toast('Leave cancelled. The time is bookable again.', 'success')
-    onChanged()
+  useEffect(()=>{if(open)loadConflicts();return()=>{readGeneration.current++}},[open,l.revision])
+  const reviewCurrent=async()=>{
+    if(command.busy||command.uncertain||reviewBusy)return
+    const auth=getAuthGeneration?.(),ticket=++readGeneration.current;setReviewBusy(true);setReadError('')
+    try{
+      const r=await getLeave(l.id)
+      if(!live.current||ticket!==readGeneration.current||(getAuthGeneration&&(auth==null||auth!==getAuthGeneration())))return
+      if(!r.ok||r.data?.id!==l.id||!validLeaveRevision(r.data?.revision)||r.meta?.commands_available!==true){setReadError('Current leave could not be verified. Your intended action remains unapplied.');return}
+      setLeave(r.data);setConfirmDecision(null);command.reviewed()
+    }catch{if(live.current&&ticket===readGeneration.current)setReadError('Current leave could not be loaded. Try again.')}
+    finally{if(live.current&&ticket===readGeneration.current)setReviewBusy(false)}
   }
+  const execute=async action=>{
+    readGeneration.current++;setReadError('');setBusy(action||'retry')
+    const saved=await command.run(action,l.id,l.revision)
+    if(!live.current)return
+    setBusy('')
+    if(!saved)return
+    setLeave(saved);if(saved.appointments)setConflicts(saved.appointments)
+    toast(`Confirmed ${saved.status}, revision ${saved.revision}.`,'success')
+    onPending?.(l.id,false);onChanged(saved.status)
+  }
+  const decide=decision=>execute(decision)
+  const doCancel=()=>execute('cancel')
   return <li className="st-leave">
     <div><b>{l.requester.name} ({l.requester.role}) · {l.label}</b>
-      <span>{l.type_label} · <span className={`fd-badge ${STATUS_TONE[l.status]}`}>{l.status}</span>{l.decided_by ? ` · by ${l.decided_by}` : ''}</span>
+      <span>{l.type_label} (revision {l.revision ?? "unavailable"}) · <span className={`fd-badge ${STATUS_TONE[l.status]}`}>{l.status}</span>{l.decided_by ? ` · by ${l.decided_by}` : ''}</span>
       {l.private_note && <span>Private note: {l.private_note}</span>}</div>
+    {command.error && <p role="alert">{command.error}</p>}
+    {readError && <p role="alert">{readError}</p>}
+    {command.receipt && <p role="status">Confirmed {command.receipt.status}, revision {command.receipt.revision}.</p>}
+    {command.uncertain && <Button onClick={()=>execute()}>Retry original leave command</Button>}
+    {['conflict','blocked'].includes(command.phase) && <Button disabled={reviewBusy} onClick={reviewCurrent}>Reload and review current leave</Button>}
+    {!commandsAvailable && <Notice>Revision-safe leave changes are unavailable on this server.</Notice>}
     <div className="ns-actions">
-      {l.can_decide && <><Button size="sm" disabled={!!busy} onClick={() => setConfirmDecision('approve')}>{busy === 'approve' ? 'Accepting…' : 'Accept leave request'}</Button>
-        <Button size="sm" variant="ghost" disabled={!!busy} onClick={() => setConfirmDecision('decline')}>{busy === 'decline' ? 'Declining…' : 'Decline leave'}</Button></>}
+      {l.can_decide && <><Button size="sm" disabled={command.locked||reviewBusy||!commandsAvailable||!validLeaveRevision(l.revision)} onClick={() => setConfirmDecision('approve')}>{busy === 'approve' ? 'Accepting…' : 'Accept leave request'}</Button>
+        <Button size="sm" variant="ghost" disabled={command.locked||reviewBusy||!commandsAvailable||!validLeaveRevision(l.revision)} onClick={() => setConfirmDecision('decline')}>{busy === 'decline' ? 'Declining…' : 'Decline leave'}</Button></>}
       {l.requester.role === 'Dentist' && l.status !== 'Declined' && l.status !== 'Cancelled' && <Button size="sm" variant="soft" onClick={onToggle} aria-expanded={open}>{open ? 'Hide bookings' : 'Booked appointments'}</Button>}
-      {l.can_cancel && l.status === 'Approved' && <Button size="sm" variant="ghost" disabled={!!busy} onClick={() => setConfirmDecision('cancel')}>Cancel leave</Button>}
+      {l.can_cancel && l.status === 'Approved' && <Button size="sm" variant="ghost" disabled={command.locked||reviewBusy||!commandsAvailable||!validLeaveRevision(l.revision)} onClick={() => setConfirmDecision('cancel')}>Cancel leave</Button>}
     </div>
     {confirmDecision && <ConfirmDialog
       open
@@ -655,7 +695,9 @@ function LeaveRow({ l, role, open, onToggle, toast, onChanged, wordingApproved }
       onCancel={() => setConfirmDecision(null)}
     >
       <p>
-        {confirmDecision === 'approve'
+        {l.requester.role !== 'Dentist'
+          ? 'This records the Staff leave decision. Effective Staff roster publication remains separate.'
+          : confirmDecision === 'approve'
           ? `Accepting this leave request for ${l.requester.name} (${l.label}) blocks new bookings during their away window. Existing appointments remain on the affected list so they can be reassigned or rescheduled.`
           : confirmDecision === 'decline'
             ? `Declining marks this leave request for ${l.requester.name} (${l.label}) as Declined and keeps their schedule open for booking.`
