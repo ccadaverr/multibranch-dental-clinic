@@ -33,7 +33,7 @@ const clin11SetKey = values => Array.isArray(values) ? [...new Set(values)].sort
 function clin11AuthContext(session, state, referenceReady) {
   const user = state?.users?.find(u => u.id === session?.userId)
   const identity = session?.serverUserId ? JSON.stringify([
-    session.serverUserId, session.role, session.userId, session.dentistId, session.staffId,
+    session.serverUserId, session.clinicalContext, session.role, session.userId, session.dentistId, session.staffId,
     session.patientId, session.patientPublicId, session.branchId, session.scopeBranchId, clin11SetKey(session.branchScopes),
   ]) : null
   const authority = JSON.stringify([user?.personId, user?.roleName || user?.role, user?.accountStatus || user?.status,
@@ -216,7 +216,7 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
   const setSession=role=>{
     const previous=sessionRef.current
     const derived=role?(previous?.employeeBridge&&previous.role===role?sessionForEmployee(stateRef.current,previous):sessionForRole(role,stateRef.current)):null
-    const next=derived&&previous?.role===role?{...derived,serverUserId:previous.serverUserId??null,patientPublicId:previous.patientPublicId??null,branchScopes:previous.branchScopes}:derived
+    const next=derived&&previous?.role===role?{...derived,clinicalContext:previous.clinicalContext??null,serverUserId:previous.serverUserId??null,patientPublicId:previous.patientPublicId??null,branchScopes:previous.branchScopes}:derived
     sessionRef.current=next
     authLifetime.current.rederive()
     setSessionState(next)

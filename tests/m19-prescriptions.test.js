@@ -20,7 +20,7 @@ test('M19: dentist form shows the allergy check, has no drug database or interac
   assert.match(page, /There is no drug list and no interaction check/)
   assert.doesNotMatch(page, /interaction warning|drug database|e-signature|digitally signed/i)
   assert.match(page, /Issuing locks the prescription and gives it a number\. It cannot be edited afterwards, only voided\./)
-  assert.match(page, /voidPrescription\(id, reason\.trim\(\)\)/)
+  assert.match(page, /voidPrescription\(id, submitted\.reason, submitted\.revision, submitted\.key, owns, clinicalContext\)/)
 })
 
 test('M19 (4.4): medicine name autocomplete and Other free-text option exist with no dev-written dosing defaults', () => {
@@ -66,7 +66,7 @@ test('M19: Other selection retains custom values and sends only clinical line fi
   }
   assert.match(page, /lines\.filter\(l => l\.medicine\.trim\(\)\)\.map\(apiLine\)/)
   assert.match(page, /const missingCustomValue = lines\.some/)
-  assert.match(page, /\|\| missingCustomValue \|\| !lines\.some/)
+  assert.match(page, /\|\| missingCustomValue \|\| lines\.some\(l => !l\.medicine\.trim\(\)\)/)
 })
 
 test('M19: the patient sees issued prescriptions read-only with a PDF, and a void one is marked', () => {

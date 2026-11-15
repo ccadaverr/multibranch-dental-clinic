@@ -29,7 +29,7 @@ function hooks(code,api){
  const useRef=initial=>{const i=cursor++;cells[i]??={value:{current:initial}};return cells[i].value}
  const effect=(run,deps,queue=passive)=>{const i=cursor++,old=cells[i];if(!old||deps.some((d,j)=>d!==old.deps[j])){old?.cleanup?.();cells[i]={deps};queue.push(()=>{cells[i].cleanup=run()})}}
  const useLayoutEffect=(run,deps)=>effect(run,deps,layout)
- const component=runInNewContext(prefix+helpers+code,{useState,useRef,useEffect:effect,useLayoutEffect,React:{useState,useRef,useEffect:effect,useLayoutEffect},rxVoidLedgers:sharedLedgers,...api})
+ const component=runInNewContext(prefix+helpers+code,{useState,useRef,useEffect:effect,useLayoutEffect,React:{useState,useRef,useEffect:effect,useLayoutEffect},rxVoidLedgers:sharedLedgers,commandKey:()=>"synthetic-key",...api})
  return {render(props){cursor=0;value=component(props);for(const run of layout.splice(0))run();for(const run of passive.splice(0))run();return value},unmount(){for(const cell of cells)cell?.cleanup?.()}}
 }
 function dialog({respond=async()=>ok(voided()),read=async id=>ok(issued(id)),auth=()=>1}={}){

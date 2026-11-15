@@ -466,11 +466,12 @@ export function listPrescriptions(params = {}) { return request(`/api/prescripti
 export function myPrescriptions() { return request('/api/me/prescriptions') }
 export function prescription(id) { return request(`/api/prescriptions/${encodeURIComponent(id)}`) }
 export function prescriptionVisits() { return request('/api/prescriptions/visits') }
-export function createPrescription(body) { return json('/api/prescriptions', 'POST', body) }
-export function updatePrescription(id, body) { return json(`/api/prescriptions/${encodeURIComponent(id)}`, 'PUT', body) }
-export function issuePrescription(id, revision) { return json(`/api/prescriptions/${encodeURIComponent(id)}/issue`, 'POST', { expected_revision: revision }) }
-export function voidPrescription(id, reason) { return json(`/api/prescriptions/${encodeURIComponent(id)}/void`, 'POST', { reason }) }
-export function savePrescriptionLicense(value) { return json('/api/me/prescription-license', 'PUT', { rx_license_no: value }) }
+const clinicalRequest = (path, method, body, key, beforeDispatch, context) => request(path, {method, body:JSON.stringify(body), headers:{...(key?{'Idempotency-Key':key}:{}),...(context?{'X-Clinical-Context':context}:{})}, beforeDispatch})
+export function createPrescription(body, key, beforeDispatch, context) { return clinicalRequest('/api/prescriptions', 'POST', body, key, beforeDispatch, context) }
+export function updatePrescription(id, body, key, beforeDispatch, context) { return clinicalRequest(`/api/prescriptions/${encodeURIComponent(id)}`, 'PUT', body, key, beforeDispatch, context) }
+export function issuePrescription(id, revision, key, beforeDispatch, context) { return clinicalRequest(`/api/prescriptions/${encodeURIComponent(id)}/issue`, 'POST', {expected_revision:revision}, key, beforeDispatch, context) }
+export function voidPrescription(id, reason, revision, key, beforeDispatch, context) { return clinicalRequest(`/api/prescriptions/${encodeURIComponent(id)}/void`, 'POST', {reason, expected_revision:revision}, key, beforeDispatch, context) }
+export function savePrescriptionLicense(value, beforeDispatch, context) { return clinicalRequest('/api/me/prescription-license','PUT',{rx_license_no:value},null,beforeDispatch,context) }
 export function getPaymentOptions(invoiceId) { return request(`/api/invoices/${encodeURIComponent(invoiceId)}/payment-options`) }
 export function createPayMongoCheckout(invoiceId, payload = {}) {
   return request(`/api/invoices/${encodeURIComponent(invoiceId)}/paymongo-checkout`, {

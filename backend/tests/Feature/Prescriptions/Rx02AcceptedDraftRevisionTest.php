@@ -36,7 +36,7 @@ class Rx02AcceptedDraftRevisionTest extends TestCase
 
     private function draft(): Prescription
     {
-        $v = Visit::create(['patient_id' => $this->p['A']->id, 'branch_id' => $this->b['b1']->id, 'source' => 'walk_in',
+        $v = Visit::where('patient_id', $this->p['A']->id)->where('branch_id', $this->b['b1']->id)->first() ?? Visit::create(['patient_id' => $this->p['A']->id, 'branch_id' => $this->b['b1']->id, 'source' => 'walk_in',
             'status' => 'Checked In', 'responsible_dentist_profile_id' => $this->d['d1']->id, 'requested_service_id' => $this->svc['svc1']->id,
             'arrived_at' => now(), 'clinic_date' => '2026-09-28', 'revision' => 1,
             'created_by_user_id' => $this->u['staffB1']->id, 'updated_by_user_id' => $this->u['staffB1']->id]);
@@ -115,7 +115,7 @@ class Rx02AcceptedDraftRevisionTest extends TestCase
             ->assertJsonPath('data.number', 'RX-2026-000001')->assertJsonPath('data.revision', 3);
         $this->putJson("/api/prescriptions/{$p->public_id}", $this->payload('locked', 3))
             ->assertUnprocessable()->assertJsonValidationErrors('status');
-        $this->postJson("/api/prescriptions/{$p->public_id}/void", ['reason' => 'Synthetic correction'])->assertOk();
+        $this->postJson("/api/prescriptions/{$p->public_id}/void", ['reason' => 'Synthetic correction', 'expected_revision' => $p->fresh()->revision])->assertOk();
         $next = $this->draft();
         $this->postJson("/api/prescriptions/{$next->public_id}/issue", ['expected_revision' => 1])->assertOk()
             ->assertJsonPath('data.number', 'RX-2026-000002');

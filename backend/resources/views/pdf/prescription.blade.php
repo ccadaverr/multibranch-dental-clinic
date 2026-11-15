@@ -57,7 +57,7 @@
     </td>
     <td style="width:40%;">
         <div class="doc">Prescription</div>
-        <div class="docmeta">No. <b>{{ $p->number }}</b><br>Date <b>{{ $date }}</b></div>
+        <div class="docmeta">No. <b>{{ $p->number }}</b><br>Date <b>{{ $date }}</b><br>Status <b>{{ $void ? 'VOID — DO NOT USE' : 'Issued' }}</b></div>
     </td>
 </tr></table>
 

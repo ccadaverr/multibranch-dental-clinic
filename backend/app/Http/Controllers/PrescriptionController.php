@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ReadsIdempotencyKey;
+use App\Models\CommandKey;
 use App\Models\DentistProfile;
 use App\Models\Patient;
 use App\Models\Prescription;
@@ -10,12 +12,16 @@ use App\Models\UserBranchScope;
 use App\Models\Visit;
 use App\Services\Audit\AuditService;
 use App\Services\Automations\AutomationCatalog;
+use App\Services\Billing\BillingDocuments;
 use App\Services\Intake\Guardianship;
 use App\Services\Mail\MailOutbox;
 use App\Services\Notifications\NotificationCenter;
 use App\Support\ClinicClock;
+use App\Support\IdempotentCommand;
+use Closure;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -30,6 +36,15 @@ use Illuminate\Validation\ValidationException;
  */
 class PrescriptionController extends Controller
 {
+    use ReadsIdempotencyKey;
+
+    private const SERVER_FIELDS = ['patient_id', 'branch_id', 'dentist_profile_id', 'status', 'number', 'revision', 'issued_at', 'issued_by_user_id', 'voided_at', 'voided_by_user_id', 'license_no', 'created_by_user_id', 'treatment_id'];
+
+    private function serverFields(): array
+    {
+        return array_fill_keys(self::SERVER_FIELDS, ['prohibited']);
+    }
+
     private const LINE_RULES = ['lines' => ['required', 'array', 'min:1', 'max:20'], 'lines.*.medicine' => ['required', 'string', 'max:200'],
         'lines.*.dosage' => ['nullable', 'string', 'max:120'], 'lines.*.frequency' => ['nullable', 'string', 'max:120'], 'lines.*.duration' => ['nullable', 'string', 'max:120'],
         'lines.*.instructions' => ['nullable', 'string', 'max:500'], 'note' => ['nullable', 'string', 'max:1000']];
@@ -79,94 +94,124 @@ class PrescriptionController extends Controller
     public function store(Request $request): JsonResponse
     {
         $user = $request->user();
-        $data = $request->validate(['visit_id' => ['required', 'string', 'max:40']] + self::LINE_RULES);
+        $data = $request->validate(['visit_id' => ['required', 'string', 'max:40']] + self::LINE_RULES + $this->serverFields());
         $visit = Visit::where('public_id', $data['visit_id'])->with('treatment')->firstOrFail();
         $dentist = $this->dentistAt($user, $visit->branch_id);
-        $p = DB::transaction(function () use ($user, $visit, $dentist, $data) {
-            $p = Prescription::create(['patient_id' => $visit->patient_id, 'branch_id' => $visit->branch_id, 'visit_id' => $visit->id, 'treatment_id' => $visit->treatment?->id,
-                'dentist_profile_id' => $dentist->id, 'created_by_user_id' => $user->id, 'status' => 'Draft', 'note' => $data['note'] ?? null]);
-            $this->writeLines($p, $data['lines']);
-            $this->audit($user, 'prescription.created', $p);
+        $response = $this->command($request, 'prescription.create', $data, $visit->branch_id, function () use ($user, $visit, $dentist, $data) {
+            $p = DB::transaction(function () use ($user, $visit, $dentist, $data) {
+                $p = Prescription::create(['patient_id' => $visit->patient_id, 'branch_id' => $visit->branch_id, 'visit_id' => $visit->id, 'treatment_id' => $visit->treatment?->id,
+                    'dentist_profile_id' => $dentist->id, 'created_by_user_id' => $user->id, 'status' => 'Draft', 'note' => $data['note'] ?? null]);
+                $this->writeLines($p, $data['lines']);
+                $this->audit($user, 'prescription.created', $p);
 
-            return $p->fresh(['patient.person', 'branch', 'dentist.person', 'lines']);
+                return $p->fresh(['patient.person', 'branch', 'dentist.person', 'lines']);
+            });
+
+            return [['data' => $this->view($p, $user, true)], 201];
         });
 
-        return response()->json(['data' => $this->view($p, $user, true)], 201);
+        return $response;
     }
 
     public function update(Request $request, Prescription $prescription): JsonResponse
     {
         $user = $request->user();
-        $data = $request->validate(['expected_revision' => ['required', 'integer']] + self::LINE_RULES);
+        $data = $request->validate(['expected_revision' => ['required', 'integer', 'min:1'], 'visit_id' => ['prohibited']] + self::LINE_RULES + $this->serverFields());
         $this->dentistAt($user, $prescription->branch_id);
-        $accepted = DB::transaction(function () use ($prescription, $data, $user) {
-            $p = Prescription::whereKey($prescription->id)->lockForUpdate()->first();
-            if ($p->status !== 'Draft') throw ValidationException::withMessages(['status' => ['An issued prescription cannot be changed. Void it and write a new one.']]);
-            if ($p->revision !== (int) $data['expected_revision']) throw ValidationException::withMessages(['expected_revision' => ['This draft changed. Reload it.']]);
-            $p->lines()->delete();
-            $this->writeLines($p, $data['lines']);
-            $p->update(['note' => $data['note'] ?? null, 'revision' => $p->revision + 1]);
-            // Materialize the complete accepted response while this row is locked.
-            // A post-commit fresh() could adopt a later editor's unreviewed revision.
-            return $this->view($p->fresh(['patient.person', 'branch', 'dentist.person', 'lines', 'visit']), $user, true);
-        });
 
-        return response()->json(['data' => $accepted]);
+        return $this->command($request, 'prescription.update', ['prescription' => $prescription->public_id] + $data, $prescription->branch_id, function () use ($prescription, $data, $user) {
+            $accepted = DB::transaction(function () use ($prescription, $data, $user) {
+                $p = Prescription::whereKey($prescription->id)->lockForUpdate()->first();
+                if ($p->status !== 'Draft') {
+                    throw ValidationException::withMessages(['status' => ['An issued prescription cannot be changed. Void it and write a new one.']]);
+                }
+                if ($p->revision !== (int) $data['expected_revision']) {
+                    throw ValidationException::withMessages(['expected_revision' => ['This draft changed. Reload it.']]);
+                }
+                $p->lines()->delete();
+                $this->writeLines($p, $data['lines']);
+                $p->update(['note' => $data['note'] ?? null, 'revision' => $p->revision + 1]);
+
+                // Materialize the complete accepted response while this row is locked.
+                // A post-commit fresh() could adopt a later editor's unreviewed revision.
+                return $this->view($p->fresh(['patient.person', 'branch', 'dentist.person', 'lines', 'visit']), $user, true);
+            });
+
+            return [['data' => $accepted], 200];
+        });
     }
 
     /** Issue: lock it and give it the next number of the year (a locked counter row: concurrent issues never leave a gap). */
     public function issue(Request $request, Prescription $prescription): JsonResponse
     {
         $user = $request->user();
-        $data = $request->validate(['expected_revision' => ['required', 'integer']]);
+        $data = $request->validate(['expected_revision' => ['required', 'integer', 'min:1'], 'visit_id' => ['prohibited']] + $this->serverFields());
         $dentist = $this->dentistAt($user, $prescription->branch_id);
-        $p = DB::transaction(function () use ($prescription, $data, $user, $dentist) {
-            $p = Prescription::whereKey($prescription->id)->lockForUpdate()->first();
-            if ($p->status !== 'Draft') throw ValidationException::withMessages(['status' => ['This prescription was already issued.']]);
-            if ($p->revision !== (int) $data['expected_revision']) throw ValidationException::withMessages(['expected_revision' => ['This draft changed. Reload it.']]);
-            if (! $p->lines()->exists()) throw ValidationException::withMessages(['lines' => ['Add at least one medicine.']]);
-            $year = (int) ClinicClock::now()->format('Y');
-            DB::table('prescription_counters')->insertOrIgnore(['year' => $year, 'last_number' => 0]);
-            $n = DB::table('prescription_counters')->where('year', $year)->lockForUpdate()->value('last_number') + 1;
-            DB::table('prescription_counters')->where('year', $year)->update(['last_number' => $n]);
-            $p->update(['status' => 'Issued', 'number' => sprintf('RX-%d-%06d', $year, $n), 'issued_at' => now(), 'issued_by_user_id' => $user->id,
-                'license_no' => $dentist->rx_license_no, 'revision' => $p->revision + 1]);
-            $this->audit($user, 'prescription.issued', $p);
-            $p->load(['patient.person', 'branch', 'dentist.person', 'lines']);
-            // No patient/guardian notice for an uncommitted or rolled-back
-            // issuance, including when this command has an outer transaction.
-            DB::afterCommit(function () use ($p, $user) {
-                if ($to = $p->patient?->contactUser()) {
-                    app(NotificationCenter::class)->staffNotice($to, 'prescription_ready', 'A prescription is ready', 'A prescription from your visit is ready in the portal.', 'visits', $p->public_id, "prescription_ready:{$p->public_id}");
-                    try {
-                        app(MailOutbox::class)->queue('prescription_ready', "prescription_ready:{$p->public_id}", $p, null, $to, $user);
-                    } catch (\Throwable $e) {
-                        report($e);
-                    }
+
+        return $this->command($request, 'prescription.issue', ['prescription' => $prescription->public_id] + $data, $prescription->branch_id, function () use ($prescription, $data, $user, $dentist) {
+            $p = DB::transaction(function () use ($prescription, $data, $user, $dentist) {
+                $dentist = $this->dentistAt($user, $prescription->branch_id);
+                $p = Prescription::whereKey($prescription->id)->lockForUpdate()->first();
+                if ($p->status !== 'Draft') {
+                    throw ValidationException::withMessages(['status' => ['This prescription was already issued.']]);
                 }
+                if ($p->revision !== (int) $data['expected_revision']) {
+                    throw ValidationException::withMessages(['expected_revision' => ['This draft changed. Reload it.']]);
+                }
+                if (! $p->lines()->exists()) {
+                    throw ValidationException::withMessages(['lines' => ['Add at least one medicine.']]);
+                }
+                $year = (int) ClinicClock::now()->format('Y');
+                DB::table('prescription_counters')->insertOrIgnore(['year' => $year, 'last_number' => 0]);
+                $n = DB::table('prescription_counters')->where('year', $year)->lockForUpdate()->value('last_number') + 1;
+                DB::table('prescription_counters')->where('year', $year)->update(['last_number' => $n]);
+                $p->update(['status' => 'Issued', 'number' => sprintf('RX-%d-%06d', $year, $n), 'issued_at' => now(), 'issued_by_user_id' => $user->id,
+                    'dentist_profile_id' => $dentist->id, 'license_no' => $dentist->rx_license_no, 'revision' => $p->revision + 1]);
+                $this->audit($user, 'prescription.issued', $p);
+                $p->load(['patient.person', 'branch', 'dentist.person', 'lines']);
+                // No patient/guardian notice for an uncommitted or rolled-back
+                // issuance, including when this command has an outer transaction.
+                DB::afterCommit(function () use ($p, $user) {
+                    if ($to = $p->patient?->contactUser()) {
+                        app(NotificationCenter::class)->staffNotice($to, 'prescription_ready', 'A prescription is ready', 'A prescription from your visit is ready in the portal.', 'visits', $p->public_id, "prescription_ready:{$p->public_id}");
+                        try {
+                            app(MailOutbox::class)->queue('prescription_ready', "prescription_ready:{$p->public_id}", $p, null, $to, $user);
+                        } catch (\Throwable $e) {
+                            report($e);
+                        }
+                    }
+                });
+
+                return $p;
             });
 
-            return $p;
+            return [['data' => $this->view($p, $user, true)], 200];
         });
-
-        return response()->json(['data' => $this->view($p, $user, true)]);
     }
 
     public function void(Request $request, Prescription $prescription): JsonResponse
     {
         $user = $request->user();
-        $data = $request->validate(['reason' => ['required', 'string', 'min:3', 'max:300']]);
+        $data = $request->validate(['reason' => ['required', 'string', 'min:3', 'max:300'], 'expected_revision' => ['required', 'integer', 'min:1'], 'visit_id' => ['prohibited']] + $this->serverFields());
         $this->dentistAt($user, $prescription->branch_id);
-        $p = DB::transaction(function () use ($prescription, $data, $user) {
-            $p = Prescription::whereKey($prescription->id)->lockForUpdate()->first();
-            if ($p->status !== 'Issued') throw ValidationException::withMessages(['status' => [$p->status === 'Void' ? 'This prescription is already void.' : 'Only an issued prescription is voided; a draft is just not issued.']]);
-            $p->update(['status' => 'Void', 'voided_at' => now(), 'voided_by_user_id' => $user->id, 'void_reason' => $data['reason'], 'revision' => $p->revision + 1]);
-            $this->audit($user, 'prescription.voided', $p);
 
-            return $p->load(['patient.person', 'branch', 'dentist.person', 'lines']);
+        return $this->command($request, 'prescription.void', ['prescription' => $prescription->public_id] + $data, $prescription->branch_id, function () use ($prescription, $data, $user) {
+            $p = DB::transaction(function () use ($prescription, $data, $user) {
+                $p = Prescription::whereKey($prescription->id)->lockForUpdate()->first();
+                if ($p->status !== 'Issued') {
+                    throw ValidationException::withMessages(['status' => [$p->status === 'Void' ? 'This prescription is already void.' : 'Only an issued prescription is voided; a draft is just not issued.']]);
+                }
+                if ($p->revision !== (int) $data['expected_revision']) {
+                    throw ValidationException::withMessages(['expected_revision' => ['This prescription changed. Reload it.']]);
+                }
+                $p->update(['status' => 'Void', 'voided_at' => now(), 'voided_by_user_id' => $user->id, 'void_reason' => $data['reason'], 'revision' => $p->revision + 1]);
+                $this->audit($user, 'prescription.voided', $p);
+
+                return $p->load(['patient.person', 'branch', 'dentist.person', 'lines']);
+            });
+
+            return [['data' => $this->view($p, $user, true)], 200];
         });
-
-        return response()->json(['data' => $this->view($p, $user, true)]);
     }
 
     public function show(Request $request, Prescription $prescription): JsonResponse
@@ -174,7 +219,9 @@ class PrescriptionController extends Controller
         $user = $request->user();
         $content = $this->canRead($user, $prescription);
         abort_unless($content || $this->ownerMeta($user, $prescription), 404);
-        if ($content && $user->role->value === 'staff') $this->audit($user, 'prescription.viewed', $prescription);
+        if ($content && $user->role->value === 'staff') {
+            $this->audit($user, 'prescription.viewed', $prescription);
+        }
 
         return response()->json(['data' => $this->view($prescription->load(['patient.person', 'branch', 'dentist.person', 'lines']), $user, $content)]);
     }
@@ -186,18 +233,19 @@ class PrescriptionController extends Controller
         $prescription->load(['patient.person', 'branch', 'dentist.person', 'lines']);
         $this->audit($user, 'prescription.downloaded', $prescription);
         $person = $prescription->patient?->person;
-        $pdf = app(\App\Services\Billing\BillingDocuments::class)->documentPdf('pdf.prescription', [
+        $pdf = app(BillingDocuments::class)->documentPdf('pdf.prescription', [
             'p' => $prescription, 'branch' => $prescription->branch, 'patientName' => $person?->fullName() ?? 'Patient',
             'age' => Guardianship::age($person?->date_of_birth?->toDateString()), 'date' => ClinicClock::local($prescription->issued_at)->format('F j, Y'),
             'dentistName' => 'Dr. '.($prescription->dentist?->person?->fullName() ?? ''), 'void' => $prescription->status === 'Void',
         ], 'Prescription '.$prescription->number);
 
-        return response($pdf, 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="Prescription-'.$prescription->number.'.pdf"', 'Cache-Control' => 'private, no-store']);
+        return response($pdf, 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="Prescription-'.$prescription->number.'.pdf"', 'Cache-Control' => 'private, no-store', 'X-Content-Type-Options' => 'nosniff']);
     }
 
     /** The dentist's own optional license number for prescriptions (never prefilled). */
     public function license(Request $request): JsonResponse
     {
+        \App\Support\PrescriptionSession::assertCurrent($request);
         $data = $request->validate(['rx_license_no' => ['nullable', 'string', 'max:40', 'regex:/^[A-Za-z0-9 .\\/-]*$/']]);
         $me = $this->me($request->user());
         abort_unless($me, 403);
@@ -205,6 +253,29 @@ class PrescriptionController extends Controller
         app(AuditService::class)->recordAdministrative('dentist.rx_license_updated', $request->user(), null, ['dentist' => $me->legacy_ref, 'set' => (bool) $me->rx_license_no]);
 
         return response()->json(['data' => ['rx_license_no' => $me->rx_license_no]]);
+    }
+
+    /** Reauthorize even a replay. Clinical responses are encrypted inside the existing generic journal. */
+    private function command(Request $request, string $name, array $payload, int $branchId, Closure $work): JsonResponse
+    {
+        \App\Support\PrescriptionSession::assertCurrent($request);
+        $key = $this->idempotencyKey($request);
+        $actor = $request->user();
+
+        return DB::transaction(function () use ($actor, $branchId, $key, $name, $payload, $work) {
+            $current = User::whereKey($actor->id)->sharedLock()->firstOrFail();
+            abort_unless($current->role->value === 'dentist' && $current->account_status === 'Active' && $current->auth_version === $actor->auth_version, 403);
+            $profile = DentistProfile::where('person_id', $current->person_id)->sharedLock()->first();
+            abort_unless($profile && DB::table('dentist_branches')->where('dentist_profile_id', $profile->id)->where('branch_id', $branchId)->sharedLock()->first(), 403);
+            $response = IdempotentCommand::run(CommandKey::class, $current, $key, $name, $payload, function () use ($work) {
+                [$body, $status] = $work();
+
+                return [['encrypted_prescription_response' => Crypt::encryptString(json_encode($body, JSON_THROW_ON_ERROR))], $status];
+            }, fn () => ValidationException::withMessages(['idempotency_key' => ['This key was used for a different prescription request.']]));
+            $body = json_decode(Crypt::decryptString($response->getData(true)['encrypted_prescription_response']), true, flags: JSON_THROW_ON_ERROR);
+
+            return response()->json($body, $response->getStatusCode())->withHeaders($response->headers->all());
+        }, 3);
     }
 
     // ---- rules --------------------------------------------------------------------------------------------------------
@@ -268,7 +339,9 @@ class PrescriptionController extends Controller
         $out = ['id' => $p->public_id, 'number' => $p->number, 'status' => $p->status, 'issued_at' => $p->issued_at?->toIso8601String(),
             'date' => $p->issued_at ? ClinicClock::local($p->issued_at)->toDateString() : null, 'branch' => $p->branch?->name,
             'dentist' => $p->dentist ? 'Dr. '.$p->dentist->person?->fullName() : null, 'revision' => $p->revision];
-        if ($viewer->role->value === 'owner') return $out; // metadata only
+        if ($viewer->role->value === 'owner') {
+            return $out;
+        } // metadata only
         $out += ['patient' => ['id' => $p->patient?->public_id, 'name' => $p->patient?->person?->fullName()], 'visit' => $p->visit?->public_id,
             'voided' => $p->voided_at ? ['at' => $p->voided_at->toIso8601String(), 'reason' => $p->void_reason] : null,
             'can_edit' => $viewer->role->value === 'dentist' && $p->status === 'Draft' && in_array($p->branch_id, $this->dentistBranchIds($viewer), true),

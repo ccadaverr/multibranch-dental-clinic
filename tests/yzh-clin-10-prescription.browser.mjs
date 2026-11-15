@@ -49,14 +49,14 @@ export const reportSessionInvalidated=unexpected,listAppointments=unexpected,get
 export const prescriptionVisits=async()=>window.rx10.failVisits?{ok:false,message:'Synthetic Visit outage'}:{ok:true,data:['A','B'].map(x=>({id:'visit-'+x,date:'2026-11-06',patient:{id:'patient-'+x,name:'Synthetic '+x,age:null},branch:'Synthetic branch'})),meta:{license_no:'',allergy_notice:'Ask the patient'}};
 export const listPrescriptions=async()=>({ok:true,data:window.rx10.records});
 export const prescription=async id=>({ok:true,data:window.rx10.records.find(p=>p.id===id)});
-const draft=(body,id='rx-A',revision=1)=>({id,status:'Draft',can_edit:true,revision,lines:body.lines,note:body.note,visit:body.visit_id||'visit-A',patient:{id:'patient-A',name:'Synthetic A'}});
+const draft=(body,id='rx-A',revision=1)=>({id,status:'Draft',can_edit:true,branch:'Synthetic branch',revision,lines:body.lines,note:body.note,visit:body.visit_id||'visit-A',patient:{id:'patient-A',name:'Synthetic A'}});
 const stored=data=>{window.rx10.records=[...window.rx10.records.filter(p=>p.id!==data.id),data];return {ok:true,data}};
 export const createPrescription=async body=>window.rx10.holdSave?window.rx10.request('create',null,body):(window.rx10.calls.push({command:'create',body}),stored(draft(body)));
 export const updatePrescription=async(id,body)=>window.rx10.holdSave?window.rx10.request('update',id,body):(window.rx10.calls.push({command:'update',id,body}),stored(draft(body,id,body.expected_revision+1)));
 export const issuePrescription=async(id,revision)=>{
  if(window.rx10.holdIssue)return window.rx10.request('issue',id,{expected_revision:revision});
  window.rx10.calls.push({command:'issue',id,body:{expected_revision:revision}});
- return window.rx10.failIssue?{ok:false,message:'Synthetic Issue refusal'}:stored({...window.rx10.records.find(p=>p.id===id),status:'Issued',can_edit:false,number:'RX-SYNTHETIC',revision:revision+1});
+ return window.rx10.failIssue?{ok:false,message:'Synthetic Issue refusal'}:stored({...window.rx10.records.find(p=>p.id===id),status:'Issued',can_edit:false,number:'RX-2026-000001',issued_at:'2026-11-15T11:00:00+08:00',can_void:true,revision:revision+1});
 };
 export const savePrescriptionLicense=async()=>({ok:true});
 export const voidPrescription=()=>{throw new Error('Unexpected void')};
@@ -87,7 +87,7 @@ const calls = p => p.evaluate(() => window.rx10.calls)
 const feedback = p => p.evaluate(() => window.rx10.feedback)
 const waitCalls = (p, n) => p.waitForFunction(n => window.rx10.calls.length === n, n)
 const respond = async (p, i, r) => {await p.evaluate(({i,r}) => window.rx10.respond(i,r), {i,r}); await frames(p)}
-const saved = {ok: true, data: {id: 'rx-A', status: 'Draft', can_edit: true, revision: 1, patient: {id: 'patient-A', name: 'Synthetic A'}, visit: 'visit-A', lines: [{medicine:'Paracetamol',dosage:'',frequency:'',duration:'',instructions:''}], note: 'Submitted note'}}
+const saved = {ok: true, data: {id: 'rx-A', status: 'Draft', can_edit: true, branch:'Synthetic branch', revision: 1, patient: {id: 'patient-A', name: 'Synthetic A'}, visit: 'visit-A', lines: [{medicine:'Paracetamol',dosage:'',frequency:'',duration:'',instructions:''}], note: 'Submitted note'}}
 const fill = async p => {await visit(p).selectOption('visit-A'); await p.getByLabel('Select medicine 1', {exact: true}).selectOption('Paracetamol'); await note(p).fill('Submitted note')}
 const startIssue = async p => {
   await button(p, 'Issue prescription').click()
@@ -170,7 +170,7 @@ try {
   }, {failIssue:true})
   await check('issued result makes no delivery claim', async p => {
     await fill(p); await startIssue(p); await p.waitForFunction(() => window.rx10.feedback.length === 1)
-    assert.match((await feedback(p))[0][0], /Issued RX-SYNTHETIC.*delivery is not confirmed/)
+    assert.match((await feedback(p))[0][0], /Issued RX-2026-000001.*delivery is not confirmed/)
   })
   await check('Visit loading failure has retry and differs from no eligible Visits', async p => {
     await p.getByText('Synthetic Visit outage', {exact:true}).waitFor()

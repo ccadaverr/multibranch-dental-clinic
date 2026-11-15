@@ -102,6 +102,7 @@ source = source.slice(0, harnessStart) + harness
 // Use a JS string literal, not another interpolated template, for the adapter.
 replay = replay.slice(0, sourceStart) + 'const source = ' + JSON.stringify(source) + replay.slice(sourceEnd + 2)
 replay = replaceOnce(replay, "const root = fileURLToPath(new URL('..', import.meta.url))", 'const root = ' + JSON.stringify(fileURLToPath(new URL('..', import.meta.url))))
+replay = replaceOnce(replay, 'createRequire(import.meta.url)', 'createRequire(' + JSON.stringify(previousUrl.href) + ')')
 // Store and useClinicalSession subscribe to the real shared invalidation bus.
 // Only prescription commands/reads use the existing in-memory API stub.
 replay = replaceOnce(replay,
@@ -155,7 +156,7 @@ const cases = `
   },{holdSave:true});
   console.log(JSON.stringify({completed,unverified:['actual credentials/backend sessions','unobserved cross-tab cookie replacement','transport dispatch/CSRF/retry race'],evidence:'Synthetic APIs with actual store and React StrictMode; historical CLIN-10 browser assertions retained'},null,2));
 `
-const finalStart = replay.indexOf('  console.log(JSON.stringify({completed, blocked:')
+const finalStart = replay.indexOf('  console.log(JSON.stringify({measurements,completed, blocked:')
 const finalEnd = replay.indexOf('} finally {await browser?.close();', finalStart)
 assert(finalStart > 0 && finalEnd > finalStart)
 replay = replay.slice(0, finalStart) + cases + replay.slice(finalEnd)

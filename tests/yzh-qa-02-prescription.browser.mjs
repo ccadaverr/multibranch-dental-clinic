@@ -8,7 +8,7 @@ const errors=[],mutations=[]
 let releaseFirst,firstRead,issued=false,revision=1
 const url=process.env.QA_URL||'http://127.0.0.1:5187/tests/fixtures/yzh-qa-02.html'
 const firstRequested=new Promise(resolve=>{firstRead=resolve})
-const row=(id)=>({id,visit:'v'+id,patient:{id:'p'+id,name:'Synthetic patient '+id},status:'Draft',can_edit:true,revision,number:issued?'RX-SYNTHETIC-000002':null,lines:[{medicine:id==='1'?'Amoxicillin':'Paracetamol',dosage:'500mg',frequency:'',duration:'',instructions:''}],note:'',branch:'Synthetic branch',dentist:'Synthetic dentist'})
+const row=(id)=>({id,visit:'v'+id,patient:{id:'p'+id,name:'Synthetic patient '+id},status:'Draft',can_edit:true,revision,number:issued?'RX-2026-000002':null,issued_at:issued?'2026-11-15T11:00:00+08:00':null,can_void:issued,lines:[{medicine:id==='1'?'Amoxicillin':'Paracetamol',dosage:'500mg',frequency:'',duration:'',instructions:''}],note:'',branch:'Synthetic branch',dentist:'Synthetic dentist'})
 page.on('pageerror',e=>errors.push(e.message))
 await page.route('**/*',r=>new URL(r.request().url()).origin===new URL(url).origin?r.continue():r.abort())
 await page.route('**/sanctum/**',r=>r.fulfill({status:204}))

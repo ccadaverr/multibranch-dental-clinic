@@ -14,6 +14,7 @@ class UserResource extends JsonResource
         return [
             // Public identifiers only (CONTRACTS.md §1): no internal user/person/patient bigint ever leaves the server.
             'id' => $this->public_id,
+            ...($this->role->value === 'dentist' ? ['clinical_context' => \App\Support\PrescriptionSession::context($request, $this->resource)] : []),
             'name' => $this->name(),
             // Already-stored, already-safe Person fields (Backend Foundation 1B): let a frontend identity
             // bridge build a real local Person/Patient projection instead of parsing the derived `name` string.

@@ -1,6 +1,7 @@
 // Authored only: defer node --test until the testing phase is approved.
 // Executes actual pre-JSX WriteCard controller code with hook cells. This is
 // synthetic controller coverage, not React/browser/authenticated acceptance.
+import { runPrescriptionWrite } from '../src/prescription-command.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {readFileSync} from 'node:fs'
@@ -14,11 +15,12 @@ const controller = source.slice(source.indexOf('const firstError'), source.index
   + source.slice(start, end) + '\nreturn {save, changeVisit, setNote, setLines, stay, discard, requestLeave, visitId, lines, note, err, busy, visitError, visits, setVisitAttempt};\n}\nWriteCard'
 const wire = v => JSON.parse(JSON.stringify(v))
 const deferred = () => {let resolve; const promise = new Promise(r => {resolve = r}); return {promise, resolve}}
-const accepted = (id = 'rx-A') => ({ok: true, data: {id, revision: 2, status: 'Draft', can_edit: true}})
+const accepted = (id = 'rx-A') => ({ok: true, data: {id, revision: 1, status: 'Draft', can_edit: true}})
 
-function editor({respond = async () => accepted(), issue = async () => ({ok: true, data: {id: 'rx-A', number: 'RX-SYNTHETIC', status: 'Issued'}}), visits = async () => ({ok: true, data: []})} = {}) {
+function editor({respond = async () => accepted(), issue = async () => ({ok: true, data: {id: 'rx-A', number: 'RX-2026-000001', status: 'Issued'}}), visits = async () => ({ok: true, data: []})} = {}) {
   const cells = [], pending = [], calls = [], feedback = [], done = [], protections = []
-  let cursor = 0, active = true, value, authGeneration = 1
+  let cursor = 0, active = true, value, authGeneration = 1, knownRow
+  const enrich = (r,body) => {if(r.ok)knownRow={patient:{id:"patient-A"},visit:"visit-A",branch:"Synthetic branch",lines:body.lines,note:body.note,...r.data};return r.ok?{...r,data:knownRow}:r}
   const useState = initial => {
     const i = cursor++
     cells[i] ||= {value: typeof initial === 'function' ? initial() : initial}
@@ -32,12 +34,17 @@ function editor({respond = async () => accepted(), issue = async () => ({ok: tru
     }
   }
   const component = runInNewContext(controller, {
-    useState, useRef, useEffect: effect, useLayoutEffect: effect,
+    useState, useRef, useEffect: effect, useLayoutEffect: effect, structuredClone,
+    commandKey:()=>`synthetic-${calls.length}`,
+    // Controller tests invoke Save before the mocked catalog microtask; supply
+    // the same explicit synthetic encounter identity a rendered form requires.
+    runPrescriptionWrite:(request,api,allowed)=>runPrescriptionWrite(Object.assign(request,{patientId:request.patientId||'patient-A',branch:request.branch||'Synthetic branch'}),api,allowed),
+    prescription:async()=>({ok:true,data:knownRow}),
     useClinicalProtection: (dirty, busy) => protections.push({dirty, busy}),
     prescriptionVisits: visits,
-    createPrescription: body => {calls.push({command: 'create', body: wire(body)}); return respond(body)},
-    updatePrescription: (id, body) => {calls.push({command: 'update', id, body: wire(body)}); return respond(body)},
-    issuePrescription: (id, revision) => {calls.push({command: 'issue', id, revision}); return issue(id, revision)},
+    createPrescription: body => {calls.push({command: 'create', body: wire(body)}); return Promise.resolve(respond(body)).then(r=>enrich(r,body))},
+    updatePrescription: (id, body) => {calls.push({command: 'update', id, body: wire(body)}); return Promise.resolve(respond(body)).then(r=>enrich(r,body))},
+    issuePrescription: (id, revision) => {calls.push({command: 'issue', id, revision}); return Promise.resolve(issue(id, revision)).then(r=>{if(r.ok)knownRow={...knownRow,...r.data,revision:r.data.revision??revision+1,can_edit:false,can_void:true,issued_at:'2026-11-15T10:00:00+08:00'};return r.ok?{...r,data:knownRow}:r})},
   })
   const props = {getAuthGeneration:()=>authGeneration, context: {visitId: 'visit-A'}, editing: null, isCurrent: () => active, leaveRef: {current: null}, toast: (...args) => feedback.push(args), onDone: id => done.push(id), onEdited() {}}
   const render = () => {cursor = 0; value = component(props); for (const run of pending.splice(0)) run(); return value}
@@ -79,7 +86,7 @@ for (const returnToA of [false, true]) test(`confirmed original Visit issuance c
   e.value.setNote('New editor note'); e.render()
   held.resolve(accepted()); await task; e.render()
   assert.deepEqual(e.calls[0].body.visit_id, 'visit-A')
-  assert.deepEqual(e.calls.at(-1), {command: 'issue', id: 'rx-A', revision: 2})
+  assert.deepEqual(e.calls.at(-1), {command: 'issue', id: 'rx-A', revision: 1})
   assert.equal(e.value.note, 'New editor note'); assert.deepEqual(e.feedback, []); assert.deepEqual(e.done, []); e.unmount()
 })
 
@@ -95,12 +102,12 @@ test('Save accepted, Issue refused: recovery retries the same saved Draft ID and
   assert.equal(e.value.err, 'Synthetic stale revision'); assert.equal(e.value.note, 'Submitted note')
   assert.deepEqual(e.feedback, [])
   await e.value.save(false)
-  assert.equal(e.calls[2].command, 'update'); assert.equal(e.calls[2].id, 'rx-A'); assert.equal(e.calls[2].body.expected_revision, 2); e.unmount()
+  assert.equal(e.calls[2].command, 'update'); assert.equal(e.calls[2].id, 'rx-A'); assert.equal(e.calls[2].body.expected_revision, 1); e.unmount()
 })
 
 test('issuance success proves issuance, without asserting notification delivery', async () => {
   const e = editor(); e.fill(); await e.value.save(true)
-  assert.match(e.feedback[0][0], /Issued RX-SYNTHETIC/)
+  assert.match(e.feedback[0][0], /Issued RX-2026-000001/)
   assert.match(e.feedback[0][0], /delivery is not confirmed/); e.unmount()
 })
 
@@ -148,3 +155,8 @@ test('GEN-07 submitted clinical strings are trimmed without changing draft text 
 
 // Keep historical CLIN-05/R2 and RX-01 files intact and run them separately in
 // the approved test phase. Navigation/DOM/PDF assertions are in the browser file.
+
+test('an incomplete second medicine cannot be silently omitted from the prescription', async () => {
+  const e=editor();e.fill();e.value.setLines(ls=>[...ls,{medicine:'',dosage:'',frequency:'',duration:'',instructions:''}]);e.render()
+  await e.value.save(false);e.render();assert.equal(e.calls.length,0);assert.match(e.value.err,/every line/);e.unmount()
+})

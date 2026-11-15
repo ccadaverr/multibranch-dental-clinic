@@ -19,7 +19,7 @@ const between = (source, from, to) => {
 }
 
 // Old CLIN-10 controller mocks have no ClinicProvider. Supply one explicit,
-// stable synthetic generation; all old assertions and TODO markers stay intact.
+// stable synthetic generation; all existing behavioral assertions stay intact.
 const legacyUrl = new URL('./yzh-clin-10-prescription-lifecycle.test.js', import.meta.url)
 let legacy = readFileSync(legacyUrl, 'utf8').replaceAll('\r\n', '\n')
 legacy = replaceOnce(legacy, "new URL('../src/pages/ServerPrescriptions.jsx', import.meta.url)", JSON.stringify(new URL('../src/pages/ServerPrescriptions.jsx', import.meta.url).href))
@@ -29,6 +29,7 @@ legacy = replaceOnce(legacy, 'function editor({respond =', 'function editor({get
 // CLIN-10 now owns a mutable synthetic lifetime for its own regressions. Keep
 // that default, while injecting the real store reader for CLIN-11 owner cases.
 legacy = replaceOnce(legacy, 'getAuthGeneration:()=>authGeneration, context:', 'getAuthGeneration:getAuthGeneration === undefined ? (()=>authGeneration) : getAuthGeneration, context:')
+legacy = replaceOnce(legacy, '../src/prescription-command.js', new URL('../src/prescription-command.js', import.meta.url).href)
 const {editor} = await import('data:text/javascript;base64,' + Buffer.from(legacy + '\nexport {editor}\n').toString('base64'))
 
 const fixture = () => ({
@@ -38,7 +39,7 @@ const fixture = () => ({
 const session = id => ({serverUserId:'server-'+id,userId:'user-'+id,dentistId:'dentist-'+id,role:'dentist',branchId:'b1',branchScopes:[],employeeBridge:true,active:true})
 const wire = value => JSON.parse(JSON.stringify(value))
 const deferred = () => {let resolve; const promise = new Promise(r => {resolve=r}); return {promise,resolve}}
-const accepted = {ok:true,data:{id:'rx-A',status:'Draft',can_edit:true,revision:2}}
+const accepted = {ok:true,data:{id:'rx-A',status:'Draft',can_edit:true,revision:1}}
 
 function owner({ready = true} = {}) {
   const sessionRef={current:null}, stateRef={current:fixture()}, listeners=new Set(), effects=[]
@@ -108,7 +109,7 @@ for(const mode of ['unchanged','refresh','visit-B','unmounted']) test(`confirmed
   if(mode==='visit-B'){e.value.changeVisit('visit-B');e.render();e.value.discard();e.render();e.value.setNote('New B note');e.render()}
   if(mode==='unmounted')e.unmount()
   held.resolve(accepted);await task;e.render()
-  assert.equal(e.calls[0].body.visit_id,'visit-A');assert.deepEqual(e.calls.at(-1),{command:'issue',id:'rx-A',revision:2})
+  assert.equal(e.calls[0].body.visit_id,'visit-A');assert.deepEqual(e.calls.at(-1),{command:'issue',id:'rx-A',revision:1})
   if(mode==='visit-B'){assert.equal(e.value.note,'New B note');assert.deepEqual(e.feedback,[])}
   if(mode==='unmounted')assert.deepEqual(e.feedback,[])
   e.unmount();o.dispose()
@@ -144,5 +145,10 @@ test('authentication replacement after Issue began cannot undo it, but suppresse
   held.resolve({ok:true,data:{id:'rx-A',number:'RX-SYNTHETIC',status:'Issued'}});await task
   assert.deepEqual(e.feedback,[]);assert.deepEqual(e.done,[]);e.unmount();o.dispose()
 })
-test.todo('UNVERIFIED: unobserved cross-tab cookie replacement requires server-issued session-instance binding checked by the mutation')
-test.todo('UNVERIFIED: real credentials, API CSRF/retry dispatch timing and native browser acceptance; client command gate does not bind a transmitted request')
+test('adopting a replaced clinical session invalidates held intent even for the same Dentist', () => {
+  const o=owner();o.adoptSession({...session('A'),clinicalContext:'first-context'});const first=o.getAuthGeneration()
+  o.setSession('dentist');assert.equal(o.getAuthGeneration(),first)
+  o.adoptSession({...session('A'),clinicalContext:'replacement-context'});assert(o.getAuthGeneration()>first);o.dispose()
+})
+// Real session replacement is exercised by local-prescription.browser.mjs and PrescriptionRecoveryTest.
+// Actual async CSRF/419 dispatch gates are exercised in prescription-session-api.test.js.

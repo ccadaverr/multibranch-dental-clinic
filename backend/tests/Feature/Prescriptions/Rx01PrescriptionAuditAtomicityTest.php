@@ -45,11 +45,13 @@ class Rx01PrescriptionAuditAtomicityTest extends TestCase
         Mail::fake();
         Bus::fake([SendMailDispatch::class]);
         $this->setUpSchedulingWorld();
-        $this->d['d1']->update(['rx_license_no' => 'SYNTHETIC-RX01']);
+        $this->d['d1']->forceFill(['rx_license_no' => 'SYNTHETIC-RX01'])->save();
     }
 
     private function visit(?Patient $patient = null): Visit
     {
+        // Multiple prescriptions share the one active Visit; never manufacture duplicate admissions.
+        if ($existing = Visit::where('patient_id', ($patient ?? $this->p['A'])->id)->where('branch_id', $this->b['b1']->id)->whereIn('status', ['Checked In', 'In Treatment'])->first()) return $existing;
         return Visit::create(['patient_id' => ($patient ?? $this->p['A'])->id, 'branch_id' => $this->b['b1']->id,
             'source' => 'walk_in', 'status' => 'Checked In', 'responsible_dentist_profile_id' => $this->d['d1']->id,
             'requested_service_id' => $this->svc['svc1']->id, 'arrived_at' => now(), 'clinic_date' => ClinicClock::today(),
@@ -311,7 +313,7 @@ class Rx01PrescriptionAuditAtomicityTest extends TestCase
         $this->postJson("/api/prescriptions/{$p->public_id}/issue", ['expected_revision' => 1])->assertOk();
         $issued = $p->fresh();
         $lines = $p->lines()->get()->map->getRawOriginal()->all();
-        $this->postJson("/api/prescriptions/{$p->public_id}/void", ['reason' => 'Synthetic correction reason'])->assertOk()
+        $this->postJson("/api/prescriptions/{$p->public_id}/void", ['reason' => 'Synthetic correction reason', 'expected_revision' => $p->fresh()->revision])->assertOk()
             ->assertJsonPath('data.status', 'Void')->assertJsonPath('data.revision', 3);
         $void = $p->fresh();
         foreach (['number', 'issued_at', 'issued_by_user_id', 'license_no', 'visit_id', 'patient_id', 'branch_id', 'dentist_profile_id', 'note'] as $field) {
@@ -319,7 +321,7 @@ class Rx01PrescriptionAuditAtomicityTest extends TestCase
         }
         $this->assertSame($lines, $p->lines()->get()->map->getRawOriginal()->all());
         $this->assertAudit('prescription.voided', $void);
-        $this->postJson("/api/prescriptions/{$p->public_id}/void", ['reason' => 'Synthetic repeat'])->assertStatus(422)->assertJsonValidationErrors('status');
+        $this->postJson("/api/prescriptions/{$p->public_id}/void", ['reason' => 'Synthetic repeat', 'expected_revision' => $p->fresh()->revision])->assertStatus(422)->assertJsonValidationErrors('status');
         $this->assertSame($void->getRawOriginal(), $p->fresh()->getRawOriginal());
         $this->assertSame(1, $this->logs('prescription.voided')->count());
     }
@@ -331,7 +333,7 @@ class Rx01PrescriptionAuditAtomicityTest extends TestCase
         $before = $p->fresh()->getRawOriginal();
         foreach ([false, true] as $afterInsert) {
             $this->failingAudit('prescription.voided', $afterInsert);
-            $this->assertFailure(fn () => $this->postJson("/api/prescriptions/{$p->public_id}/void", ['reason' => 'Synthetic correction reason']), 'Synthetic prescription audit failure');
+            $this->assertFailure(fn () => $this->postJson("/api/prescriptions/{$p->public_id}/void", ['reason' => 'Synthetic correction reason', 'expected_revision' => $p->fresh()->revision]), 'Synthetic prescription audit failure');
             $this->assertSame($before, $p->fresh()->getRawOriginal());
             $this->assertSame(0, $this->logs('prescription.voided')->count());
             $this->assertSame([1, 1], $this->readyCounts());
@@ -342,8 +344,8 @@ class Rx01PrescriptionAuditAtomicityTest extends TestCase
     {
         $p = $this->draft();
         $before = $p->getRawOriginal();
-        $this->postJson("/api/prescriptions/{$p->public_id}/void", ['reason' => 'Synthetic reason'])->assertStatus(422)->assertJsonValidationErrors('status');
-        $this->postJson("/api/prescriptions/{$p->public_id}/void", ['reason' => '  '])->assertStatus(422)->assertJsonValidationErrors('reason');
+        $this->postJson("/api/prescriptions/{$p->public_id}/void", ['reason' => 'Synthetic reason', 'expected_revision' => $p->fresh()->revision])->assertStatus(422)->assertJsonValidationErrors('status');
+        $this->postJson("/api/prescriptions/{$p->public_id}/void", ['reason' => '  ', 'expected_revision' => $p->fresh()->revision])->assertStatus(422)->assertJsonValidationErrors('reason');
         $this->assertSame($before, $p->fresh()->getRawOriginal());
         $this->assertSame(0, $this->logs('prescription.voided')->count());
     }
@@ -398,7 +400,7 @@ class Rx01PrescriptionAuditAtomicityTest extends TestCase
         $this->getJson("/api/prescriptions/{$p->public_id}")->assertOk()->assertJsonPath('data.lines.0.medicine', self::MEDICINE);
         $this->putJson("/api/prescriptions/{$p->public_id}", ['expected_revision' => 2, 'lines' => $this->lines()])->assertForbidden();
         $this->actingAsUser('dentist1');
-        $this->postJson("/api/prescriptions/{$p->public_id}/void", ['reason' => 'Synthetic correction'])->assertOk();
+        $this->postJson("/api/prescriptions/{$p->public_id}/void", ['reason' => 'Synthetic correction', 'expected_revision' => $p->fresh()->revision])->assertOk();
         $this->actingAsUser('patientA');
         $this->getJson('/api/me/prescriptions')->assertOk()->assertJsonPath('data.0.id', $p->public_id)->assertJsonPath('data.0.status', 'Void');
     }
@@ -411,7 +413,7 @@ class Rx01PrescriptionAuditAtomicityTest extends TestCase
             $this->actingAsUser($actor);
             $this->postJson('/api/prescriptions', ['visit_id' => $visit->public_id, 'lines' => $this->lines()])->assertForbidden();
             $this->postJson("/api/prescriptions/{$p->public_id}/issue", ['expected_revision' => 1])->assertForbidden();
-            $this->postJson("/api/prescriptions/{$p->public_id}/void", ['reason' => 'Synthetic reason'])->assertForbidden();
+            $this->postJson("/api/prescriptions/{$p->public_id}/void", ['reason' => 'Synthetic reason', 'expected_revision' => $p->fresh()->revision])->assertForbidden();
         }
         $this->assertSame('Draft', $p->fresh()->status);
         $this->assertSame(0, $this->logs('prescription.issued')->count());

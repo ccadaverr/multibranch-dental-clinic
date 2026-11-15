@@ -118,3 +118,30 @@ python3 scripts/local-system.py --target "$CLONE_TARGET" --profile test stop
 ```
 
 This lane refuses the regular runtime and requires empty committed fixture tables; no migrations/resets/cleanup run. It proves real row-lock waiting for different keys, same-key replay and contradictory reuse. The historical reset-based `ConcurrentBillingTest` is not run by this profile. No selected-follow-up activation is enabled.
+
+## Prescription lifecycle acceptance (Sprint03)
+
+See [Sprint03 evidence and boundaries](LOCAL_PRESCRIPTION_SPRINT03.md). Reuse an existing synthetic Sprint02 completed encounter; a newly provisioned environment must first complete the actual visit journey above. These scripts never mark an encounter complete by fixture. Keep the historical synthetic branch Inactive after acceptance.
+
+```bash
+DENTALOPS_LOCAL_TARGET="$TARGET" PLAYWRIGHT_MODULE="/absolute/path/to/playwright" \
+  LOCAL_SYSTEM_EVIDENCE="/private/fresh-prescription-evidence" \
+  node tests/local-prescription.browser.mjs
+DENTALOPS_LOCAL_TARGET="$TARGET" PLAYWRIGHT_MODULE="/absolute/path/to/playwright" \
+  LOCAL_SYSTEM_EVIDENCE="/private/fresh-prescription-evidence" \
+  node tests/local-prescription-visibility.browser.mjs
+# Install pypdf in a private test-only venv, then parse the actual downloads:
+/private/pdf-tools/bin/python scripts/verify-prescription-pdf.py /private/fresh-prescription-evidence
+```
+
+The journey deliberately drops real Issue and Void responses only after commit, then recovers with the exact same keys. It also replaces a same-Dentist cookie session in another tab and verifies that the held clinical confirmation is refused. Never copy captured cookies/context values, credentials, dumps or synthetic clinical exports into Git.
+
+For real committed row-lock races, create a fresh `clone-test` target first:
+
+```bash
+python3 scripts/local-system.py --target "$CLONE_TARGET" --profile test prescription-concurrency
+python3 scripts/local-system.py --target "$CLONE_TARGET" --profile test backup
+python3 scripts/local-system.py --target "$CLONE_TARGET" --profile test stop
+```
+
+This action refuses the regular runtime. It exercises duplicate/conflicting create/save/issue/void commands, stale issue and authorization revocation while workers wait on real locks. It executes no migration/reset or history cleanup. Ordinary focused API tests use `tests/Feature/Prescriptions/PrescriptionTest.php` and `tests/Feature/Prescriptions/PrescriptionRecoveryTest.php` through the guarded `test` action.

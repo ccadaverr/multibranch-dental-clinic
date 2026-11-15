@@ -66,8 +66,8 @@ class PrescriptionTest extends TestCase
             try { DB::transaction($change); $this->fail('an issued prescription changed'); } catch (\Illuminate\Database\QueryException) {} // a savepoint keeps the test transaction usable
         }
 
-        $this->postJson("/api/prescriptions/$id/void", ['reason' => 'Wrong dose'])->assertOk()->assertJsonPath('data.status', 'Void')->assertJsonPath('data.voided.reason', 'Wrong dose');
-        $this->postJson("/api/prescriptions/$id/void", ['reason' => 'Again'])->assertStatus(422);
+        $this->postJson("/api/prescriptions/$id/void", ['reason' => 'Wrong dose', 'expected_revision' => 3])->assertOk()->assertJsonPath('data.status', 'Void')->assertJsonPath('data.voided.reason', 'Wrong dose');
+        $this->postJson("/api/prescriptions/$id/void", ['reason' => 'Again', 'expected_revision' => 4])->assertStatus(422);
         $second = $this->draft($visit)->json('data.id');
         $this->postJson("/api/prescriptions/$second/issue", ['expected_revision' => 1])->assertOk()->assertJsonPath('data.number', 'RX-2026-000002');
         $this->assertSame(['Void', 'Issued'], Prescription::orderBy('id')->pluck('status')->all()); // the void one stays
