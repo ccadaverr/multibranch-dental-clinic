@@ -170,8 +170,8 @@ function appointmentPayload({ branchId, serviceId, date, start, notes = null, pa
   return payload
 }
 
-export async function createAppointment(form, key) {
-  return commandResult(await api.createAppointment(appointmentPayload(form), key))
+export async function createAppointment(form, key, beforeDispatch) {
+  return commandResult(await api.createAppointment(appointmentPayload(form), key, beforeDispatch))
 }
 
 // The clinical entry uses the running v1 capability at this exact API base. Retain the legacy reviewed-commit
