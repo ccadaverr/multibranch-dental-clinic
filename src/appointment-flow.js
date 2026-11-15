@@ -8,6 +8,9 @@ import { canSchedule, schedulingActorKey } from './appointment-ui.js'
 import { beginArrivalCommand } from './arrival-command.js'
 import { canAccessPage } from './safeguards.js'
 import { inScope } from './contracts.js'
+import { patientKeyResolver } from './appointment-projection.js'
+import { matchesEncounter, boundedEncounter } from './encounter-readback.js'
+import { clinicalSessionKey } from './encounter.js'
 
 // Server-first M6/M8/M9/M5 command flows. Every appointment, Visit, queue and Treatment change is a Laravel command
 // followed by a refresh of the in-memory server projection; the browser-local adapter step for unfinished modules
@@ -182,10 +185,16 @@ export function createAppointmentFlow({ getState, getSession, getActions, refres
     },
 
     // M9 queue commands (server only): 'call' | 'ready' | 'away' | 'return', and the operational priority.
-    async queueCommand(entry, name, key) {
-      const result = await queue.transitionQueue(entry, name, key)
+    async queueCommand(entry, name, key, isCurrent = () => true) {
+      if (!isCurrent()) return {ok:false,kind:'stale_context'}
+      let result
+      try { result = await boundedEncounter(() => queue.transitionQueue(entry, name, key, isCurrent)) }
+      catch { return {ok:false,kind:'network',uncertain:true,message:'The queue outcome is unconfirmed. Retry the same call or refresh this exact Visit.'} }
+      if (!isCurrent()) return {ok:false,kind:'stale_context'}
       if (!result.ok) return afterServerCommand(result)
-      await refresh()
+      try { const r=await boundedEncounter(refresh);if(r?.ok===false)return {ok:false,uncertain:true,message:'The queue command was accepted, but the current worklist could not be refreshed. Retry the same command or review this Visit.'} }
+      catch {return {ok:false,uncertain:true,message:'The queue command was accepted, but the current worklist could not be refreshed. Review this Visit.'}}
+      if (!isCurrent()) return {ok:false,kind:'stale_context'}
       return { ok: true, row: result.row }
     },
 
@@ -231,26 +240,63 @@ export function createAppointmentFlow({ getState, getSession, getActions, refres
 
     // Atomic start (Queue Served + Visit/appointment In Treatment + Treatment created). When the Dentist already filled in
     // the form, it is then saved as the first documentation revision (a separate command with its own key).
-    async startTreatment(entry, form = null, key = api.commandKey(), documentKey = api.commandKey(), visitIntent = null) {
-      const issue = entry ? encounterIssue(getState(), entry) : 'Open your exact encounter from today’s queue.'
+    async startTreatment(entry, form = null, key = api.commandKey(), documentKey = api.commandKey(), visitIntent = null, isCurrent = () => true) {
+      const currentEntry = entry && getState().queue.find(q=>q.id===entry.id)
+      if (!currentEntry || ['visitId','patientPublicId','branchId','dentistId','appointmentId'].some(k=>(currentEntry[k]??null)!==(entry[k]??null)))
+        return {ok:false,kind:'stale_context',message:'The selected queue identities changed. Return to My Queue.'}
+      const issue = encounterIssue(getState(), currentEntry)
       if (issue) return { ok: false, message: issue }
       const visit = visitIntent?.id === entry.visitId ? visitIntent : visitFor(entry.visitId)
       if (!visit) return { ok: false, message: 'This visit is not loaded from the clinic server. Refresh the worklist and try again.' }
-      const result = await treatments.startTreatment(visit, key)
+      if (getSession()?.dentistId !== visit.dentistId || !inScope(visit,getSession(),getState())) return {ok:false,kind:'stale_context',message:'This Visit is outside your assigned clinical workspace.'}
+      const identity = clinicalSessionKey(getSession()), generation = getAuthGeneration?.()
+      const owns = () => isCurrent() && getSession()?.role === 'dentist' && getSession()?.active !== false &&
+        identity === clinicalSessionKey(getSession()) && inScope(visit,getSession(),getState()) && (!getAuthGeneration || generation != null && generation === getAuthGeneration())
+      if (!owns()) return {ok:false,kind:'stale_context',message:'Your clinical session changed. Return to My Queue.'}
+      const expected = {visitId:visit.id,visitRevision:visit.revision,queueEntryId:entry.id,queueRevision:entry.revision,
+        patientPublicId:visit.patientPublicId,branchId:visit.branchId,dentistId:visit.dentistId,serviceId:visit.serviceId,appointmentId:visit.appointmentId,clinicDate:visit.clinicDate}
+      let result
+      try { result = await boundedEncounter(() => treatments.startTreatment(visit, key, entry, owns)) }
+      catch { result = {ok:false,kind:'network',uncertain:true,message:'Treatment start is unconfirmed. Retry the same command or check this exact Visit.'} }
+      if (!owns()) return {ok:false,kind:'stale_context',message:'Your clinical session changed. No result was adopted.'}
       if (!result.ok) return afterServerCommand(result)
-      await refresh()
-      const started = this.treatmentFor(visit.id)
-      if (!started) return { ok: false, uncertain: true, message: 'The start command was accepted, but the treatment could not be refreshed. Check the encounter before retrying.' }
+      if (!matchesEncounter(result.row, expected, true)) return {ok:false,uncertain:true,message:'The start response did not match this exact encounter. Check the saved Visit before another command.'}
+      const patientIdFor = patientKeyResolver({session:getSession(),users:getState().users,patients:getState().patients})
+      const started = treatmentsApi.mapTreatment(result.row, patientIdFor)
+      // Documentation always uses the revision returned by this start, even if another tab saves during refresh.
+      let refreshed
+      try { refreshed = await boundedEncounter(refresh) } catch { refreshed = {ok:false} }
+      if (!owns()) return {ok:false,kind:'stale_context',message:'Your clinical session changed. No result was adopted.'}
+      if (refreshed?.ok === false) return {ok:false,uncertain:true,partial:true,record:started,message:'Treatment start verified, but current clinic records could not be refreshed. Check this Visit or retry the same command; no replacement encounter is needed.'}
       if (!form || !hasDocumentation(form)) return { ok: true, record: started }
-      const saved = await this.saveTreatment(started, form, documentKey)
+      const saved = await this.saveTreatment(started, form, documentKey, owns)
       return saved.ok ? saved : { ...saved, ok: false, partial: true, record: started, message: `Treatment started, but the documentation was not saved: ${saved.message}` }
     },
 
-    async saveTreatment(treatment, form, key = api.commandKey()) {
+    async readEncounter(context) {
+      const visit = visitFor(context.visitId), identity = clinicalSessionKey(getSession()), generation = getAuthGeneration?.()
+      const owns = () => getSession()?.role === 'dentist' && getSession()?.active !== false && identity === clinicalSessionKey(getSession()) &&
+        (!getAuthGeneration || generation != null && generation === getAuthGeneration())
+      if (!visit?.server || getSession()?.dentistId !== visit.dentistId || !inScope(visit,getSession(),getState()) || !owns()) return {ok:false,kind:'stale_context',message:'Refresh your authorized queue before reviewing this Visit.'}
+      const expected = {...context,patientPublicId:visit.patientPublicId,serviceId:visit.serviceId,clinicDate:visit.clinicDate}
+      if (visit.patientId !== context.patientId || visit.branchId !== context.branchId || visit.dentistId !== context.dentistId ||
+          (visit.appointmentId??null) !== (context.appointmentId??null)) return {ok:false,kind:'stale_context',message:'The selected encounter identities disagree.'}
+      let result
+      try { result = await boundedEncounter(() => treatments.encounterForVisit(context.visitId)) }
+      catch { return {ok:false,kind:'network',message:'This encounter could not be read. No start or completion was inferred.'} }
+      if (!owns()) return {ok:false,kind:'stale_context',message:'Your clinical session changed. No encounter was adopted.'}
+      if (!result.ok) return result
+      if (!matchesEncounter(result.row,expected)) return {ok:false,kind:'unverified',message:'The saved record does not match this exact encounter.'}
+      return {ok:true,record:treatmentsApi.mapTreatment(result.row,patientKeyResolver({session:getSession(),users:getState().users,patients:getState().patients}))}
+    },
+
+    async saveTreatment(treatment, form, key = api.commandKey(), isCurrent = () => true) {
+      if (!isCurrent()) return {ok:false,kind:'stale_context',message:'This encounter is no longer selected.'}
       if (!treatment?.server || !treatment.author) return { ok: false, message: 'Only the treating Dentist can document this treatment.' }
       const issue = this.encounterProblem(treatment)
       if (issue) return { ok: false, message: issue }
-      const result = await treatments.documentTreatment(treatment, form, key)
+      const result = await treatments.documentTreatment(treatment, form, key, isCurrent)
+      if (!isCurrent()) return {ok:false,kind:'stale_context',message:'This encounter is no longer selected. No result was adopted.'}
       if (!result.ok) return afterServerCommand(result)
       await refresh()
       const record = this.treatmentFor(treatment.visitId)

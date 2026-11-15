@@ -271,13 +271,14 @@ export function listTreatments(params) { return request(`/api/treatments${query(
 export function getTreatment(id) { return request(`/api/treatments/${encodeURIComponent(id)}`) }
 // Cursor-paged (newest first): per_page 1-100, cursor = the previous page's meta.next_cursor.
 export function myTreatments(params) { return request(`/api/treatments/mine${query(params)}`) }
-export function startTreatment(visitId, payload, key) { return command(`/api/visits/${encodeURIComponent(visitId)}/treatment`, payload, key) }
-export function treatmentCommand(id, name, payload, key) { return command(`/api/treatments/${encodeURIComponent(id)}/${encodeURIComponent(name)}`, payload, key) }
+export function startTreatment(visitId, payload, key, beforeDispatch) { return request(`/api/visits/${encodeURIComponent(visitId)}/treatment`, {method:'POST',body:JSON.stringify(payload),headers:key?{'Idempotency-Key':key}:{},beforeDispatch}) }
+export function encounterForVisit(visitId, {signal}={}) { return request(`/api/visits/${encodeURIComponent(visitId)}/treatment`, signal?{signal}:{}) }
+export function treatmentCommand(id, name, payload, key, beforeDispatch) { return request(`/api/treatments/${encodeURIComponent(id)}/${encodeURIComponent(name)}`, {method:'POST',body:JSON.stringify(payload),headers:key?{'Idempotency-Key':key}:{},beforeDispatch}) }
 
 // M9 Patient Queue Management (entries are created only by M8 arrival). Raw calls only; src/queue-api.js owns mapping.
 export function listQueue(params) { return request(`/api/queue${query(params)}`) }
 export function myQueue() { return request('/api/queue/mine') }
-export function queueCommand(id, name, payload, key) { return command(`/api/queue/${encodeURIComponent(id)}/${encodeURIComponent(name)}`, payload, key) }
+export function queueCommand(id, name, payload, key, beforeDispatch) { return command(`/api/queue/${encodeURIComponent(id)}/${encodeURIComponent(name)}`, payload, key, beforeDispatch) }
 
 // M7 Patient assistant: the ONLY input is the message; the server derives everything else and holds the provider credential.
 export function askAssistant(message, history = []) { return request('/api/assistant/messages', { method: 'POST', body: JSON.stringify(history.length ? { message, history } : { message }) }) }

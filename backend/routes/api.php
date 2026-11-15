@@ -449,6 +449,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
         // M5: starting treatment is the atomic Treatment command (Queue Served + Visit/appointment In Treatment +
         // Treatment created). There is no standalone Visit start-treatment or complete endpoint.
         Route::post('/{visit}/treatment', [TreatmentController::class, 'start'])->middleware('role:dentist');
+        Route::get('/{visit}/treatment', [TreatmentController::class, 'forVisit'])->middleware('role:dentist');
         // M12: open the Visit's HMO case, or record the explicit self-pay / no-claim decision (terminal Withdrawn).
         Route::post('/{visit}/hmo-membership', [HmoController::class, 'setMembership'])->middleware('role:staff');
         Route::post('/{visit}/hmo-membership/end', [HmoController::class, 'endMembership'])->middleware('role:staff');

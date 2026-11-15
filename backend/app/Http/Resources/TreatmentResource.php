@@ -48,7 +48,7 @@ class TreatmentResource extends JsonResource
                 'status' => $visit->status,
                 'revision' => $visit->revision,
                 'source' => $visit->source,
-                'queue' => $visit->queueEntry ? ['id' => $visit->queueEntry->public_id, 'status' => $visit->queueEntry->status] : null,
+                'queue' => $visit->queueEntry ? ['id' => $visit->queueEntry->public_id, 'status' => $visit->queueEntry->status, 'revision' => $visit->queueEntry->revision] : null,
             ],
             'patient' => ['id' => $visit->patient->public_id, 'code' => $visit->patient->patient_code, 'name' => $visit->patient->person?->fullName()],
             'branch' => ['id' => $visit->branch->legacy_ref, 'name' => $visit->branch->name],

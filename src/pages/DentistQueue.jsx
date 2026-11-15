@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Button, RefreshButton, SearchInput, Notice, PageHeader, Status } from '../components.jsx'
 import { inScope, isTodayQueue } from '../contracts.js'
 import { commandKey } from '../appointments-api.js'
-import { commandGate, encounterContextFor, clinicalSessionKey } from '../encounter.js'
+import { commandGate, encounterContextFor, calledEncounterContext, clinicalSessionKey } from '../encounter.js'
 import { useClinicalSession } from '../use-clinical-session.js'
 import { useVisibleRefresh } from '../use-visible-refresh.js'
 import { QueueCountsNotice, useQueueVisibility } from './QueueCounts.jsx'
@@ -12,13 +12,14 @@ import '../encounter-workspace.css'
 export function DentistQueue({ store, setPage }) {
   const allowed=useClinicalSession(store)
   if(!allowed)return <Notice title="Clinical session unavailable">Patient information is hidden. Sign in again to open My Queue.</Notice>
-  return <Worklist key={clinicalSessionKey(store.session)} store={store} setPage={setPage}/>
+  return <Worklist key={clinicalSessionKey(store.session)+'|'+store.getAuthGeneration?.()} store={store} setPage={setPage}/>
 }
 function Worklist({store,setPage}) {
   const {state,session}=store, flow=store.appointmentFlow
   const [filter,setFilter]=useState('active'), [search,setSearch]=useState(''), [busy,setBusy]=useState(null), [feedback,setFeedback]=useState(null)
   const [messageBusy,setMessageBusy]=useState(false)
   const gate=useRef(commandGate(commandKey)), live=useRef(true), messageLock=useRef(false)
+  const latest=useRef(store);latest.current=store
   useEffect(()=>{live.current=true;return()=>{live.current=false}},[])
   const vis=useQueueVisibility(store)
   useVisibleRefresh(flow?.refresh)
@@ -31,11 +32,21 @@ function Worklist({store,setPage}) {
   const call=async(entry)=>{
     if(!fresh||gate.current.pending)return
     const current=state.queue.find(q=>q.id===entry.id)
-    if(!current||!inScope(current,session,state)||current.revision!==entry.revision)return setFeedback({ok:false,message:'This queue entry changed. Refresh before calling.'})
+    const replay = gate.current.retry?.entry.id === entry.id
+    if(!current||!inScope(current,session,state)||['visitId','patientPublicId','branchId','dentistId','appointmentId'].some(k=>(current[k]??null)!==(entry[k]??null))||!replay&&current.revision!==entry.revision)return setFeedback({ok:false,message:'This queue entry changed. Refresh before calling.'})
+    const auth=store.getAuthGeneration?.(), identity=clinicalSessionKey(session)
+    const owns=()=>live.current&&identity===clinicalSessionKey(latest.current.session)&&auth===latest.current.getAuthGeneration?.()
     setBusy(entry.id);setFeedback(null)
-    const result=await gate.current.run({entry},attempt=>flow.queueCommand(attempt.entry,'call',attempt.keys.start))
-    if(!live.current)return
-    setBusy(null);setFeedback(result.ok?{ok:true,message:'Call confirmed by the clinic server. Open the encounter when the patient is ready.'}:result)
+    const result=await gate.current.run({entry},async attempt=>{
+      const result=await flow.queueCommand(attempt.entry,'call',attempt.keys.start,owns)
+      if(!owns())return {ok:false,kind:'stale_context'}
+      const context=result.ok?calledEncounterContext(result.row,attempt.entry):null
+      return result.ok&&!context?{ok:false,uncertain:true,message:'The call response did not match this queue/Visit. Review the exact encounter before another command.'}:{...result,context}
+    })
+    if(!owns())return
+    setBusy(null)
+    if(result.ok&&result.context)return setPage('treatment',result.context)
+    setFeedback(result)
   }
   const openMessage=async entry=>{
     if(messageLock.current)return
@@ -64,7 +75,7 @@ function Worklist({store,setPage}) {
         <div className="enc-queue-identity"><h3>{q.patientName||state.patients.find(p=>p.id===q.patientId)?.name||'Identity unavailable'}</h3><p>{q.patientCode} · {q.walkIn?'Walk-in':'Appointment'}{appointment?.start?` · ${appointment.start}`:''}</p><p>{state.branches.find(b=>b.id===q.branchId)?.name} · {q.service||state.services.find(s=>s.id===q.serviceId)?.name}</p></div>
         <div className="enc-queue-state"><Status>{q.status==='Served'?q.visitStatus:q.status}</Status><small>Visit: {q.visitStatus||'Unavailable'}</small></div>
         <div className="enc-queue-actions">
-          {q.status==='Waiting'&&<Button disabled={!fresh||!!busy} onClick={()=>call(q)}>{busy===q.id?'Calling...':'Call patient'}</Button>}
+          {q.status==='Waiting'&&<Button disabled={!fresh||!!busy} onClick={()=>call(q)}>{busy===q.id?'Calling...':'Call and open encounter'}</Button>}
           {ready&&<Button disabled={!fresh||!!busy} onClick={()=>open(q)}>Open encounter</Button>}
           {q.visitStatus==='Completed'&&t&&<Button variant="soft" onClick={()=>open(t)}>View completed record</Button>}
           {!ready&&q.visitStatus!=='Completed'&&<Button variant="ghost" size="sm" onClick={()=>open(q)}>Review encounter</Button>}

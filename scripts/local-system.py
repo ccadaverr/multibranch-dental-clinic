@@ -133,7 +133,7 @@ def main():
     parser.add_argument('--target', required=True, help='Private manifest for a newly provisioned, owned local cluster')
     parser.add_argument('--profile', choices=['demo', 'test'], default='demo')
     parser.add_argument('--filter', help='Optional PHPUnit test-name filter; explicit reviewed files remain required')
-    parser.add_argument('action', choices=['status', 'start', 'stop', 'backup', 'migrate', 'seed', 'seed-demo', 'visit-fixture', 'test', 'clone-test', 'concurrency', 'billing-concurrency', 'prescription-concurrency', 'arrival-concurrency', 'verify-schema', 'verify-guard', 'serve', 'ui', 'mailbox', 'worker', 'scheduler'])
+    parser.add_argument('action', choices=['status', 'start', 'stop', 'backup', 'migrate', 'seed', 'seed-demo', 'visit-fixture', 'test', 'clone-test', 'concurrency', 'billing-concurrency', 'prescription-concurrency', 'arrival-concurrency', 'encounter-concurrency', 'verify-schema', 'verify-guard', 'serve', 'ui', 'mailbox', 'worker', 'scheduler'])
     parser.add_argument('tests', nargs='*')
     args = parser.parse_args()
     c, runtime = target(args.target)
@@ -149,7 +149,7 @@ def main():
     selected = migrations(c) if args.action != 'backup' else []
     # Separate profiles may run independently. One profile never runs overlapping suites or schema/seed work.
     lock = None
-    if args.action in ['migrate', 'seed', 'seed-demo', 'visit-fixture', 'test', 'clone-test', 'concurrency', 'billing-concurrency', 'prescription-concurrency', 'arrival-concurrency', 'verify-schema', 'verify-guard', 'backup']:
+    if args.action in ['migrate', 'seed', 'seed-demo', 'visit-fixture', 'test', 'clone-test', 'concurrency', 'billing-concurrency', 'prescription-concurrency', 'arrival-concurrency', 'encounter-concurrency', 'verify-schema', 'verify-guard', 'backup']:
         lock = open(runtime / (database + '.lock'), 'a')
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -199,7 +199,7 @@ def main():
         seeder = 'DemoClinicSeeder' if args.action == 'seed-demo' else 'DatabaseSeeder'
         subprocess.run([c['php'], 'artisan', 'db:seed', '--class=' + seeder, '--force', '--no-interaction'],
                        cwd=ROOT / 'backend', env=environment(c, runtime, args.profile), check=True)
-    elif args.action in ['test', 'verify-schema', 'verify-guard', 'concurrency', 'billing-concurrency', 'prescription-concurrency', 'arrival-concurrency']:
+    elif args.action in ['test', 'verify-schema', 'verify-guard', 'concurrency', 'billing-concurrency', 'prescription-concurrency', 'arrival-concurrency', 'encounter-concurrency']:
         if args.action == 'verify-schema':
             args.tests = ['tests/Feature/Queue/PreservationMigrationTest.php']
         if args.action == 'verify-guard':
@@ -220,6 +220,10 @@ def main():
             if not runtime.name.startswith('contention-'):
                 raise ValueError('Run arrival contention only in a separate clone-test target.')
             args.tests = ['tests/Feature/Visits/ArrivalContentionTest.php']
+        if args.action == 'encounter-concurrency':
+            if not runtime.name.startswith('contention-'):
+                raise ValueError('Run encounter contention only in a separate clone-test target.')
+            args.tests = ['tests/Feature/Treatments/EncounterContentionTest.php']
         if args.profile != 'test' or not args.tests:
             raise ValueError('Choose test profile and explicit reviewed test paths; no blanket Feature/concurrency/reset suite.')
         for name in args.tests:
@@ -239,6 +243,8 @@ def main():
             test_env['PRESCRIPTION_DISPOSABLE_POSTGRES_ACCEPTANCE'] = '1'
         if args.action == 'arrival-concurrency':
             test_env['ARRIVAL_DISPOSABLE_POSTGRES_ACCEPTANCE'] = '1'
+        if args.action == 'encounter-concurrency':
+            test_env['ENCOUNTER_DISPOSABLE_POSTGRES_ACCEPTANCE'] = '1'
         subprocess.run([c['php'], 'vendor/bin/phpunit', '-c', 'phpunit.xml', '--bootstrap', 'tests/Support/IsolatedTestBootstrap.php',
                         '--cache-directory', str(runtime / 'cache/phpunit'), *(['--filter', args.filter] if args.filter else []), *args.tests],
                        cwd=ROOT / 'backend', env=test_env, check=True)

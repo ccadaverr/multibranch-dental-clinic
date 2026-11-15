@@ -6,6 +6,7 @@ use App\Enums\Role;
 use App\Http\Controllers\Concerns\ReadsIdempotencyKey;
 use App\Http\Requests\Treatment\DocumentTreatmentRequest;
 use App\Http\Requests\Treatment\TreatmentCommandRequest;
+use App\Http\Requests\Treatment\StartTreatmentRequest;
 use App\Http\Resources\PatientTreatmentResource;
 use App\Http\Resources\TreatmentResource;
 use App\Models\Treatment;
@@ -87,12 +88,20 @@ class TreatmentController extends Controller
         return response()->json(['data' => PatientTreatmentResource::collection($page)->resolve($request), 'meta' => ['per_page' => $per, 'next_cursor' => $rows->count() > $per ? $page->last()->public_id : null]]);
     }
 
-    public function start(TreatmentCommandRequest $request, Visit $visit): JsonResponse
+    public function forVisit(Request $request, Visit $visit): JsonResponse
+    {
+        $treatment = $this->treatments->forVisit($request->user(), $visit);
+        return response()->json(['data' => (new TreatmentResource($treatment))->resolve($request), 'meta' => ['encounter_readback' => true]])
+            ->header('Cache-Control', 'private, no-store');
+    }
+
+    public function start(StartTreatmentRequest $request, Visit $visit): JsonResponse
     {
         $visit->load('dentist');
         Gate::authorize('start', [Treatment::class, $visit]);
 
-        return $this->treatments->start($request->user(), $visit, (int) $request->validated('expected_revision'), $this->idempotencyKey($request, true), $this->presenter($request));
+        return $this->treatments->start($request->user(), $visit, (int) $request->validated('expected_revision'), $this->idempotencyKey($request, true), $this->presenter($request),
+            $request->has('queue_id') ? ['queue_id' => $request->validated('queue_id'), 'expected_queue_revision' => (int) $request->validated('expected_queue_revision')] : null);
     }
 
     public function document(DocumentTreatmentRequest $request, Treatment $treatment): JsonResponse
