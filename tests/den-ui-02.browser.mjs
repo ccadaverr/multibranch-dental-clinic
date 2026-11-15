@@ -23,7 +23,7 @@ await page.route('**/api/**',async route=>{
   if(p==='/api/queue')return fulfill(route,queue)
   if(p==='/api/visits')return fulfill(route,visits)
   if(p==='/api/treatments')return fulfill(route,treatments)
-  if(p.endsWith('/chart'))return fulfill(route,{settings:{numbering:'fdi',statuses:[]},current:[],history:[]})
+  if(p.endsWith('/chart'))return fulfill(route,{patient:{id:u.pathname.split('/')[3]},settings:{numbering:'fdi',statuses:[]},current:[],summary:[],history:[]})
   if(p==='/api/prescriptions/visits')return fulfill(route,visits.map(v=>({...v,date:today,branch:'Illustrative Central Branch'})))
   if(p==='/api/prescriptions')return fulfill(route,[])
   if(p.endsWith('/followups'))return fulfill(route,[])

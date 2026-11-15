@@ -402,16 +402,22 @@ export function issueBillingInvoice(id, payload, key, beforeDispatch) { return c
 export function recordBillingPayment(id, payload, key, beforeDispatch) { return command(`/api/invoices/${encodeURIComponent(id)}/payment`, payload, key, beforeDispatch) }
 // Review and Pay: accepted methods in plain words and the billing-address prefill (Patient who owns the invoice, or scoped Staff).
 /** Downloads an invoice or receipt PDF (the emailed document) and saves it in the browser. {ok} or a normal failure. */
-export async function downloadBillingPdf(invoiceId, kind = 'invoice') {
+export async function downloadBillingPdf(invoiceId, kind = 'invoice', {receiptId,patientId,isCurrent=()=>true} = {}) {
+  if(!isCurrent())return {ok:false,kind:'stale_context'}
   let response
   try {
     response = await rawFetch(`/api/invoices/${encodeURIComponent(invoiceId)}/${kind === 'receipt' ? 'receipt-pdf' : 'pdf'}`, { headers: { Accept: 'application/pdf' } })
   } catch {
     return { ok: false, kind: 'network', message: 'Could not reach the clinic system. Check your connection and try again.' }
   }
+  if(!isCurrent())return {ok:false,kind:'stale_context'}
   if (!response.ok) return response.status === 404 ? { ok: false, kind: 'not_found', message: 'This document is not available.' } : parseFailure(response)
+  if((patientId&&(response.headers.get('X-Invoice-Id')!==invoiceId||response.headers.get('X-Patient-Id')!==patientId))||
+     (receiptId&&response.headers.get('X-Receipt-Id')!==receiptId)||!response.headers.get('Content-Type')?.includes('application/pdf'))return {ok:false,kind:'unverified',message:'The document did not confirm the selected invoice, Patient and receipt. No file was downloaded.'}
   const name = /filename="([^"]+)"/.exec(response.headers.get('Content-Disposition') || '')?.[1] || `${kind}.pdf`
-  const url = URL.createObjectURL(await response.blob())
+  const blob=await response.blob()
+  if(!isCurrent())return {ok:false,kind:'stale_context'}
+  const url = URL.createObjectURL(blob)
   const a = Object.assign(document.createElement('a'), { href: url, download: name })
   document.body.appendChild(a); a.click(); a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
@@ -456,7 +462,7 @@ export async function downloadPrescriptionPdf(id, number = null) {
 }
 // M10 Dental Charts
 export function patientChart(patientId) { return request(`/api/patients/${encodeURIComponent(patientId)}/chart`) }
-export function recordChartEntry(patientId, body) { return json(`/api/patients/${encodeURIComponent(patientId)}/chart`, 'POST', body) }
+export function recordChartEntry(patientId, body, key, beforeDispatch) { return command(`/api/patients/${encodeURIComponent(patientId)}/chart`,body,key,beforeDispatch) }
 export function myChart(patientId = null) { return request(`/api/me/chart${patientId ? `?patient_id=${encodeURIComponent(patientId)}` : ''}`) }
 // M20 Patient Follow-Up
 export function followups(filters = {}) { const q = new URLSearchParams(Object.entries(filters).filter(([, v]) => v)).toString(); return request(`/api/followups${q ? `?${q}` : ''}`) }

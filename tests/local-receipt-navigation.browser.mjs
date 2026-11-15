@@ -1,0 +1,37 @@
+// Existing Cash commands prepare synthetic receipts; the navigation phase is strictly read-only.
+import assert from 'node:assert/strict'
+import {readFileSync,writeFileSync,existsSync} from 'node:fs'
+const {browser,login,get,api,evidence,target}=await import('./local-visit-support.mjs')
+const original=JSON.parse(readFileSync(target.runtime+'/encounter-browser-batch03/journey.json','utf8')).scheduled
+const fixture=JSON.parse(readFileSync(target.runtime+'/receipt-fixture.json','utf8'))
+const file=evidence+'/journey.json',state=existsSync(file)?JSON.parse(readFileSync(file,'utf8')):{groups:[]}
+state.accepted=false;const save=()=>writeFileSync(file,JSON.stringify(state,null,2)),pass=s=>{if(!state.groups.includes(s))state.groups.push(s);save();console.log('PASS '+s)};save();let page
+async function post(p,path,body,key){const r=await p.evaluate(async({api,path,body,key})=>{await fetch(api+'/sanctum/csrf-cookie',{credentials:'include'});const csrf=decodeURIComponent(document.cookie.split('; ').find(v=>v.startsWith('XSRF-TOKEN='))?.slice(11)||'');const r=await fetch(api+path,{method:'POST',credentials:'include',headers:{Accept:'application/json','Content-Type':'application/json','X-XSRF-TOKEN':csrf,'Idempotency-Key':key},body:JSON.stringify(body)});return {status:r.status,body:await r.json()}},{api,path,body,key});assert(r.status>=200&&r.status<300,JSON.stringify(r));return r.body.data}
+try{
+ const staff=await login('sprint02.staff@example.test');page=staff.page
+ async function settle(t,label){let i=await post(page,'/api/invoices/from-treatment/'+t.id,{},'batch05-'+label+'-draft');if(i.status==='Draft')i=await post(page,'/api/invoices/'+i.id+'/review',{expected_revision:i.revision},'batch05-'+label+'-review');if(i.status==='Review')i=await post(page,'/api/invoices/'+i.id+'/issue',{expected_revision:i.revision},'batch05-'+label+'-issue');if(i.status==='Issued')i=await post(page,'/api/invoices/'+i.id+'/payment',{expected_revision:i.revision,method:'Cash',amount:fixture.amount},'batch05-'+label+'-cash');assert.equal(i.status,'Paid');assert.equal(i.balance,'0.00');return i}
+ if(!state.scheduled){state.scheduled=await settle(original,'scheduled');save()}
+ if(!state.walkVisit){state.walkVisit=await post(page,'/api/visits/walk-in',{patient_id:original.patient.id,branch_ref:fixture.branch,dentist_ref:fixture.dentist,service_ref:fixture.service},'batch05-walk-arrival');save()}
+ if(!state.walkTreatment){let v=state.walkVisit;const q=await post(page,'/api/queue/'+v.queue.id+'/call',{expected_revision:v.queue.revision},'batch05-walk-call');const doctor=await login('sprint05.dentist@example.test');let t=await post(doctor.page,'/api/visits/'+v.id+'/treatment',{expected_revision:v.revision,queue_id:q.id,expected_queue_revision:q.revision},'batch05-walk-start');t=await post(doctor.page,'/api/treatments/'+t.id+'/document',{expected_revision:t.revision,procedure_summary:'Synthetic receipt navigation acceptance only',prescription_required:false,followup_required:false,procedures:[{service_ref:fixture.service,quantity:1}]},'batch05-walk-document');state.walkTreatment=await post(doctor.page,'/api/treatments/'+t.id+'/complete',{expected_revision:t.revision},'batch05-walk-complete');save();await doctor.context.close()}
+ if(!state.walkin){state.walkin=await settle(state.walkTreatment,'walkin');save()}
+ assert.equal(state.walkin.appointment_id,null);await staff.context.close()
+ const patient=await login('sprint02.patient@example.test');page=patient.page
+ const writes=[];page.on('request',r=>{if(r.url().startsWith(api+'/api/')&&r.method()!=='GET')writes.push(r.url())})
+ await page.getByRole('button',{name:'My visits',exact:true}).first().click();await page.getByRole('button',{name:'Completed',exact:true}).click()
+ const visit=page.locator('#visit-'+original.appointment.id);await visit.waitFor();const action=visit.getByRole('button',{name:'Invoice and receipt',exact:true});await action.focus();await page.keyboard.press('Enter')
+ const card=page.locator('#invoice-'+state.scheduled.id);await card.waitFor();assert.equal(await card.getAttribute('data-receipt-id'),state.scheduled.receipt.id)
+ await card.getByText(state.scheduled.receipt.number,{exact:true}).waitFor();assert.equal(await card.getByRole('button',{name:'Hide details',exact:true}).getAttribute('aria-expanded'),'true')
+ pass('Completed appointment → exact saved invoice and expanded receipt in one keyboard action')
+ const download=page.waitForEvent('download');await card.getByRole('button',{name:'Download Receipt',exact:true}).click();const pdf=await download;assert.match(pdf.suggestedFilename(),/^Payment-Receipt-/);await pdf.saveAs(evidence+'/authorized-receipt.pdf');assert(readFileSync(evidence+'/authorized-receipt.pdf').subarray(0,5).toString()==='%PDF-')
+ pass('download verifies exact authorized invoice/Patient/receipt headers and returns the existing PDF')
+ for(const width of [375,390,430,768,1024,1440]){await page.setViewportSize({width,height:1000});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'receipt overflow '+width);await page.screenshot({path:evidence+'/receipt-'+width+'.png',fullPage:true})}
+ await page.getByRole('button',{name:'Return to appointment',exact:true}).click();await page.locator('#visit-'+original.appointment.id).waitFor()
+ await page.getByRole('button',{name:'Billing',exact:true}).first().click();const walk=page.locator('#invoice-'+state.walkin.id);await walk.waitFor();await walk.getByText('Walk-in Visit — no appointment is linked.',{exact:true}).waitFor();assert.equal(await walk.getByRole('button',{name:'Associated appointment',exact:true}).count(),0)
+ await walk.getByRole('button',{name:'View details',exact:true}).click();await walk.getByText(state.walkin.receipt.number,{exact:true}).waitFor()
+ pass('walk-in receipt retains exact Visit and no appointment; associated scheduled appointment navigation preserves context')
+ await page.route(api+'/api/invoices/mine*',r=>r.fulfill({status:503,json:{message:'Synthetic transient read failure'}}),{times:1});await page.getByRole('button',{name:'Reload billing records',exact:true}).click();await page.getByText('Synthetic transient read failure',{exact:true}).waitFor();assert.equal(await page.getByText('No invoices returned',{exact:true}).count(),0);await page.getByRole('button',{name:'Try again',exact:true}).click();await page.locator('#invoice-'+state.walkin.id).waitFor()
+ assert.equal(writes.length,0);pass('failed billing load stays an error; Retry restores saved receipts with no payment/settlement mutation')
+ const fresh=await login('sprint02.patient@example.test',390);await fresh.page.getByRole('button',{name:'More',exact:true}).click();await fresh.page.getByRole('dialog',{name:'More',exact:true}).getByRole('button',{name:'Billing',exact:true}).click();await fresh.page.locator('#invoice-'+state.scheduled.id).waitFor();const foreign=await login('patient@example.test');assert.equal((await get(foreign.page,'/api/invoices/'+state.scheduled.id+'/receipt-pdf')).status,404)
+ pass('new Patient sign-in reloads receipt identities; another Patient cannot retrieve the PDF; six responsive widths pass')
+ await fresh.context.close();await foreign.context.close();state.accepted=true;save()
+}catch(e){if(page&&!page.isClosed()){writeFileSync(evidence+'/failure-text.txt',await page.locator('body').innerText());await page.screenshot({path:evidence+'/failure.png',fullPage:true})}throw e}finally{await browser.close()}
