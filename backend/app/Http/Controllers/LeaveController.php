@@ -68,10 +68,11 @@ class LeaveController extends Controller
                 ->where('starts_at', '<', SchedulingService::ts($ends))->where('ends_at', '>', SchedulingService::ts($starts))->exists();
             if ($overlap) throw ValidationException::withMessages(['start_date' => ['You already have leave requested or approved in this period.']]);
 
-            return LeaveRequest::create(['requester_user_id' => $user->id, 'dentist_profile_id' => $dentist?->id, 'staff_profile_id' => $staff?->id, 'type' => $data['type'],
+            $leave = LeaveRequest::create(['requester_user_id' => $user->id, 'dentist_profile_id' => $dentist?->id, 'staff_profile_id' => $staff?->id, 'type' => $data['type'],
                 'starts_at' => $starts, 'ends_at' => $ends, 'private_note' => $data['private_note'] ?? null, 'status' => 'Pending']);
+            $this->audit($user, 'leave.requested', $leave);
+            return $leave;
         });
-        $this->audit($user, 'leave.requested', $leave);
         foreach ($this->approvers($leave) as $approver) $this->tell($approver, $leave, 'leave_requested', 'Leave request', ($user->person?->fullName() ?? 'A team member').' asked for leave: '.$this->range($leave).'.', 'leave', $user);
 
         return response()->json(['data' => $this->view($leave->fresh(['requester.person', 'dentist.person']), $user)], 201);
@@ -129,9 +130,9 @@ class LeaveController extends Controller
             $current = LeaveRequest::whereKey($leaveRequest->id)->lockForUpdate()->first();
             if ($current->status !== 'Pending') throw ValidationException::withMessages(['decision' => ["This request is already {$current->status}. Reload the list."]]);
             $current->update(['status' => $to, 'decided_by_user_id' => $user->id, 'decided_at' => now()]);
+            $this->audit($user, $to === 'Approved' ? 'leave.approved' : 'leave.declined', $current);
         });
         $leave = $leaveRequest->fresh(['requester.person', 'decider.person', 'dentist.person']);
-        $this->audit($user, $to === 'Approved' ? 'leave.approved' : 'leave.declined', $leave);
         $this->tell($leave->requester, $leave, 'leave_decided', 'Leave '.strtolower($to), 'Your leave '.$this->range($leave).' was '.strtolower($to).'.', 'leave', $user);
 
         // Approval never cancels anything: the affected appointments come back for the approver to resolve.
@@ -149,9 +150,9 @@ class LeaveController extends Controller
             if (! in_array($current->status, ['Pending', 'Approved'], true)) throw ValidationException::withMessages(['status' => ["This request is already {$current->status}."]]);
             if ($current->ends_at->lessThanOrEqualTo(now())) throw ValidationException::withMessages(['status' => ['This leave has already ended.']]);
             $current->update(['status' => 'Cancelled', 'cancelled_by_user_id' => $user->id, 'cancelled_at' => now()]);
+            $this->audit($user, 'leave.cancelled', $current);
         });
         $leave = $leaveRequest->fresh(['requester.person', 'decider.person', 'dentist.person']);
-        $this->audit($user, 'leave.cancelled', $leave);
         if ($leave->requester_user_id !== $user->id) $this->tell($leave->requester, $leave, null, 'Leave cancelled', 'Your leave '.$this->range($leave).' was cancelled by '.($user->person?->fullName() ?? 'an approver').'.', 'leave', $user);
 
         return response()->json(['data' => $this->view($leave, $user)]);
