@@ -44,3 +44,20 @@ The fixture verifies demo database/cluster identity, holds the profile lock, bac
 For Vite's container-origin diagnostic only, set `__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=host.docker.internal`; keep the dev server bound to127.0.0.1. Private local-only predefense may use `FRONTEND_URL=http://host.docker.internal:5195` for the diagnostic HTTP check. Normal browser origins remain localhost/127.0.0.1. Do not enable unrestricted hosts or change production hosting.
 
 At completion: back up demo/test and clones via the guarded runner, stop each owned PostgreSQL cluster, and stop only this container. Do not remove containers/volumes or discard private keys/snapshots. Restart the container and then the explicit owned cluster when resuming; no production auto-start policy is installed.
+
+## Dated preparation continuation
+
+The new **separate** target `/private/roster-batch4/target.json` uses internal loopback55491 and the same two allowed database names. It was provisioned with `--operations --roster-drafts`, selecting85 migrations. Existing `/private/ops` remains84 and was used to verify explicit503 capability absence. Do not overwrite either manifest. Failed migration experimentation in `/private/roster-batch3` was backed up and stopped; its hashes were not repinned.
+
+`--roster-drafts` selects exactly `2026_11_19_000100_create_staff_roster_drafts.php`; it enables Owner preparation only, never publication or effective duty. The base profile remains83, archive-only84, draft-only84, combined85. The original87 source files and four held migrations are unchanged.
+
+Use `clone-test` from the empty transactional85 profile, then `roster-draft-contention` with the returned fresh clone manifest. This lane refuses regular targets. Accepted clone `/private/contention-0609eb17` covers actual PostgreSQL lock contention, exact replay, stale/conflicting commands and Owner revocation; failed clone `/private/contention-4901073e` is retained for diagnosis, not reused.
+
+New browser commands (local API/Vite running against the new85 demo profile):
+
+```text
+node tests/operations-preparation.browser.mjs <absolute-path-to-playwright/index.mjs>
+node tests/roster-draft-postgres.browser.mjs <absolute-path-to-playwright/index.mjs>
+```
+
+The first is a synthetic race/recovery fixture. The second authenticates synthetic Owner contexts, saves through real React/Laravel/PostgreSQL, loses a committed response, retries the exact operation and opens a new session for readback. It reads only its explicitly named private generated password into memory. Neither invokes provider services or changes effective duty. Back up/stop all owned targets after acceptance.

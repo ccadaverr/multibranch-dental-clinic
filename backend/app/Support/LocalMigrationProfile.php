@@ -22,7 +22,8 @@ final class LocalMigrationProfile
     public static function paths(array $target): array
     {
         $extensions = $target['operations_migrations'] ?? [];
-        if (! in_array($extensions, [[], ['2026_11_18_000100_create_notification_archives.php']], true)) {
+        if (! in_array($extensions, [[], ['2026_11_18_000100_create_notification_archives.php'], ['2026_11_19_000100_create_staff_roster_drafts.php'],
+            ['2026_11_18_000100_create_notification_archives.php', '2026_11_19_000100_create_staff_roster_drafts.php']], true)) {
             throw new RuntimeException('Unreviewed Operations migration selection.');
         }
 

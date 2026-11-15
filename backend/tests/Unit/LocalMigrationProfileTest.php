@@ -43,6 +43,19 @@ final class LocalMigrationProfileTest extends TestCase
         LocalMigrationProfile::paths($target);
     }
 
+    public function test_draft_extension_requires_explicit_paths_and_preserves_archive_opt_in(): void
+    {
+        foreach ([['2026_11_19_000100_create_staff_roster_drafts.php'], ['2026_11_18_000100_create_notification_archives.php','2026_11_19_000100_create_staff_roster_drafts.php']] as $extensions) {
+            $target=$this->target(); $target['operations_migrations']=$extensions;
+            foreach ($extensions as $file) $target['selected_migrations'][]=substr($file,0,-4);
+            $paths=LocalMigrationProfile::paths($target);
+            $this->assertSame('database/operations/2026_11_19_000100_create_staff_roster_drafts.php',end($paths));
+            LocalMigrationProfile::assertSelection('migrate',$paths,$target);
+            try { LocalMigrationProfile::assertSelection('migrate',array_slice($paths,0,-1),$target); $this->fail('Partial path selection must fail'); }
+            catch (RuntimeException) { $this->addToAssertionCount(1); }
+        }
+    }
+
     #[DataProvider('denied')]
     public function test_default_held_or_destructive_commands_are_refused(string $command, array $paths): void
     {

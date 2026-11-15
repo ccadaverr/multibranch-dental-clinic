@@ -16,6 +16,7 @@ window.fetch=async (url,options={})=>{
  const path=new URL(url,location.href).pathname
  if(path==='/sanctum/csrf-cookie')return new Response(null,{status:204})
  if(path==='/api/work-schedules')return Response.json({data:{staff,branches}})
+ if(path.endsWith('/roster-draft')&&(!options.method||options.method==='GET'))return Response.json({data:null,meta:{staff_ref:path.split('/').at(-2),date:new URL(url,location.href).searchParams.get('date'),revision:0,publication_available:false}})
  if(path.startsWith('/api/staff/')&&options.method==='PATCH'){
   const id=decodeURIComponent(path.split('/').at(-1)),body=JSON.parse(options.body)
   window.sched01.requests.push({id,body})

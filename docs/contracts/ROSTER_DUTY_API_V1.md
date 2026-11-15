@@ -33,6 +33,8 @@ Consumer migration: Work schedules already supplied comparison fields. The remai
 
 ## Missing dated Staff contract
 
+Continuation: [dated preparation v1](STAFF_ROSTER_DRAFT_API_V1.md) now supports Owner-only date/branch draft saves, revisions, immutable history and retry receipts. It explicitly cannot publish duty. The missing effective-duty policies below remain open; no clinical consumer should interpret preparation as availability.
+
 No Staff weekday/exception tables or dated-duty route exist. Do not feed flat profile availability into booking as dated duty. Owner editing, recurrence periods, date override precedence, overlap policy, leave effect, and historical publication semantics await the exact decisions recorded in `QA_STAFF_SCHEDULING_CONTRACT_DECISIONS.md`. Shift requests are not implemented by this PATCH and never become approved duty implicitly. OWN-11 remains partial. STF-07 retains its Doctor-duty criterion.
 
 ## Acceptance and remaining integration work

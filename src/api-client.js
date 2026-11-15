@@ -104,7 +104,7 @@ async function request(path, options = {}, { allowCsrfRetry = true } = {}) {
     const body = await response.json().catch(() => null)
     // Paginated lists keep their meta/links so a client can page through a bounded range.
     // M18: a command that sent email reports its dispatch outcome next to `data`.
-    return { ok: true, data: body?.data ?? body, ...(body?.meta ? { meta: body.meta } : {}), ...(body?.links ? { links: body.links } : {}), ...(body?.delivery ? { delivery: body.delivery } : {}) }
+    return { ok: true, data: body && Object.hasOwn(body, 'data') ? body.data : body, ...(body?.meta ? { meta: body.meta } : {}), ...(body?.links ? { links: body.links } : {}), ...(body?.delivery ? { delivery: body.delivery } : {}) }
   }
   const failure = await parseFailure(response)
   if (failure.kind === 'csrf') {
@@ -217,6 +217,9 @@ export function setBranchService(payload, beforeDispatch) {
 export function updateStaffProfile(legacyRef, payload, beforeDispatch) {
   return request(`/api/staff/${encodeURIComponent(legacyRef)}`, { method: 'PATCH', body: JSON.stringify(payload), beforeDispatch })
 }
+export function staffRosterDraft(ref, date) { return request(`/api/staff/${encodeURIComponent(ref)}/roster-draft?date=${encodeURIComponent(date)}`) }
+export function saveStaffRosterDraft(ref, payload, beforeDispatch) { return request(`/api/staff/${encodeURIComponent(ref)}/roster-draft`, { method:'PUT', body:JSON.stringify(payload), beforeDispatch }) }
+export function staffRosterDraftHistory(ref, date, before) { return request(`/api/staff/${encodeURIComponent(ref)}/roster-draft/history?${new URLSearchParams({date,...(before?{before}:{})})}`) }
 
 export function updateDentistProfile(legacyRef, payload) {
   return request(`/api/dentists/${encodeURIComponent(legacyRef)}`, { method: 'PATCH', body: JSON.stringify(payload) })

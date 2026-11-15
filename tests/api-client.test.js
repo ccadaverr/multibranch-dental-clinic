@@ -28,6 +28,13 @@ test('me() normalizes a successful response to {ok:true, data}', async () => {
   assert.deepEqual(await api.me(), { ok: true, data: { id: 1, role: 'patient' } })
 })
 
+test('an absent dated draft preserves explicit null and its authoritative revision metadata', async () => {
+  const meta={staff_ref:'s1',date:'2026-11-16',revision:0,publication_available:false}
+  mockFetch([jsonResponse(200,{data:null,meta})])
+  assert.deepEqual(await api.staffRosterDraft('s1','2026-11-16'),{ok:true,data:null,meta})
+  assert.match(calls[0].url,/\/api\/staff\/s1\/roster-draft\?date=2026-11-16$/)
+})
+
 test('me() reports 401 as kind unauthenticated, not a crash', async () => {
   mockFetch([jsonResponse(401, {})])
   assert.deepEqual(await api.me(), { ok: false, kind: 'unauthenticated' })

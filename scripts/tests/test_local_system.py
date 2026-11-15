@@ -106,6 +106,14 @@ class LocalSystemTargetTest(unittest.TestCase):
                 local.main()
             launch.assert_not_called()
 
+    def test_draft_contention_refuses_regular_target_before_launch(self):
+        args = ['local-system.py', '--target', str(self.manifest), '--profile', 'test', 'roster-draft-contention']
+        with patch.object(sys, 'argv', args), patch.object(local, 'verify'), patch.object(local, 'migrations'), \
+                patch.object(local.subprocess, 'run') as launch:
+            with self.assertRaisesRegex(ValueError, 'fresh roster-drafts clone-test'):
+                local.main()
+            launch.assert_not_called()
+
     def test_backup_remains_available_while_source_migrations_are_awaiting_review(self):
         args = ['local-system.py', '--target', str(self.manifest), '--profile', 'test', 'backup']
         with patch.object(sys, 'argv', args), patch.object(local, 'verify') as verify, \

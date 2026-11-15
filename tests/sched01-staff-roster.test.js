@@ -87,7 +87,7 @@ test('SCHED-01 source guards capture the target, block duplicate saves and suppr
   assert.match(editor, /setConflict\(result.kind === 'conflict'\)/)
   assert.doesNotMatch(editor, /setEditing\(false\);\s*setError\(firstError/)
   assert.match(source, /key=\{summary.id\}/)
-  assert.match(source, /<select value=\{summary.id\} disabled=\{saving\}/)
+  assert.match(source, /<select aria-label="Staff member" value=\{summary.id\} disabled=\{saving\|\|draftPending\}/)
   assert.match(source, /row.id === record.id/)
 })
 

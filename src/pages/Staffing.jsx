@@ -7,6 +7,7 @@ import {
 import { commandKey, rescheduleAppointment } from '../appointments-api.js'
 import { dutyForBranch } from '../work-hours-duty.js'
 import { confirmedStaffShift, staffShiftCommand, validStaffRevision } from '../staff-shift-command.js'
+import { StaffRosterDraft } from './StaffRosterDraft.jsx'
 import '../den12-work-hours.css'
 import { schedulingActorKey, useRequestOwner } from '../appointment-ui.js'
 import { canAccessPage } from '../safeguards.js'
@@ -197,6 +198,7 @@ export function staffShiftSummary(row) {
 const useStaffLayoutEffect = typeof window === 'undefined' ? useEffect : React.useLayoutEffect
 
 export function StaffScheduleProfiles({ role, session, getAuthGeneration }) {
+  const [draftPending,setDraftPending]=useState(false)
   const [snapshot, setSnapshot] = useState(null), [error, setError] = useState(''), [selected, setSelected] = useState(''), [saving, setSaving] = useState(false), [loading, setLoading] = useState(true)
   const live = useRef(false), generation = useRef(0), reading = useRef(null)
   const authorized = !!session?.serverUserId && session.active && session.role === role && ['owner', 'staff'].includes(role)
@@ -236,17 +238,18 @@ export function StaffScheduleProfiles({ role, session, getAuthGeneration }) {
   const summary = current ? staffShiftSummary(current) : null
   if (!authorized) return <Notice title="Clinic server required">Staff shift profiles require an active Staff or Owner server session. Historical workspace profiles are not shown as live schedules.</Notice>
   return <Card title="Staff shift profiles" subtitle="Profile hours and assignment; weekday coverage is not provided."
-    actions={<RefreshButton title={error ? 'Retry staff profiles' : 'Refresh staff profiles'} ariaLabel={error ? 'Retry staff profiles' : 'Refresh staff profiles'} loading={loading} disabled={saving} onClick={load}/>} >
+    actions={<RefreshButton title={error ? 'Retry staff profiles' : 'Refresh staff profiles'} ariaLabel={error ? 'Retry staff profiles' : 'Refresh staff profiles'} loading={loading} disabled={saving||draftPending} onClick={load}/>} >
     {error && <div role="alert" tabIndex={0}><p>{error} {snapshot && 'Showing the last loaded profiles.'}</p></div>}
     {snapshot && loading && <p role="status">Refreshing Staff profiles…</p>}
     {!snapshot ? loading && <p role="status">Loading Staff profiles…</p> : !staff.length ? <p>No Staff shift profiles are available in your branch scope.</p> : <>
-      <Field label="Staff member"><select value={summary.id} disabled={saving} onChange={e => setSelected(e.target.value)}>{staff.map(s => <option key={s.id} value={s.id}>{s.name || 'Staff member'} · {s.branch?.name || 'No branch recorded'}</option>)}</select></Field>
-      <StaffShiftProfile key={summary.id} staff={summary} role={role} branches={snapshot.branches || []} canEdit={role === 'owner' && !error && !loading} getAuthGeneration={getAuthGeneration}
+      <Field label="Staff member"><select aria-label="Staff member" value={summary.id} disabled={saving||draftPending} onChange={e => setSelected(e.target.value)}>{staff.map(s => <option key={s.id} value={s.id}>{s.name || 'Staff member'} · {s.branch?.name || 'No branch recorded'}</option>)}</select></Field>
+      <StaffShiftProfile key={summary.id} staff={summary} role={role} branches={snapshot.branches || []} canEdit={role === 'owner' && !error && !loading && !draftPending} getAuthGeneration={getAuthGeneration}
         onPending={setSaving} onSaved={record => {
           // Adopt only this profile's authoritative response, never the currently selected row.
           generation.current++
           setSnapshot(previous => ({ ...previous, staff: previous.staff.map(row => row.id === record.id ? { ...row, branch: record.branchId ? { id: record.branchId, name: record.branch } : null, shift_start: record.shiftStart, shift_end: record.shiftEnd, available: record.available, revision: record.revision } : row) }))
         }}/>
+      {role==='owner'&&<StaffRosterDraft key={`dated:${summary.id}`} staff={summary} branches={snapshot.branches||[]} getAuthGeneration={getAuthGeneration} enabled={!error&&!loading&&!saving} onPending={setDraftPending}/>}
     </>}
   </Card>
 }
