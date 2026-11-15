@@ -2,6 +2,8 @@
 
 Items deliberately left until after the defense, each with its owner decision or plan.
 
+**Pending real-clinic database change — not executed:** approved Staff roster recurrence/approval/publication extension `backend/database/operations/2026_11_21_000100_publish_staff_rosters.php`, including immutable publication evidence and the operational notification kind. Implemented/tested only on newly verified Joevan-owned synthetic demo/test profiles. Requires explicit real-database authorization, reviewed deployment migration selection, backup/test restore and clinical integration review before any real-clinic use. Roster business-policy approval does not authorize production database writes or hosting deployment. All four historical migration holds remain operative.
+
 | # | Item | Plan / status |
 | --- | --- | --- |
 | 1 | **Timezone (A4)**: times written by the app's generic clock are stored 8 hours early | `docs/TIMEZONE_PLAN.md` (option A recommended). Approve, then fix the code, repair `dental_clinic` with backup, log and rollback, and rebuild the demo database. |

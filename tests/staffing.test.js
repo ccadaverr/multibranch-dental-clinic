@@ -105,11 +105,13 @@ test('OWN-11: work schedule supports both Dentist and Staff schedules with shift
   const staffing = read('src/pages/Staffing.jsx')
   assert.match(staffing, /Dentist schedules/)
   assert.match(staffing, /Staff schedules/)
-  assert.match(staffing, /Staff work schedules/)
-  assert.ok(staffing.includes('updateStaffProfile(currentStaff.id'))
+  assert.match(staffing, /StaffRosterWorkflow/)
+  assert.match(staffing, /confirmedStaffShift/)
   assert.match(staffing, /Marked available/)
   assert.doesNotMatch(staffing, /Available \/ On-Duty/)
-  assert.match(staffing, /Weekly roster coverage/)
+  const roster = read('src/pages/StaffRosterWorkflow.jsx')
+  for (const text of ['Recurring weekdays', 'Effective from', 'Effective through (inclusive)', 'Approve roster', 'Publish approved roster', 'Published Staff duty', 'Submit schedule request']) assert.ok(roster.includes(text), text)
+  assert.match(read('src/staff-roster-workflow.js'), /row\.published===\(row\.status==='Published'\)/)
 })
 
 test('STF-07: dashboard and profile retain duty status; Work Hours uses branch-scoped server duty', () => {

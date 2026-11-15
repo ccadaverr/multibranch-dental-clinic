@@ -22,7 +22,7 @@ final class LocalMigrationProfile
     public static function paths(array $target): array
     {
         $extensions = $target['operations_migrations'] ?? [];
-        $approved=['2026_11_18_000100_create_notification_archives.php','2026_11_19_000100_create_staff_roster_drafts.php','2026_11_20_000100_add_leave_command_recovery.php'];
+        $approved=['2026_11_18_000100_create_notification_archives.php','2026_11_19_000100_create_staff_roster_drafts.php','2026_11_20_000100_add_leave_command_recovery.php','2026_11_21_000100_publish_staff_rosters.php'];
         if ($extensions !== array_values(array_filter($approved,fn($name)=>in_array($name,$extensions,true)))) {
             throw new RuntimeException('Unreviewed Operations migration selection.');
         }

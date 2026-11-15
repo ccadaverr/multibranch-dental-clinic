@@ -1,5 +1,7 @@
 # Dated Staff preparation API v1
 
+**Batch11 extension:** [Staff roster duty v2](STAFF_ROSTER_DUTY_API_V2.md) extends these same preparation records with approved recurrence and a separate lifecycle. V1 is retained for old private schemas. Its writer rejects recurring, approved or previously published records409 instead of resetting them; its reader reports actual lifecycle status when an extended row is encountered. New consumers must use v2, never interpret v1 preparation as duty. Earlier missing-policy statements below are historical.
+
 Implemented on Joevan's feature branch; not deployed or integrated. This is preparation infrastructure under M3, **not effective duty or publication**. Source: M3 Owner-defined dated shifts and revision/history requirements in `MODULE_IPO_BLUEPRINT.md`, original OWN-11 and OWN-10 in `FINALS-QA-REVISIONS.md`. These original QAs remain partial.
 
 ## Routes and authority

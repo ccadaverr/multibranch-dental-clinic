@@ -218,6 +218,11 @@ export function updateStaffProfile(legacyRef, payload, beforeDispatch) {
   return request(`/api/staff/${encodeURIComponent(legacyRef)}`, { method: 'PATCH', body: JSON.stringify(payload), beforeDispatch })
 }
 export function staffRosterDraft(ref, date) { return request(`/api/staff/${encodeURIComponent(ref)}/roster-draft?date=${encodeURIComponent(date)}`) }
+export function staffRoster(ref,date) { return request(`/api/staff/${encodeURIComponent(ref)}/roster?${new URLSearchParams({date})}`) }
+export function staffRosters(branchRef,date,before) { return request(`/api/staff-rosters?${new URLSearchParams({branch_ref:branchRef,date,...(before?{before}:{})})}`) }
+export function staffRosterHistory(ref,date,before) { return request(`/api/staff/${encodeURIComponent(ref)}/roster/history?${new URLSearchParams({date,...(before?{before}:{})})}`) }
+export function staffDuty(ref,branch,date) { return request(`/api/staff/${encodeURIComponent(ref)}/duty?${new URLSearchParams({branch_ref:branch,date})}`) }
+export function staffRosterCommand(ref,action,body,beforeDispatch) { return request(`/api/staff/${encodeURIComponent(ref)}/roster${action==='save'?'':'/'+action}`,{method:action==='save'?'PUT':'POST',body:JSON.stringify(body),beforeDispatch}) }
 export function staffRosterDrafts(branchRef,date,before) { return request(`/api/staff-roster-drafts?${new URLSearchParams({branch_ref:branchRef,date,...(before?{before}:{})})}`) }
 export function saveStaffRosterDraft(ref, payload, beforeDispatch) { return request(`/api/staff/${encodeURIComponent(ref)}/roster-draft`, { method:'PUT', body:JSON.stringify(payload), beforeDispatch }) }
 export function staffRosterDraftHistory(ref, date, before) { return request(`/api/staff/${encodeURIComponent(ref)}/roster-draft/history?${new URLSearchParams({date,...(before?{before}:{})})}`) }

@@ -101,10 +101,12 @@ class WorkScheduleController extends Controller
                 ];
             })->values(),
             'duty' => ['date' => $todayDate, 'as_of' => $now->toIso8601String(), 'rows' => $duty],
+            'staff_roster_publication_available' => \Illuminate\Support\Facades\Schema::hasTable('staff_roster_publications'),
             'staff' => $staffProfiles->map(fn (\App\Models\StaffProfile $s) => [
                 'id' => $s->legacy_ref,
                 'name' => $s->person ? $s->person->fullName() : $s->legacy_ref,
                 'title' => $s->title,
+                'can_request_roster' => $user->role->value === 'staff' && $user->person_id === $s->person_id,
                 'branch' => $s->branch ? ['id' => $s->branch->legacy_ref, 'name' => $s->branch->name] : null,
                 'shift_start' => $s->shift_start ? substr((string) $s->shift_start, 0, 5) : null,
                 'shift_end' => $s->shift_end ? substr((string) $s->shift_end, 0, 5) : null,

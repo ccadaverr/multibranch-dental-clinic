@@ -29,6 +29,11 @@ class OperationsProfileTest(unittest.TestCase):
         bad = self.manifest(True)
         bad['operations_migrations'] = ['../unreviewed.php']
         with self.assertRaises(ValueError): local.migrations(bad)
+
+    def test_publication_extension_is_explicit_and_retains_all_four_holds(self):
+        selected=local.migrations(self.manifest(local.OPERATIONS_MIGRATIONS+local.ROSTER_DRAFT_MIGRATIONS+local.LEAVE_RECOVERY_MIGRATIONS+local.ROSTER_PUBLICATION_MIGRATIONS))
+        self.assertEqual(87,len(selected))
+        self.assertFalse(local.HELD.intersection(f.name for f in selected))
         bad = self.manifest(True)
         bad['migration_hashes'][local.OPERATIONS_MIGRATIONS[0]] = 'wrong'
         with self.assertRaises(ValueError): local.migrations(bad)

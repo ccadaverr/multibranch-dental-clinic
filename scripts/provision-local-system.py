@@ -39,7 +39,7 @@ def validate(runtime, port, php, pg_bin):
     return runtime.resolve()
 
 
-def provision(runtime, port, php, pg_bin, operations=False, roster_drafts=False, leave_recovery=False):
+def provision(runtime, port, php, pg_bin, operations=False, roster_drafts=False, leave_recovery=False, roster_publication=False):
     runtime = validate(runtime, port, php, pg_bin)
     os.umask(0o077)
     runtime.mkdir(mode=0o700, parents=True)
@@ -57,7 +57,9 @@ def provision(runtime, port, php, pg_bin, operations=False, roster_drafts=False,
     files = sorted((ROOT / 'backend/database/migrations').glob('*.php')) + sorted((ROOT / 'backend/database/compatibility').glob('*.php'))
     if len(files) != 87 or not local.HELD <= {f.name for f in files}:
         raise ValueError('Migration inventory changed; review the preservation profile first.')
-    extensions = (local.OPERATIONS_MIGRATIONS if operations else []) + (local.ROSTER_DRAFT_MIGRATIONS if roster_drafts else []) + (local.LEAVE_RECOVERY_MIGRATIONS if leave_recovery else [])
+    if roster_publication and not (roster_drafts and leave_recovery):
+        raise ValueError('Roster publication requires dated preparation and revision-safe leave.')
+    extensions = (local.OPERATIONS_MIGRATIONS if operations else []) + (local.ROSTER_DRAFT_MIGRATIONS if roster_drafts else []) + (local.LEAVE_RECOVERY_MIGRATIONS if leave_recovery else []) + (local.ROSTER_PUBLICATION_MIGRATIONS if roster_publication else [])
     files += [ROOT / 'backend/database/operations' / name for name in extensions]
     manifest = runtime / 'target.json'
     state = {'root': str(ROOT), 'runtime': str(runtime), 'host': '127.0.0.1', 'port': port,
@@ -131,8 +133,9 @@ def main():
     parser.add_argument('--operations', action='store_true', help='Opt into the reviewed additive Operations archive extension on this NEW private cluster.')
     parser.add_argument('--roster-drafts', action='store_true', help='Opt into dated draft preparation only; no publication or effective duty.')
     parser.add_argument('--leave-recovery', action='store_true', help='Opt into lifecycle revisions and encrypted append-only leave replay receipts.')
+    parser.add_argument('--roster-publication', action='store_true', help='Opt into approved Staff recurrence, approval and separate publication on a NEW private cluster.')
     args = parser.parse_args()
-    provision(args.runtime, args.port, args.php.expanduser().resolve(), args.pg_bin.expanduser().resolve(), args.operations, args.roster_drafts, args.leave_recovery)
+    provision(args.runtime, args.port, args.php.expanduser().resolve(), args.pg_bin.expanduser().resolve(), args.operations, args.roster_drafts, args.leave_recovery, args.roster_publication)
 
 
 if __name__ == '__main__':

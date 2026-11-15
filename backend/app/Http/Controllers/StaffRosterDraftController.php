@@ -82,6 +82,7 @@ class StaffRosterDraftController extends Controller
                 return response()->json(['data' => $prior->payload['receipt'], 'meta' => ['operation_id' => $data['operation_id'], 'replayed' => true, 'publication_available' => false]]);
             }
             $draft = StaffRosterDraft::where('staff_profile_id', $staff->id)->where('on_date', $data['date'])->lockForUpdate()->first();
+            if ($draft && ($draft->status !== 'Draft' || ($draft->kind ?? 'custom_hours') !== 'custom_hours' || $draft->publication_id)) return $this->conflict('staff_roster_workflow_required', 'Use the roster approval workflow to edit this schedule. Existing published duty is retained.');
             if ((int) $data['expected_revision'] !== ($draft?->revision ?? 0)) return $this->conflict('staff_roster_revision_conflict', 'This dated draft changed. Your entries are preserved. Reload and review before another save.');
             $branch = Branch::where('legacy_ref', $data['branch_ref'])->lockForUpdate()->first();
             if (! $branch || $branch->status !== 'Open') throw ValidationException::withMessages(['branch_ref' => ['Choose an existing open branch.']]);
@@ -123,8 +124,8 @@ class StaffRosterDraftController extends Controller
     private function view(StaffRosterDraft $draft, StaffProfile $staff): array
     {
         return ['id' => $draft->public_id, 'staff_ref' => $staff->legacy_ref, 'branch_ref' => $draft->branch->legacy_ref, 'branch_name' => $draft->branch->name,
-            'date' => $draft->on_date->toDateString(), 'start_time' => substr($draft->start_time, 0, 5), 'end_time' => substr($draft->end_time, 0, 5),
-            'revision' => $draft->revision, 'status' => 'Draft', 'published' => false];
+            'date' => $draft->on_date->toDateString(), 'start_time' => $draft->start_time ? substr($draft->start_time, 0, 5) : null, 'end_time' => $draft->end_time ? substr($draft->end_time, 0, 5) : null,
+            'revision' => $draft->revision, 'status' => $draft->status, 'published' => $draft->status === 'Published'];
     }
 
     private function conflict(string $code, string $message): JsonResponse { return response()->json(compact('code', 'message'), 409); }

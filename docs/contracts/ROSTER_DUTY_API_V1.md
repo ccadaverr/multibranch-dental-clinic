@@ -1,5 +1,7 @@
 # Operations scheduling contract v1 — Joevan, 2026-11-15
 
+**Batch11 continuation:** approved Staff recurrence, exception, approval/publication and dated duty are now implemented in [Staff roster duty API v2](STAFF_ROSTER_DUTY_API_V2.md). The missing-policy section below is historical. Existing Doctor duty and flat-profile v1 contracts remain unchanged.
+
 Source implementation on `feature/joevan-qa-20261115`. Continuation revision: all Staff mutation consumers now use observed revisions; requests without preconditions are refused. Focused PostgreSQL and real contention acceptance passed on Joevan's new private Linux runtime. This is an integration handshake for Jaztin, not a deployed capability claim.
 
 ## Existing Doctor duty (unchanged)

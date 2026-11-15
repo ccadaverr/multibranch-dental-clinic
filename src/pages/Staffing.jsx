@@ -9,6 +9,7 @@ import { dutyForBranch } from '../work-hours-duty.js'
 import { confirmedStaffShift, staffShiftCommand, validStaffRevision } from '../staff-shift-command.js'
 import { StaffRosterDraft } from './StaffRosterDraft.jsx'
 import {StaffRosterDraftCollection} from './StaffRosterDraftCollection.jsx'
+import {StaffRosterWorkflow} from './StaffRosterWorkflow.jsx'
 import {useLeaveCommand} from '../use-leave-command.js'
 import {validLeaveRevision} from '../leave-command.js'
 import {getLeave} from '../api-client.js'
@@ -255,7 +256,10 @@ export function StaffScheduleProfiles({ role, session, getAuthGeneration, roster
           generation.current++
           setSnapshot(previous => ({ ...previous, staff: previous.staff.map(row => row.id === record.id ? { ...row, branch: record.branchId ? { id: record.branchId, name: record.branch } : null, shift_start: record.shiftStart, shift_end: record.shiftEnd, available: record.available, revision: record.revision } : row) }))
         }}/>
-      {role==='owner'&&<>
+      {snapshot.staff_roster_publication_available===true
+        ? <><StaffRosterDraftCollection workflow branches={(snapshot.branches||[]).filter(b=>role==='owner'||session.branchScopes?.includes(b.id))} getAuthGeneration={getAuthGeneration} refreshKey={draftRefresh} disabled={draftPending||saving||loading} onReview={(id,date)=>{if(staff.some(s=>s.id===id)){setSelected(id);setFocusDate(date);setReviewEpoch(v=>v+1)}}}/>
+          <StaffRosterWorkflow key={`workflow:${summary.id}:${focusDate}:${reviewEpoch}`} initialDate={focusDate} staff={summary} branches={(snapshot.branches||[]).filter(b=>role==='owner'||session.branchScopes?.includes(b.id))} role={role} canRequest={current.can_request_roster===true} getAuthGeneration={getAuthGeneration} onPending={setDraftPending} onSaved={()=>setDraftRefresh(v=>v+1)}/></>
+        : role==='owner'&&<>
         <StaffRosterDraftCollection branches={rosterBranches?.length?rosterBranches:snapshot.branches||[]} getAuthGeneration={getAuthGeneration} refreshKey={draftRefresh} disabled={!!error||loading||saving||draftPending} onReview={(id,date)=>{if(staff.some(row=>row.id===id)){setSelected(id);setFocusDate(date);setReviewEpoch(value=>value+1)}}}/>
         <StaffRosterDraft key={`dated:${summary.id}:${focusDate}:${reviewEpoch}`} initialDate={focusDate} staff={summary} branches={snapshot.branches||[]} getAuthGeneration={getAuthGeneration} enabled={!error&&!loading&&!saving} onPending={setDraftPending} onSaved={()=>setDraftRefresh(value=>value+1)}/>
       </>}

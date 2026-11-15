@@ -328,6 +328,13 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
     // Least privilege: Patient has no current workflow needing the Staff directory (plan section H/I).
     Route::get('/staff', [StaffProfileController::class, 'index'])->middleware('role:staff,dentist,owner');
     Route::get('/staff-roster-drafts', [\App\Http\Controllers\StaffRosterDraftController::class, 'index'])->middleware('role:owner');
+    Route::get('/staff-rosters', [\App\Http\Controllers\StaffRosterController::class, 'index'])->middleware('role:owner,staff');
+    Route::get('/staff/{staffProfile}/roster', [\App\Http\Controllers\StaffRosterController::class, 'show'])->middleware('role:owner,staff');
+    Route::put('/staff/{staffProfile}/roster', [\App\Http\Controllers\StaffRosterController::class, 'save'])->middleware('role:owner,staff');
+    Route::get('/staff/{staffProfile}/roster/history', [\App\Http\Controllers\StaffRosterController::class, 'history'])->middleware('role:owner,staff');
+    Route::post('/staff/{staffProfile}/roster/approve', [\App\Http\Controllers\StaffRosterController::class, 'approve'])->middleware('role:owner');
+    Route::post('/staff/{staffProfile}/roster/publish', [\App\Http\Controllers\StaffRosterController::class, 'publish'])->middleware('role:owner');
+    Route::get('/staff/{staffProfile}/duty', [\App\Http\Controllers\StaffRosterController::class, 'duty'])->middleware('role:owner,staff');
     Route::patch('/staff/{staffProfile}', [StaffProfileController::class, 'update'])->middleware('role:owner');
     Route::get('/staff/{staffProfile}/roster-draft', [\App\Http\Controllers\StaffRosterDraftController::class, 'show'])->middleware('role:owner');
     Route::put('/staff/{staffProfile}/roster-draft', [\App\Http\Controllers\StaffRosterDraftController::class, 'save'])->middleware('role:owner');
