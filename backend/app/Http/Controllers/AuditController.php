@@ -67,10 +67,10 @@ class AuditController extends Controller
         }
         // Dates are clinic (Asia/Manila) business days; the stored instants are timestamptz.
         if (! empty($v['date_from'])) {
-            $query->where('created_at', '>=', ClinicClock::at($v['date_from'], '00:00')->startOfDay());
+            $query->where('created_at', '>=', ClinicClock::at($v['date_from'], '00:00')->startOfDay()->toIso8601String());
         }
         if (! empty($v['date_to'])) {
-            $query->where('created_at', '<=', ClinicClock::at($v['date_to'], '00:00')->endOfDay());
+            $query->where('created_at', '<', ClinicClock::at($v['date_to'], '00:00')->addDay()->startOfDay()->toIso8601String());
         }
 
         return $query;
@@ -86,7 +86,8 @@ class AuditController extends Controller
         if (! empty($v['cursor'])) {
             // Keyset pagination on the public id of the last row seen: stable under concurrent inserts, no offset scans, and
             // no internal id ever leaves the server. An unknown cursor yields an empty page.
-            $query->where('id', '<', AuditLog::select('id')->where('public_id', strtolower($v['cursor']))->limit(1));
+            $anchor = (clone $query)->where('public_id', strtolower($v['cursor']))->value('id');
+            $query->where('id', '<', $anchor ?? 0);
         }
 
         $rows = $query->limit($perPage + 1)->get();
