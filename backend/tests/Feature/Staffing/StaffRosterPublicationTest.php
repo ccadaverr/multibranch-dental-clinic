@@ -149,4 +149,16 @@ class StaffRosterPublicationTest extends TestCase
         $this->withoutExceptionHandling();try{$this->command('publish',2);$this->fail('Expected rollback');}catch(\RuntimeException $e){$this->assertSame('Synthetic publication audit failure',$e->getMessage());}
         $this->assertSame(0,DB::table('staff_roster_publications')->count());$this->assertSame('Approved',StaffRosterDraft::sole()->status);$this->assertSame(2,StaffRosterDraft::sole()->revision);
     }
+    public function test_maximum_exception_content_replays_exactly_without_overflowing_audit_metadata(): void
+    {
+        $exceptions=[];
+        for($i=0;$i<100;$i++)$exceptions[]=['date'=>\Carbon\CarbonImmutable::parse('2026-01-01')->addDays($i)->toDateString(),'kind'=>'custom_hours','start_time'=>'10:00','end_time'=>'16:00'];
+        $body=$this->body(['effective_from'=>'2026-01-01','effective_until'=>'2026-12-31','exceptions'=>$exceptions]);
+        $first=$this->putJson('/api/staff/ops-contention/roster',$body)->assertOk()->assertJsonCount(100,'data.exceptions')->json('data');
+        $this->command('approve',1)->assertOk();
+        $op=(string)Str::uuid();$published=$this->command('publish',2,'2026-09-28',$op)->assertOk()->assertJsonCount(100,'data.exceptions')->json('data');
+        $this->assertEquals($published,$this->command('publish',2,'2026-09-28',$op)->assertOk()->assertJsonPath('meta.replayed',true)->json('data'));
+        $this->assertEquals($first,$this->putJson('/api/staff/ops-contention/roster',$body)->assertOk()->assertJsonPath('meta.replayed',true)->json('data'));
+        foreach(AuditLog::whereIn('action',['staff_roster.saved','staff_roster.approved','staff_roster.published'])->get() as $audit){$this->assertLessThan(8192,strlen(json_encode($audit->payload)));$this->assertArrayHasKey('receipt_ref',$audit->payload);}
+    }
 }

@@ -83,7 +83,7 @@ try {
   await owner.p.getByLabel('Branch',{exact:true}).selectOption(own.branch.id)
   await owner.p.getByRole('button',{name:'Inspect',exact:true}).first().waitFor()
   const audit=(await read(owner.c,`/api/audit-logs?action=staff_roster.published&branch_id=${own.branch.id}`)).data
-  assert.ok(audit.some(a=>a.payload?.receipt?.publication_id===receipt.data.publication_id),'Exact publication audit is discoverable under branch/action filters')
+  assert.ok(audit.some(a=>(a.payload?.publication_id||a.payload?.receipt?.publication_id)===receipt.data.publication_id),'Exact publication audit is discoverable under branch/action filters')
   await owner.p.getByRole('button',{name:'Work Schedules',exact:true}).first().click();await owner.p.getByRole('tab',{name:'Staff schedules',exact:true}).click()
   await owner.p.getByLabel('Staff member',{exact:true}).selectOption(own.id);await owner.p.getByLabel('Schedule record date',{exact:true}).fill(date)
   const currentEditor=owner.p.getByRole('form',{name:'Staff roster editor'})

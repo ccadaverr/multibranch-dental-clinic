@@ -110,7 +110,13 @@ class StaffRosterController extends Controller
             $fingerprintData=['action'=>$action,'staff_ref'=>$staff->legacy_ref,'body'=>$data];ksort($fingerprintData['body']);
             $fingerprint=hash('sha256',json_encode($fingerprintData,JSON_THROW_ON_ERROR));
             $prior=AuditLog::where('actor_user_id',$actor->id)->whereIn('action',['staff_roster.saved','staff_roster.approved','staff_roster.published'])->where('payload->operation_id',$data['operation_id'])->first();
-            if($prior){if($prior->payload['fingerprint']!==$fingerprint)return $this->conflict('staff_roster_operation_conflict','This command identity already belongs to a different roster operation.');return response()->json(['data'=>$prior->payload['receipt'],'meta'=>['operation_id'=>$data['operation_id'],'replayed'=>true]]);}
+            if($prior){
+                if($prior->payload['fingerprint']!==$fingerprint)return $this->conflict('staff_roster_operation_conflict','This command identity already belongs to a different roster operation.');
+                // Audit metadata is bounded. The immutable revision is the exact receipt, including
+                // large exception lists; retained earlier compact receipts remain readable.
+                $receipt=$prior->payload['receipt']??json_decode(DB::table('staff_roster_draft_revisions')->where('public_id',$prior->payload['receipt_ref'])->firstOrFail()->snapshot,true);
+                return response()->json(['data'=>$receipt,'meta'=>['operation_id'=>$data['operation_id'],'replayed'=>true]]);
+            }
             if((int)$data['expected_revision']!==($row?->revision??0))return $this->conflict('staff_roster_revision_conflict','This schedule changed. Reload and review it before another command.');
             if($action==='save'){
                 $this->validateContent($data,$branch);
@@ -134,9 +140,10 @@ class StaffRosterController extends Controller
                 $row->save();
             }
             $receipt=$this->view($row->fresh('branch'),$staff);
-            DB::table('staff_roster_draft_revisions')->insert(['public_id'=>strtolower((string)Str::ulid()),'draft_id'=>$row->id,'revision'=>$row->revision,'actor_user_id'=>$actor->id,'snapshot'=>json_encode($receipt,JSON_THROW_ON_ERROR)]);
+            $receiptRef=strtolower((string)Str::ulid());
+            DB::table('staff_roster_draft_revisions')->insert(['public_id'=>$receiptRef,'draft_id'=>$row->id,'revision'=>$row->revision,'actor_user_id'=>$actor->id,'snapshot'=>json_encode($receipt,JSON_THROW_ON_ERROR)]);
             app(AuditService::class)->record(['action'=>'staff_roster.'.($action==='save'?'saved':($action==='approve'?'approved':'published')),'category'=>'administrative','actor'=>$actor,'target'=>$row,'branch_id'=>$branch->id,
-                'payload'=>['operation_id'=>$data['operation_id'],'fingerprint'=>$fingerprint,'receipt'=>$receipt]]);
+                'payload'=>['operation_id'=>$data['operation_id'],'fingerprint'=>$fingerprint,'receipt_ref'=>$receiptRef,'revision'=>$row->revision,'status'=>$row->status,'publication_id'=>$receipt['publication_id']]]);
             $recipients=$row->status==='Pending'?User::where('role','owner')->where('account_status','Active')->get():collect($target?[$target]:[]);
             foreach($recipients as $recipient)app(\App\Services\Notifications\NotificationCenter::class)->staffNoticeOrFail($recipient,'staff_roster','Staff schedule '.$row->status,
                 $branch->name.' · '.$data['date'].' · Review Work schedules.','schedules',$row->public_id,'staff-roster:'.$row->public_id.':'.$row->revision.':'.$recipient->public_id);
