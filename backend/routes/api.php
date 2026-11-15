@@ -207,6 +207,8 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
         Route::post('/{patientHandover}/cancel', [\App\Http\Controllers\HandoverController::class, 'cancel'])->middleware(['role:staff,dentist', 'throttle:30,1']);
     });
     // M20 Patient Follow-Up: front desk and Dentists of the branch; Owner counts and dates only.
+    Route::get('/followups/booking-capability', [\App\Http\Controllers\FollowupController::class, 'bookingCapability'])->middleware('role:staff');
+    Route::get('/followups/{followupTask}/booking-receipt', [\App\Http\Controllers\FollowupController::class, 'bookingReceipt'])->middleware('role:staff');
     Route::get('/followups', [\App\Http\Controllers\FollowupController::class, 'index'])->middleware('role:staff,dentist,owner');
     Route::get('/followups/{followupTask}', [\App\Http\Controllers\FollowupController::class, 'show'])->middleware('role:staff,dentist');
     Route::post('/followups', [\App\Http\Controllers\FollowupController::class, 'store'])->middleware(['role:staff,dentist', 'throttle:30,1']);

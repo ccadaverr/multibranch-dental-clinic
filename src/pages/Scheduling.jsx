@@ -35,7 +35,7 @@ export function appointmentRecordPatient(appointment,state,session) {
 // `prefill` (M20 server follow-up task or calendar click): prefilled parameters; patient/branch locked only when patient is specified.
 export function AppointmentForm({ role, store, appointment=null, followup=null, prefill=null, serverFollowupSelection, verifiedFollowupBackend, onSaved, submitLabel='Confirm appointment' }) {
   const selectedMode = serverFollowupSelection !== undefined
-  const context = JSON.stringify([schedulingActorKey(store), selectedMode ? ['server-followup', serverFollowupSelection?.taskId, serverFollowupSelection?.expectedRevision, serverFollowupSelection?.patientPublicId, serverFollowupSelection?.branchId, verifiedFollowupBackend?.commit, verifiedFollowupBackend?.apiBase] : appointment ? ['appointment', appointment.id, appointment.patientPublicId, appointment.branchId, appointment.serviceId, appointment.dentistId] : followup ? ['followup', followup.id, followup.patientId, followup.branchId, followup.dentistId] : ['booking', prefill?.patientPublicId, prefill?.branchId, prefill?.date]])
+  const context = JSON.stringify([schedulingActorKey(store), selectedMode ? ['server-followup', serverFollowupSelection?.taskId, serverFollowupSelection?.expectedRevision, serverFollowupSelection?.patientPublicId, serverFollowupSelection?.branchId, serverFollowupSelection?.dentistId, verifiedFollowupBackend?.commit, verifiedFollowupBackend?.apiBase] : appointment ? ['appointment', appointment.id, appointment.patientPublicId, appointment.branchId, appointment.serviceId, appointment.dentistId] : followup ? ['followup', followup.id, followup.patientId, followup.branchId, followup.dentistId] : ['booking', prefill?.patientPublicId, prefill?.branchId, prefill?.date]])
   return <AppointmentEditor key={context} {...{role,store,appointment,followup,prefill,serverFollowupSelection,verifiedFollowupBackend,selectedMode,onSaved,submitLabel}}/>
 }
 
@@ -53,7 +53,7 @@ function AppointmentEditor({ role, store, appointment: currentAppointment, follo
   const lockedPatient=!!(appointment||followup||prefill?.patientPublicId||prefill?.patientName)||selectedMode
   const lockedBranch=!!(appointment||followup||(prefill?.patientPublicId&&prefill?.branchId))||selectedMode
   const [form,setFormState]=useState(()=>{
-    if(selectedMode)return {patientPublicId:selection.patientPublicId||'',branchId:selection.branchId||'',serviceId:prefill?.serviceId||'',dentistId:prefill?.dentistId||'',date:prefill?.date&&prefill.date>=clinicDate()?prefill.date:clinicDate(),start:'',notes:prefill?.notes||''}
+    if(selectedMode)return {patientPublicId:selection.patientPublicId||'',branchId:selection.branchId||'',serviceId:prefill?.serviceId||'',dentistId:selection.dentistId||prefill?.dentistId||'',date:prefill?.date&&prefill.date>=clinicDate()?prefill.date:clinicDate(),start:'',notes:prefill?.notes||''}
     if(appointment)return {patientPublicId:appointment.patientPublicId,branchId:appointment.branchId,serviceId:appointment.serviceId,dentistId:appointment.dentistId,date:appointment.date>=clinicDate()?appointment.date:clinicDate(),start:'',notes:''}
     if(followup)return {patientPublicId:followupPatient,branchId:followup.branchId,serviceId:'',dentistId:followup.dentistId,date:followup.recommendedDate&&followup.recommendedDate>=clinicDate()?followup.recommendedDate:clinicDate(),start:'',notes:followup.reason||''}
     if(prefill)return {patientPublicId:prefill.patientPublicId,branchId:prefill.branchId||branches[0]?.id||'',serviceId:prefill.serviceId||'',dentistId:prefill.dentistId||'',date:prefill.date&&prefill.date>=clinicDate()?prefill.date:clinicDate(),start:'',notes:prefill.notes||''}
@@ -72,7 +72,7 @@ function AppointmentEditor({ role, store, appointment: currentAppointment, follo
     setForm(previous=>{
     const next={...previous,[name]:value}
     if(name==='branchId'){next.serviceId='';next.dentistId=followup?previous.dentistId:'';next.start=''}
-    if(name==='serviceId'){next.dentistId=followup||appointment?previous.dentistId:'';next.start=''}
+    if(name==='serviceId'){next.dentistId=followup||appointment||selection.dentistId?previous.dentistId:'';next.start=''}
     if(['date','dentistId','patientPublicId'].includes(name))next.start=''
     return next
     })
@@ -83,7 +83,7 @@ function AppointmentEditor({ role, store, appointment: currentAppointment, follo
 
   const services=servicesAt(state,form.branchId)
   const dentists=form.serviceId?dentistsFor(state,form.branchId,form.serviceId):[]
-  const lockedDentist=!!followup
+  const lockedDentist=!!followup||(selectedMode&&!!selection.dentistId)
   const selectedService=services.find(s=>s.id===form.serviceId)
   const isRestricted=selectedService?.onlineBooking==='consultation_first'||selectedService?.onlineBooking==='hidden'
   const selectionProblem=selectedMode?(role!=='staff'||session?.role!=='staff'||appointment||followup

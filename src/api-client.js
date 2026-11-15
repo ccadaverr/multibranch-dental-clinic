@@ -459,6 +459,9 @@ export function myChart(patientId = null) { return request(`/api/me/chart${patie
 // M20 Patient Follow-Up
 export function followups(filters = {}) { const q = new URLSearchParams(Object.entries(filters).filter(([, v]) => v)).toString(); return request(`/api/followups${q ? `?${q}` : ''}`) }
 export function patientFollowups(patientId) { return request(`/api/patients/${encodeURIComponent(patientId)}/followups`) }
+export function followupTask(id) { return request(`/api/followups/${encodeURIComponent(id)}`) }
+export function followupBookingReceipt(id) { return request(`/api/followups/${encodeURIComponent(id)}/booking-receipt`) }
+export function followupBookingCapability() { return request('/api/followups/booking-capability') }
 export function createFollowup(body) { return json('/api/followups', 'POST', body) }
 export function updateFollowup(id, body) { return json(`/api/followups/${encodeURIComponent(id)}`, 'PATCH', body) }
 // M19 Prescriptions

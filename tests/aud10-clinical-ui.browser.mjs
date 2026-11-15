@@ -127,7 +127,8 @@ export async function runClinicalAcceptance(page,base,evidence){
     await fresh();await page.evaluate(()=>{window.clinical.holdReview=true})
     await read().evaluate(b=>{b.click();b.click()})
     await row().getByRole('status').filter({hasText:'Loading current follow-up state'}).waitFor()
-    assert.equal(await page.evaluate(()=>window.clinical.requests.filter(r=>r.path.includes('/patients/')).length),1)
+    assert.equal(await page.evaluate(()=>window.clinical.requests.filter(r=>r.path==='/api/followups/'+window.clinical.ids.B).length),1)
+    assert.equal(await page.evaluate(()=>window.clinical.requests.filter(r=>r.path==='/api/followups/'+window.clinical.ids.B+'/booking-receipt').length),1)
     await page.evaluate(()=>window.clinical.releaseReview());await row().getByText(/Current task status: Open/).waitFor();await noPost()
   })
   for(const mode of ['auth','account','branch','permission','permission-cycle','unmount'])await run('obsolete read cannot adopt a response after '+mode,async()=>{

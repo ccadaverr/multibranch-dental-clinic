@@ -174,14 +174,16 @@ export async function createAppointment(form, key) {
   return commandResult(await api.createAppointment(appointmentPayload(form), key))
 }
 
-// Release gate, not a server capability probe. The caller must supply verified deployment evidence for this
-// exact API target. It defaults closed; never test an older backend by sending a potentially ignored selection.
+// The clinical entry uses the running v1 capability at this exact API base. Retain the legacy reviewed-commit
+// attestation for shared-form callers; never probe an unknown backend with a potentially ignored selected POST.
 export const SELECTED_FOLLOWUP_BACKEND_COMMIT = 'e2654fafb1d30b6e50d3c1e475b2a3c0af227457'
 const publicUlid = value => typeof value === 'string' && /^[0-7][0-9a-hjkmnp-tv-z]{25}$/i.test(value)
 const taskRevision = value => Number.isInteger(value) && value >= 1 && value <= 2147483647
 
 export function selectedFollowupProblem(form, selection, backend, key) {
-  if (backend?.commit !== SELECTED_FOLLOWUP_BACKEND_COMMIT || backend?.apiBase !== api.apiBase()) {
+  const ready = backend?.contract === 'followup-booking.v1' && backend.enabled === true &&
+    backend.exact_task_linkage === true && backend.receipt_recovery === true && backend.dentist_context === true
+  if ((!ready && backend?.commit !== SELECTED_FOLLOWUP_BACKEND_COMMIT) || backend?.apiBase !== api.apiBase()) {
     return 'Selected follow-up booking is unavailable until this clinic connection has been verified. Contact the clinic system administrator.'
   }
   if (!publicUlid(selection?.taskId) || !taskRevision(selection?.expectedRevision) ||
@@ -189,6 +191,7 @@ export function selectedFollowupProblem(form, selection, backend, key) {
       selection.patientPublicId !== form?.patientPublicId || selection.branchId !== form?.branchId || form?.forPatientId) {
     return 'The selected follow-up context is incomplete or changed. Close this form and reload the selected follow-up.'
   }
+  if (selection.dentistId && selection.dentistId !== form.dentistId) return 'Keep the Dentist requested by this follow-up.'
   if (key !== undefined && (typeof key !== 'string' || !/^[\x21-\x7e]{1,255}$/.test(key) || /[\r\n]/.test(key))) {
     return 'The booking attempt could not be identified. Close this form and reload the selected follow-up.'
   }

@@ -73,7 +73,7 @@ for(const mode of ['unmount','A-B-A'])test('CLIN-12 obsolete '+mode+' mutation k
  const held=deferred();let current=true;const e=row({respond:()=>held.promise,current:()=>current});const work=e.value.act('contacted')
  if(mode==='unmount')e.unmount();else current=false // Old scope stays invalid even when a new A scope exists.
  held.resolve(ok(task('A',{status:'Contacted'})));await work
- assert.deepEqual(e.calls,[{id:'task-A',body:{action:'contacted'}}]);assert.deepEqual(e.feedback,[]);assert.equal(e.reloads,0);e.unmount()
+ assert.deepEqual(e.calls,[{id:'task-A',body:{action:'contacted',expected_revision:1}}]);assert.deepEqual(e.feedback,[]);assert.equal(e.reloads,0);e.unmount()
 })
 for(const patch of [{id:'other'},{patient:{id:'B'}},{branch:{id:'b2'}},{status:'Open'}])test('CLIN-12 rejects update identity/status mismatch '+JSON.stringify(patch),async()=>{
  const e=row({respond:async()=>ok(task('A',{status:'Contacted',...patch}))});await e.value.act('contacted');e.render();assert.ok(e.value.error);assert.deepEqual(e.feedback,[]);e.unmount()
