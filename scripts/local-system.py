@@ -140,7 +140,7 @@ def main():
     parser.add_argument('--target', required=True, help='Private manifest for a newly provisioned, owned local cluster')
     parser.add_argument('--profile', choices=['demo', 'test'], default='demo')
     parser.add_argument('--filter', help='Optional PHPUnit test-name filter; explicit reviewed files remain required')
-    parser.add_argument('action', choices=['status', 'start', 'stop', 'backup', 'migrate', 'seed', 'seed-demo', 'visit-fixture', 'test', 'clone-test', 'concurrency', 'billing-concurrency', 'prescription-concurrency', 'operations-contention', 'roster-draft-contention', 'verify-schema', 'verify-guard', 'serve', 'ui', 'mailbox', 'worker', 'scheduler'])
+    parser.add_argument('action', choices=['status', 'start', 'stop', 'backup', 'migrate', 'seed', 'seed-demo', 'visit-fixture', 'test', 'clone-test', 'concurrency', 'billing-concurrency', 'prescription-concurrency', 'operations-contention', 'roster-draft-contention', 'leave-authority-contention', 'verify-schema', 'verify-guard', 'serve', 'ui', 'mailbox', 'worker', 'scheduler'])
     parser.add_argument('tests', nargs='*')
     args = parser.parse_args()
     c, runtime = target(args.target)
@@ -156,7 +156,7 @@ def main():
     selected = migrations(c) if args.action != 'backup' else []
     # Separate profiles may run independently. One profile never runs overlapping suites or schema/seed work.
     lock = None
-    if args.action in ['migrate', 'seed', 'seed-demo', 'visit-fixture', 'test', 'clone-test', 'concurrency', 'billing-concurrency', 'prescription-concurrency', 'operations-contention', 'roster-draft-contention', 'verify-schema', 'verify-guard', 'backup']:
+    if args.action in ['migrate', 'seed', 'seed-demo', 'visit-fixture', 'test', 'clone-test', 'concurrency', 'billing-concurrency', 'prescription-concurrency', 'operations-contention', 'roster-draft-contention', 'leave-authority-contention', 'verify-schema', 'verify-guard', 'backup']:
         lock = open(runtime / (database + '.lock'), 'a')
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -206,7 +206,11 @@ def main():
         seeder = 'DemoClinicSeeder' if args.action == 'seed-demo' else 'DatabaseSeeder'
         subprocess.run([c['php'], 'artisan', 'db:seed', '--class=' + seeder, '--force', '--no-interaction'],
                        cwd=ROOT / 'backend', env=environment(c, runtime, args.profile), check=True)
-    elif args.action in ['test', 'verify-schema', 'verify-guard', 'concurrency', 'billing-concurrency', 'prescription-concurrency', 'operations-contention', 'roster-draft-contention']:
+    elif args.action in ['test', 'verify-schema', 'verify-guard', 'concurrency', 'billing-concurrency', 'prescription-concurrency', 'operations-contention', 'roster-draft-contention', 'leave-authority-contention']:
+        if args.action == 'leave-authority-contention':
+            if not runtime.name.startswith('contention-'):
+                raise ValueError('Leave authority contention requires a fresh clone-test target.')
+            args.tests = ['tests/Feature/Staffing/LeaveAuthorityContentionTest.php']
         if args.action == 'roster-draft-contention':
             if not runtime.name.startswith('contention-') or not set(ROSTER_DRAFT_MIGRATIONS) <= set(c.get('operations_migrations', [])):
                 raise ValueError('Roster draft contention requires a fresh roster-drafts clone-test target.')
@@ -250,7 +254,7 @@ def main():
             test_env['PRESCRIPTION_DISPOSABLE_POSTGRES_ACCEPTANCE'] = '1'
         if args.action == 'operations-contention':
             test_env['OPERATIONS_DISPOSABLE_POSTGRES_ACCEPTANCE'] = '1'
-        if args.action == 'roster-draft-contention':
+        if args.action in ['roster-draft-contention', 'leave-authority-contention']:
             test_env['OPERATIONS_DISPOSABLE_POSTGRES_ACCEPTANCE'] = '1'
         subprocess.run([c['php'], 'vendor/bin/phpunit', '-c', 'phpunit.xml', '--bootstrap', 'tests/Support/IsolatedTestBootstrap.php',
                         '--cache-directory', str(runtime / 'cache/phpunit'), *(['--filter', args.filter] if args.filter else []), *args.tests],

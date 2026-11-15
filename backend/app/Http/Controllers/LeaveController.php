@@ -62,8 +62,10 @@ class LeaveController extends Controller
         $ends = $partial ? ClinicClock::at($data['end_date'], $data['end_time']) : ClinicClock::at($data['end_date'], '00:00')->addDay();
         if ($ends->lessThanOrEqualTo($starts)) throw ValidationException::withMessages(['end_time' => ['The end must be after the start.']]);
 
-        $leave = DB::transaction(function () use ($user, $dentist, $staff, $data, $starts, $ends) {
-            User::whereKey($user->id)->lockForUpdate()->first();
+        $leave = DB::transaction(function () use ($user, $data, $starts, $ends) {
+            $user = $this->lockedActor($user);
+            [$dentist, $staff] = $this->profiles($user);
+            abort_unless($dentist || $staff, 403, 'Only dentists and staff members request leave.');
             $overlap = LeaveRequest::where('requester_user_id', $user->id)->whereIn('status', ['Pending', 'Approved'])
                 ->where('starts_at', '<', SchedulingService::ts($ends))->where('ends_at', '>', SchedulingService::ts($starts))->exists();
             if ($overlap) throw ValidationException::withMessages(['start_date' => ['You already have leave requested or approved in this period.']]);
@@ -127,7 +129,9 @@ class LeaveController extends Controller
         abort_unless($this->canDecide($user, $leaveRequest), 403, 'You cannot decide this request.');
         $to = $data['decision'] === 'approve' ? 'Approved' : 'Declined';
         DB::transaction(function () use ($leaveRequest, $user, $to) {
+            $user = $this->lockedActor($user);
             $current = LeaveRequest::whereKey($leaveRequest->id)->lockForUpdate()->first();
+            abort_unless($current && $this->canDecide($user, $current), 403, 'You cannot decide this request.');
             if ($current->status !== 'Pending') throw ValidationException::withMessages(['decision' => ["This request is already {$current->status}. Reload the list."]]);
             $current->update(['status' => $to, 'decided_by_user_id' => $user->id, 'decided_at' => now()]);
             $this->audit($user, $to === 'Approved' ? 'leave.approved' : 'leave.declined', $current);
@@ -146,7 +150,9 @@ class LeaveController extends Controller
         $user = $request->user();
         abort_unless($leaveRequest->requester_user_id === $user->id || $this->canDecide($user, $leaveRequest), 403);
         DB::transaction(function () use ($leaveRequest, $user) {
+            $user = $this->lockedActor($user);
             $current = LeaveRequest::whereKey($leaveRequest->id)->lockForUpdate()->first();
+            abort_unless($current && ($current->requester_user_id === $user->id || $this->canDecide($user, $current)), 403);
             if (! in_array($current->status, ['Pending', 'Approved'], true)) throw ValidationException::withMessages(['status' => ["This request is already {$current->status}."]]);
             if ($current->ends_at->lessThanOrEqualTo(now())) throw ValidationException::withMessages(['status' => ['This leave has already ended.']]);
             $current->update(['status' => 'Cancelled', 'cancelled_by_user_id' => $user->id, 'cancelled_at' => now()]);
@@ -175,6 +181,16 @@ class LeaveController extends Controller
     }
 
     // ---- rules --------------------------------------------------------------------------------------------------------
+
+    /** Match the authenticated authority again after any lock wait, before mutating leave. */
+    private function lockedActor(User $observed): User
+    {
+        $current = User::whereKey($observed->id)->lockForUpdate()->first();
+        abort_unless($current && $current->account_status === 'Active' && $current->auth_version === $observed->auth_version
+            && $current->role === $observed->role && $current->person_id === $observed->person_id, 403, 'Your access changed. Sign in again before changing leave.');
+
+        return $current;
+    }
 
     /** @return array{0:?DentistProfile,1:?StaffProfile} */
     private function profiles(User $user): array

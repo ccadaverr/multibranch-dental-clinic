@@ -61,3 +61,5 @@ node tests/roster-draft-postgres.browser.mjs <absolute-path-to-playwright/index.
 ```
 
 The first is a synthetic race/recovery fixture. The second authenticates synthetic Owner contexts, saves through real React/Laravel/PostgreSQL, loses a committed response, retries the exact operation and opens a new session for readback. It reads only its explicitly named private generated password into memory. Neither invokes provider services or changes effective duty. Back up/stop all owned targets after acceptance.
+
+Further leave acceptance uses the `leave-authority-contention` lane on a **new** `clone-test` target. Accepted clone `/private/contention-e3d9a7c3` verifies lock-time account, branch-scope and configured approver revocation for creation/decision/cancellation. It changes no migration profile and refuses regular targets; do not rerun its committed fixture on a used clone. Back up and stop it, retaining all evidence.
