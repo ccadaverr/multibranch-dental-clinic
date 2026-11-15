@@ -1,0 +1,39 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synthetic Operations preparation acceptance</title></head><body><div id="root"></div><script type="module">
+import React from 'react'
+import {createRoot} from 'react-dom/client'
+import {StaffRosterDraft} from '/src/pages/StaffRosterDraft.jsx'
+import {AuditTrailPage} from '/src/pages/AuditTrail.jsx'
+import '/src/styles.css'
+import '/src/foundation.css'
+const test=window.ops={rows:new Map(),receipts:new Map(),requests:[],drop:false,holdDate:null,release:null,holdMore:false,releaseMore:null}
+const audit=(id,action)=>({id,action,category:'administrative',severity:'info',actor:{name:'Synthetic Owner',role:'owner'},payload:{},created_at:'2026-11-15T10:00:00+08:00'})
+window.fetch=async(url,options={})=>{
+ const u=new URL(url,location.href),path=u.pathname;test.requests.push({path,query:u.search,method:options.method,body:options.body})
+ if(path==='/sanctum/csrf-cookie')return new Response(null,{status:204})
+ if(path==='/api/audit-logs'){
+  if(u.searchParams.has('cursor')){if(test.holdMore)await new Promise(resolve=>test.releaseMore=resolve);return Response.json({data:[audit('older-source','old-filter-event')],meta:{next_cursor:null}})}
+  const action=u.searchParams.get('action')
+  return Response.json({data:[audit(action?'filtered-row':'source-row',action||'source-event')],meta:{next_cursor:action?null:'cursor-source'}})
+ }
+ if(path.endsWith('/roster-draft')){
+  if(options.method==='PUT'){
+   const b=JSON.parse(options.body),old=test.rows.get(b.date)
+   if(test.receipts.has(b.operation_id))return Response.json({...test.receipts.get(b.operation_id),meta:{operation_id:b.operation_id,replayed:true,publication_available:false}})
+   if(b.expected_revision!==(old?.revision||0))return Response.json({code:'staff_roster_revision_conflict',message:'Draft changed. Review before saving.'},{status:409})
+   const row={id:old?.id||'draft-'+b.date,staff_ref:'s1',branch_ref:b.branch_ref,branch_name:'Synthetic Branch',date:b.date,start_time:b.start_time,end_time:b.end_time,revision:b.expected_revision+1,status:'Draft',published:false}
+   test.rows.set(b.date,row);const receipt={data:row,meta:{operation_id:b.operation_id,replayed:false,publication_available:false}};test.receipts.set(b.operation_id,receipt)
+   if(test.drop){test.drop=false;throw Error('Synthetic response lost after commit')}return Response.json(receipt)
+  }
+  const date=u.searchParams.get('date'),row=test.rows.get(date)||null
+  if(test.holdDate===date)await new Promise(resolve=>test.release=resolve)
+  return Response.json({data:row,meta:{staff_ref:'s1',date,revision:row?.revision||0,publication_available:false}})
+ }
+ if(path.endsWith('/history')){
+  const date=u.searchParams.get('date'),row=test.rows.get(date)
+  return Response.json({data:row?[{id:'revision-'+row.revision,revision:row.revision,draft:row,saved_at:'2026-11-15T10:00:00+08:00'}]:[],meta:{staff_ref:'s1',date,publication_available:false}})
+ }
+ return Response.json({message:'Unexpected synthetic request'},{status:500})
+}
+const store={session:{serverUserId:'owner-server',userId:'owner',role:'owner',active:true},state:{persons:[{id:'person-owner'}],users:[{id:'owner',personId:'person-owner',roleName:'Owner / Admin',accountStatus:'Active',permissions:['all']}],branches:[{id:'b1',name:'Synthetic Branch'}]},toast:()=>{},getAuthGeneration:()=>1}
+createRoot(document.getElementById('root')).render(new URLSearchParams(location.search).has('audit')?React.createElement(AuditTrailPage,{store}):React.createElement(StaffRosterDraft,{staff:{id:'s1',name:'Synthetic Staff',branchRef:'b1'},branches:[{id:'b1',name:'Synthetic Branch'}],getAuthGeneration:()=>1,enabled:true}))
+</script></body></html>

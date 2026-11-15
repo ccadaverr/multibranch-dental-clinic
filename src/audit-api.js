@@ -32,7 +32,7 @@ export async function fetchAuditLog(id) {
 }
 
 /** Downloads the CSV and reports whether the server cut it at its bound (the export is never silently partial). */
-export async function downloadAuditLogsCsv(params = {}) {
+export async function downloadAuditLogsCsv(params = {}, beforeDispatch = () => true) {
   const query = Object.entries(params)
     .filter(([, v]) => v !== null && v !== undefined && v !== '' && v !== 'all')
     .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
@@ -41,6 +41,7 @@ export async function downloadAuditLogsCsv(params = {}) {
   const baseUrl = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_BASE_URL) || 'http://localhost:8000'
   const url = `${baseUrl}/api/audit-logs/export${query ? `?${query}` : ''}`
 
+  if (!beforeDispatch()) throw new Error('Audit export context changed. Review the current filters before exporting.')
   let res
   try { res = await fetch(url, { credentials: 'include' }) } catch { throw new Error('Could not reach the clinic system. Check your connection and try again.') }
   if (!res.ok) {
@@ -50,6 +51,7 @@ export async function downloadAuditLogsCsv(params = {}) {
   const truncated = res.headers?.get?.('X-Audit-Export-Truncated') === 'true'
   const limit = Number(res.headers?.get?.('X-Audit-Export-Limit')) || null
   const blob = await res.blob()
+  if (!beforeDispatch()) throw new Error('Audit export context changed. Review the current filters before exporting.')
   const blobUrl = window.URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = blobUrl

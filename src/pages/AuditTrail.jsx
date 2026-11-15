@@ -1,10 +1,17 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Brand } from '../Brand.jsx'
 import { Button, Card, Field, FilterBar, Modal, Notice, PageHeader, Status, Table } from '../components.jsx'
-import { dateLabel } from '../logic.js'
 import { fetchAuditLogs, downloadAuditLogsCsv } from '../audit-api.js'
+import { canAccessPage } from '../safeguards.js'
 
 export function AuditTrailPage({ store }) {
+  const session=store.session,auth=store.getAuthGeneration?.()
+  const allowed=!!session?.serverUserId&&session.role==='owner'&&session.active&&canAccessPage(store.state,session,'audit')&&(!store.getAuthGeneration||auth!=null)
+  if(!allowed)return <Notice title="Audit trail unavailable">An active Owner server session is required to inspect operational archive activity and audit history.</Notice>
+  return <AuditLifetime key={JSON.stringify([session.serverUserId,session.userId,session.role,session.active,auth])} store={store}/>
+}
+
+function AuditLifetime({ store }) {
   const { state, toast } = store
   const [logs, setLogs] = useState([])
   const [status, setStatus] = useState('loading')
@@ -18,7 +25,10 @@ export function AuditTrailPage({ store }) {
   const [branchId, setBranchId] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
-  const [inspectLog, setInspectLog] = useState(null)
+  const [selection, setInspectLog] = useState(null)
+  const [loadedKey,setLoadedKey]=useState(null),[action,setAction]=useState('')
+  const epoch=useRef(0),mounted=useRef(false),morePending=useRef(false),exportPending=useRef(false),currentKey=useRef('')
+  const auth=store.getAuthGeneration?.()
   const [exporting, setExporting] = useState(false)
   const rangeInvalid = !!(dateFrom && dateTo && dateFrom > dateTo)
 
@@ -29,11 +39,22 @@ export function AuditTrailPage({ store }) {
     branch_id: branchId || undefined,
     date_from: dateFrom || undefined,
     date_to: dateTo || undefined,
+    action: action || undefined,
   })
+  const filterKey=JSON.stringify(filters())
+  currentKey.current=filterKey
+  const owns=ticket=>mounted.current&&ticket.epoch===epoch.current&&ticket.key===currentKey.current&&ticket.auth===store.getAuthGeneration?.()
+  const shownLogs=loadedKey===filterKey&&!rangeInvalid?logs:[]
+  const inspectLog=shownLogs.find(row=>row.id===selection?.id)||null
+  const viewStatus=loadedKey===filterKey?status:'loading'
+  const layoutEffect=typeof window==='undefined'?useEffect:React.useLayoutEffect
+  layoutEffect(()=>{mounted.current=true;return()=>{mounted.current=false;epoch.current++}},[])
 
   // Debounced server query. A response for an older filter set is discarded, and a failure is an explicit error with Retry:
   // never an empty list and never browser-held or demo activity.
   useEffect(() => {
+    const ticket={epoch:++epoch.current,key:filterKey,auth}
+    morePending.current=false;setLoadingMore(false);setInspectLog(null)
     if (rangeInvalid) return undefined
     let live = true
     setStatus('loading')
@@ -42,49 +63,60 @@ export function AuditTrailPage({ store }) {
       try {
         const page = await fetchAuditLogs({ ...filters(), per_page: 50 })
         if (!live) return
+        if (!owns(ticket)) return
         setLogs(page.rows)
+        setLoadedKey(filterKey)
         setNextCursor(page.nextCursor)
         setStatus('ready')
       } catch (err) {
         if (!live) return
+        if (!owns(ticket)) return
         setLogs([])
         setNextCursor(null)
         setLoadError(err.message || 'The audit trail could not be loaded.')
         setStatus('error')
+        setLoadedKey(filterKey)
       }
     }, 200)
     return () => { live = false; clearTimeout(timer) }
-  }, [search, category, severity, branchId, dateFrom, dateTo, attempt])
+  }, [filterKey, attempt])
 
   const loadMore = async () => {
-    if (!nextCursor || loadingMore) return
+    if (!nextCursor || loadingMore || morePending.current || loadedKey!==filterKey || rangeInvalid) return
+    morePending.current=true
+    const ticket={epoch:epoch.current,key:filterKey,auth}
     setLoadingMore(true)
     try {
       const page = await fetchAuditLogs({ ...filters(), per_page: 50, cursor: nextCursor })
+      if(!owns(ticket))return
       setLogs(previous => [...previous, ...page.rows.filter(row => !previous.some(p => p.id === row.id))])
       setNextCursor(page.nextCursor)
     } catch (err) {
-      toast(err.message || 'More audit records could not be loaded.', 'warning')
+      if(owns(ticket))toast(err.message || 'More audit records could not be loaded.', 'warning')
     } finally {
-      setLoadingMore(false)
+      if(owns(ticket)){morePending.current=false;setLoadingMore(false)}
     }
   }
 
   const handleExport = async () => {
+    if(rangeInvalid||loadedKey!==filterKey||viewStatus!=='ready'||exportPending.current)return
+    const ticket={epoch:epoch.current,key:filterKey,auth}
+    exportPending.current=true
     try {
       setExporting(true)
-      const result = await downloadAuditLogsCsv(filters())
+      const result = await downloadAuditLogsCsv(filters(),()=>owns(ticket))
+      if(!owns(ticket))return
       toast(result.truncated ? `Export generated, but cut at the newest ${result.limit} matching events. Narrow the filters for the rest.` : 'Audit trail export generated.', result.truncated ? 'warning' : 'success')
     } catch (err) {
-      toast(err.message || 'Failed to export audit logs.', 'warning')
+      if(owns(ticket))toast(err.message || 'Failed to export audit logs.', 'warning')
     } finally {
-      setExporting(false)
+      exportPending.current=false;if(mounted.current)setExporting(false)
     }
   }
 
-  const securityCount = logs.filter(l => l.severity === 'warning' || l.severity === 'critical' || l.category === 'security').length
-  const financialCount = logs.filter(l => l.category === 'financial').length
-  const clinicalCount = logs.filter(l => l.category === 'clinical').length
+  const securityCount = shownLogs.filter(l => l.severity === 'warning' || l.severity === 'critical' || l.category === 'security').length
+  const financialCount = shownLogs.filter(l => l.category === 'financial').length
+  const clinicalCount = shownLogs.filter(l => l.category === 'clinical').length
 
   const severityTone = (sev) => {
     if (sev === 'critical') return 'danger'
@@ -99,10 +131,10 @@ export function AuditTrailPage({ store }) {
         text="Append-only record of significant events written by the clinic server. The Owner can review and export it; nothing in this screen can change or delete an entry. Details are kept minimal and credentials are redacted."
         aside={
           <div className="row-actions">
-            <Button size="sm" variant="soft" onClick={handleExport} disabled={exporting}>
+            <Button size="sm" variant="soft" onClick={handleExport} disabled={exporting||rangeInvalid||viewStatus!=='ready'}>
               {exporting ? 'Generating Export...' : 'Export Audit Trail (CSV)'}
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => window.print()} icon="file">
+            <Button size="sm" variant="ghost" disabled={rangeInvalid||viewStatus!=='ready'} onClick={() => window.print()} icon="file">
               Download / Print PDF
             </Button>
           </div>
@@ -114,7 +146,7 @@ export function AuditTrailPage({ store }) {
           <Brand />
           <div style={{ textAlign: 'right' }}>
             <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800' }}>Official Audit Trail & Compliance Log</h3>
-            <span style={{ fontSize: '11px', color: '#64748b' }}>Generated on {new Date().toLocaleDateString()}</span>
+            <span style={{ fontSize: '11px', color: '#64748b' }}>Generated on {new Date().toLocaleDateString('en-PH',{timeZone:'Asia/Manila'})}</span>
           </div>
         </div>
       </div>
@@ -125,6 +157,8 @@ export function AuditTrailPage({ store }) {
         }
       `}</style>
 <Card title="Audit Event Filters">
+        <Field label="Operational activity"><select aria-label="Operational activity" value={action} onChange={e=>setAction(e.target.value)}><option value="">All authorized audit events</option><option value="notification.archived">Notification archive activity (metadata only)</option><option value="staff_profile.updated">Staff profile changes</option><option value="staff_roster.draft_saved">Dated Staff draft preparation</option></select></Field>
+        {action==='notification.archived'&&<Notice>Archive activity shows who archived a notification and when. Notification contents remain private to their recipient. This view cannot restore or delete records.</Notice>}
         <FilterBar
           search={search}
           onSearchChange={setSearch}
@@ -194,7 +228,7 @@ export function AuditTrailPage({ store }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '20px' }}>
         <div style={{ padding: '14px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)' }}>
           <span style={{ fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: '700' }}>Events loaded</span>
-          <b style={{ display: 'block', fontSize: '20px', marginTop: '4px' }}>{logs.length}</b>
+          <b style={{ display: 'block', fontSize: '20px', marginTop: '4px' }}>{shownLogs.length}</b>
         </div>
         <div style={{ padding: '14px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)' }}>
           <span style={{ fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: '700' }}>Security & warnings (loaded)</span>
@@ -214,24 +248,24 @@ export function AuditTrailPage({ store }) {
         <Card title="Activity Log" subtitle="Newest first, recorded by the clinic server. Entries cannot be edited or deleted from the application.">
           {rangeInvalid ? (
             <Notice tone="warning">Fix the date range to load audit records.</Notice>
-          ) : status === 'loading' ? (
+          ) : viewStatus === 'loading' ? (
             <Notice>Loading audit records...</Notice>
-          ) : status === 'error' ? (
+          ) : viewStatus === 'error' ? (
             <Notice tone="warning" title="Audit trail unavailable">{loadError} <Button size="sm" variant="ghost" onClick={() => setAttempt(attempt + 1)}>Retry</Button></Notice>
-          ) : logs.length === 0 ? (
+          ) : shownLogs.length === 0 ? (
             <Notice tone="info">No audit records match the current filter criteria.</Notice>
           ) : (
             <Table
-              rows={logs}
+              rows={shownLogs}
               columns={[
                 {
                   key: 'createdAt',
                   label: 'Timestamp',
                   render: l => (
                     <div>
-                      <b>{dateLabel(l.createdAt)}</b>
+                      <b>{l.createdAt ? new Date(l.createdAt).toLocaleDateString('en-PH',{timeZone:'Asia/Manila'}) : 'Date unavailable'}</b>
                       <small style={{ display: 'block', color: 'var(--muted)', fontSize: '10px' }}>
-                        {l.createdAt ? new Date(l.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'}
+                        {l.createdAt ? new Date(l.createdAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone:'Asia/Manila' }) : '—'}
                       </small>
                     </div>
                   ),
@@ -287,12 +321,12 @@ export function AuditTrailPage({ store }) {
               ]}
             />
           )}
-          {status === 'ready' && nextCursor && !rangeInvalid && (
+          {viewStatus === 'ready' && nextCursor && !rangeInvalid && (
             <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'center' }}>
               <Button variant="soft" onClick={loadMore} disabled={loadingMore}>{loadingMore ? 'Loading…' : 'Load older events'}</Button>
             </div>
           )}
-          {status === 'ready' && !nextCursor && logs.length > 0 && <p className="muted" style={{ textAlign: 'center', marginTop: '12px', fontSize: '11px' }}>End of the matching history.</p>}
+          {viewStatus === 'ready' && !nextCursor && shownLogs.length > 0 && <p className="muted" style={{ textAlign: 'center', marginTop: '12px', fontSize: '11px' }}>End of the matching history.</p>}
         </Card>
       </div>
 

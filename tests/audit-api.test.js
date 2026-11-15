@@ -67,6 +67,19 @@ test('the export reports truncation and explains refusals', async () => {
   await assert.rejects(() => downloadAuditLogsCsv(), /Could not reach/)
 })
 
+test('an export cannot download after its actor/filter context changes or dispatch an obsolete command',async()=>{
+  let release,current=true,clicked=false,sent=0
+  globalThis.window={URL:{createObjectURL:()=>{throw Error('No stale file URL may be created')},revokeObjectURL(){}}}
+  globalThis.document={createElement:()=>({click(){clicked=true},remove(){}}),body:{appendChild(){}}}
+  globalThis.fetch=async()=>{sent++;return new Promise(resolve=>{release=resolve})}
+  const pending=downloadAuditLogsCsv({action:'notification.archived'},()=>current)
+  current=false;release(json(200,{}))
+  await assert.rejects(()=>pending,/context changed/)
+  assert.equal(clicked,false)
+  await assert.rejects(()=>downloadAuditLogsCsv({},()=>false),/context changed/)
+  assert.equal(sent,1)
+})
+
 test('the audit screen shows errors with Retry, pages by cursor, never claims tamper-proofing and holds no local audit authority', () => {
   const client = readFileSync(new URL('../src/audit-api.js', import.meta.url), 'utf8')
   const page = readFileSync(new URL('../src/pages/AuditTrail.jsx', import.meta.url), 'utf8')
