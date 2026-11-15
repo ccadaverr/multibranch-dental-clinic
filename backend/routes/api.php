@@ -76,6 +76,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
     Route::get('/notifications', [\App\Http\Controllers\NotificationController::class, 'index']);
     Route::post('/notifications/read-all', [\App\Http\Controllers\NotificationController::class, 'readAll']);
     Route::post('/notifications/{notification}/read', [\App\Http\Controllers\NotificationController::class, 'read']);
+    Route::post('/notifications/{notification}/archive', [\App\Http\Controllers\NotificationController::class, 'archive']);
     // M1 self-service sign-in email change: current password, then a one-time code sent to the new address.
     Route::post('/account/email', [\App\Http\Controllers\Auth\EmailChangeController::class, 'request'])->middleware('throttle:m1-otp');
     Route::post('/account/email/confirm', [\App\Http\Controllers\Auth\EmailChangeController::class, 'confirm'])->middleware('throttle:m1-otp');

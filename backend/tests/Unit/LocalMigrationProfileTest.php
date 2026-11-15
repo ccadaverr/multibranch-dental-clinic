@@ -30,6 +30,19 @@ final class LocalMigrationProfileTest extends TestCase
             ['migrate', ['database/migrations/2026_11_16_000500_update_queue_statuses_and_remove_urgent_priority.php']]];
     }
 
+    public function test_operations_directory_is_explicitly_opted_in_without_changing_original_paths(): void
+    {
+        $target = $this->target();
+        $target['operations_migrations'] = ['2026_11_18_000100_create_notification_archives.php'];
+        $target['selected_migrations'][] = '2026_11_18_000100_create_notification_archives';
+        $paths = LocalMigrationProfile::paths($target);
+        $this->assertSame('database/operations/2026_11_18_000100_create_notification_archives.php', $paths[2]);
+        LocalMigrationProfile::assertSelection('migrate', $paths, $target);
+        $target['operations_migrations'] = ['unreviewed.php'];
+        $this->expectException(RuntimeException::class);
+        LocalMigrationProfile::paths($target);
+    }
+
     #[DataProvider('denied')]
     public function test_default_held_or_destructive_commands_are_refused(string $command, array $paths): void
     {

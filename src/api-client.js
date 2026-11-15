@@ -330,10 +330,14 @@ export function updateAssistantAnswer(id, payload) { return request(`/api/assist
 export function testAssistantAnswer(question) { return request('/api/assistant-answers/test', { method: 'POST', body: JSON.stringify({ question }) }) }
 
 // Identity-specific notifications from real server events (each person sees only their own).
-export function listNotifications(before) {
-  return request('/api/notifications' + (typeof before === 'string' && before ? `?before=${encodeURIComponent(before)}` : ''))
+export function listNotifications(before, collection = 'active') {
+  const query = new URLSearchParams()
+  if (typeof before === 'string' && before) query.set('before', before)
+  if (collection === 'archived') query.set('collection', 'archived')
+  return request('/api/notifications' + (query.size ? `?${query}` : ''))
 }
-export function readNotification(id, beforeDispatch) { return request(`/api/notifications/${encodeURIComponent(id)}/read`, { method: 'POST', body: '{}', beforeDispatch }) }
+export function readNotification(id, beforeDispatch, collection = 'active') { return request(`/api/notifications/${encodeURIComponent(id)}/read` + (collection === 'archived' ? '?collection=archived' : ''), { method: 'POST', body: '{}', beforeDispatch }) }
+export function archiveNotification(id, beforeDispatch) { return request(`/api/notifications/${encodeURIComponent(id)}/archive`, { method: 'POST', body: '{}', beforeDispatch }) }
 export function readAllNotifications(beforeDispatch) { return request('/api/notifications/read-all', { method: 'POST', body: '{}', beforeDispatch }) }
 
 // Patient booking helpers (read-only searches; the booking command is createAppointment).

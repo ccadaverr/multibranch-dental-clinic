@@ -22,6 +22,11 @@ class UserNotification extends Model
         return ['public_id'];
     }
 
+    public function archive(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(NotificationArchive::class, 'notification_id');
+    }
+
     protected function casts(): array
     {
         return ['created_at' => 'immutable_datetime', 'read_at' => 'immutable_datetime'];

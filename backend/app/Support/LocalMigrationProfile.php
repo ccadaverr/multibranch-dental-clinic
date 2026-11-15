@@ -21,7 +21,12 @@ final class LocalMigrationProfile
 
     public static function paths(array $target): array
     {
-        return array_map(fn ($name) => 'database/'.(str_ends_with($name, '_preserve_queue_state_vocabulary') ? 'compatibility/' : 'migrations/').$name.'.php', $target['selected_migrations']);
+        $extensions = $target['operations_migrations'] ?? [];
+        if (! in_array($extensions, [[], ['2026_11_18_000100_create_notification_archives.php']], true)) {
+            throw new RuntimeException('Unreviewed Operations migration selection.');
+        }
+
+        return array_map(fn ($name) => 'database/'.(in_array($name.'.php', $extensions, true) ? 'operations/' : (str_ends_with($name, '_preserve_queue_state_vocabulary') ? 'compatibility/' : 'migrations/')).$name.'.php', $target['selected_migrations']);
     }
 
     public static function assertSelection(string $command, array $paths, array $target): void

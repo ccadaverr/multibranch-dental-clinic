@@ -13,7 +13,7 @@ import { AuthShell } from './pages/AuthShell.jsx'
 import { PasswordField } from './pages/PasswordField.jsx'
 import { ClinicAssistant } from './assistant-panel.jsx'
 import { loadConversationSummary, sendPresence } from './messaging-api.js'
-import { listNotifications, readNotification, readAllNotifications } from './api-client.js'
+import { listNotifications, readNotification, readAllNotifications, archiveNotification } from './api-client.js'
 export { Brand } from './Brand.jsx'
 import { Brand } from './Brand.jsx'
 
@@ -123,20 +123,25 @@ export function serverNotificationSnapshot(result) {
       result.data.some(n => !n || typeof n.id !== 'string' || typeof n.read !== 'boolean' || typeof n.title !== 'string' || (n.body != null && typeof n.body !== 'string'))) {
     throw new Error('Notifications could not be loaded. Try again.')
   }
-  if (new Set(result.data.map(n => n.id)).size !== result.data.length || result.meta.unread < result.data.filter(n => !n.read).length) throw new Error('Notifications could not be loaded. Try again.')
+  if (new Set(result.data.map(n => n.id)).size !== result.data.length || result.meta.collection !== 'archived' && result.meta.unread < result.data.filter(n => !n.read).length) throw new Error('Notifications could not be loaded. Try again.')
   if (result.meta.has_more !== undefined && (typeof result.meta.has_more !== 'boolean' ||
     (result.meta.has_more ? !result.data.length || result.meta.next_before !== result.data.at(-1).id : result.meta.next_before !== null))) throw new Error('Notification history could not be matched. Retry notifications.')
-  return { items: result.data.map(n => ({ id: n.id, title: n.title, body: n.body, read: n.read, target: n.target, createdAt: n.created_at, channel: 'In-app' })), unread: result.meta.unread,
+  if (result.meta.collection !== undefined && (!['active', 'archived'].includes(result.meta.collection) || typeof result.meta.archive_available !== 'boolean' ||
+      result.data.some(n => typeof n.archived !== 'boolean' || n.archived !== (result.meta.collection === 'archived') || n.archived && (typeof n.archived_at !== 'string' || !Number.isFinite(Date.parse(n.archived_at)))))) throw new Error('Notification archive state could not be matched. Reload notifications.')
+  return { items: result.data.map(n => ({ id: n.id, title: n.title, body: n.body, read: n.read, archived: n.archived, archivedAt: n.archived_at, target: n.target, createdAt: n.created_at, channel: 'In-app' })), unread: result.meta.unread,
+    ...(result.meta.collection !== undefined ? { collection: result.meta.collection, archiveAvailable: result.meta.archive_available } : {}),
     ...(result.meta.has_more !== undefined ? { nextBefore: result.meta.next_before } : {}) }
 }
 
 // Render-keyed snapshots hide old-account data before effects run. Epoch objects also
 // reject A -> B -> A responses, and cleanup invalidates in-flight work on unmount.
 function useServerNotificationFeed(session, enabled = true, getAuthGeneration) {
+  const [collection, setCollection] = React.useState('active')
   const auth = getAuthGeneration?.()
   const key = notificationFeedKey(session, auth)
+  const scopeKey = JSON.stringify([key, collection])
   const epoch = React.useRef(null)
-  if (epoch.current?.key !== key) epoch.current = { key }
+  if (epoch.current?.key !== scopeKey) epoch.current = { key: scopeKey }
   const token = epoch.current
   const mounted = React.useRef(false)
   const generation = React.useRef(0)
@@ -144,7 +149,7 @@ function useServerNotificationFeed(session, enabled = true, getAuthGeneration) {
   const [snapshot, setSnapshot] = React.useState(null)
   const snapshotRef = React.useRef(null)
   snapshotRef.current = snapshot
-  const run = React.useCallback(async (operation = listNotifications, mutation = false, expectedRead = null, append = false) => {
+  const run = React.useCallback(async (operation = () => listNotifications(undefined, collection), mutation = false, expectedRead = null, append = false, expectedArchive = null) => {
     if (getAuthGeneration && (auth == null || auth !== getAuthGeneration())) return false
     if (!enabled || !session?.serverUserId || !session.active || pending.current === token || epoch.current !== token || !mounted.current) return false
     const requestId = ++generation.current
@@ -157,6 +162,9 @@ function useServerNotificationFeed(session, enabled = true, getAuthGeneration) {
       const result = await operation(owns)
       if (!mounted.current || epoch.current !== token || generation.current !== requestId || !owns()) return false
       const data = serverNotificationSnapshot(result)
+      if (data.collection !== undefined && data.collection !== collection) throw new Error('The notification collection changed. Reload notifications.')
+      if (expectedArchive && (result.meta?.archive_receipt?.id !== expectedArchive || result.meta.archive_receipt.archived !== true ||
+          typeof result.meta.archive_receipt.replayed !== 'boolean' || !Number.isFinite(Date.parse(result.meta.archive_receipt.archived_at)) || data.items.some(n => n.id === expectedArchive))) throw new Error('Archival could not be confirmed. Retry the same notification archive or reload its history.')
       if (expectedRead === '*' ? data.items.some(n=>!n.read) : expectedRead && result.meta?.read_id !== expectedRead && !data.items.some(n=>n.id===expectedRead&&n.read)) throw new Error('Read status could not be confirmed. Reload notifications before trying again.')
       if (append) {
         const ids = new Set(previousPage.items.map(n => n.id))
@@ -169,12 +177,13 @@ function useServerNotificationFeed(session, enabled = true, getAuthGeneration) {
       if (!mounted.current || epoch.current !== token || generation.current !== requestId) return false
       // Never show stale feed contents as a successful empty result after failure.
       setSnapshot(append ? { ...previousPage, loading: false, busy: false, historyError: error.message || 'Older notifications could not be loaded. Try again.' }
-        : { token, items: [], unread: null, loading: false, busy: false, error: error.message || 'Notifications are unavailable. Try again.' })
+        : { token, items: [], unread: null, archiveAvailable: previousPage?.archiveAvailable, failedArchive: expectedArchive,
+            loading: false, busy: false, error: error.message || 'Notifications are unavailable. Try again.' })
       return false
     } finally {
       if (pending.current === token && generation.current === requestId) pending.current = null
     }
-  }, [enabled, token, session?.serverUserId, session?.active, auth, getAuthGeneration])
+  }, [enabled, token, session?.serverUserId, session?.active, auth, getAuthGeneration, collection])
   useLayoutEffectSafe(() => {
     mounted.current = true
     run()
@@ -185,7 +194,10 @@ function useServerNotificationFeed(session, enabled = true, getAuthGeneration) {
     }
   }, [run, token])
   const current = !enabled || !session?.active ? { items: [], unread: null, loading: false, busy: false, error: 'Notifications are unavailable for this session.' } : snapshot?.token === token ? snapshot : { items: [], unread: null, loading: true, busy: false, error: '' }
-  return { ...current, key, refresh: () => run(), more: () => run(() => listNotifications(current.nextBefore), false, null, true), mark: id => run(guard => readNotification(id, guard), true, id), markAll: () => run(readAllNotifications, true, '*') }
+  return { ...current, key, collection, changeCollection: value => { if (['active','archived'].includes(value)) setCollection(value) }, refresh: () => run(),
+    more: () => run(() => listNotifications(current.nextBefore, collection), false, null, true),
+    archive: id => run(guard => archiveNotification(id, guard), true, null, false, id),
+    mark: id => run(guard => readNotification(id, guard, collection), true, id), markAll: () => run(readAllNotifications, true, '*') }
 }
 
 export function NotificationPanel(props) {
@@ -250,13 +262,15 @@ function NotificationPanelContent({role,store,onClose,setPage,serverFeed}){
   const updating=busy||(server&&feed.busy)
   return <Modal open title="Notifications" subtitle={server?'Your updates and notification history':'Your updates and reminders'} onClose={onClose} className="notification-dialog a12-notifications"><div className="notification-popover">
     <div className="notification-summary"><span>{unread===null?'Unread count unavailable':unread?`${unread} unread`:'No unread updates'}</span><span role="status">{loading?'Loading notifications…':updating?'Updating read status…':feedError?'Notifications unavailable':`Showing ${visible.length} of ${items.length}${server?' recent records':''}`}</span></div>
-    <div className="notification-toolbar"><button type="button" onClick={()=>perform(()=>server?feed.markAll():actions.markAllNotificationsRead())} disabled={updating||loading||!!feedError||!unread}>Mark my notifications read</button><button type="button" disabled={loading||!!feedError} aria-pressed={all} onClick={()=>setAll(v=>!v)}>{all?'Recent only':server?`Show loaded history (${items.length})`:`View all (${items.length})`}</button></div>
+    <div className="notification-toolbar"><button type="button" onClick={()=>perform(()=>server?feed.markAll():actions.markAllNotificationsRead())} disabled={updating||loading||!!feedError||!unread||feed.collection==='archived'}>Mark my notifications read</button><button type="button" disabled={loading||!!feedError} aria-pressed={all} onClick={()=>setAll(v=>!v)}>{all?'Recent only':server?`Show loaded history (${items.length})`:`View all (${items.length})`}</button></div>
+    {server&&feedCurrent&&feed.archiveAvailable&&<div className="notification-toolbar" aria-label="Notification collection"><button type="button" disabled={updating||loading} aria-pressed={feed.collection==='active'} onClick={()=>{setFailure('');feed.changeCollection('active')}}>Inbox</button><button type="button" disabled={updating||loading} aria-pressed={feed.collection==='archived'} onClick={()=>{setFailure('');setAll(true);feed.changeCollection('archived')}}>Archived notifications</button></div>}
     {server&&<p>History loads 50 records at a time. The unread count includes older notifications.</p>}
     {feedError&&<p className="notification-failure" role="alert" tabIndex={0}>{feedError} <button type="button" onClick={()=>{setFailure('');feed.refresh()}}>Retry notifications</button></p>}
-    {!feedError&&failure&&<p className="notification-failure" role="alert" tabIndex={0}><b>Read status wasn’t updated.</b> {failure}</p>}
+    {feedError&&feed.failedArchive&&<div className="notification-toolbar"><button type="button" disabled={updating||loading} onClick={()=>feed.archive(feed.failedArchive)}>Retry archive</button></div>}
+    {!feedError&&failure&&<p className="notification-failure" role="alert" tabIndex={0}><b>Notification change wasn’t confirmed.</b> {failure}</p>}
     <div ref={scrollRegion} className="notification-scroll" role="region" aria-label={server?'Recent notification history':'Notification history'} tabIndex={0} aria-busy={loading||updating}>{loading?<p role="status">Loading notifications…</p>:feedError?null:visible.length?dateGroups.map(group=><section key={group.key}>
       <h3 className="notification-date-heading">{group.label}</h3>
-      <ul className="notification-list">{group.items.map(n=><li className={`notification-row ${n.read?'':'unread'}`} key={n.id}><span className="notification-dot" aria-hidden="true"/><div><b>{!n.read&&<><span className="sr-only">Unread: </span><span className="notification-unread-label" aria-hidden="true">Unread</span></>}{n.title}</b><p>{n.body}</p><small>{n.createdAt||'Date unavailable'} • {n.legacy?'Historical demo record':n.channel}</small><div className="row-actions">{!n.read&&<button type="button" disabled={updating} onClick={()=>mark(n.id)}>Mark read</button>}{destination(n)&&<button type="button" className="notification-view" disabled={updating} onClick={()=>open(n)}>View update</button>}</div></div></li>)}</ul>
+      <ul className="notification-list">{group.items.map(n=><li className={`notification-row ${n.read?'':'unread'}`} key={n.id}><span className="notification-dot" aria-hidden="true"/><div><b>{!n.read&&<><span className="sr-only">Unread: </span><span className="notification-unread-label" aria-hidden="true">Unread</span></>}{n.title}</b><p>{n.body}</p><small>{n.createdAt||'Date unavailable'} • {n.legacy?'Historical demo record':n.channel}{n.archived&&` • Archived ${n.archivedAt}`}</small><div className="row-actions">{!n.read&&<button type="button" disabled={updating} onClick={()=>mark(n.id)}>Mark read</button>}{server&&feed.archiveAvailable&&feed.collection==='active'&&<button type="button" disabled={updating} aria-label={`Archive ${n.title}`} onClick={()=>perform(()=>feed.archive(n.id))}>Archive</button>}{destination(n)&&<button type="button" className="notification-view" disabled={updating} onClick={()=>open(n)}>View update</button>}</div></div></li>)}</ul>
     </section>):<div className="notification-empty"><Icon name="bell" size={28}/><b>{server?'No recent notifications.':"You're all caught up."}</b><p>{server?'No records were returned for your account.':'No updates to show in this workspace.'}</p></div>}</div>
     {server&&feedCurrent&&!feedError&&feed.nextBefore&&<div className="notification-toolbar"><button type="button" disabled={updating||loading} onClick={async()=>{setAll(true);await perform(()=>feed.more())}}>Load older notifications</button></div>}
     {server&&feedCurrent&&feed.historyError&&<p role="alert" className="notification-failure">{feed.historyError}</p>}

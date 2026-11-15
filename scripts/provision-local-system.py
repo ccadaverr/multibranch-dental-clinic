@@ -39,7 +39,7 @@ def validate(runtime, port, php, pg_bin):
     return runtime.resolve()
 
 
-def provision(runtime, port, php, pg_bin):
+def provision(runtime, port, php, pg_bin, operations=False):
     runtime = validate(runtime, port, php, pg_bin)
     os.umask(0o077)
     runtime.mkdir(mode=0o700, parents=True)
@@ -57,6 +57,8 @@ def provision(runtime, port, php, pg_bin):
     files = sorted((ROOT / 'backend/database/migrations').glob('*.php')) + sorted((ROOT / 'backend/database/compatibility').glob('*.php'))
     if len(files) != 87 or not local.HELD <= {f.name for f in files}:
         raise ValueError('Migration inventory changed; review the preservation profile first.')
+    extensions = local.OPERATIONS_MIGRATIONS if operations else []
+    files += [ROOT / 'backend/database/operations' / name for name in extensions]
     manifest = runtime / 'target.json'
     state = {'root': str(ROOT), 'runtime': str(runtime), 'host': '127.0.0.1', 'port': port,
              'data_directory': str(runtime / 'postgres'), 'user': 'dentalops_dev', 'app_user': 'dentalops_app',
@@ -64,6 +66,7 @@ def provision(runtime, port, php, pg_bin):
              'cluster_id': secrets.token_hex(16), 'php': str(php), 'pg_bin': str(pg_bin),
              'migration_hashes': {f.name: hashlib.sha256(f.read_bytes()).hexdigest() for f in files},
              'selected_migrations': [f.stem for f in files if f.name not in local.HELD]}
+    state['operations_migrations'] = extensions
     private('target.json', json.dumps(state, indent=2) + '\n')
     for profile in ['demo', 'test']:
         cache = runtime / 'cache' / profile
@@ -125,8 +128,9 @@ def main():
     parser.add_argument('--port', required=True, type=int)
     parser.add_argument('--php', required=True, type=Path)
     parser.add_argument('--pg-bin', required=True, type=Path)
+    parser.add_argument('--operations', action='store_true', help='Opt into the reviewed additive Operations archive extension on this NEW private cluster.')
     args = parser.parse_args()
-    provision(args.runtime, args.port, args.php.expanduser().resolve(), args.pg_bin.expanduser().resolve())
+    provision(args.runtime, args.port, args.php.expanduser().resolve(), args.pg_bin.expanduser().resolve(), args.operations)
 
 
 if __name__ == '__main__':

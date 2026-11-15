@@ -51,11 +51,24 @@ test('notification history accepts only a cursor matching the last returned row'
   for (const meta of [{ unread: 0, has_more: true, next_before: 'other' }, { unread: 0, has_more: false, next_before: 'n1' }, { unread: 0, has_more: 'yes' }]) assert.throws(() => serverNotificationSnapshot({ ...page, meta }))
 })
 
+test('archived notifications retain unread history separately from the active inbox total', () => {
+  const row = { id: 'archived-1', title: 'Synthetic archive', read: false, archived: true, archived_at: '2026-11-15T12:00:00+08:00' }
+  const result = { ok: true, data: [row], meta: { unread: 0, collection: 'archived', archive_available: true, has_more: false, next_before: null } }
+  const parsed = serverNotificationSnapshot(result)
+  assert.equal(parsed.items[0].read, false)
+  assert.equal(parsed.items[0].archived, true)
+  assert.equal(parsed.archiveAvailable, true)
+  assert.equal(parsed.unread, 0)
+  assert.throws(() => serverNotificationSnapshot({ ...result, meta: { ...result.meta, collection: 'active' } }))
+  assert.throws(() => serverNotificationSnapshot({ ...result, data: [{ ...row, archived_at: 'invalid' }] }))
+  assert.throws(() => serverNotificationSnapshot({ ...result, data: [{ ...row, archived: false }] }))
+})
+
 test('NOTIF-01 source guards retain race invalidation and awaited authoritative reads', () => {
   const source = readFileSync('src/layout.jsx', 'utf8')
   assert.match(source, /epoch.current !== token \|\| generation.current !== requestId/)
   assert.match(source, /generation.current \+= 1/)
-  assert.match(source, /readNotification\(id, guard\)/)
+  assert.match(source, /readNotification\(id, guard, collection\)/)
   assert.match(source, /run\(readAllNotifications, true, '\*'\)/)
   assert.match(source, /!await mark\(n.id\)/)
   assert.match(source, /latest.current.key!==key/)

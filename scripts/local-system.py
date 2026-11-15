@@ -19,6 +19,7 @@ HELD = {
     '2026_11_15_000500_add_critical_foreign_key_and_analytics_indexes.php',
     '2026_11_16_000500_update_queue_statuses_and_remove_urgent_priority.php',
 }
+OPERATIONS_MIGRATIONS = ['2026_11_18_000100_create_notification_archives.php']
 
 def target(path):
     p = Path(path)
@@ -70,6 +71,10 @@ def environment(c, runtime, profile, migrator=False):
 def migrations(c):
     files = sorted((ROOT / 'backend/database/migrations').glob('*.php'))
     files += sorted((ROOT / 'backend/database/compatibility').glob('*.php'))
+    extensions = c.get('operations_migrations', [])
+    if extensions not in [[], OPERATIONS_MIGRATIONS]:
+        raise ValueError('Unreviewed Operations migration selection.')
+    files += [ROOT / 'backend/database/operations' / name for name in extensions]
     observed = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in files}
     if observed != c['migration_hashes']:
         raise ValueError('Migration sources changed; review a new schema profile before executing it.')
@@ -94,6 +99,7 @@ def clone_test(c, runtime):
     clone.mkdir(mode=0o700)
     for name in ['sockets', 'logs', 'backups', 'cache', 'env']:
         (clone / name).mkdir(mode=0o700)
+    (clone / 'cache/test').mkdir(mode=0o700)
     with socket.socket() as sock:
         sock.bind(('127.0.0.1', 0))
         port = sock.getsockname()[1]
@@ -133,7 +139,7 @@ def main():
     parser.add_argument('--target', required=True, help='Private manifest for a newly provisioned, owned local cluster')
     parser.add_argument('--profile', choices=['demo', 'test'], default='demo')
     parser.add_argument('--filter', help='Optional PHPUnit test-name filter; explicit reviewed files remain required')
-    parser.add_argument('action', choices=['status', 'start', 'stop', 'backup', 'migrate', 'seed', 'seed-demo', 'visit-fixture', 'test', 'clone-test', 'concurrency', 'billing-concurrency', 'prescription-concurrency', 'verify-schema', 'verify-guard', 'serve', 'ui', 'mailbox', 'worker', 'scheduler'])
+    parser.add_argument('action', choices=['status', 'start', 'stop', 'backup', 'migrate', 'seed', 'seed-demo', 'visit-fixture', 'test', 'clone-test', 'concurrency', 'billing-concurrency', 'prescription-concurrency', 'operations-contention', 'verify-schema', 'verify-guard', 'serve', 'ui', 'mailbox', 'worker', 'scheduler'])
     parser.add_argument('tests', nargs='*')
     args = parser.parse_args()
     c, runtime = target(args.target)
@@ -149,7 +155,7 @@ def main():
     selected = migrations(c) if args.action != 'backup' else []
     # Separate profiles may run independently. One profile never runs overlapping suites or schema/seed work.
     lock = None
-    if args.action in ['migrate', 'seed', 'seed-demo', 'visit-fixture', 'test', 'clone-test', 'concurrency', 'billing-concurrency', 'prescription-concurrency', 'verify-schema', 'verify-guard', 'backup']:
+    if args.action in ['migrate', 'seed', 'seed-demo', 'visit-fixture', 'test', 'clone-test', 'concurrency', 'billing-concurrency', 'prescription-concurrency', 'operations-contention', 'verify-schema', 'verify-guard', 'backup']:
         lock = open(runtime / (database + '.lock'), 'a')
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -199,7 +205,11 @@ def main():
         seeder = 'DemoClinicSeeder' if args.action == 'seed-demo' else 'DatabaseSeeder'
         subprocess.run([c['php'], 'artisan', 'db:seed', '--class=' + seeder, '--force', '--no-interaction'],
                        cwd=ROOT / 'backend', env=environment(c, runtime, args.profile), check=True)
-    elif args.action in ['test', 'verify-schema', 'verify-guard', 'concurrency', 'billing-concurrency', 'prescription-concurrency']:
+    elif args.action in ['test', 'verify-schema', 'verify-guard', 'concurrency', 'billing-concurrency', 'prescription-concurrency', 'operations-contention']:
+        if args.action == 'operations-contention':
+            if not runtime.name.startswith('contention-') or c.get('operations_migrations') != OPERATIONS_MIGRATIONS:
+                raise ValueError('Operations contention requires a fresh Operations clone-test target.')
+            args.tests = ['tests/Feature/Staffing/OperationsContentionTest.php']
         if args.action == 'verify-schema':
             args.tests = ['tests/Feature/Queue/PreservationMigrationTest.php']
         if args.action == 'verify-guard':
@@ -233,6 +243,8 @@ def main():
             test_env['BILLING_DISPOSABLE_POSTGRES_ACCEPTANCE'] = '1'
         if args.action == 'prescription-concurrency':
             test_env['PRESCRIPTION_DISPOSABLE_POSTGRES_ACCEPTANCE'] = '1'
+        if args.action == 'operations-contention':
+            test_env['OPERATIONS_DISPOSABLE_POSTGRES_ACCEPTANCE'] = '1'
         subprocess.run([c['php'], 'vendor/bin/phpunit', '-c', 'phpunit.xml', '--bootstrap', 'tests/Support/IsolatedTestBootstrap.php',
                         '--cache-directory', str(runtime / 'cache/phpunit'), *(['--filter', args.filter] if args.filter else []), *args.tests],
                        cwd=ROOT / 'backend', env=test_env, check=True)
