@@ -41,7 +41,14 @@ test('NOTIF-01 server initial rendering shows loading, never local-demo content 
   const html = renderToStaticMarkup(React.createElement(NotificationPanel, { role: 'staff', store: { state: { ...state, notifications: [{ id: 'demo-secret', title: 'LOCAL DEMO TITLE', recipientUserId: 'u1', branchId: 'b1' }] }, session, actions: {}, toast() {} }, onClose() {}, setPage() {} }))
   assert.match(html, /Loading notifications/)
   assert.doesNotMatch(html, /LOCAL DEMO TITLE|No recent notifications\./)
-  assert.match(html, /limited to 50 records/)
+  assert.match(html, /50 records at a time/)
+})
+
+test('notification history accepts only a cursor matching the last returned row', () => {
+  const page = { ok: true, data: [{ id: 'n1', title: 'Synthetic', read: true }], meta: { unread: 0, has_more: true, next_before: 'n1' } }
+  assert.equal(serverNotificationSnapshot(page).nextBefore, 'n1')
+  assert.equal(serverNotificationSnapshot({ ...page, meta: { unread: 0, has_more: false, next_before: null } }).nextBefore, null)
+  for (const meta of [{ unread: 0, has_more: true, next_before: 'other' }, { unread: 0, has_more: false, next_before: 'n1' }, { unread: 0, has_more: 'yes' }]) assert.throws(() => serverNotificationSnapshot({ ...page, meta }))
 })
 
 test('NOTIF-01 source guards retain race invalidation and awaited authoritative reads', () => {

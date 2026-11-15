@@ -330,7 +330,9 @@ export function updateAssistantAnswer(id, payload) { return request(`/api/assist
 export function testAssistantAnswer(question) { return request('/api/assistant-answers/test', { method: 'POST', body: JSON.stringify({ question }) }) }
 
 // Identity-specific notifications from real server events (each person sees only their own).
-export function listNotifications() { return request('/api/notifications') }
+export function listNotifications(before) {
+  return request('/api/notifications' + (typeof before === 'string' && before ? `?before=${encodeURIComponent(before)}` : ''))
+}
 export function readNotification(id, beforeDispatch) { return request(`/api/notifications/${encodeURIComponent(id)}/read`, { method: 'POST', body: '{}', beforeDispatch }) }
 export function readAllNotifications(beforeDispatch) { return request('/api/notifications/read-all', { method: 'POST', body: '{}', beforeDispatch }) }
 
