@@ -76,6 +76,15 @@ try{
  await fresh.p.getByRole('alert').filter({hasText:'Leave requests could not be loaded.'}).waitFor()
  await fresh.p.getByRole('button',{name:'Refresh leave requests',exact:true}).click()
  await fresh.p.locator('.st-leave').filter({hasText:note}).waitFor()
- for(const width of [375,390,430,768,1024,1440]){await p.setViewportSize({width,height:900});assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'Leave recovery fits '+width)}
+ await fresh.p.getByLabel('Leave from',{exact:true}).fill(date);await fresh.p.getByLabel('Leave through',{exact:true}).fill(date)
+ await fresh.p.locator('.st-leave').filter({hasText:note}).waitFor()
+ const later=new Date(date+'T00:00:00Z');later.setUTCDate(later.getUTCDate()+1)
+ await fresh.p.getByLabel('Leave from',{exact:true}).fill(later.toISOString().slice(0,10))
+ await fresh.p.getByRole('alert').filter({hasText:'Leave through date must not be before the from date.'}).waitFor()
+ assert.equal(await fresh.p.locator('.st-leave').count(),0,'Invalid date range cannot expose obsolete rows')
+ await fresh.p.getByLabel('Leave from',{exact:true}).fill(date);await fresh.p.locator('.st-leave').filter({hasText:note}).waitFor()
+ for(const width of [375,390,430,768,1024,1440]){
+  for(const page of [p,fresh.p]){await page.setViewportSize({width,height:900});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'Leave recovery and review fit '+width)}
+ }
  console.log(JSON.stringify({postgresBrowser:true,partialDay:true,createReplay:true,decisionReplay:true,cancellationReplay:true,staleRevisionPreserved:true,explicitReview:true,newSessionReadback:true,obsoleteFilterIgnored:true,failedListRecovered:true,keyboard:true,widths:[375,390,430,768,1024,1440]}))
 }finally{for(const c of contexts)await c.close();await browser.close()}

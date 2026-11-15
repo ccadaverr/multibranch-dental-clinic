@@ -476,7 +476,7 @@ function LeaveSession({ store, role }) {
       text="Vacation, sick and other leave. Approved leave of a dentist removes their time from booking at once; approving never cancels an appointment. Leave balances are not tracked."/>
     <TeamStrip key={tick}/>
     {requester && <MyLeave toast={toast} onChanged={changed} getAuthGeneration={store?.getAuthGeneration}/>}
-    {role !== 'dentist' && <Approvals toast={toast} role={role} onChanged={changed} getAuthGeneration={store?.getAuthGeneration} branches={(store?.state?.branches || []).filter(b => b.status !== 'Closed')}/>}
+    {role !== 'dentist' && <Approvals toast={toast} role={role} onChanged={changed} getAuthGeneration={store?.getAuthGeneration} branches={store?.state?.branches || []}/>}
   </div>
 }
 
@@ -597,13 +597,14 @@ function MyLeave({ toast, onChanged, getAuthGeneration }) {
 }
 
 function Approvals({ toast, role, branches, onChanged, getAuthGeneration }) {
-  const [rows,setRows]=useState(null),[meta,setMeta]=useState({}),[denied,setDenied]=useState(false),[filters,setFilters]=useState({status:'Pending',branch_ref:''})
+  const [rows,setRows]=useState(null),[meta,setMeta]=useState({}),[denied,setDenied]=useState(false),[filters,setFilters]=useState({status:'Pending',branch_ref:'',from:'',to:''})
   const [open,setOpen]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState(''),[held,setHeld]=useState(false)
   const live=useRef(false),generation=useRef(0),currentKey=useRef(''),pendingIds=useRef(new Set())
   const key=JSON.stringify(filters);currentKey.current=key
   const setRowPending=React.useCallback((id,value)=>{value?pendingIds.current.add(id):pendingIds.current.delete(id);setHeld(pendingIds.current.size>0)},[])
   const load=async()=>{
     if(!live.current||pendingIds.current.size)return
+    if(filters.from&&filters.to&&filters.from>filters.to){generation.current++;setRows(null);setLoading(false);setError('Leave through date must not be before the from date.');return}
     const ticket=++generation.current,auth=getAuthGeneration?.(),capturedKey=key
     const owns=()=>live.current&&ticket===generation.current&&capturedKey===currentKey.current&&(!getAuthGeneration||(auth!=null&&auth===getAuthGeneration()))
     setLoading(true);setError('')
@@ -620,12 +621,15 @@ function Approvals({ toast, role, branches, onChanged, getAuthGeneration }) {
   useEffect(()=>{setRows(null);setOpen(null);load();return()=>{generation.current++}},[key])
   if(denied)return <Notice title="Leave approvals unavailable">Your current account cannot inspect these leave requests. Refresh your session before trying again.</Notice>
   return <Card title={role === 'owner' ? 'Leave requests' : 'Leave requests to decide'} subtitle={meta.approver === 'owner_or_front_desk' ? 'Decided by the Owner or the front desk of the requester’s branch.' : 'Decided by the Owner.'}>
-    <FilterBar className="st-filters" ariaLabel="Filter leave requests" onClear={!held && (filters.status !== 'Pending' || filters.branch_ref) ? () => setFilters({ status: 'Pending', branch_ref: '' }) : null}>
+    <FilterBar className="st-filters" ariaLabel="Filter leave requests" onClear={!held && (filters.status !== 'Pending' || filters.branch_ref || filters.from || filters.to) ? () => setFilters({ status: 'Pending', branch_ref: '', from: '', to: '' }) : null}>
       <Field label="Status"><select aria-label="Leave status" disabled={held} value={filters.status} onChange={e => setFilters(x => ({ ...x, status: e.target.value }))}><option value="">All</option>{['Pending', 'Approved', 'Declined', 'Cancelled'].map(s => <option key={s}>{s}</option>)}</select></Field>
-      <Field label="Branch"><select aria-label="Leave branch" disabled={held} value={filters.branch_ref} onChange={e => setFilters(x => ({ ...x, branch_ref: e.target.value }))}><option value="">All branches</option>{branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>
+      <Field label="Branch"><select aria-label="Leave branch" disabled={held} value={filters.branch_ref} onChange={e => setFilters(x => ({ ...x, branch_ref: e.target.value }))}><option value="">All branches</option>{branches.map(b => <option key={b.id} value={b.id}>{b.name}{b.status==='Closed'?' (Closed)':''}</option>)}</select></Field>
+      <Field label="Leave from"><input type="date" value={filters.from} disabled={held} onChange={e=>setFilters(x=>({...x,from:e.target.value}))}/></Field>
+      <Field label="Leave through"><input type="date" value={filters.to} disabled={held} onChange={e=>setFilters(x=>({...x,to:e.target.value}))}/></Field>
     </FilterBar>
     {error && <p role="alert">{error}</p>}
     <Button variant="ghost" onClick={load} disabled={held||loading}>Refresh leave requests</Button>
+    {meta.has_more&&!loading&&!error&&<Notice>More authorized requests match these filters. Showing the first {meta.limit||300}; narrow the status, branch or dates to review the rest.</Notice>}
     {loading ? <p role="status">Loading leave requests...</p> : !rows ? <p className="au-muted">Leave requests are unavailable.</p> : !rows.length ? <p className="au-muted">No requests here.</p> : <ul className="fd-list">{rows.map(l => <LeaveRow key={l.id} l={l} role={role} open={open === l.id} onToggle={() => setOpen(open === l.id ? null : l.id)} toast={toast} wordingApproved={meta.wording_approved} getAuthGeneration={getAuthGeneration} onPending={setRowPending} commandsAvailable={meta.commands_available===true}
       onChanged={decided => { if (decided && filters.status && decided !== filters.status) { setOpen(l.id); setFilters(x => ({ ...x, status: '' })) } else load() }}/>)}</ul>}
   </Card>

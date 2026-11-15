@@ -97,15 +97,24 @@ class LeaveController extends Controller
         $data = $request->validate(['status' => ['nullable', 'in:Pending,Approved,Declined,Cancelled'], 'branch_ref' => ['nullable', 'string', 'max:50'],
             'from' => ['nullable', 'date_format:Y-m-d'], 'to' => ['nullable', 'date_format:Y-m-d']]);
         abort_unless($this->isApproverRole($user), 403, 'Only the leave approvers see this list.');
+        if(!empty($data['from'])&&!empty($data['to'])&&$data['from']>$data['to']) throw ValidationException::withMessages(['to'=>['The end date must not be before the start date.']]);
         $q = LeaveRequest::with(['requester.person', 'decider.person', 'dentist.person', 'dentist.branches', 'staffProfile.branch'])->orderBy('starts_at')
             ->when($data['status'] ?? null, fn ($q, $s) => $q->where('status', $s))
             ->when($data['from'] ?? null, fn ($q, $d) => $q->where('ends_at', '>', SchedulingService::ts(ClinicClock::at($d, '00:00'))))
             ->when($data['to'] ?? null, fn ($q, $d) => $q->where('starts_at', '<', SchedulingService::ts(ClinicClock::at($d, '00:00')->addDay())));
-        $rows = $q->limit(300)->get()->filter(fn (LeaveRequest $l) => $this->canDecide($user, $l))
-            ->filter(fn (LeaveRequest $l) => empty($data['branch_ref']) || in_array($data['branch_ref'], $this->branchRefs($l), true))->values();
+        // Scope BEFORE bounding rows: another branch's early requests cannot crowd this actor's work out.
+        $q->where('requester_user_id','!=',$user->id);
+        if($user->role->value==='staff') $this->scopeBranches($q,UserBranchScope::where('user_id',$user->id)->pluck('branch_id')->all());
+        if(!empty($data['branch_ref'])){
+            $branchId=\App\Models\Branch::where('legacy_ref',$data['branch_ref'])->value('id');
+            if(!$branchId)throw ValidationException::withMessages(['branch_ref'=>['Choose an existing branch.']]);
+            $this->scopeBranches($q,[$branchId]);
+        }
+        $page=$q->orderBy('id')->limit(301)->get();
+        $rows=$page->take(300)->filter(fn(LeaveRequest $l)=>$this->canDecide($user,$l))->values();
 
         return response()->json(['data' => $rows->map(fn (LeaveRequest $l) => $this->view($l, $user))->values(), 'meta' => ['types' => LeaveRequest::TYPES,
-            'approver' => AutomationCatalog::setting('staffing')?->settings['leave_approver'] ?? 'owner', 'wording_approved' => MessageTemplates::approved(ScheduleNotices::TEMPLATE), 'commands_available'=>LeaveCommands::available()]]);
+            'approver' => AutomationCatalog::setting('staffing')?->settings['leave_approver'] ?? 'owner', 'wording_approved' => MessageTemplates::approved(ScheduleNotices::TEMPLATE), 'commands_available'=>LeaveCommands::available(), 'has_more'=>$page->count()>300, 'limit'=>300]]);
     }
 
     /** Team calendar strip: who is away (approved) or asked to be (pending) in a date range. Names and dates only. */
@@ -241,6 +250,23 @@ class LeaveController extends Controller
     private function branchRefs(LeaveRequest $l): array
     {
         return \App\Models\Branch::whereIn('id', $this->branchIds($l))->pluck('legacy_ref')->all();
+    }
+
+    /** SQL equivalent of branchIds priority: Dentist assignments, else Staff assignment, else account scopes. */
+    private function scopeBranches(\Illuminate\Database\Eloquent\Builder $query,array $ids): void
+    {
+        $query->where(function($q)use($ids){
+            $q->whereHas('dentist.branches',fn($branches)=>$branches->whereIn('branches.id',$ids))
+              ->orWhere(function($fallback)use($ids){
+                  $fallback->whereDoesntHave('dentist')->where(function($staff)use($ids){
+                      $staff->whereHas('staffProfile',fn($profile)=>$profile->whereIn('branch_id',$ids))
+                        ->orWhere(function($unassigned)use($ids){
+                            $unassigned->where(fn($none)=>$none->whereDoesntHave('staffProfile')->orWhereHas('staffProfile',fn($profile)=>$profile->whereNull('branch_id')))
+                              ->whereIn('requester_user_id',UserBranchScope::select('user_id')->whereIn('branch_id',$ids));
+                        });
+                  });
+              });
+        });
     }
 
     private function canDecide(User $user, LeaveRequest $l): bool

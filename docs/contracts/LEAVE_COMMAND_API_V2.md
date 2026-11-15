@@ -13,6 +13,8 @@ Supersedes the missing revision/replay portions of `LEAVE_AUTHORITY_RECOVERY_V1.
 
 Existing leave rows now include integer `revision`: imported existing rows start at1, creation1, each successful approve/decline/cancel increments once. States remain Pending/Approved/Declined/Cancelled. Lifecycle revision excludes the separate existing patient-notify timestamp; that clinical notice action and its contract are untouched.
 
+Batch07 collection correction: `GET /api/leave` applies current approver/self/branch scope and requested branch **before** the300-row bound, retaining existing branch priority (Dentist assignments, else Staff assignment, else account-scope fallback). Ordering is start time then ID. Extra `meta.has_more`/`meta.limit:300` identifies truncation; the UI exposes existing optional `from`/`to` inclusive Manila day-overlap filters, status and branch, including closed-branch historical reads. Unknown/numeric branch substitution and reversed date ranges return422. This does not expand approver rights or introduce an offset cursor. Soft-archived requester scope/history is retained.
+
 Response `{data:<exact existing leave DTO plus revision>,meta:{operation_id,replayed}}`. Decision DTO still includes the existing affected appointments list. Dates/times retain the original Asia/Manila interval representation and encrypted private note visibility. GET collections/exact read expose `meta.commands_available`; absent optional schema means false and null/unavailable revision, never fabricated authority. Writes then return503 `leave_recovery_unavailable`. UI is read-only until capability is available.
 
 ## Concurrency and recovery
