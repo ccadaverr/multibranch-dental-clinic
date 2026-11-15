@@ -25,22 +25,25 @@ class UserBranchScopeController extends Controller
 
     public function update(SetBranchScopesRequest $request, User $user): JsonResponse
     {
-        if ($user->role !== Role::Staff) {
-            throw ValidationException::withMessages(['user' => 'Branch authorization scopes apply to Staff accounts only.']);
-        }
         $branchIds = Branch::whereIn('legacy_ref', $request->validated('branch_refs'))->pluck('id')->all();
 
-        DB::transaction(function () use ($user, $branchIds) {
-            // Serialize concurrent replacements for the same account.
-            User::whereKey($user->id)->lockForUpdate()->first();
+        return DB::transaction(function () use ($request, $user, $branchIds) {
+            // Keep the current Owner authority stable while waiting for the target account.
+            // Middleware and route-bound models may predate concurrent account revocation.
+            $actor = User::whereKey($request->user()->id)->lockForUpdate()->first();
+            abort_unless($actor && $actor->role === Role::Owner && $actor->account_status === 'Active'
+                && $actor->auth_version === $request->user()->auth_version, 403);
+            $current = User::whereKey($user->id)->lockForUpdate()->firstOrFail();
+            if ($current->role !== Role::Staff) {
+                throw ValidationException::withMessages(['user' => 'Branch authorization scopes apply to Staff accounts only.']);
+            }
             UserBranchScope::where('user_id', $user->id)->whereNotIn('branch_id', $branchIds ?: [0])->delete();
             foreach ($branchIds as $branchId) {
                 UserBranchScope::firstOrCreate(['user_id' => $user->id, 'branch_id' => $branchId]);
             }
-            app(\App\Services\Audit\AuditService::class)->recordAdministrative('account.branch_scopes_changed', auth()->user(), $user, ['branch_refs' => Branch::whereIn('id', $branchIds)->pluck('legacy_ref')->all()]);
+            app(\App\Services\Audit\AuditService::class)->recordAdministrative('account.branch_scopes_changed', $actor, $current, ['branch_refs' => Branch::whereIn('id', $branchIds)->pluck('legacy_ref')->all()]);
+            return $this->scopes($current);
         });
-
-        return $this->scopes($user);
     }
 
     private function scopes(User $user): JsonResponse

@@ -203,14 +203,15 @@ function AuditLifetime({ store }) {
             },
           ]}
           count={logs.length}
-          onReset={() => {
+          onReset={search || category !== 'all' || severity !== 'all' || branchId || dateFrom || dateTo || action ? () => {
             setSearch('')
             setCategory('all')
             setSeverity('all')
             setBranchId('')
             setDateFrom('')
             setDateTo('')
-          }}
+            setAction('')
+          } : null}
         />
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginTop: '12px', flexWrap: 'wrap', paddingTop: '10px', borderTop: '1px solid var(--line)' }}>
           <label style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>

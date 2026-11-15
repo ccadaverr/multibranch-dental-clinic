@@ -6,7 +6,7 @@ import React, { useMemo, useRef, useState } from 'react'
 import { ROLE_INFO } from '../data.js'
 import { eventModuleLabel, ruleTargetLabel } from '../module-map.js'
 import { LOYALTY_PROGRAM, canManageLoyalty, ledgerIssue } from '../loyalty.js'
-import { Button, Card, ConfirmDialog, Field, FilterBar, Modal, Notice, PageHeader, Progress, StatCard, Status, Table, Tabs } from '../components.jsx'
+import { Button, Card, ConfirmDialog, Field, FilterBar, Modal, Notice, PageHeader, Progress, RefreshButton, StatCard, Status, Table, Tabs } from '../components.jsx'
 import { clinicDate } from '../clock.js'
 import { branchCapacity, dateLabel, dentistName, makeCsv, patientName, peso, uid } from '../logic.js'
 import { syncBranchUpdate, syncBranchServiceToggle, syncPersonnelUpdate } from '../reference-data-bridge.js'
@@ -411,7 +411,7 @@ export function TeamPage({ store }) {
   }
 
   return <>
-    <PageHeader title="Dentist & Staff Management" text="Personnel records are linked to account access. This screen manages Staff and Dentist profiles, operational shifts, branch assignments, and availability used by scheduling and capacity workflows." aside={<Button variant="soft" disabled={currentDuty?.loading} onClick={loadDuty}>{currentDuty?.loading?'Loading duty…':'Refresh duty'}</Button>}/>
+    <PageHeader title="Dentist & Staff Management" text="Personnel records are linked to account access. This screen manages Staff and Dentist profiles, operational shifts, branch assignments, and availability used by scheduling and capacity workflows." aside={<RefreshButton ariaLabel="Refresh duty" title="Refresh duty" loading={!!currentDuty?.loading} onClick={loadDuty}/>}/>
     {currentDuty?.error&&<p role="alert">{currentDuty.error}</p>}
     <Notice tone="info" title="Account & personnel synchronization">Create the account first in <b>Access & Roles</b>. Dentist and staff accounts automatically receive a linked personnel profile here. <b>Active</b> comes from the account; <b>Available</b> reflects operational scheduling status.</Notice>
     <Tabs tabs={[{key:'dentists',label:'Dentists',count:state.dentists.length},{key:'staff',label:'Staff',count:state.staff.length}]} active={tab} onChange={setTab}/>
@@ -795,7 +795,7 @@ export function UsersPage({ store }) {
         ]}
         count={filteredRecords.length}
         totalCount={records.length}
-        onReset={()=>{setSearch('');setRoleFilter('all')}}
+        onReset={search || roleFilter !== 'all' ? ()=>{setSearch('');setRoleFilter('all')} : null}
       />
       {loading?<p className="muted-copy" role="status">Loading user accounts…</p>:error?<Notice tone="warning" title="Couldn’t load user accounts">{error}<Button size="sm" variant="ghost" onClick={load}>Try again</Button></Notice>:<Table rows={filteredRecords} caption="User accounts" columns={[
         {key:'name',label:'Name'}, {key:'email',label:'Email'}, {key:'phone',label:'Phone',render:u=>u.phone||'—'},

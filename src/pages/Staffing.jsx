@@ -628,7 +628,7 @@ function Approvals({ toast, role, branches, onChanged, getAuthGeneration }) {
       <Field label="Leave through"><input type="date" value={filters.to} disabled={held} onChange={e=>setFilters(x=>({...x,to:e.target.value}))}/></Field>
     </FilterBar>
     {error && <p role="alert">{error}</p>}
-    <Button variant="ghost" onClick={load} disabled={held||loading}>Refresh leave requests</Button>
+    <RefreshButton title="Refresh leave requests" ariaLabel="Refresh leave requests" onClick={load} disabled={held} loading={loading}/>
     {meta.has_more&&!loading&&!error&&<Notice>More authorized requests match these filters. Showing the first {meta.limit||300}; narrow the status, branch or dates to review the rest.</Notice>}
     {loading ? <p role="status">Loading leave requests...</p> : !rows ? <p className="au-muted">Leave requests are unavailable.</p> : !rows.length ? <p className="au-muted">No requests here.</p> : <ul className="fd-list">{rows.map(l => <LeaveRow key={l.id} l={l} role={role} open={open === l.id} onToggle={() => setOpen(open === l.id ? null : l.id)} toast={toast} wordingApproved={meta.wording_approved} getAuthGeneration={getAuthGeneration} onPending={setRowPending} commandsAvailable={meta.commands_available===true}
       onChanged={decided => { if (decided && filters.status && decided !== filters.status) { setOpen(l.id); setFilters(x => ({ ...x, status: '' })) } else load() }}/>)}</ul>}
