@@ -2,6 +2,8 @@
 
 This profile runs React/Vite, Laravel/Sanctum, PostgreSQL, a queue worker, a scheduler and a **local mail capture**. It is development infrastructure, not deployment or acceptance of all 68 original QA requirements. No AUD-10 activation is enabled.
 
+For a **new developer computer**, start with [team setup](TEAM_DEVELOPMENT_SETUP.md). The tracked `scripts/provision-local-system.py` creates a fresh owned cluster and independent private credentials; it never adopts an existing target. Existing working environments should continue using their current manifest and must not be reprovisioned. [The duo QA plan](TEAM_QA_WORKFLOW_20261115.md) defines feature branches and contract checkpoints.
+
 ## Verified tooling and target
 
 - Existing MAMP PHP 8.3.30, Composer 2.9.5; dependencies installed from the unchanged backend composer.lock with `--no-scripts --no-plugins`. Platform requirements pass; no global PHP replacement or platform bypass.

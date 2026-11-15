@@ -1,0 +1,60 @@
+# Two-developer QA delivery — 2026-11-15
+
+The collaboration branch is `collab/dentalops-qa-20261115`; start both feature branches from its exact published SHA using [team setup](TEAM_DEVELOPMENT_SETUP.md). Accepted source anchor: `df56fda57c640ea772f4d73417a17275657095de`. Joevan and Jaztin work on separate computers and feature branches, never by concurrently editing the integration target. Do not rewrite any published history.
+
+The original inventory remains **68 unique IDs**:14 General,25 Staff,16 Dentist,13 Owner in [FINALS-QA-REVISIONS.md](../FINALS-QA-REVISIONS.md), with original criteria/owners preserved. [The68-row evidence matrix](defense/FEATURE_ACCEPTANCE_MATRIX.md) is historical and records discrepancies; later [Sprint02](LOCAL_VISIT_SETTLEMENT_SPRINT02.md), [Sprint03](LOCAL_PRESCRIPTION_SPRINT03.md) and accepted QA batch reports supplement it. Master checkboxes and old module totals are not a current closure count. This assignment changes execution responsibility, not original attribution or acceptance status. No new closures are claimed by publication.
+
+## First parallel batches
+
+**Joevan — J-A01, supported Staff shift integrity + dated roster contract (OWN-11 subset).** Start with existing `PATCH /api/staff/{legacy_ref}`, `StaffProfileController`, `UpdateStaffProfileRequest`, `StaffProfileResource`, `WorkScheduleController` and [the scheduling decision register](QA_STAFF_SCHEDULING_CONTRACT_DECISIONS.md). Agree the exact expected-version/idempotency/authoritative receipt/readback extension with Jaztin before coding; complete that existing flat-shift write's persistence, authorization, stale/concurrent and lost-response behavior with a narrow reviewed additive schema change if necessary. Explicit reassignment and linked branch scopes must retain current meaning. This is productive existing-contract work, not invented recurrence policy. In the same bounded batch, capture the full dated Staff roster contract's unresolved editor, recurrence, exception precedence, overlap, branch and historical semantics for review; do not implement those decisions until approved. Do not call the whole OWN-11 closed because flat shifts work.
+
+**Jaztin — J-C01, real Doctor duty → work-hours/leave journey (STF-07, DEN-12, STF-08/DEN-13/OWN-12 evidence where applicable).** Use the existing `/api/work-schedules` dated Dentist duty projection, exact branch/date/as-of/source/estimated evidence and existing weekly-hours/leave APIs. Complete the actual Staff/Owner/Dentist screens and fix concrete mapping/reload/recovery/accessibility defects encountered. Verify explicit working-now versus on-duty-today semantics, branch scope, current Manila date, fallback labels, reload and separate sessions. Doctor duty does not depend on inventing a Staff weekday roster. Do not rewrite already accepted visual styling or count the broader leave policy as resolved. Coordinate before touching Joevan's proposed shift-client extension; implement that UI only after its reviewed contract lands.
+
+These batches can run together: Joevan owns backend/tests/migrations; Jaztin owns the existing React duty/work-hours/leave screens and browser evidence. They share request/response examples and fixture identities before editing the same contract. New synthetic databases are owned separately; no credentials/snapshots travel through GitHub.
+
+**First integration checkpoint:** after these two short accepted batch commits, review both PRs against the same collaboration baseline. Check exact Patient/personnel/branch/revision and operation IDs; optimistic conflicts, duplicate/replay and uncertain-outcome recovery; Staff/Dentist/Owner permitted operations; Doctor duty source/estimated labels and dates; and regression of the accepted visit→settlement and prescription journeys. Run changed scheduling/authorization PostgreSQL tests, real cross-role browser acceptance, frontend relevant tests, smoke/build and the required consolidated gates once on the combined candidate. Preserve the inherited OWN-11 failure until its original full dated Staff contract is implemented and verified. Publish only the accepted combined tip; have both developers fetch that exact SHA before the next batch.
+
+## Ordered work after the first checkpoint
+
+1. **Existing walk-in/arrival vertical slice:** Jaztin frontend + Joevan backend. Original STF-10/11/12/13 and shared GEN-01 dependencies; actual supported find/register/ID verification → explicit Check-In → correct Dentist queue → encounter. Reuse the accepted scheduled-visit workflow; never auto-admit from a stale projection or invent cancellation/ID policy. Preserve existing unsupported-policy refusals.
+2. **Follow-up task → exact booking → Patient readback/reload recovery:** Joevan owns durable command identity/replay/readback; Jaztin owns retained reviewed task/Patient/branch/revision, resume/review and truthful recovery UI. Use existing selected-follow-up contract and AUD-10 acceptance documents. Collect linkage, authorization, real contention, committed lost-response and reload/new-session evidence. Clinical activation stays disabled until every gate, including deployed capability, is genuinely accepted. DEN-09/GEN-09 receive only the original criteria's corresponding evidence; AUD-10 is not a69th original QA ID.
+3. **Held queue migration correction proposal:** Joevan produces a separately reviewed additive/environment-specific preservation path on disposable legacy/current fixtures, retaining identifiers and append-only history. Jaztin verifies supported named queue commands and cross-role displays. STF-14/15 removal wording conflicts with current clinical states/urgent history; resolve that decision before any conversion. Four diagnostic failures cannot be hidden or weakened.
+4. **Notifications and protected document/record lifecycle:** implement supported server read/retry/file/retraction behavior first. Archival/restore, notification deletion and retention require entity-specific permissions and policy, not global Owner access. GEN-10/11, STF-25/DEN-16 and clinical handovers remain gated at their exact decisions.
+5. **Owner operations and remaining functional requirements:** actual accepted branch/service settings, analytics inputs/filters and supported personnel operations; authoritative database totals and mutation receipts. Keep settlement and prescription regression gates. Add only independently approved planned capabilities; do not manufacture profit, prices, clinical policy, HMO coverage, lab/handover states or provider success.
+6. **Scoped efficiency and remaining presentation/reproduction items:** use measured real user journeys for GEN-09; retain accepted UI changes. Obtain exact GEN-06/DEN-03 reproductions before claiming fixes. Full design/performance polish follows functional completion.
+
+## All original IDs: execution routing, not a new status matrix
+
+Each ID occurs once below. This prevents duplicated ownership and accidental omission; it does not reopen accepted work. “Retain” means use existing acceptance as a regression gate and fix only a demonstrated remaining defect. Original members' attribution remains in the source matrix.
+
+| Original IDs | Execution lead / partner | Next action or dependency |
+|---|---|---|
+| GEN-01, DEN-15 | Joevan / Jaztin | Existing explicit approval/wording workflow; reviewed triggers and permissions, never automated clinical approval. |
+| GEN-02, GEN-03, GEN-04, GEN-08, GEN-12, GEN-13 | Jaztin / Joevan as needed | Retain accepted shared controls, filters and accessibility; address an actual remaining functional defect. |
+| GEN-05 | Joevan / Jaztin | Retain accepted kiosk source boundary; no unrelated cleanup or destructive data removal. |
+| GEN-06, DEN-03 | Jaztin / Joevan after reproduction | Blocked on exact original reproduction; record browser, role, context, expected and actual behavior. |
+| GEN-07, STF-04, DEN-10 | Jaztin / Joevan validation | Retain accepted conditional Specify, saved readback and whitespace refusal. |
+| GEN-09 | Jaztin / Joevan | Measure and improve complete supported paths; no invented time savings or broad closure from one path. |
+| GEN-10, GEN-11, STF-25, DEN-16 | Joevan / Jaztin | Notification/archive API and entity-specific privacy/restore policy; supported read/recovery can continue. |
+| GEN-14, STF-01, STF-02, STF-09, DEN-02, OWN-07, OWN-08, OWN-09 | Jaztin / Joevan | Real scheduling/calendar/search/closure readback; photo/avatar contract still needs an authoritative source. |
+| STF-03, STF-05, DEN-04, DEN-05 | Jaztin / Joevan clinical permissions | Preserve chart evidence; actual clinical record/history/readback and accessible interaction. No invented findings. |
+| STF-06, DEN-11 | Joevan / Jaztin | Clinical handover authority, access duration and transitions need exact policy. No automatic medical handoff. |
+| STF-07, STF-08, DEN-12, DEN-13, OWN-10, OWN-11, OWN-12 | Joevan + Jaztin | First paired batches above; existing Doctor duty/leave independent of missing dated Staff roster policy. |
+| STF-10, STF-11, STF-12, STF-13 | Jaztin / Joevan | Complete supported walk-in/arrival slice; preserve immutable reviewed Check-In context and unresolved policy. |
+| STF-14, STF-15, STF-16, STF-17, OWN-13 | Joevan / Jaztin | Queue vocabulary/history hold, named commands and actual branch/Dentist queue acceptance. |
+| STF-18 | Joevan / Jaztin | Retain accepted synthetic at-clinic settlement and Patient receipt; no real financial/provider transaction. |
+| STF-19, STF-20 | Joevan / Jaztin | Retain established legacy HMO/provider and inquiry contracts; no new HMO lifecycle/coverage system. |
+| STF-21, STF-22, STF-23, STF-24, DEN-14 | Jaztin / Joevan | Correct identity-specific messages/search/scroll/readback; active-Dentist switching/history requires an approved contract. |
+| DEN-01, DEN-06, DEN-07, DEN-08 | Jaztin / Joevan | Retain accepted Dentist presentation and Sprint03 prescription behavior as regression gates. |
+| DEN-09 | Jaztin / Joevan | Existing follow-up status meanings; complete functional selected-booking recovery only under its separate activation gates. |
+| OWN-01, OWN-02, OWN-03, OWN-04, OWN-05, OWN-06 | Joevan / Jaztin | Preserve accepted branch settings; verify authoritative analytics/financial definitions and supported Owner operations. |
+
+## Contract and Git working agreement
+
+- Coordinate before API/schema, clinical or financial transition, scope, revision, retry, notification or completion-rule changes. Capture agreed examples and failure semantics in the owning domain document; frozen cross-module contracts still require team review. Assign one author per shared file for each batch.
+- Development loop: implement → focused tests → continue the bounded batch → one accepted local commit → exact feature-branch push → PR to collaboration. Do not create a commit for a broken candidate just to publish activity. Deployment exclusions must be confirmed before feature pushes too.
+- PR description: problem and resulting behavior; original QA IDs/criteria; exact contracts and migration safety; tests actually run; real browser/database evidence; remaining limitations and needed decisions. Keep test fixtures distinct from real acceptance.
+- Integration owner updates the master evidence matrix after approved integration, preserving all68 IDs and attribution. Each developer writes a separate per-batch evidence file, avoiding simultaneous master edits. Done means every original criterion is satisfied with evidence; partial work remains partial. Do not sum overlapping test counts as closures.
+- No direct/shared force-push, main merge or production deployment. Existing references/worktrees, histories and private source/runtime separation remain protected. This collaboration plan is not enforcement by a GitHub ruleset; actual branch-protection changes require repository policy review.
+
+Applied team principle: Conway's Law — layer ownership is paired around one business process and an agreed contract, with a joint integration checkpoint, so two developers do not create competing workflows.
