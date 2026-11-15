@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Button, Field, Notice } from '../components.jsx'
+import { Button, Field, Notice, RefreshButton } from '../components.jsx'
 import { staffRosterDraft, saveStaffRosterDraft, staffRosterDraftHistory } from '../api-client.js'
 import { commandKey } from '../appointments-api.js'
 import { clinicDate } from '../clock.js'
@@ -70,7 +70,9 @@ export function StaffRosterDraft({staff,branches,getAuthGeneration,enabled,onPen
     {loading&&<p role="status">Loading dated draft…</p>}
     {notice&&<p role="status">{notice}</p>}
     {error&&<p role="alert">{error}</p>}
-    {!uncertain&&<Button variant="soft" disabled={saving||loading} onClick={load}>{conflict?'Discard entries and reload draft':'Reload dated draft'}</Button>}
+    {!uncertain&&(conflict
+      ? <Button variant="soft" disabled={saving||loading||!enabled} onClick={load}>Discard entries and reload draft</Button>
+      : <RefreshButton title="Reload dated draft" ariaLabel="Reload dated draft" loading={loading} disabled={saving||!enabled} onClick={load}/>)}
     {ready&&<form onSubmit={save} aria-label={`Prepare dated Staff draft for ${staff.name}`} aria-busy={saving}>
       <fieldset disabled={saving||uncertain||conflict} style={{border:0,padding:0,minWidth:0}}>
         <Field label="Draft branch"><select aria-label="Draft branch" required value={branch} onChange={e=>setBranch(e.target.value)}><option value="">Choose a branch</option>{branches.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>
