@@ -8,6 +8,7 @@ import { commandKey, rescheduleAppointment } from '../appointments-api.js'
 import { dutyForBranch } from '../work-hours-duty.js'
 import { confirmedStaffShift, staffShiftCommand, validStaffRevision } from '../staff-shift-command.js'
 import { StaffRosterDraft } from './StaffRosterDraft.jsx'
+import {StaffRosterDraftCollection} from './StaffRosterDraftCollection.jsx'
 import {useLeaveCommand} from '../use-leave-command.js'
 import {validLeaveRevision} from '../leave-command.js'
 import {getLeave} from '../api-client.js'
@@ -143,7 +144,7 @@ function WorkScheduleSession({ store, role }) {
     )}
     <div id={`${roleTabsId}-panel`} role={role !== 'dentist' ? 'tabpanel' : undefined} aria-labelledby={role !== 'dentist' ? `${roleTabsId}-${scheduleRole}` : undefined}>
     {scheduleRole === 'staff' && role !== 'dentist' ? (
-      <StaffScheduleProfiles key={staffSessionKey} role={role} session={store?.session} getAuthGeneration={store.getAuthGeneration}/>
+      <StaffScheduleProfiles key={staffSessionKey} role={role} session={store?.session} getAuthGeneration={store.getAuthGeneration} rosterBranches={store?.state?.branches}/>
     ) : (
       !data ? (loading && <p className="au-muted" role="status">Loading work schedules…</p>) : !data.dentists.length ? <Notice>No dentists to show for your branches.</Notice> : <>
         {loading && <p role="status">Refreshing work schedules…</p>}
@@ -200,8 +201,10 @@ export function staffShiftSummary(row) {
 
 const useStaffLayoutEffect = typeof window === 'undefined' ? useEffect : React.useLayoutEffect
 
-export function StaffScheduleProfiles({ role, session, getAuthGeneration }) {
+export function StaffScheduleProfiles({ role, session, getAuthGeneration, rosterBranches }) {
   const [draftPending,setDraftPending]=useState(false)
+  const [focusDate,setFocusDate]=useState(''),[draftRefresh,setDraftRefresh]=useState(0)
+  const [reviewEpoch,setReviewEpoch]=useState(0)
   const [snapshot, setSnapshot] = useState(null), [error, setError] = useState(''), [selected, setSelected] = useState(''), [saving, setSaving] = useState(false), [loading, setLoading] = useState(true)
   const live = useRef(false), generation = useRef(0), reading = useRef(null)
   const authorized = !!session?.serverUserId && session.active && session.role === role && ['owner', 'staff'].includes(role)
@@ -252,7 +255,10 @@ export function StaffScheduleProfiles({ role, session, getAuthGeneration }) {
           generation.current++
           setSnapshot(previous => ({ ...previous, staff: previous.staff.map(row => row.id === record.id ? { ...row, branch: record.branchId ? { id: record.branchId, name: record.branch } : null, shift_start: record.shiftStart, shift_end: record.shiftEnd, available: record.available, revision: record.revision } : row) }))
         }}/>
-      {role==='owner'&&<StaffRosterDraft key={`dated:${summary.id}`} staff={summary} branches={snapshot.branches||[]} getAuthGeneration={getAuthGeneration} enabled={!error&&!loading&&!saving} onPending={setDraftPending}/>}
+      {role==='owner'&&<>
+        <StaffRosterDraftCollection branches={rosterBranches?.length?rosterBranches:snapshot.branches||[]} getAuthGeneration={getAuthGeneration} refreshKey={draftRefresh} disabled={!!error||loading||saving||draftPending} onReview={(id,date)=>{if(staff.some(row=>row.id===id)){setSelected(id);setFocusDate(date);setReviewEpoch(value=>value+1)}}}/>
+        <StaffRosterDraft key={`dated:${summary.id}:${focusDate}:${reviewEpoch}`} initialDate={focusDate} staff={summary} branches={snapshot.branches||[]} getAuthGeneration={getAuthGeneration} enabled={!error&&!loading&&!saving} onPending={setDraftPending} onSaved={()=>setDraftRefresh(value=>value+1)}/>
+      </>}
     </>}
   </Card>
 }

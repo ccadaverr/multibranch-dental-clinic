@@ -218,6 +218,7 @@ export function updateStaffProfile(legacyRef, payload, beforeDispatch) {
   return request(`/api/staff/${encodeURIComponent(legacyRef)}`, { method: 'PATCH', body: JSON.stringify(payload), beforeDispatch })
 }
 export function staffRosterDraft(ref, date) { return request(`/api/staff/${encodeURIComponent(ref)}/roster-draft?date=${encodeURIComponent(date)}`) }
+export function staffRosterDrafts(branchRef,date,before) { return request(`/api/staff-roster-drafts?${new URLSearchParams({branch_ref:branchRef,date,...(before?{before}:{})})}`) }
 export function saveStaffRosterDraft(ref, payload, beforeDispatch) { return request(`/api/staff/${encodeURIComponent(ref)}/roster-draft`, { method:'PUT', body:JSON.stringify(payload), beforeDispatch }) }
 export function staffRosterDraftHistory(ref, date, before) { return request(`/api/staff/${encodeURIComponent(ref)}/roster-draft/history?${new URLSearchParams({date,...(before?{before}:{})})}`) }
 

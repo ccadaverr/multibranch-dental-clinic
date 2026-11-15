@@ -9,10 +9,11 @@ const errorText=r=>Object.values(r?.errors||{})[0]?.[0]||r?.message||'The dated 
 const useLayout=typeof window==='undefined'?useEffect:React.useLayoutEffect
 
 /** Owner-only preparation. No source here or in the API publishes duty or changes branch access. */
-export function StaffRosterDraft({staff,branches,getAuthGeneration,enabled,onPending}) {
-  const [date,setDate]=useState(clinicDate),[branch,setBranch]=useState(staff.branchRef||''),[start,setStart]=useState(''),[end,setEnd]=useState('')
+export function StaffRosterDraft({staff,branches,getAuthGeneration,enabled,onPending,onSaved,initialDate}) {
+  const [date,setDate]=useState(()=>initialDate||clinicDate()),[branch,setBranch]=useState(staff.branchRef||''),[start,setStart]=useState(''),[end,setEnd]=useState('')
   const [snapshot,setSnapshot]=useState(null),[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('')
   const [uncertain,setUncertain]=useState(false),[conflict,setConflict]=useState(false),[history,setHistory]=useState(null),[historyBusy,setHistoryBusy]=useState(false)
+  const [historyCursor,setHistoryCursor]=useState(null),historyPending=useRef(null)
   const live=useRef(false),generation=useRef(0),pending=useRef(false),retained=useRef(null),current=useRef(null)
   const auth=getAuthGeneration?.(),key=JSON.stringify([staff.id,date,auth,enabled])
   useEffect(()=>{onPending?.(saving||uncertain);return()=>onPending?.(false)},[saving,uncertain,onPending])
@@ -21,7 +22,7 @@ export function StaffRosterDraft({staff,branches,getAuthGeneration,enabled,onPen
   const load=async()=>{
     if(!live.current||!enabled||pending.current||(getAuthGeneration&&auth==null))return
     const ticket={key,auth,generation:++generation.current}
-    setLoading(true);setError('');setHistory(null);setHistoryBusy(false)
+    setLoading(true);setError('');setHistory(null);setHistoryBusy(false);setHistoryCursor(null);historyPending.current=null
     try{
       const r=await staffRosterDraft(staff.id,date)
       if(!own(ticket))return
@@ -45,21 +46,22 @@ export function StaffRosterDraft({staff,branches,getAuthGeneration,enabled,onPen
       if(!own(ticket))return
       if(!r.ok){const unknown=['network','server'].includes(r.kind);setUncertain(unknown);setConflict(r.kind==='conflict');if(!unknown)retained.current=null;setError(unknown?'The save is uncertain. Your entries are retained. Retry this draft save to recover its original result.':errorText(r));return}
       if(!rosterDraftReceipt(r,staff.id,payload)){setUncertain(true);setError('The draft receipt did not match. Retry this draft save to recover its original result.');return}
-      setSnapshot({key,row:r.data,revision:r.data.revision});retained.current=null;setUncertain(false);setConflict(false);setHistory(null)
+      setSnapshot({key,row:r.data,revision:r.data.revision});retained.current=null;setUncertain(false);setConflict(false);setHistory(null);setHistoryCursor(null)
       setNotice(`Draft revision ${r.data.revision} saved. This is not published duty.`)
+      onSaved?.(r.data)
     }catch{if(own(ticket)){setUncertain(true);setError('The save is uncertain. Retry this draft save to recover its original result.')}}
     finally{pending.current=false;if(live.current)setSaving(false)}
   }
-  const showHistory=async()=>{
-    if(!ready||saving||historyBusy)return
-    const ticket={key,auth,generation:generation.current};setHistoryBusy(true)
+  const showHistory=async before=>{
+    if(!ready||saving||historyBusy||historyPending.current)return
+    const ticket={key,auth,generation:generation.current};historyPending.current=ticket;setHistoryBusy(true)
     try{
-      const r=await staffRosterDraftHistory(staff.id,date)
+      const r=await staffRosterDraftHistory(staff.id,date,before)
       if(!own(ticket))return
       if(!r.ok||r.meta?.staff_ref!==staff.id||r.meta?.date!==date||!Array.isArray(r.data)||r.data.some(row=>!validRosterDraft(row.draft,staff.id,date))){setError('Saved draft history could not be matched. Try again.');return}
-      setHistory(r.data)
+      setHistory(previous=>before?[...(previous||[]),...r.data.filter(row=>!previous?.some(old=>old.id===row.id))]:r.data);setHistoryCursor(r.meta.next_before||null)
     }catch{if(own(ticket))setError('Saved draft history could not be loaded.')}
-    finally{if(own(ticket))setHistoryBusy(false)}
+    finally{if(historyPending.current===ticket)historyPending.current=null;if(own(ticket))setHistoryBusy(false)}
   }
   return <section className="st-gap" aria-label={`Dated draft for ${staff.name}`}>
     <h3>Dated Staff draft</h3>
@@ -75,8 +77,9 @@ export function StaffRosterDraft({staff,branches,getAuthGeneration,enabled,onPen
         <div className="st-pair"><Field label="Draft start"><input required type="time" value={start} onChange={e=>setStart(e.target.value)}/></Field><Field label="Draft end"><input required type="time" value={end} onChange={e=>setEnd(e.target.value)}/></Field></div>
       </fieldset>
       <div className="row-actions"><Button type="submit" disabled={saving||conflict}>{saving?'Saving dated draft…':uncertain?'Retry draft save':'Save dated draft'}</Button>
-      <Button variant="ghost" disabled={saving||uncertain||historyBusy} onClick={showHistory}>{historyBusy?'Loading revisions…':'Show saved draft revisions'}</Button></div>
+      <Button variant="ghost" disabled={saving||uncertain||historyBusy} onClick={()=>showHistory()}>{historyBusy?'Loading revisions…':'Show saved draft revisions'}</Button></div>
     </form>}
     {history&&<div role="region" aria-label="Saved draft revisions">{history.length?<ul>{history.map(row=><li key={row.id}>Revision {row.revision} · {row.draft.branch_name} · {row.draft.start_time}–{row.draft.end_time} · {row.saved_at} · Draft only</li>)}</ul>:<p>No saved revisions for this Staff member and date.</p>}</div>}
+    {historyCursor&&<Button variant="ghost" disabled={saving||uncertain||historyBusy} onClick={()=>showHistory(historyCursor)}>Load older draft revisions</Button>}
   </section>
 }

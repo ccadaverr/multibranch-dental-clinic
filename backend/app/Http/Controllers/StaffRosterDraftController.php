@@ -19,6 +19,7 @@ use Illuminate\Validation\ValidationException;
 /** Owner preparation records, never published work or a source for clinical booking/duty. */
 class StaffRosterDraftController extends Controller
 {
+    private const DATE_RULES=['required','date_format:Y-m-d','regex:/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/','after_or_equal:0001-01-01'];
     private function authorizeOwner(Request $request): void
     {
         abort_unless($request->user()?->role->value === 'owner', 403);
@@ -31,10 +32,27 @@ class StaffRosterDraftController extends Controller
         return response()->json(['code' => 'staff_roster_drafts_unavailable', 'message' => 'Dated Staff draft preparation is unavailable on this server. No duty was changed.'], 503);
     }
 
+    public function index(Request $request): JsonResponse
+    {
+        $this->authorizeOwner($request);
+        $data=$request->validate(['branch_ref'=>['required','string','max:50'],'date'=>self::DATE_RULES,'before'=>['sometimes','ulid']]);
+        if(!$this->ready())return $this->unavailable();
+        $branch=Branch::where('legacy_ref',$data['branch_ref'])->first();
+        if(!$branch)throw ValidationException::withMessages(['branch_ref'=>['Choose an existing branch.']]);
+        $query=StaffRosterDraft::with(['branch','staff.person'])->where('branch_id',$branch->id)->where('on_date',$data['date']);
+        if(isset($data['before'])){
+            $anchor=(clone $query)->where('public_id',strtolower($data['before']))->first();
+            abort_unless($anchor,404);$query->where('id','<',$anchor->id);
+        }
+        $rows=$query->orderByDesc('id')->limit(51)->get();$page=$rows->take(50);
+        return response()->json(['data'=>$page->map(fn($row)=>$this->view($row,$row->staff)+['staff_name'=>$row->staff->person?->fullName()])->values(),
+            'meta'=>['branch_ref'=>$branch->legacy_ref,'date'=>$data['date'],'next_before'=>$rows->count()>50?$page->last()->public_id:null,'publication_available'=>false]]);
+    }
+
     public function show(Request $request, StaffProfile $staffProfile): JsonResponse
     {
         $this->authorizeOwner($request);
-        $data = $request->validate(['date' => ['required', 'date_format:Y-m-d']]);
+        $data = $request->validate(['date' => self::DATE_RULES]);
         if (! $this->ready()) return $this->unavailable();
         $draft = StaffRosterDraft::with('branch')->where('staff_profile_id', $staffProfile->id)->where('on_date', $data['date'])->first();
 
@@ -45,7 +63,7 @@ class StaffRosterDraftController extends Controller
     public function save(Request $request, StaffProfile $staffProfile): JsonResponse
     {
         $this->authorizeOwner($request);
-        $data = $request->validate(['date' => ['required', 'date_format:Y-m-d'], 'branch_ref' => ['required', 'string', 'max:50'],
+        $data = $request->validate(['date' => self::DATE_RULES, 'branch_ref' => ['required', 'string', 'max:50'],
             'start_time' => ['required', 'date_format:H:i'], 'end_time' => ['required', 'date_format:H:i', 'after:start_time'],
             'expected_revision' => ['required', 'integer', 'min:0'], 'operation_id' => ['required', 'uuid', 'lowercase'],
             'id' => ['prohibited'], 'staff_ref' => ['prohibited'], 'revision' => ['prohibited'], 'status' => ['prohibited'], 'published' => ['prohibited'],
@@ -86,7 +104,7 @@ class StaffRosterDraftController extends Controller
     public function history(Request $request, StaffProfile $staffProfile): JsonResponse
     {
         $this->authorizeOwner($request);
-        $data = $request->validate(['date' => ['required', 'date_format:Y-m-d'], 'before' => ['sometimes', 'ulid']]);
+        $data = $request->validate(['date' => self::DATE_RULES, 'before' => ['sometimes', 'ulid']]);
         if (! $this->ready()) return $this->unavailable();
         $draft = StaffRosterDraft::where('staff_profile_id', $staffProfile->id)->where('on_date', $data['date'])->first();
         $query = DB::table('staff_roster_draft_revisions')->where('draft_id', $draft?->id ?? 0);

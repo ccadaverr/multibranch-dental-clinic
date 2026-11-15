@@ -327,6 +327,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
 
     // Least privilege: Patient has no current workflow needing the Staff directory (plan section H/I).
     Route::get('/staff', [StaffProfileController::class, 'index'])->middleware('role:staff,dentist,owner');
+    Route::get('/staff-roster-drafts', [\App\Http\Controllers\StaffRosterDraftController::class, 'index'])->middleware('role:owner');
     Route::patch('/staff/{staffProfile}', [StaffProfileController::class, 'update'])->middleware('role:owner');
     Route::get('/staff/{staffProfile}/roster-draft', [\App\Http\Controllers\StaffRosterDraftController::class, 'show'])->middleware('role:owner');
     Route::put('/staff/{staffProfile}/roster-draft', [\App\Http\Controllers\StaffRosterDraftController::class, 'save'])->middleware('role:owner');

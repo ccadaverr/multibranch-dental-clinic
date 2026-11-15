@@ -40,6 +40,16 @@ test('me() reports 401 as kind unauthenticated, not a crash', async () => {
   assert.deepEqual(await api.me(), { ok: false, kind: 'unauthenticated' })
 })
 
+test('draft collection GET preserves exact encoded branch/date/cursor context and unpublished capability', async()=>{
+  const meta={branch_ref:'b&other',date:'2026-11-16',next_before:null,publication_available:false}
+  mockFetch([jsonResponse(200,{data:[],meta})])
+  assert.deepEqual(await api.staffRosterDrafts('b&other','2026-11-16','cursor-public'),{ok:true,data:[],meta})
+  const url=new URL(calls[0].url)
+  assert.equal(url.pathname,'/api/staff-roster-drafts');assert.equal(url.searchParams.get('branch_ref'),'b&other')
+  assert.equal(url.searchParams.get('date'),'2026-11-16');assert.equal(url.searchParams.get('before'),'cursor-public')
+  assert.equal(calls[0].options.method,'GET')
+})
+
 test('login() distinguishes invalid credentials from an inactive account via the backend code field', async () => {
   mockFetch([jsonResponse(200, {}), jsonResponse(422, { message: 'x', errors: { email: ['x'] }, code: 'invalid_credentials' })])
   const invalid = await api.login('a@example.com', 'wrong')

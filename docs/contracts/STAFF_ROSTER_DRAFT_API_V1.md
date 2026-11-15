@@ -4,6 +4,10 @@ Implemented on Joevan's feature branch; not deployed or integrated. This is prep
 
 ## Routes and authority
 
+Batch06 adds `GET /api/staff-roster-drafts?branch_ref={legacy_ref}&date=YYYY-MM-DD&before={draft_public_id}`. Owner-only current preparation collection, exact branch/date filter, newest ID first, maximum50, public cursor. Response `{data:[<existing Draft DTO plus staff_name>],meta:{branch_ref,date,next_before,publication_available:false}}`. Unknown/numeric branch substitution or malformed date422; non-Owner403; a cursor outside the selected branch/date404. Closed branches remain readable for historical preparation; saving still requires an open branch. Inserts after the first page do not shift older traversal. A moved anchor requires explicit collection reload. No effective-duty or attendance interpretation is added.
+
+All draft date inputs now require exactly four-digit ISO years0001–9999, excluding PostgreSQL's invalid year zero and expanded-year strings. This is a storage/protocol boundary, not a clinic scheduling horizon or recurrence policy. Past-date history remains readable. The Owner interface lists branch/date drafts, opens the exact Staff/date in the existing editor, refreshes the collection after a confirmed save and loads older immutable revisions beyond50. Old branch/date/session responses are discarded; drafts stay unpublished.
+
 - `GET /api/staff/{legacy_ref}/roster-draft?date=YYYY-MM-DD`
 - `PUT /api/staff/{legacy_ref}/roster-draft`
 - `GET /api/staff/{legacy_ref}/roster-draft/history?date=YYYY-MM-DD&before={revision_public_id}`
