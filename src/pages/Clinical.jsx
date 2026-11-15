@@ -16,7 +16,8 @@ import { ChartView } from './DentalChart.jsx'
 import { visibleHmo, HMO_PROVIDERS } from '../phase3-contracts.js'
 import { visiblePrescriptions, prescriptionTasks, linkedTreatment, followupDisplayState } from '../phase2.js'
 import { inScope, isTodayQueue, patientInScope, sessionForRole } from '../contracts.js'
-import { loadPatientRecord, loadPatientRecordIndex, savePatientRecord } from '../patient-records-api.js'
+import { loadPatientRecord, loadPatientRecordIndex, changedFields } from '../patient-records-api.js'
+import { beginProfileSave } from '../patient-profile-save.js'
 import { commandKey } from '../appointments-api.js'
 import { DEFAULT_COUNTRY, normalizePhoneNumber } from '../phone.js'
 import { addCalendarMonths, clinicDate } from '../clock.js'
@@ -25,7 +26,7 @@ import { fetchDocuments, fetchDocument, submitDocumentUpload, retractDocument, f
 export function PatientsPage(props) {
   const allowed=useClinicalSession(props.store)
   if(props.role==='dentist'&&!allowed)return <Notice>Clinical session unavailable. Patient information is hidden.</Notice>
-  return <PatientRecordsBody key={clinicalSessionKey(props.store.session)+encounterKey(props.context)} {...props}/>
+  return <PatientRecordsBody key={clinicalSessionKey(props.store.session)+encounterKey(props.context)+'|'+props.store.getAuthGeneration?.()} {...props}/>
 }
 function PatientRecordsBody({ role, store, context, setPage }) {
   const { state, actions, toast, log }=store
@@ -216,40 +217,65 @@ function StaffPatientSummary({ patient, role, branches, toast, store }) {
   const [saving,setSaving]=useState(false)
   const [problem,setProblem]=useState(null)
   const [attempt,setAttempt]=useState(0)
+  const [profilePhase,setProfilePhase]=useState('idle'),[reloadOpen,setReloadOpen]=useState(false),[linkedError,setLinkedError]=useState('')
+  const command=React.useRef(null),pending=React.useRef(false),live=React.useRef(false),latest=React.useRef(store),feedback=React.useRef(null)
+  latest.current=store
+  const generation=store?.getAuthGeneration?.(),owner=JSON.stringify([patient.id,clinicalSessionKey(store?.session),generation])
+  const currentOwner=React.useRef(owner);currentOwner.current=owner
+  const owns=()=>live.current&&owner===currentOwner.current&&(!store?.getAuthGeneration||generation===latest.current?.getAuthGeneration?.())
+  React.useLayoutEffect(()=>{live.current=true;return()=>{live.current=false}},[])
+  React.useEffect(()=>{if(['unknown','refused','verified'].includes(profilePhase))feedback.current?.focus()},[profilePhase])
   React.useEffect(()=>{
-    let live=true
-    setLoad({status:'loading',record:null,message:''});setProblem(null)
-    Promise.all([loadPatientRecord(patient.id),loadPatientRecordIndex(patient.id)]).then(([record,linked])=>{
-      if(!live)return
+    let current=true,timer
+    setLoad({status:'loading',record:null,message:''});setProblem(null);setIndex(null);setLinkedError('')
+    const unavailable={ok:false,message:'The Patient record could not be verified within the waiting period. Retry to read its current state.'}
+    Promise.race([Promise.all([loadPatientRecord(patient.id),loadPatientRecordIndex(patient.id)]),new Promise(resolve=>{timer=setTimeout(()=>resolve([unavailable,unavailable]),30000)})])
+    .catch(()=>[unavailable,unavailable]).then(([record,linked])=>{
+      clearTimeout(timer)
+      if(!current||!owns())return
       if(!record.ok)return setLoad({status:'error',record:null,message:record.message})
       setLoad({status:'ready',record:record.record,message:''});setForm(record.record);setIndex(linked.ok?linked:null)
+      if(!linked.ok)setLinkedError(linked.message||'Linked records could not be verified for this Patient.')
     })
-    return ()=>{live=false}
-  },[patient.id,attempt])
+    return ()=>{current=false;clearTimeout(timer)}
+  },[patient.id,attempt,owner])
   if(load.status==='loading')return <Card title="Patient summary"><p role="status">Loading the patient record from the clinic server…</p></Card>
   if(load.status==='error')return <Card title="Patient summary"><Notice tone="warning" title="Patient record unavailable">{load.message}</Notice><Button className="top-gap" onClick={()=>setAttempt(attempt+1)}>Retry</Button></Card>
   const record=load.record
   const full=record.access==='full'
   const editable=role==='staff'&&full
-  const update=(key,value)=>{setProblem(null);setForm({...form,[key]:value})}
+  const profilePending=saving||profilePhase==='unknown'
+  const dirty=Object.keys(changedFields(record,form)).length>0
+  const update=(key,value)=>{if(profilePending||pending.current)return;command.current=null;setProfilePhase('idle');setProblem(null);setForm({...form,[key]:value})}
+  const submit=async selected=>{
+    if(!selected||pending.current||!owns())return
+    pending.current=true;setSaving(true);setProfilePhase('submitting');setProblem(null)
+    try{
+      const result=await selected.submit()
+      if(!owns()||command.current!==selected)return
+      if(!['unknown','refused','verified'].includes(result.outcome))return
+      setProfilePhase(result.outcome)
+      if(!result.ok)return setProblem({tone:'warning',message:result.message||'The profile save could not be confirmed.',conflict:result.kind==='conflict'})
+      setLoad({status:'ready',record:result.record,message:''});setForm(result.record)
+      toast(result.unchanged?'No changes to save.':`Patient ${result.record.patientCode} profile saved. Revision ${result.record.revision}.`,'success')
+    }finally{pending.current=false;if(owns())setSaving(false)}
+  }
   const save=async()=>{
+    if(profilePending||pending.current||!owns())return
     let next=form
     if(form.phone!==record.phone){
       const phone=form.phone.trim()?normalizePhoneNumber(DEFAULT_COUNTRY.dial,form.phone):{ok:true,e164:''}
       if(!phone.ok)return setProblem({tone:'warning',message:phone.reason})
       next={...form,phone:phone.e164}
     }
-    setSaving(true)
-    const result=await savePatientRecord(record,next)
-    setSaving(false)
-    if(!result.ok)return setProblem({tone:'warning',message:result.kind==='conflict'?'This patient record was changed by someone else after you opened it. Reload it to see the latest details before saving again.':result.message,conflict:result.kind==='conflict'})
-    setLoad({status:'ready',record:result.record,message:''});setForm(result.record);setProblem(null)
-    toast(result.unchanged?'No changes to save.':'Patient record updated.','success')
+    const selected=beginProfileSave({record,form:next,key:commandKey(),isCurrent:()=>owns()&&command.current===selected})
+    command.current=selected;await submit(selected)
   }
   const counts=index?.counts
   const subtitle=editable?'Staff maintains the non-clinical profile on the clinic server. Clinical history is not edited here.':full?'Read-only.':'Identity only. The full profile is shown to Staff for patients with an appointment or visit at their branches.'
   return <Card title="Patient summary" subtitle={subtitle}>
     <div className="form-grid">
+      <fieldset className="span-2" disabled={!editable||profilePending} style={{border:0,padding:0,margin:0,minWidth:0}}><div className="form-grid">
       <Field label="Patient code"><input value={record.patientCode} disabled/></Field>
       <Field label="First name"><input value={form.firstName} disabled={!editable} onChange={e=>update('firstName',e.target.value)}/></Field>
       <Field label="Last name"><input value={form.lastName} disabled={!editable} onChange={e=>update('lastName',e.target.value)}/></Field>
@@ -262,15 +288,23 @@ function StaffPatientSummary({ patient, role, branches, toast, store }) {
       {record.emergencyContact!==undefined&&<Field label="Emergency contact"><textarea value={form.emergencyContact} disabled={!editable} onChange={e=>update('emergencyContact',e.target.value)}/></Field>}
       {record.hmoProviderName!==undefined&&<Field label="HMO provider"><select value={form.hmoProviderName||''} disabled={!editable} onChange={e=>update('hmoProviderName',e.target.value||null)}><option value="">None / Not recorded</option>{HMO_PROVIDERS.filter(p=>!p.legacy).map(p=><option key={p.id} value={p.name}>{p.name}</option>)}</select></Field>}
       {record.hmoMemberNumber!==undefined&&<Field label="HMO member number"><input value={form.hmoMemberNumber||''} disabled={!editable} onChange={e=>update('hmoMemberNumber',e.target.value||null)} placeholder="e.g. 123456789"/></Field>}
+      </div></fieldset>
       <div className="span-2"><Notice tone="info" title="Clinical history">Allergies, medical history and dental history are not stored on the clinic server yet, so they are not shown or editable here. They change only through an authorized Dentist workflow.</Notice></div>
       {counts&&<div className="span-2"><Notice tone="info" title="Linked records">{[['appointments','appointments'],['visits','visits'],['treatments','treatments'],['invoices','invoices'],['hmo_cases','HMO cases']].map(([key,label])=>`${counts[key]} ${label}`).join(' • ')}{index.limit&&Object.values(counts).some(n=>n>=index.limit)?` (showing up to ${index.limit} per list)`:''}. These records are kept in their own modules and open from the tabs above.</Notice></div>}
-      {problem&&<div className="span-2"><Notice tone={problem.tone} title={problem.conflict?'Record changed':undefined}>{problem.message}{problem.conflict&&<> <Button size="sm" variant="ghost" onClick={()=>setAttempt(attempt+1)}>Reload record</Button></>}</Notice></div>}
-      {editable&&<Button className="span-2" disabled={saving} onClick={save}>{saving?'Saving…':'Save changes'}</Button>}
+      {linkedError&&<div className="span-2"><Notice tone="warning" title="Linked records unavailable">{linkedError}</Notice></div>}
+      <div className="span-2" ref={feedback} tabIndex={-1} role={profilePhase==='unknown'||profilePhase==='refused'?'alert':'status'}>
+        {problem&&<Notice tone={problem.tone} title={problem.conflict?'Record changed':'Save not confirmed'}>{problem.message}</Notice>}
+        {profilePhase==='unknown'&&<Button variant="soft" disabled={saving} onClick={()=>submit(command.current)}>Retry same profile save</Button>}
+        {(profilePhase==='unknown'||problem?.conflict||linkedError)&&<Button size="sm" variant="ghost" disabled={saving} onClick={()=>setReloadOpen(true)}>Review current record</Button>}
+        {profilePhase==='verified'&&<p>Profile save verified for {record.patientCode}, revision {record.revision}.</p>}
+      </div>
+      {editable&&<Button className="span-2" disabled={profilePending||!dirty} onClick={save}>{saving?'Saving…':'Save changes'}</Button>}
       {editable&&<div className="span-2"><IdCheck patientId={patient.id} toast={toast} getAuthGeneration={store?.getAuthGeneration}/></div>}
       {role==='staff'&&<div className="span-2"><HandoverPanel patientId={patient.id} toast={toast}/></div>}
       {role==='staff'&&full&&<div className="span-2"><section className="st-panel" aria-label="Dental chart"><h3 className="st-sub">Dental chart (read-only)</h3><ChartView patientId={patient.id} canRecord={false} toast={toast} store={store}/></section></div>}
       {role==='staff'&&full&&<div className="span-2"><FollowupPanel patientId={patient.id} toast={toast} store={store} branches={(branches||[]).filter(b=>b.status!=='Closed')}/></div>}
     </div>
+    <ConfirmDialog open={reloadOpen} title="Load the current Patient record?" confirmLabel="Load current record" onCancel={()=>setReloadOpen(false)} onConfirm={()=>{command.current=null;setProfilePhase('idle');setReloadOpen(false);setAttempt(attempt+1)}}><p>Your current form will be replaced by the clinic’s saved record. An unchanged read does not prove a pending save failed.</p></ConfirmDialog>
   </Card>
 }
 

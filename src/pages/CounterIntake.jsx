@@ -162,6 +162,7 @@ function ReviewDialog({ row, reviewInstance, isCurrent, idTypes, toast, onClose,
             type="text"
             required={idChecked}
             maxLength={100}
+            placeholder="e.g. Company ID"
             value={idOther}
             onChange={e => setIdOther(e.target.value)}
             onBlur={() => setIdOtherTouched(true)}
@@ -301,7 +302,7 @@ function PatientIdCheck({ patientId, toast, getAuthGeneration }) {
     <div className="ci-id">
       <Field label="ID shown" error={failure?.errors?.id_type?.[0]}><select disabled={busy || blocked} value={type} onChange={e => { setType(e.target.value); setOtherTouched(false); setFailure(null); if (e.target.value !== 'other') setOtherText('') }}>{Object.entries(ID_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>
       {type === 'other' && <Field label="Specify ID type" required hint="Example: Company ID. Enter the type only, not its number." error={otherError}>
-        <input type="text" required maxLength={100} disabled={busy || blocked} value={otherText} onChange={e => { setOtherText(e.target.value); setFailure(null) }} onBlur={() => setOtherTouched(true)}/>
+        <input type="text" required maxLength={100} placeholder="e.g. Company ID" disabled={busy || blocked} value={otherText} onChange={e => { setOtherText(e.target.value); setFailure(null) }} onBlur={() => setOtherTouched(true)}/>
       </Field>}
       <div className="au-actions"><Button variant="soft" disabled={busy || blocked || (type === 'other' && !otherText.trim())} onClick={go}>{busy ? 'Recording ID check…' : 'ID checked'}</Button></div>
     </div>

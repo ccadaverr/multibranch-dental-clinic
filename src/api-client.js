@@ -253,7 +253,7 @@ export function searchPatients(params) { return request(`/api/patients${query(pa
 export function registerPatient(payload, key) { return command('/api/patients', payload, key) }
 // M4 Patient record: non-clinical profile (read; Staff-only edit with expected_revision) and the read-only linked-record index.
 export function getPatientRecord(id) { return request(`/api/patients/${encodeURIComponent(id)}`) }
-export function updatePatientRecordRemote(id, payload) { return request(`/api/patients/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) }) }
+export function updatePatientRecordRemote(id, payload, key, beforeDispatch) { return request(`/api/patients/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload),headers:key?{'Idempotency-Key':key}:{},beforeDispatch }) }
 export function getPatientRecordIndex(id) { return request(`/api/patients/${encodeURIComponent(id)}/records`) }
 
 // M8 Patient Check-In and the shared Visit / Clinical Encounter. Raw calls only; src/visits-api.js owns mapping.

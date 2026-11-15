@@ -1,0 +1,16 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import {beginProfileSave} from '../src/patient-profile-save.js'
+const record={id:'01j0000000000000000000000a',patientCode:'PAT-SYNTHETIC',revision:3,access:'full',emergencyContact:'Before'}
+const form={...record,emergencyContact:'Reviewed value'}
+const success={ok:true,record:{...record,revision:4,emergencyContact:'Reviewed value'}}
+test('one Patient save owns the reviewed values/revision/key despite rapid clicks or caller edits',async()=>{
+ let resolve,calls=0,submitted;const draft={...form};const cmd=beginProfileSave({record,form:draft,key:'observed',isCurrent:()=>true,send:(r,f,options)=>{calls++;submitted={r,f,options};return new Promise(x=>{resolve=x})}})
+ const first=cmd.submit();draft.emergencyContact='Changed outside command';assert.equal((await cmd.submit()).outcome,'submitting');await Promise.resolve();assert.equal(calls,1);assert.equal(submitted.f.emergencyContact,'Reviewed value');assert.equal(submitted.r.revision,3);assert.equal(submitted.options.key,'observed');resolve(success);assert.equal((await first).ok,true);await cmd.submit();assert.equal(calls,1)
+})
+for(const kind of ['network','server','unverified',undefined])test(String(kind)+' outcome retains the same save through recovery',async()=>{const sends=[];const cmd=beginProfileSave({record,form,key:'same',isCurrent:()=>true,send:async(r,f,o)=>{sends.push({r,f,key:o.key});return sends.length===1?{ok:false,kind}:success}});assert.equal((await cmd.submit()).outcome,'unknown');assert.equal((await cmd.submit()).ok,true);assert.deepEqual(sends[0],sends[1])})
+test('a later refusal cannot prove the first ambiguous profile write failed',async()=>{let n=0;const cmd=beginProfileSave({record,form,key:'same',isCurrent:()=>true,send:async()=>++n===1?{ok:false,kind:'network'}:{ok:false,kind:'conflict'}});await cmd.submit();assert.equal((await cmd.submit()).outcome,'unknown');assert.equal(n,2)})
+test('known first stale revision is refused and never automatically rebased',async()=>{let n=0;const cmd=beginProfileSave({record,form,key:'same',isCurrent:()=>true,send:async r=>{n++;assert.equal(r.revision,3);return {ok:false,kind:'conflict'}}});assert.equal((await cmd.submit()).outcome,'refused');await cmd.submit();assert.equal(n,1)})
+for(const patch of [{id:'wrong-patient'},{revision:8},{revision:3}])test('wrong Patient or resulting revision remains unconfirmed: '+JSON.stringify(patch),async()=>{const cmd=beginProfileSave({record,form,key:'same',isCurrent:()=>true,send:async()=>({ok:true,record:{...success.record,...patch}})});assert.equal((await cmd.submit()).outcome,'unknown')})
+test('auth/selection change during send prevents adoption and dispatch ownership becomes false',async()=>{let current=true;const cmd=beginProfileSave({record,form,key:'same',isCurrent:()=>current,send:async(r,f,o)=>{current=false;assert.equal(o.beforeDispatch(),false);return success}});assert.equal((await cmd.submit()).outcome,'obsolete')})
+test('timeout ends waiting truthfully, preserving original save for retry',async()=>{const cmd=beginProfileSave({record,form,key:'same',isCurrent:()=>true,timeoutMs:5,send:()=>new Promise(()=>{})});assert.equal((await cmd.submit()).outcome,'unknown')})
