@@ -92,7 +92,7 @@ def clone_test(c, runtime):
     # macOS Unix-domain socket paths must fit 104 bytes, including PostgreSQL's socket filename.
     clone = runtime.with_name('contention-' + secrets.token_hex(4))
     clone.mkdir(mode=0o700)
-    for name in ['sockets', 'logs', 'backups', 'cache', 'env']:
+    for name in ['sockets', 'logs', 'backups', 'cache', 'cache/test', 'env']:
         (clone / name).mkdir(mode=0o700)
     with socket.socket() as sock:
         sock.bind(('127.0.0.1', 0))
@@ -222,7 +222,7 @@ def main():
             file = (ROOT / 'backend' / name).resolve()
             if not file.is_relative_to(ROOT / 'backend/tests') or not file.name.endswith('Test.php'):
                 raise ValueError('Expected explicit backend test files.')
-            if ('migrate:fresh' in file.read_text() and args.action != 'verify-guard') or ('Concurren' in file.name and args.action != 'concurrency'):
+            if (('migrate:fresh' in file.read_text() or 'use DatabaseMigrations' in file.read_text()) and args.action != 'verify-guard') or ('Concurren' in file.name and args.action != 'concurrency'):
                 raise ValueError('This test requires a separately reviewed concurrency/reset runner.')
         test_env = environment(c, runtime, 'test')
         if args.action == 'verify-schema':

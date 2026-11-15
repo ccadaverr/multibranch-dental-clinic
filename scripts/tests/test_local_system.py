@@ -107,6 +107,15 @@ class LocalSystemTargetTest(unittest.TestCase):
             verify.assert_called_once()
             backup.assert_called_once()
 
+    def test_reset_fixture_suite_is_refused_before_php_execution(self):
+        args = ['local-system.py', '--target', str(self.manifest), '--profile', 'test', 'test',
+                'tests/Feature/Followups/Follow02AtomicTransitionsTest.php']
+        with patch.object(sys, 'argv', args), patch.object(local, 'verify'), patch.object(local, 'migrations'), \
+                patch.object(local.subprocess, 'run') as launch:
+            with self.assertRaisesRegex(ValueError, 'separately reviewed'):
+                local.main()
+            launch.assert_not_called()
+
 
 if __name__ == '__main__':
     unittest.main()
