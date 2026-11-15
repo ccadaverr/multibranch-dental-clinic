@@ -262,7 +262,8 @@ export function getVisit(id) { return request(`/api/visits/${encodeURIComponent(
 export function checkInVisit(payload, key, beforeDispatch) {
   return request('/api/visits/check-in', { method:'POST', body:JSON.stringify(payload), headers:key ? {'Idempotency-Key':key} : {}, beforeDispatch })
 }
-export function walkInVisit(payload, key) { return command('/api/visits/walk-in', payload, key) }
+export function walkInVisit(payload, key, beforeDispatch) { return request('/api/visits/walk-in', {method:'POST',body:JSON.stringify(payload),headers:key?{'Idempotency-Key':key}:{},beforeDispatch}) }
+export function arrivalReceipt(id, {signal}={}) { return request(`/api/visits/${encodeURIComponent(id)}/arrival-receipt`,signal?{signal}:{}) }
 
 // M5 Treatment & Clinical Workflow. Raw calls only; src/treatments-api.js owns mapping. Starting treatment is the atomic
 // Treatment command on the Visit (there is no standalone Visit start/complete command).

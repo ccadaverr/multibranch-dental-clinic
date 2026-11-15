@@ -5,6 +5,9 @@ import * as queueApi from './queue-api.js'
 import * as treatmentsApi from './treatments-api.js'
 import { encounterIssue } from './safeguards.js'
 import { canSchedule, schedulingActorKey } from './appointment-ui.js'
+import { beginArrivalCommand } from './arrival-command.js'
+import { canAccessPage } from './safeguards.js'
+import { inScope } from './contracts.js'
 
 // Server-first M6/M8/M9/M5 command flows. Every appointment, Visit, queue and Treatment change is a Laravel command
 // followed by a refresh of the in-memory server projection; the browser-local adapter step for unfinished modules
@@ -32,6 +35,16 @@ export function createAppointmentFlow({ getState, getSession, getActions, refres
   return {
     refresh,
     searchPatients,
+
+    beginArrival(intent,{key=appointmentsApi.commandKey(),isCurrent,validateInitial,timeoutMs}={}){
+      const identity=checkInActorKey(getSession()),auth=getAuthGeneration?.()
+      const owns=()=>isCurrent?.()&&Number.isSafeInteger(auth)&&getAuthGeneration?.()===auth&&identity===checkInActorKey(getSession())&&
+        getSession()?.role==='staff'&&canAccessPage(getState(),getSession(),'checkin')&&inScope({branchId:intent.branchId},getSession(),getState())
+      return beginArrivalCommand({intent,key,isCurrent:owns,validateInitial,timeoutMs,refresh,
+        send:(submitted,commandKey,beforeDispatch)=>submitted.kind==='scheduled'
+          ?visits.checkIn({id:submitted.appointmentId,revision:submitted.expectedRevision,idConfirmed:submitted.idConfirmed},commandKey,beforeDispatch)
+          :visits.walkIn(submitted,commandKey,beforeDispatch)})
+    },
 
     // One mounted selected workflow owns this command; no browser persistence or local clinical mutation.
     beginSelectedFollowup(form, { selection, backend, isCurrent, key = appointmentsApi.commandKey(), timeoutMs = 30000 } = {}) {

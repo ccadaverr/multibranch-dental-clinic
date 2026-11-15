@@ -12,6 +12,7 @@ use App\Models\DentistProfile;
 use App\Models\Patient;
 use App\Models\Service;
 use App\Models\Visit;
+use App\Models\CommandKey;
 use App\Services\Visits\VisitService;
 use App\Support\ClinicClock;
 use Illuminate\Http\JsonResponse;
@@ -65,12 +66,28 @@ class VisitController extends Controller
         return new VisitResource($visit->load([...self::RELATIONS, 'history']));
     }
 
+    /** Original receipt for an exact Visit and the same account, including after reload/new sign-in. */
+    public function arrivalReceipt(Request $request, Visit $visit): JsonResponse
+    {
+        $current = Visit::visibleTo($request->user())->where('public_id', $visit->public_id)->firstOrFail();
+        Gate::authorize('view', $current);
+        $record = CommandKey::where('user_id', $request->user()->id)->whereIn('command', ['visit.check_in', 'visit.walk_in'])
+            ->where('response_body->data->id', $current->public_id)->where('response_status', 201)->firstOrFail();
+        $body = $record->response_body;
+        abort_unless(data_get($body, 'data.patient.id') === $current->patient->public_id
+            && data_get($body, 'data.branch.id') === $current->branch->legacy_ref
+            && data_get($body, 'data.appointment.id') === $current->appointment?->public_id, 404);
+
+        return response()->json(['data' => $body, 'meta' => ['historical_receipt' => true]])->header('Cache-Control', 'private, no-store');
+    }
+
     public function checkIn(CheckInVisitRequest $request): JsonResponse
     {
         $appointment = Appointment::where('public_id', $request->validated('appointment_id'))->firstOrFail();
         Gate::authorize('checkIn', [Visit::class, $appointment]);
 
-        return $this->visits->checkInScheduled($request->user(), $appointment, (int) $request->validated('expected_revision'), $this->idempotencyKey($request, true));
+        return $this->visits->checkInScheduled($request->user(), $appointment, (int) $request->validated('expected_revision'), $this->idempotencyKey($request, true),
+            $request->has('id_confirmed') ? $request->boolean('id_confirmed') : null);
     }
 
     public function walkIn(WalkInVisitRequest $request): JsonResponse

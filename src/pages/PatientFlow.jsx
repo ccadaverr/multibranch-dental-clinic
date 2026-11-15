@@ -9,6 +9,7 @@ import '../b4-queue.css'
 import { useVisibleRefresh } from '../use-visible-refresh.js'
 import { patientKeyResolver } from '../appointment-projection.js'
 import { DEFAULT_COUNTRY, normalizePhoneNumber } from '../phone.js'
+import { RecordedArrivals } from './ArrivalRecovery.jsx'
 import { bookableBranches } from './Scheduling.jsx'
 
 import { addCalendarMonths, clinicDate } from '../clock.js'
@@ -27,6 +28,29 @@ export function CheckInPage({ store, context, setPage }) {
   const { state, toast }=store
   const session=store.session||sessionForRole('staff',state)
   const flow=store.appointmentFlow
+  const [arrivalPhase,setArrivalPhase]=useState('idle'),[arrivalMessage,setArrivalMessage]=useState(''),[arrivalResult,setArrivalResult]=useState(null)
+  const arrivalAttempt=useRef(null),arrivalSending=useRef(false),arrivalLive=useRef(false),arrivalFeedback=useRef(null)
+  const arrivalLocked=['submitting','unknown'].includes(arrivalPhase)
+  React.useLayoutEffect(()=>{arrivalLive.current=true;return()=>{arrivalLive.current=false}},[])
+  useEffect(()=>{if(['unknown','refused','verified'].includes(arrivalPhase))arrivalFeedback.current?.focus()},[arrivalPhase])
+  const resetArrival=()=>{if(arrivalSending.current||arrivalAttempt.current?.outcome==='unknown')return false;arrivalAttempt.current=null;setArrivalPhase('idle');setArrivalMessage('');return true}
+  const submitArrival=async command=>{
+    if(!command||arrivalSending.current)return
+    arrivalSending.current=true;setArrivalPhase('submitting');setArrivalMessage('')
+    try{
+      const result=await command.submit()
+      if(!arrivalLive.current||arrivalAttempt.current!==command)return
+      if(result.outcome==='obsolete'){setArrivalPhase('unknown');setArrivalMessage('Your admission context changed. Review recorded arrivals before starting another admission.');return}
+      if(!['unknown','refused','verified'].includes(result.outcome))return
+      setArrivalPhase(result.outcome)
+      if(!result.ok){setArrivalMessage(result.message||'The arrival was not confirmed. Review the current clinic records.');return}
+      if(command.intent.kind==='walkin')setAdmitted(true)
+      else{reviewedSelection.current=null;setSelectionContext(null);setAppointmentId('');setIdConfirmed(false)}
+      setArrivalResult({...result,actorKey:checkInActorKey(store.session),authGeneration:store.getAuthGeneration?.()})
+      setArrivalMessage(result.warning||'')
+      toast(result.queued?`Arrival verified — queue number ${result.queueNumber}.`:'Arrival verified.','success')
+    }catch{if(arrivalLive.current&&arrivalAttempt.current===command){setArrivalPhase('unknown');setArrivalMessage('The arrival outcome could not be confirmed. Review recorded arrivals before another admission.')}}finally{arrivalSending.current=false}
+  }
   const [mode,setMode]=useState(context?.mode||'scheduled')
   const today=clinicDate()
   useEffect(()=>{ flow?.searchPatients?.('') }, [])
@@ -44,6 +68,7 @@ export function CheckInPage({ store, context, setPage }) {
   reviewedSelection.current=selectionContext
   const [arrivalProblem,setArrivalProblem]=useState('')
   const selectScheduled=snapshot=>{
+    if(!resetArrival())return
     const next=snapshot ? Object.freeze({...snapshot}) : null
     reviewedSelection.current=next;setSelectionContext(next);setAppointmentId(next?.appointmentId||'');setIdConfirmed(false);setArrivalProblem('')
   }
@@ -84,7 +109,7 @@ export function CheckInPage({ store, context, setPage }) {
     setCancelNote('')
     cancelKey.current = commandKey()
   }
-  const checkScheduled=async()=>{
+  const checkScheduledLegacy=async()=>{
     const reviewed=reviewedSelection.current
     if(!selectedAppointment||!reviewed||busy||scheduledPending.current)return
     if(!idConfirmed){
@@ -106,6 +131,17 @@ export function CheckInPage({ store, context, setPage }) {
     toast(result.queued?`Arrival recorded — queue number ${result.queueNumber}.`:'Arrival recorded.','success')
   }
 
+  const checkScheduled=async()=>{
+    if(typeof flow?.beginArrival!=='function')return checkScheduledLegacy()
+    if(arrivalSending.current||arrivalLocked||!selectedAppointment||!selectionContext)return
+    if(!idConfirmed)return toast('Confirm that the patient presented a valid ID before completing check-in, or cancel the appointment.','warning')
+    const reviewed=reviewedSelection.current,a=selectedAppointment
+    const command=flow.beginArrival({kind:'scheduled',appointmentId:a.id,expectedRevision:reviewed.revision,patientPublicId:a.patientPublicId,branchId:a.branchId,
+      serviceId:a.serviceId||null,dentistId:a.dentistId||null,clinicDate:today,idConfirmed:true},
+      {isCurrent:()=>arrivalLive.current&&arrivalAttempt.current===command,validateInitial:()=>reviewedSelection.current===reviewed&&!!checkInAppointmentFor(store,reviewed)})
+    arrivalAttempt.current=command;await submitArrival(command)
+  }
+
   const branches=bookableBranches(state,session)
   const [walkIn,setWalkIn]=useState({patientPublicId:'',branchId:branches[0]?.id||'',dentistId:'',serviceId:''})
   const walkKey=useRef(commandKey())
@@ -123,16 +159,17 @@ export function CheckInPage({ store, context, setPage }) {
   const walkServices=state.services.filter(s=>s.status==='Active'&&state.branchServices.some(bs=>bs.branchId===walkIn.branchId&&bs.serviceId===s.id&&bs.active!==false))
   const walkDentists=state.dentists.filter(d=>d.available&&d.branchIds.includes(walkIn.branchId)&&state.dentistServiceAssignments.some(a=>a.dentistId===d.id&&a.serviceId===walkIn.serviceId&&a.isAuthorized!==false))
   const updateWalkin=(key,value)=>{
+    if(!resetArrival())return
     setAdmitted(false);walkKey.current=commandKey()
     setWalkIn(previous=>({...previous,[key]:value,...(key==='branchId'?{serviceId:'',dentistId:''}:key==='serviceId'?{dentistId:''}:{})}))
   }
   const [walking,setWalking]=useState(false)
   const [registering,setRegistering]=useState(!!context?.register)
   const selectedPatient=(store.directoryPatients||[]).find(p=>p.id===walkIn.patientPublicId)
-  // The Dentist is required here only because the browser-local M9 queue is organized per Dentist; the server Visit
-  // itself allows an unresolved Dentist.
-  const canWalkIn=!registering&&!!selectedPatient&&!!walkIn.branchId&&!!walkIn.serviceId&&!!walkIn.dentistId&&!walking&&!admitted
-  const checkWalkin=async()=>{
+  // This explicit front-desk path chooses a Dentist so arrival can enter a Dentist queue; the server Visit
+  // also supports an unresolved Dentist under its existing contract.
+  const canWalkIn=!registering&&!!selectedPatient&&!!walkIn.branchId&&!!walkIn.serviceId&&!!walkIn.dentistId&&!walking&&!admitted&&!arrivalLocked
+  const checkWalkinLegacy=async()=>{
     if(!canWalkIn)return
     setWalking(true)
     const patientId=patientKeyResolver({session,users:state.users,patients:state.patients})(walkIn.patientPublicId)
@@ -140,6 +177,14 @@ export function CheckInPage({ store, context, setPage }) {
     setWalking(false)
     if(!result.ok)return toast(result.message,'warning')
     setAdmitted(true);toast(result.queued?`Walk-in admitted — queue number ${result.queueNumber}.`:'Walk-in arrival recorded.','success')
+  }
+
+  const checkWalkin=async()=>{
+    if(typeof flow?.beginArrival!=='function')return checkWalkinLegacy()
+    if(!canWalkIn||arrivalSending.current||arrivalLocked)return
+    const intent={...walkIn,kind:'walkin',clinicDate:today}
+    const command=flow.beginArrival(intent,{isCurrent:()=>arrivalLive.current&&arrivalAttempt.current===command})
+    arrivalAttempt.current=command;await submitArrival(command)
   }
 
   // Minimal front-desk registration of a new walk-in Patient (Person + Patient on the server, no login account).
@@ -167,24 +212,34 @@ export function CheckInPage({ store, context, setPage }) {
         <RefreshButton size="sm" onClick={()=>flow?.refresh()}/>
       </div>}/>
     <AppointmentsLoadNotice store={store}/>
+    <div ref={arrivalFeedback} tabIndex={-1} role={['unknown','refused'].includes(arrivalPhase)?'alert':'status'}>
+      {arrivalPhase==='submitting'&&<p>Recording the reviewed arrival…</p>}
+      {arrivalMessage&&<p>{arrivalMessage}</p>}
+      {arrivalPhase==='unknown'&&<><Button onClick={()=>submitArrival(arrivalAttempt.current)}>Retry the same arrival</Button><p>Details stay protected. After reload or sign-in, review today’s recorded arrivals before starting another admission.</p></>}
+      {arrivalPhase==='refused'&&<Button onClick={()=>{if(resetArrival())flow?.refresh()}}>Review arrival details</Button>}
+      {arrivalResult&&arrivalResult.actorKey===checkInActorKey(store.session)&&arrivalResult.authGeneration===store.getAuthGeneration?.()&&<Notice tone="success" title="Arrival receipt">
+        {arrivalResult.patientName}: visit {arrivalResult.visitId}{arrivalResult.queued?` · Queue ${arrivalResult.queueNumber}`:' · No Dentist queue assigned'}. This confirms arrival, not treatment completion.
+        {setPage&&<Button variant="soft" onClick={()=>setPage('queue')}>Open live queue</Button>}
+      </Notice>}
+    </div>
     <div className="checkin-shell">
-      <div className="checkin-mode"><button className={mode==='scheduled'?'active':''} onClick={()=>setMode('scheduled')}><Icon name="calendar" size={18}/>Scheduled arrivals</button><button className={mode==='walkin'?'active':''} onClick={()=>setMode('walkin')}><Icon name="user" size={18}/>Walk-in admission</button></div>
+      <div className="checkin-mode"><button disabled={arrivalLocked} className={mode==='scheduled'?'active':''} onClick={()=>setMode('scheduled')}><Icon name="calendar" size={18}/>Scheduled arrivals</button><button disabled={arrivalLocked} className={mode==='walkin'?'active':''} onClick={()=>setMode('walkin')}><Icon name="user" size={18}/>Walk-in admission</button></div>
       {mode==='scheduled'?<Card className="checkin-focus-card" title="Scheduled arrivals" subtitle="Select the patient who has arrived (earliest first).">
         {arrivalProblem&&<Notice tone="warning">{arrivalProblem}</Notice>}
         {selectionContext&&!contextualAppointment&&<Notice tone="warning">The selected appointment changed or is no longer eligible. Refresh and explicitly select the current appointment; no patient was substituted.</Notice>}
-        <div className="checkin-select-row"><Field label="Today’s appointment"><select disabled={busy||cancelling} value={selectedAppointment?.id||''} onChange={e=>selectScheduled(checkInSelectionFor(store,state.appointments.find(a=>a.id===e.target.value)))}><option value="">Select appointment</option>{eligible.map(a=><option value={a.id} key={a.id}>{displayTime(a.start)} • {patientName(a.patientId,state.patients)} • {a.service}</option>)}</select></Field></div>
+        <div className="checkin-select-row"><Field label="Today’s appointment"><select disabled={busy||cancelling||arrivalLocked} value={selectedAppointment?.id||''} onChange={e=>selectScheduled(checkInSelectionFor(store,state.appointments.find(a=>a.id===e.target.value)))}><option value="">Select appointment</option>{eligible.map(a=><option value={a.id} key={a.id}>{displayTime(a.start)} • {patientName(a.patientId,state.patients)} • {a.service}</option>)}</select></Field></div>
         {selectedAppointment?<div className="arrival-card"><div className="avatar large">{patientName(selectedAppointment.patientId,state.patients).split(' ').map(x=>x[0]).slice(0,2).join('')}</div><div className="arrival-main"><span>Arriving patient</span><h2>{patientName(selectedAppointment.patientId,state.patients)}</h2><p>{selectedAppointment.service} • {selectedAppointment.dentistName||dentistName(selectedAppointment.dentistId,state.dentists)}</p><div className="arrival-meta"><span><Icon name="calendar" size={15}/>{displayTime(selectedAppointment.start)}</span><span><Icon name="building" size={15}/>{selectedAppointment.branch}</span><span>{selectedAppointment.appointmentNo}</span></div></div><div className="arrival-action">
             <Status>{selectedAppointment.status}</Status>
             <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', margin: '4px 0', cursor: 'pointer' }}>
-              <input type="checkbox" disabled={busy||cancelling} checked={idConfirmed} onChange={e=>setIdConfirmed(e.target.checked)}/>
+              <input type="checkbox" disabled={busy||cancelling||arrivalLocked} checked={idConfirmed} onChange={e=>setIdConfirmed(e.target.checked)}/>
               <span>Valid ID presented</span>
             </label>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-              <Button onClick={checkScheduled} disabled={busy || cancelling} icon="checkin">{busy ? 'Recording…' : 'Confirm arrival'}</Button>
-              <Button variant="ghost" onClick={() => { cancelKey.current = commandKey(); setCancelModalOpen(true) }} disabled={busy || cancelling}>Cancel appointment</Button>
+              <Button onClick={checkScheduled} disabled={busy || cancelling || arrivalLocked} icon="checkin">{busy ? 'Recording…' : 'Confirm arrival'}</Button>
+              <Button variant="ghost" onClick={() => { cancelKey.current = commandKey(); setCancelModalOpen(true) }} disabled={busy || cancelling || arrivalLocked}>Cancel appointment</Button>
             </div>
           </div></div>:<Notice>Select an appointment to check the patient in.</Notice>}
-        {selectedAppointment?.patientPublicId&&session?.role==='staff'&&<IdCheck patientId={selectedAppointment.patientPublicId} toast={toast}/>}
+        {selectedAppointment?.patientPublicId&&session?.role==='staff'&&<IdCheck patientId={selectedAppointment.patientPublicId} toast={toast} getAuthGeneration={store.getAuthGeneration}/>}
         {cancelModalOpen && selectedAppointment && (
           <Modal title={`Cancel appointment: ${patientName(selectedAppointment.patientId, state.patients)}`} onClose={() => !cancelling && setCancelModalOpen(false)}>
             <div className="form-grid">
@@ -221,7 +276,7 @@ export function CheckInPage({ store, context, setPage }) {
         {notQueued.length>0&&<div className="top-gap"><Notice tone="info" title="Checked in, not in a queue">These visits have no responsible Dentist yet, so they are not in a Dentist’s queue and treatment can’t start. Assigning a Dentist later isn’t available yet.</Notice>
           {notQueued.map(v=><div className="clinical-history" key={v.id}><div><b>{v.patientName||patientName(v.patientId,state.patients)}</b><p>{v.walkIn?'Walk-in':v.appointmentCode} • arrived {displayTime(v.checkedIn)} • No Dentist assigned</p></div></div>)}
         </div>}
-      </Card>:<Card title="Walk-in admission" subtitle="Find an existing patient or register a new walk-in patient, then select branch, service and dentist."><div className="form-grid">
+      </Card>:<Card title="Walk-in admission" subtitle="Find an existing patient or register a new walk-in patient, then select branch, service and dentist."><fieldset className="form-grid" disabled={arrivalLocked} style={{border:0,padding:0,margin:0,minWidth:0}}>
         <div className="span-2" style={{ display: 'flex', gap: '16px', marginBottom: '8px' }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: !registering ? 'bold' : 'normal' }}>
             <input type="radio" name="walkinType" checked={!registering} onChange={()=>setRegistering(false)}/> Existing registered patient
@@ -255,13 +310,14 @@ export function CheckInPage({ store, context, setPage }) {
           const dentistQueue=state.queue.filter(q=>q.dentistId===walkIn.dentistId&&isActiveQueue(q)&&isTodayQueue(q))
           const upcomingAppt=state.appointments.find(a=>a.dentistId===walkIn.dentistId&&a.date===today&&['Confirmed','Pending'].includes(a.status))
           return <div className="span-2"><Notice tone={upcomingAppt?'warning':'info'}>
-            <b>Dr. {walkDentists.find(d=>d.id===walkIn.dentistId)?.name||'Dentist'} queue load:</b> {dentistQueue.length} patient{dentistQueue.length===1?'':'s'} currently waiting/in chair.
-            {upcomingAppt?` Upcoming scheduled appointment: ${displayTime(upcomingAppt.start)} (${upcomingAppt.service}). Walk-ins are queued behind scheduled arrivals and must not displace confirmed appointments.`:' No conflicting scheduled appointments today.'}
+            <b>Dr. {walkDentists.find(d=>d.id===walkIn.dentistId)?.name||'Dentist'} queue load:</b> {dentistQueue.length} active queue entr{dentistQueue.length===1?'y':'ies'}.
+            {upcomingAppt?` Scheduled appointment shown: ${displayTime(upcomingAppt.start)} (${upcomingAppt.service}). Queue order follows recorded arrivals and authorized queue controls; this does not reserve appointment time.`:' No pending or confirmed appointments are shown for this Dentist today.'}
           </Notice></div>
         })()}
         <div className="span-2 walkin-action"><Notice tone="info">The clinic server checks branch hours, the service and the Dentist’s shift. A walk-in does not reserve Dentist appointment time.</Notice><Button disabled={!canWalkIn} onClick={checkWalkin} icon="checkin">{walking?'Admitting…':'Admit walk-in to queue'}</Button></div>
-      </div></Card>}
+      </fieldset></Card>}
     </div>
+    <RecordedArrivals store={store}/>
     <PossibleNoShows toast={toast} onChanged={()=>flow?.refresh()}/>
     <div className="fd-grid"><SelfRegistered toast={toast} store={store} onChanged={()=>flow?.refresh()}/></div>
     <FrontDeskToday toast={toast} onChanged={()=>flow?.refresh()}/>
@@ -316,6 +372,29 @@ function OperationalQueuePage({ role, activeBranch, store, setPage }) {
   // M9: every queue change is a server command (Idempotency-Key per attempt + expected revision); the server computes
   // numbers and positions. A second click while a command is in flight is ignored.
   const flow=store.appointmentFlow
+  const [arrivalPhase,setArrivalPhase]=useState('idle'),[arrivalMessage,setArrivalMessage]=useState(''),[arrivalResult,setArrivalResult]=useState(null)
+  const arrivalAttempt=useRef(null),arrivalSending=useRef(false),arrivalLive=useRef(false),arrivalFeedback=useRef(null)
+  const arrivalLocked=['submitting','unknown'].includes(arrivalPhase)
+  React.useLayoutEffect(()=>{arrivalLive.current=true;return()=>{arrivalLive.current=false}},[])
+  useEffect(()=>{if(['unknown','refused','verified'].includes(arrivalPhase))arrivalFeedback.current?.focus()},[arrivalPhase])
+  const resetArrival=()=>{if(arrivalSending.current||arrivalAttempt.current?.outcome==='unknown')return false;arrivalAttempt.current=null;setArrivalPhase('idle');setArrivalMessage('');return true}
+  const submitArrival=async command=>{
+    if(!command||arrivalSending.current)return
+    arrivalSending.current=true;setArrivalPhase('submitting');setArrivalMessage('')
+    try{
+      const result=await command.submit()
+      if(!arrivalLive.current||arrivalAttempt.current!==command)return
+      if(result.outcome==='obsolete'){setArrivalPhase('unknown');setArrivalMessage('Your admission context changed. Review recorded arrivals before starting another admission.');return}
+      if(!['unknown','refused','verified'].includes(result.outcome))return
+      setArrivalPhase(result.outcome)
+      if(!result.ok){setArrivalMessage(result.message||'The arrival was not confirmed. Review the current clinic records.');return}
+      if(command.intent.kind==='walkin')setAdmitted(true)
+      else{reviewedSelection.current=null;setSelectionContext(null);setAppointmentId('');setIdConfirmed(false)}
+      setArrivalResult({...result,actorKey:checkInActorKey(store.session),authGeneration:store.getAuthGeneration?.()})
+      setArrivalMessage(result.warning||'')
+      toast(result.queued?`Arrival verified — queue number ${result.queueNumber}.`:'Arrival verified.','success')
+    }finally{arrivalSending.current=false}
+  }
   const [busy,setBusy]=useState(null)
   const [messageBusy,setMessageBusy]=useState(null)
   const run=async(entry,label,send)=>{
@@ -356,6 +435,16 @@ function OperationalQueuePage({ role, activeBranch, store, setPage }) {
       <label>Status <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option value="Active">Active</option><option value="All">All</option><option value="In Queue">In Queue</option><option value="In Treatment">In Treatment</option><option value="Done">Done</option></select></label>
     </FilterBar>
     <AppointmentsLoadNotice store={store}/>
+    <div ref={arrivalFeedback} tabIndex={-1} role={['unknown','refused'].includes(arrivalPhase)?'alert':'status'}>
+      {arrivalPhase==='submitting'&&<p>Recording the reviewed arrival…</p>}
+      {arrivalMessage&&<p>{arrivalMessage}</p>}
+      {arrivalPhase==='unknown'&&<><Button onClick={()=>submitArrival(arrivalAttempt.current)}>Retry the same arrival</Button><p>Details stay protected. After reload or sign-in, review today’s recorded arrivals before starting another admission.</p></>}
+      {arrivalPhase==='refused'&&<Button onClick={()=>{if(resetArrival())flow?.refresh()}}>Review arrival details</Button>}
+      {arrivalResult&&arrivalResult.actorKey===checkInActorKey(store.session)&&arrivalResult.authGeneration===store.getAuthGeneration?.()&&<Notice tone="success" title="Arrival receipt">
+        {arrivalResult.patientName}: visit {arrivalResult.visitId}{arrivalResult.queued?` · Queue ${arrivalResult.queueNumber}`:' · No Dentist queue assigned'}. This confirms arrival, not treatment completion.
+        {setPage&&<Button variant="soft" onClick={()=>setPage('queue')}>Open live queue</Button>}
+      </Notice>}
+    </div>
     {!demo&&<QueueStatusCounts store={store} activeBranch={role==='owner'?activeBranch:'All Branches'} vis={vis}/>}
     {operational&&!demo&&<SelfRegistered toast={toast} store={store} compact/>}
     {role==='staff'&&<Notice tone="info">A patient in the queue has already checked in. Marking them as having left or cancelling their visit isn’t available yet — the clinic still needs to decide how an admitted visit is closed. A patient who never arrived is marked No-show from Appointments.</Notice>}
