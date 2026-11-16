@@ -8,6 +8,8 @@ use App\Http\Resources\Reference\DentistProfileResource;
 use App\Models\Branch;
 use App\Models\DentistProfile;
 use App\Models\StaffProfile;
+use App\Models\User;
+use App\Services\Audit\AuditService;
 use Illuminate\Support\Facades\DB;
 
 class DentistProfileController extends Controller
@@ -32,15 +34,27 @@ class DentistProfileController extends Controller
                 : null;
         }
 
-        DB::transaction(function () use ($request, $dentistProfile, $attributes): void {
-            $dentistProfile->update($attributes);
+        return DB::transaction(function () use ($request, $dentistProfile, $attributes) {
+            $actor=User::whereKey($request->user()->id)->lock('for no key update')->first();
+            abort_unless($actor && $actor->role->value==='owner' && $actor->account_status==='Active' && $actor->auth_version===$request->user()->auth_version,403);
+            $current=DentistProfile::whereKey($dentistProfile->id)->lockForUpdate()->firstOrFail();
+            $current->update($attributes);
+            $fields=array_values(array_intersect(array_keys($current->getChanges()),array_keys($attributes)));
 
             if ($request->has('branch_ids')) {
                 $branchIds = Branch::whereIn('legacy_ref', $request->validated('branch_ids'))->pluck('id');
-                $dentistProfile->branches()->sync($branchIds);
+                $changed=$current->branches()->sync($branchIds);
+                if($changed['attached']||$changed['detached']||$changed['updated'])$fields[]='branch_ids';
             }
+            $current=$current->fresh(['person','assistant','branches','services']);
+            if($fields){
+                sort($fields);
+                app(AuditService::class)->record(['action'=>'dentist_profile.updated','category'=>'administrative','actor'=>$actor,
+                    'auditable_type'=>'DentistProfile','auditable_public_id'=>$current->legacy_ref,
+                    'payload'=>['changed_fields'=>$fields,'branch_refs'=>$current->branches->pluck('legacy_ref')->sort()->values()->all()]]);
+            }
+            // Materialize this command's persisted resource while the profile lock is still held.
+            return response()->json(['data'=>(new DentistProfileResource($current))->resolve($request)]);
         });
-
-        return response()->json(['data' => new DentistProfileResource($dentistProfile->fresh(['person', 'assistant', 'branches', 'services']))]);
     }
 }
