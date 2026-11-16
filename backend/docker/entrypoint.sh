@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -e
 
+# Schema changes are an explicit, backed-up release step. The default chain
+# contains held transformations and must never be run by a service restart.
+if [ "${AUTO_MIGRATE:-false}" = "true" ]; then
+    echo "AUTO_MIGRATE=true is refused. Apply the reviewed migration profile offline before startup." >&2
+    exit 1
+fi
+
 # Render injects $PORT (defaults to 10000 on Render)
 PORT="${PORT:-10000}"
 echo "==> Configuring Nginx to listen on port ${PORT}..."
@@ -21,12 +28,6 @@ echo "==> Clearing cached configurations..."
 php /var/www/html/artisan config:clear || true
 php /var/www/html/artisan route:clear || true
 php /var/www/html/artisan view:clear || true
-
-# Optional auto-migration if AUTO_MIGRATE=true in Render environment
-if [ "${AUTO_MIGRATE:-false}" = "true" ]; then
-    echo "==> Running database migrations..."
-    php /var/www/html/artisan migrate --force || true
-fi
 
 # Allow running custom commands (e.g. docker run ... php artisan test)
 if [ "$#" -gt 0 ] && [ "$1" != "/usr/bin/supervisord" ]; then
