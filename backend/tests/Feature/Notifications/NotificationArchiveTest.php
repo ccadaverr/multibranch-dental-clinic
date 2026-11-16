@@ -118,4 +118,68 @@ class NotificationArchiveTest extends TestCase
         $this->assertSame(53, AuditLog::where('action', 'notification.archived')->count());
         $this->assertSame(103, UserNotification::where('user_id', $this->u['staffB1']->id)->whereNull('read_at')->count());
     }
+
+    public function test_history_page_and_unread_total_share_a_snapshot_when_state_changes_mid_response(): void
+    {
+        $recipient = $this->u['staffB1'];
+        [$archived, $read] = UserNotification::where('user_id', $recipient->id)->latest('id')->limit(2)->get()->all();
+        $interleaved = false;
+        DB::listen(function (\Illuminate\Database\Events\QueryExecuted $event) use ($recipient, $archived, $read, &$interleaved) {
+            if ($interleaved || ! str_contains($event->sql, 'from "user_notifications"') ||
+                ! str_contains($event->sql, '"created_at" desc') || ! str_contains($event->sql, 'limit 51')) {
+                return;
+            }
+            $interleaved = true;
+            // Exactly after the page SELECT, before any follow-up SELECT can see the new state.
+            DB::table('notification_archives')->insert(['notification_id' => $archived->id, 'archived_by_user_id' => $recipient->id]);
+            DB::table('user_notifications')->where('id', $read->id)->update(['read_at' => '2026-09-28T10:00:00+08:00']);
+        });
+
+        $this->getJson('/api/notifications')->assertOk()->assertJsonPath('meta.unread', 103)
+            ->assertJsonPath('data.0.id', $archived->public_id)->assertJsonPath('data.0.archived', false)
+            ->assertJsonPath('data.1.id', $read->public_id)->assertJsonPath('data.1.read', false);
+        $this->assertTrue($interleaved, 'The query barrier must run before the response returns.');
+
+        $this->getJson('/api/notifications')->assertOk()->assertJsonPath('meta.unread', 101)
+            ->assertJsonPath('data.0.id', $read->public_id)->assertJsonPath('data.0.read', true)
+            ->assertJsonMissing(['id' => $archived->public_id]);
+        $this->getJson('/api/notifications?collection=archived')->assertOk()->assertJsonPath('meta.unread', 101)
+            ->assertJsonPath('data.0.id', $archived->public_id)->assertJsonPath('data.0.archived', true)
+            ->assertJsonPath('data.0.read', false);
+    }
+
+    public function test_each_role_reads_back_only_its_own_archived_notice_and_cannot_enumerate_foreign_ids(): void
+    {
+        $roles = ['staffB1', 'dentist1', 'owner', 'patientA'];
+        $notes = [];
+        foreach ($roles as $role) {
+            $key = 'cross-role-archive-'.$role;
+            app(NotificationCenter::class)->staffNotice($this->u[$role], 'record_shared', 'Synthetic recipient notice', null, 'visits', null, $key);
+            $notes[$role] = UserNotification::where('dedupe_key', $key)->sole()->public_id;
+        }
+
+        foreach ($roles as $role) {
+            $this->actingAsUser($role);
+            $this->postJson('/api/notifications/'.$notes[$role].'/archive')->assertOk()
+                ->assertJsonPath('meta.archive_receipt.id', $notes[$role]);
+        }
+
+        $missing = strtolower((string) \Illuminate\Support\Str::ulid());
+        foreach ($roles as $role) {
+            $this->actingAsUser($role);
+            $this->getJson('/api/notifications?collection=archived')->assertOk()->assertJsonCount(1, 'data')
+                ->assertJsonPath('data.0.id', $notes[$role])->assertJsonPath('data.0.read', false);
+            $foreign = $role === 'staffB1' ? $notes['patientA'] : $notes['staffB1'];
+            $history = '/api/notifications?collection=archived&before=';
+            $unknown = $this->getJson($history.$missing)->assertNotFound()->json('message');
+            $this->getJson($history.$foreign)->assertNotFound()->assertJsonPath('message', $unknown);
+            foreach (['read', 'archive'] as $command) {
+                $unknown = $this->postJson('/api/notifications/'.$missing.'/'.$command)->assertNotFound()->json('message');
+                $this->postJson('/api/notifications/'.$foreign.'/'.$command)->assertNotFound()->assertJsonPath('message', $unknown);
+            }
+        }
+        $this->assertSame(4, DB::table('notification_archives')->count());
+        $this->assertSame(4, AuditLog::where('action', 'notification.archived')->count());
+        $this->assertSame(4, UserNotification::whereIn('public_id', $notes)->whereNull('read_at')->count());
+    }
 }

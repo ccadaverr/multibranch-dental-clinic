@@ -41,7 +41,6 @@ class NotificationController extends Controller
             $query->whereRaw('(created_at, id) < (?, ?)', [$cursor->created_at, $cursor->id]);
         }
         if ($archival) {
-            $query->with('archive');
             $collection === 'archived' ? $query->whereHas('archive') : $query->whereDoesntHave('archive');
         }
 
@@ -51,7 +50,25 @@ class NotificationController extends Controller
     private function historyResponse(Request $request, array $history, array $receipt = []): JsonResponse
     {
         ['query' => $query, 'archival' => $archival, 'collection' => $collection] = $history;
-        $page = $query->orderByDesc('created_at')->orderByDesc('id')->limit(51)->get();
+        $query->select(['id', 'public_id', 'kind', 'title', 'body', 'target_page', 'target_id', 'created_at', 'read_at']);
+        if ($archival) {
+            $query->withAggregate('archive as archive_recorded_at', 'archived_at');
+        }
+        $query->orderByDesc('created_at')->orderByDesc('id')->limit(51);
+        $unread = UserNotification::where('user_id', $request->user()->id)->whereNull('read_at')
+            ->when($archival, fn ($query) => $query->whereDoesntHave('archive'))
+            ->selectRaw('count(*) as active_unread_count');
+
+        // One PostgreSQL statement keeps the page, archive evidence and count on the same snapshot.
+        // Start with the count so even an empty continuation returns the correct unread total.
+        $result = UserNotification::query()
+            ->fromSub($unread->toBase(), 'totals')
+            ->leftJoinLateral($query->toBase(), 'page')
+            ->select('page.*', 'totals.active_unread_count')
+            ->orderByDesc('page.created_at')->orderByDesc('page.id')
+            ->withCasts(['archive_recorded_at' => 'immutable_datetime'])
+            ->get();
+        $page = $result->filter(fn (UserNotification $notification) => $notification->getKey() !== null);
         $rows = $page->take(50);
 
         return response()->json([
@@ -59,10 +76,10 @@ class NotificationController extends Controller
                 'id' => $n->public_id, 'kind' => $n->kind, 'title' => $n->title, 'body' => $n->body,
                 'target' => $n->target_page ? ['page' => $n->target_page, 'id' => $n->target_id] : null,
                 'created_at' => $n->created_at ? ClinicClock::local($n->created_at)->toIso8601String() : null, 'read' => $n->read_at !== null,
-                'archived' => $archival && $n->archive !== null,
-                'archived_at' => $archival && $n->archive ? ClinicClock::local($n->archive->archived_at)->toIso8601String() : null,
+                'archived' => $archival && $n->archive_recorded_at !== null,
+                'archived_at' => $archival && $n->archive_recorded_at ? ClinicClock::local($n->archive_recorded_at)->toIso8601String() : null,
             ])->values(),
-            'meta' => ['unread' => UserNotification::where('user_id', $request->user()->id)->whereNull('read_at')->when($archival, fn ($q) => $q->whereDoesntHave('archive'))->count(),
+            'meta' => ['unread' => (int) $result->first()->active_unread_count,
                 'collection' => $collection, 'archive_available' => $archival,
                 'has_more' => $page->count() > 50, 'next_before' => $page->count() > 50 ? $rows->last()->public_id : null] + $receipt,
         ]);
