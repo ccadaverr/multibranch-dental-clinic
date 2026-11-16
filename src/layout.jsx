@@ -156,11 +156,17 @@ function useServerNotificationFeed(session, enabled = true, getAuthGeneration) {
     const previousPage = snapshotRef.current?.token === token ? snapshotRef.current : null
     if (append && !previousPage?.nextBefore) return false
     pending.current = token
-    setSnapshot(previous => ({ ...(previous?.token === token ? previous : { items: [], unread: null }), token, loading: !mutation && !append, busy: mutation || append, error: '', historyError: '' }))
+    setSnapshot(previous => ({ ...(previous?.token === token ? previous : { items: [], unread: null }), token, loading: !mutation && !append, busy: mutation || append,
+      pendingLabel: expectedArchive ? 'Archiving notification…' : append ? 'Loading older notifications…' : null, error: '', historyError: '' }))
+    const owns = () => {
+      if (!mounted.current || epoch.current !== token || generation.current !== requestId) return false
+      return auth === getAuthGeneration?.()
+    }
+    let accessDenied = false
     try {
-      const owns=()=>mounted.current && epoch.current===token && generation.current===requestId && auth===getAuthGeneration?.()
       const result = await operation(owns)
-      if (!mounted.current || epoch.current !== token || generation.current !== requestId || !owns()) return false
+      if (!owns()) return false
+      accessDenied = result?.kind === 'unauthenticated' || result?.kind === 'forbidden'
       const data = serverNotificationSnapshot(result)
       if (data.collection !== undefined && data.collection !== collection) throw new Error('The notification collection changed. Reload notifications.')
       if (expectedArchive && (result.meta?.archive_receipt?.id !== expectedArchive || result.meta.archive_receipt.archived !== true ||
@@ -168,16 +174,16 @@ function useServerNotificationFeed(session, enabled = true, getAuthGeneration) {
       if (expectedRead === '*' ? data.items.some(n=>!n.read) : expectedRead && result.meta?.read_id !== expectedRead && !data.items.some(n=>n.id===expectedRead&&n.read)) throw new Error('Read status could not be confirmed. Reload notifications before trying again.')
       if (append) {
         const ids = new Set(previousPage.items.map(n => n.id))
-        if (!data.items.length || data.items.some(n => ids.has(n.id)) || data.nextBefore === previousPage.nextBefore) throw new Error('Notification history changed. Refresh notifications before loading more.')
+        if (data.nextBefore === undefined || data.items.some(n => ids.has(n.id)) || data.nextBefore === previousPage.nextBefore) throw new Error('Notification history changed. Refresh notifications before loading more.')
         data.items = [...previousPage.items, ...data.items]
       }
       setSnapshot({ ...data, token, loading: false, busy: false, error: '' })
       return true
     } catch (error) {
-      if (!mounted.current || epoch.current !== token || generation.current !== requestId) return false
+      if (!owns()) return false
       // Never show stale feed contents as a successful empty result after failure.
-      setSnapshot(append ? { ...previousPage, loading: false, busy: false, historyError: error.message || 'Older notifications could not be loaded. Try again.' }
-        : { token, items: [], unread: null, archiveAvailable: previousPage?.archiveAvailable, failedArchive: expectedArchive,
+      setSnapshot(append && !accessDenied ? { ...previousPage, loading: false, busy: false, historyError: error.message || 'Older notifications could not be loaded. Try again.' }
+        : { token, items: [], unread: null, archiveAvailable: !accessDenied && previousPage?.archiveAvailable, failedArchive: accessDenied ? null : expectedArchive,
             loading: false, busy: false, error: error.message || 'Notifications are unavailable. Try again.' })
       return false
     } finally {
@@ -234,8 +240,8 @@ function NotificationPanelContent({role,store,onClose,setPage,serverFeed}){
   const latest=React.useRef({state,session,key})
   latest.current={state,session,key}
   const destination=n=>server?serverNotificationDestination(state,session,n):notificationDestination(state,session,n)
-  const perform=async command=>{
-    if(pending.current||loading||feedError||auth!==store.getAuthGeneration?.())return false
+  const perform=async (command, retryArchive=false)=>{
+    if(pending.current||loading||(feedError&&!retryArchive)||auth!==store.getAuthGeneration?.())return false
     pending.current=true
     focusOrigin.current=typeof document==='undefined'?null:document.activeElement
     setBusy(true);setFailure('')
@@ -243,6 +249,7 @@ function NotificationPanelContent({role,store,onClose,setPage,serverFeed}){
       const result=await command()
       if(!live.current||latest.current.key!==key||auth!==store.getAuthGeneration?.())return false
       if(!(server?result:result?.ok)){
+        if(server)return false
         const message=result?.message||'Notifications could not be updated. Try again.'
         setFailure(message);toast?.(message,'warning');return false
       }
@@ -261,19 +268,19 @@ function NotificationPanelContent({role,store,onClose,setPage,serverFeed}){
   }
   const updating=busy||(server&&feed.busy)
   return <Modal open title="Notifications" subtitle={server?'Your updates and notification history':'Your updates and reminders'} onClose={onClose} className="notification-dialog a12-notifications"><div className="notification-popover">
-    <div className="notification-summary"><span>{unread===null?'Unread count unavailable':unread?`${unread} unread`:'No unread updates'}</span><span role="status">{loading?'Loading notifications…':updating?'Updating read status…':feedError?'Notifications unavailable':`Showing ${visible.length} of ${items.length}${server?' recent records':''}`}</span></div>
+    <div className="notification-summary"><span>{unread===null?'Unread count unavailable':unread?`${unread} unread`:'No unread updates'}</span><span role="status">{loading?'Loading notifications…':updating?(feed.pendingLabel||'Updating read status…'):feedError?'Notifications unavailable':`Showing ${visible.length} of ${items.length}${server?' recent records':''}`}</span></div>
     <div className="notification-toolbar"><button type="button" onClick={()=>perform(()=>server?feed.markAll():actions.markAllNotificationsRead())} disabled={updating||loading||!!feedError||!unread||feed.collection==='archived'}>Mark my notifications read</button><button type="button" disabled={loading||!!feedError} aria-pressed={all} onClick={()=>setAll(v=>!v)}>{all?'Recent only':server?`Show loaded history (${items.length})`:`View all (${items.length})`}</button></div>
     {server&&feedCurrent&&feed.archiveAvailable&&<div className="notification-toolbar" aria-label="Notification collection"><button type="button" disabled={updating||loading} aria-pressed={feed.collection==='active'} onClick={()=>{setFailure('');feed.changeCollection('active')}}>Inbox</button><button type="button" disabled={updating||loading} aria-pressed={feed.collection==='archived'} onClick={()=>{setFailure('');setAll(true);feed.changeCollection('archived')}}>Archived notifications</button></div>}
     {server&&<p>History loads 50 records at a time. The unread count includes older notifications.</p>}
     {feedError&&<p className="notification-failure" role="alert" tabIndex={0}>{feedError} <button type="button" onClick={()=>{setFailure('');feed.refresh()}}>Retry notifications</button></p>}
-    {feedError&&feed.failedArchive&&<div className="notification-toolbar"><button type="button" disabled={updating||loading} onClick={()=>feed.archive(feed.failedArchive)}>Retry archive</button></div>}
+    {feedError&&feed.failedArchive&&<div className="notification-toolbar"><button type="button" disabled={updating||loading} onClick={()=>perform(()=>feed.archive(feed.failedArchive),true)}>Retry archive</button></div>}
     {!feedError&&failure&&<p className="notification-failure" role="alert" tabIndex={0}><b>Notification change wasn’t confirmed.</b> {failure}</p>}
     <div ref={scrollRegion} className="notification-scroll" role="region" aria-label={server?'Recent notification history':'Notification history'} tabIndex={0} aria-busy={loading||updating}>{loading?<p role="status">Loading notifications…</p>:feedError?null:visible.length?dateGroups.map(group=><section key={group.key}>
       <h3 className="notification-date-heading">{group.label}</h3>
       <ul className="notification-list">{group.items.map(n=><li className={`notification-row ${n.read?'':'unread'}`} key={n.id}><span className="notification-dot" aria-hidden="true"/><div><b>{!n.read&&<><span className="sr-only">Unread: </span><span className="notification-unread-label" aria-hidden="true">Unread</span></>}{n.title}</b><p>{n.body}</p><small>{n.createdAt||'Date unavailable'} • {n.legacy?'Historical demo record':n.channel}{n.archived&&` • Archived ${n.archivedAt}`}</small><div className="row-actions">{!n.read&&<button type="button" disabled={updating} onClick={()=>mark(n.id)}>Mark read</button>}{server&&feed.archiveAvailable&&feed.collection==='active'&&<button type="button" disabled={updating} aria-label={`Archive ${n.title}`} onClick={()=>perform(()=>feed.archive(n.id))}>Archive</button>}{destination(n)&&<button type="button" className="notification-view" disabled={updating} onClick={()=>open(n)}>View update</button>}</div></div></li>)}</ul>
     </section>):<div className="notification-empty"><Icon name="bell" size={28}/><b>{server?'No recent notifications.':"You're all caught up."}</b><p>{server?'No records were returned for your account.':'No updates to show in this workspace.'}</p></div>}</div>
     {server&&feedCurrent&&!feedError&&feed.nextBefore&&<div className="notification-toolbar"><button type="button" disabled={updating||loading} onClick={async()=>{setAll(true);await perform(()=>feed.more())}}>Load older notifications</button></div>}
-    {server&&feedCurrent&&feed.historyError&&<p role="alert" className="notification-failure">{feed.historyError}</p>}
+    {server&&feedCurrent&&feed.historyError&&<p role="alert" className="notification-failure">{feed.historyError} <button type="button" onClick={()=>perform(()=>feed.refresh())}>Refresh notifications</button></p>}
   </div></Modal>
 }
 

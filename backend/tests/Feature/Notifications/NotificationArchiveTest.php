@@ -97,4 +97,25 @@ class NotificationArchiveTest extends TestCase
         }
         $this->assertSame(1, DB::table('notification_archives')->count());
     }
+
+    public function test_active_continuation_can_end_empty_after_older_notifications_are_archived(): void
+    {
+        $first = $this->getJson('/api/notifications')->assertOk()->assertJsonCount(50, 'data')
+            ->assertJsonPath('meta.has_more', true)->json();
+        $visible = array_column($first['data'], 'id');
+        $older = UserNotification::where('user_id', $this->u['staffB1']->id)
+            ->whereNotIn('public_id', $visible)->pluck('public_id');
+        $this->assertCount(53, $older);
+        foreach ($older as $id) {
+            $this->postJson('/api/notifications/'.$id.'/archive')->assertOk()
+                ->assertJsonPath('meta.archive_receipt.id', $id);
+        }
+
+        $this->getJson('/api/notifications?before='.$first['meta']['next_before'])->assertOk()
+            ->assertJsonCount(0, 'data')->assertJsonPath('meta.has_more', false)
+            ->assertJsonPath('meta.next_before', null)->assertJsonPath('meta.unread', 50);
+        $this->assertSame(53, DB::table('notification_archives')->count());
+        $this->assertSame(53, AuditLog::where('action', 'notification.archived')->count());
+        $this->assertSame(103, UserNotification::where('user_id', $this->u['staffB1']->id)->whereNull('read_at')->count());
+    }
 }

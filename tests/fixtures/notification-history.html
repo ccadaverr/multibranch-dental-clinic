@@ -2,19 +2,21 @@
 import React from 'react'
 import {createRoot} from 'react-dom/client'
 import {Shell} from '/src/layout.jsx'
+import {setClockSource} from '/src/clock.js'
 import '/src/styles.css'
 import '/src/foundation.css'
 import '/src/polish.css'
 const session={serverUserId:'synthetic-account',role:'staff',active:true,userId:'u1',branchId:'b1'}
 const state={persons:[{id:'p1'}],users:[{id:'u1',personId:'p1',name:'Synthetic Staff',role:'Staff',status:'Active',branchId:'b1',permissions:['all']}],staff:[{userId:'u1',personId:'p1',branchId:'b1'}],branches:[{id:'b1',name:'Synthetic branch'}],patients:[],dentists:[],appointments:[],queue:[],treatments:[],invoices:[],prescriptions:[],hmo:[],conversations:[],notifications:[]}
-const rows=Array.from({length:120},(_,i)=>({id:'synthetic-'+String(120-i).padStart(3,'0'),title:'Synthetic notification '+(120-i),body:'Synthetic operational update',read:false,archived:false,archived_at:null,created_at:'2026-11-15T08:00:00+08:00'}))
+setClockSource(() => new Date('2026-11-15T16:05:00Z'))
+const rows=Array.from({length:120},(_,i)=>({id:'synthetic-'+String(120-i).padStart(3,'0'),title:'Synthetic notification '+(120-i),body:'Synthetic operational update',read:false,archived:false,archived_at:null,created_at:i===0?'2026-11-15T16:00:00Z':'2026-11-15T15:59:59Z'}))
 window.historyFixture={requests:[],failMore:false,rows}
 window.fetch=async(url,options={})=>{
  const target=new URL(url,location.href),path=target.pathname
  if(path==='/sanctum/csrf-cookie')return new Response(null,{status:204})
  window.historyFixture.requests.push({path,query:target.search})
  const before=target.searchParams.get('before')
- if(before&&window.historyFixture.failMore)return Response.json({message:'Synthetic history unavailable'},{status:503})
+ if(before&&window.historyFixture.failMore)return Response.json({message:'Synthetic history unavailable'},{status:window.historyFixture.failMore===true?503:window.historyFixture.failMore})
  let readId=null,archiveReceipt=null
  if(path.endsWith('/read')){readId=path.split('/').at(-2);rows.find(row=>row.id===readId).read=true}
  if(path.endsWith('/read-all'))rows.filter(row=>!row.archived).forEach(row=>{row.read=true})
@@ -22,6 +24,7 @@ window.fetch=async(url,options={})=>{
   const row=rows.find(row=>row.id===path.split('/').at(-2)),replayed=row.archived
   row.archived=true;row.archived_at||='2026-11-15T12:00:00+08:00'
   archiveReceipt={id:row.id,archived:true,archived_at:row.archived_at,replayed}
+  if(window.historyFixture.holdArchive)await new Promise(resolve=>{window.historyFixture.releaseArchive=resolve})
   if(window.historyFixture.dropArchive){window.historyFixture.dropArchive=false;throw Error('Synthetic archive response lost after state change')}
  }
  const collection=target.searchParams.get('collection')||'active'

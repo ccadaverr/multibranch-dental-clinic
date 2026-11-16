@@ -210,44 +210,46 @@ class AutomationTruthfulnessTest extends TestCase
 
     // ---- E-5 (M23): no data is not 100% ------------------------------------------------------------------------------
 
+    private function automationReport(string $scope = 'all'): \Illuminate\Testing\TestResponse
+    {
+        return $this->getJson('/api/analytics/executive-summary?period=all&branch_id='.rawurlencode($scope));
+    }
+
     public function test_health_is_null_with_no_evaluations_and_exact_otherwise(): void
     {
         $this->actingAsUser('owner');
-        $empty = $this->getJson('/api/automation/snapshot')->assertOk()->json('data');
-        $this->assertNull($empty['health_rate']);
-        $this->assertSame(0, $empty['total_actions']);
+        $this->automationReport()->assertOk()
+            ->assertJsonPath('data.automation.health_rate_pct', null)->assertJsonPath('data.automation.total_actions', 0);
 
         $this->record('hmo.pending.timer.updated', ['pending_hours' => 1]);
-        $this->assertSame(100, $this->getJson('/api/automation/snapshot')->json('data.health_rate'));
+        $this->automationReport()->assertOk()->assertJsonPath('data.automation.health_rate_pct', 100);
         $this->record('hmo.pending.timer.updated', ['pending_hours' => 30]);
-        $this->assertSame(50, $this->getJson('/api/automation/snapshot')->json('data.health_rate'));
+        $this->automationReport()->assertOk()->assertJsonPath('data.automation.health_rate_pct', 50);
         $this->record('hmo.pending.timer.updated', []);   // Failed
-        $this->assertSame(33, $this->getJson('/api/automation/snapshot')->json('data.health_rate'));
-        $this->assertSame(1, $this->getJson('/api/automation/snapshot')->json('data.failed_count'));
+        $this->automationReport()->assertOk()
+            ->assertJsonPath('data.automation.health_rate_pct', 33)->assertJsonPath('data.automation.failed', 1);
     }
 
     public function test_a_genuine_zero_percent_is_not_confused_with_no_data(): void
     {
         $this->record('hmo.pending.timer.updated', []);
         $this->actingAsUser('owner');
-        $this->assertSame(0, $this->getJson('/api/automation/snapshot')->json('data.health_rate'));
+        $this->automationReport()->assertOk()->assertJsonPath('data.automation.health_rate_pct', 0);
     }
 
     // ---- branch reference, history, privacy --------------------------------------------------------------------------
 
-    public function test_snapshot_branch_uses_the_m2_reference_contract_and_never_silently_widens(): void
+    public function test_report_branch_uses_the_m2_reference_contract_and_never_silently_widens(): void
     {
         $this->record('hmo.pending.timer.updated', ['pending_hours' => 1], 'b1');
         $this->record('hmo.pending.timer.updated', ['pending_hours' => 1], 'b2');
         $this->record('hmo.pending.timer.updated', ['pending_hours' => 1], 'b2');
         $this->actingAsUser('owner');
-        $b1 = $this->getJson('/api/automation/snapshot?branch_id=b1')->json('data.total_actions');
-        $b2 = $this->getJson('/api/automation/snapshot?branch_id='.$this->b['b2']->public_id)->json('data.total_actions');
-        $this->assertSame(1, $b1);
-        $this->assertSame(2, $b2);
-        $this->assertSame(3, $this->getJson('/api/automation/snapshot?branch_id=all')->json('data.total_actions'));
+        $this->automationReport('b1')->assertOk()->assertJsonPath('data.automation.total_actions', 1);
+        $this->automationReport($this->b['b2']->public_id)->assertOk()->assertJsonPath('data.automation.total_actions', 2);
+        $this->automationReport()->assertOk()->assertJsonPath('data.automation.total_actions', 3);
         foreach ([(string) $this->b['b1']->id, '0', 'b9', '01ARZ3NDEKTSV4RRFFQ69G5FAV'] as $bad) {
-            $this->getJson('/api/automation/snapshot?branch_id='.$bad)->assertStatus(422)->assertJsonValidationErrors('branch_id');
+            $this->automationReport($bad)->assertUnprocessable()->assertJsonValidationErrors('branch_id');
         }
     }
 
