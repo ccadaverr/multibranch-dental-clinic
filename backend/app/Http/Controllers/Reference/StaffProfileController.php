@@ -26,7 +26,12 @@ class StaffProfileController extends Controller
             ->when($user->role->value === 'staff', fn ($q) => $q->whereIn('branch_id', UserBranchScope::select('branch_id')->where('user_id', $user->id)))
             ->orderBy('id')->get();
 
-        return response()->json(['data' => StaffProfileResource::collection($rows)]);
+        // Keep the branch-scoped directory intact. The exact self identity is also
+        // needed to open the employee workspace when assignment differs from access.
+        $self = $user->role->value === 'staff' && UserBranchScope::where('user_id', $user->id)->exists()
+            ? StaffProfile::with(['person', 'branch'])->where('person_id', $user->person_id)->first() : null;
+        return response()->json(['data' => StaffProfileResource::collection($rows),
+            'meta' => ['self_staff' => $self ? new StaffProfileResource($self) : null]]);
     }
 
     // {staffProfile} resolves via StaffProfile::getRouteKeyName() = 'legacy_ref'.

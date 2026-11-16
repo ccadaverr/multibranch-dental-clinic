@@ -38,7 +38,7 @@ class Scope01WorkScheduleVisibilityTest extends TestCase
     {
         $rows = $this->roster('owner');
         $this->assertSame(['s-a', 's-b', 's-c', 's-none'], array_column($rows, 'id'));
-        $this->assertSame(['id', 'name', 'title', 'branch', 'shift_start', 'shift_end', 'available'], array_keys($rows[0]));
+        $this->assertSame(['id', 'name', 'title', 'can_request_roster', 'branch', 'shift_start', 'shift_end', 'available', 'revision'], array_keys($rows[0]));
         $this->assertSame(['id' => 'b1', 'name' => 'Branch B1'], $rows[0]['branch']);
         $this->assertSame($this->u['staffB1']->person->fullName(), $rows[0]['name']);
         $this->assertSame(['Receptionist', '08:15', '16:45', false], [
@@ -97,7 +97,7 @@ class Scope01WorkScheduleVisibilityTest extends TestCase
         ]);
         $this->actingAsUser('dentist1');
         $data = $this->getJson('/api/work-schedules')->assertOk()->json('data');
-        $this->assertSame(['dentists', 'duty', 'staff', 'exceptions', 'branches', 'weekdays', 'wording_approved'], array_keys($data));
+        $this->assertSame(['dentists', 'duty', 'staff_roster_publication_available', 'self_staff', 'staff', 'exceptions', 'branches', 'weekdays', 'wording_approved'], array_keys($data));
         $this->assertSame(['d1'], array_column($data['dentists'], 'id'));
         $this->assertSame(['b1', 'b2'], array_column(array_column($data['dentists'][0]['weekly'], 'branch'), 'id'));
         $this->assertSame(['09:00', '13:00'], array_column($data['dentists'][0]['weekly'], 'start'));

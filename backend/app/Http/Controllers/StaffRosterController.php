@@ -26,6 +26,12 @@ class StaffRosterController extends Controller
         abort_unless($branch && UserBranchScope::where('user_id',$actor->id)->where('branch_id',$branch->id)->exists(),403);
     }
 
+    private function selfReadAccess(User $actor, StaffProfile $staff): void
+    {
+        abort_unless($actor->account_status==='Active' && in_array($actor->role->value,['owner','staff'],true),403);
+        if($actor->role->value==='staff')abort_unless($actor->person_id===$staff->person_id && UserBranchScope::where('user_id',$actor->id)->exists(),403);
+    }
+
     public function index(Request $r)
     {
         $this->ready();$d=$r->validate(['date'=>self::DATE,'branch_ref'=>['required','string','max:50'],'before'=>['sometimes','ulid']]);
@@ -44,7 +50,7 @@ class StaffRosterController extends Controller
     public function show(Request $r, StaffProfile $staffProfile)
     {
         $this->ready();$d=$r->validate(['date'=>self::DATE]);
-        $this->access($r->user(),$staffProfile,$staffProfile->branch,true);
+        $this->selfReadAccess($r->user(),$staffProfile);
         $row=StaffRosterDraft::with('branch')->where('staff_profile_id',$staffProfile->id)->where('on_date',$d['date'])->first();
         if($row)$this->access($r->user(),$staffProfile,$row->branch,true);
         return response()->json(['data'=>$row?$this->view($row,$staffProfile):null,'meta'=>['staff_ref'=>$staffProfile->legacy_ref,'date'=>$d['date'],'revision'=>$row?->revision??0,'workflow_available'=>true]]);
@@ -61,7 +67,7 @@ class StaffRosterController extends Controller
     public function history(Request $r, StaffProfile $staffProfile)
     {
         $this->ready();$d=$r->validate(['date'=>self::DATE,'before'=>['sometimes','ulid']]);
-        $this->access($r->user(),$staffProfile,$staffProfile->branch,true);
+        $this->selfReadAccess($r->user(),$staffProfile);
         $draft=StaffRosterDraft::with('branch')->where('staff_profile_id',$staffProfile->id)->where('on_date',$d['date'])->first();
         if($draft)$this->access($r->user(),$staffProfile,$draft->branch,true);
         $q=DB::table('staff_roster_draft_revisions')->where('draft_id',$draft?->id??0);

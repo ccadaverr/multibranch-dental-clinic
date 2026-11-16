@@ -188,7 +188,9 @@ export function staffScheduleProfiles(data, session, role) {
   const rows = Array.isArray(data?.staff) ? data.staff : []
   if (role === 'owner') return rows
   const scopes = Array.isArray(session.branchScopes) ? session.branchScopes : []
-  return rows.filter(row => row.branch?.id && scopes.includes(row.branch.id))
+  const scoped=rows.filter(row => row.branch?.id && scopes.includes(row.branch.id))
+  const self=data?.staff_roster_publication_available===true && scopes.length && data?.self_staff?.can_request_roster===true ? data.self_staff : null
+  return self && !scoped.some(row=>row.id===self.id) ? [self,...scoped] : scoped
 }
 
 export function staffShiftSummary(row) {
@@ -250,7 +252,7 @@ export function StaffScheduleProfiles({ role, session, getAuthGeneration, roster
     {snapshot && loading && <p role="status">Refreshing Staff profiles…</p>}
     {!snapshot ? loading && <p role="status">Loading Staff profiles…</p> : !staff.length ? <p>No Staff shift profiles are available in your branch scope.</p> : <>
       <Field label="Staff member"><select aria-label="Staff member" value={summary.id} disabled={saving||draftPending} onChange={e => setSelected(e.target.value)}>{staff.map(s => <option key={s.id} value={s.id}>{s.name || 'Staff member'} · {s.branch?.name || 'No branch recorded'}</option>)}</select></Field>
-      <StaffShiftProfile key={summary.id} staff={summary} role={role} branches={snapshot.branches || []} canEdit={role === 'owner' && !error && !loading && !draftPending} getAuthGeneration={getAuthGeneration}
+      <StaffShiftProfile key={summary.id} staff={summary} role={role} branches={snapshot.branches || []} rosterAvailable={snapshot.staff_roster_publication_available===true} canEdit={role === 'owner' && !error && !loading && !draftPending} getAuthGeneration={getAuthGeneration}
         onPending={setSaving} onSaved={record => {
           // Adopt only this profile's authoritative response, never the currently selected row.
           generation.current++
@@ -267,7 +269,7 @@ export function StaffScheduleProfiles({ role, session, getAuthGeneration, roster
   </Card>
 }
 
-export function StaffShiftProfile({ staff, role, branches, canEdit, getAuthGeneration, onPending = () => {}, onSaved = () => {} }) {
+export function StaffShiftProfile({ staff, role, branches, canEdit, rosterAvailable=false, getAuthGeneration, onPending = () => {}, onSaved = () => {} }) {
   const [editing, setEditing] = useState(false), [start, setStart] = useState(staff.start), [end, setEnd] = useState(staff.end), [branch, setBranch] = useState(staff.branchRef)
   const [saving, setSaving] = useState(false), [error, setError] = useState(''), [success, setSuccess] = useState('')
   const [uncertain, setUncertain] = useState(false), [conflict, setConflict] = useState(false)
@@ -319,7 +321,7 @@ export function StaffShiftProfile({ staff, role, branches, canEdit, getAuthGener
     <dl><dt>Assigned branch</dt><dd>{staff.branch}</dd><dt>Shift hours returned by the server</dt><dd>{staff.start && staff.end ? `${t12(staff.start)}–${t12(staff.end)}` : 'Shift hours unavailable'}</dd>
       <dt>Profile availability</dt><dd>{staff.available === true ? 'Marked available' : staff.available === false ? 'Marked unavailable' : 'Availability not provided'}</dd></dl>
     <p>These are stored profile hours. Missing hours remain unavailable. These hours do not confirm attendance or coverage.</p>
-    <Notice title="Weekly Staff roster unavailable">No per-weekday Staff duty roster is provided. Working days, days off and weekly coverage cannot be determined from this shift interval.</Notice>
+    {rosterAvailable ? <Notice>Profile assignment does not grant branch access. Review published Staff duty and schedule requests below.</Notice> : <Notice title="Weekly Staff roster unavailable">No per-weekday Staff duty roster is provided. Working days, days off and weekly coverage cannot be determined from this shift interval.</Notice>}
     {success && <p role="status">{success}</p>}
     {error && <p id="staff-shift-error" role="alert" tabIndex={0}>{error}</p>}
     {role === 'owner' && canEdit && <div ref={controls}><Button variant="soft" onClick={() => {

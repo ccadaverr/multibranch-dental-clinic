@@ -94,13 +94,18 @@ export async function fetchReferenceData(role) {
     return { ok: false, kind: 'unavailable', message: 'Clinic branch information is unavailable. Try again.' }
   }
   const dentists = (byKey.dentists || []).map(mapDentistProfile)
+  const self = role === 'staff' ? results[keys.indexOf('staff')]?.meta?.self_staff : null
+  // Exact server-authenticated self identity supports workspace validation; it
+  // does not grant its assignment branch as an authorization scope.
+  const staff = [...(byKey.staff || [])]
+  if (self && typeof self.id === 'string' && self.id && !staff.some(row => row.id === self.id)) staff.push(self)
   return {
     ok: true,
     data: {
       branches: (byKey.branches || []).map(mapBranch),
       services: (byKey.services || []).map(mapService),
       branchServices: (byKey.branchServices || []).map(mapBranchService),
-      staff: (byKey.staff || []).map(mapStaffProfile),
+      staff: staff.map(mapStaffProfile),
       dentists,
       dentistServiceAssignments: deriveDentistServiceAssignments(dentists),
     },

@@ -85,6 +85,10 @@ class WorkScheduleController extends Controller
                 });
         })->values();
         $dutyByDentist = $duty->groupBy('dentist_id');
+        $publicationAvailable=\Illuminate\Support\Facades\Schema::hasTable('staff_roster_publications');
+        // Exact linked self is a request entry point, not an expansion of the scoped directory.
+        $selfStaff=$publicationAvailable && $user->role->value==='staff' && $visibleBranchIds
+            ? \App\Models\StaffProfile::with(['person','branch'])->where('person_id',$user->person_id)->first() : null;
 
         return response()->json(['data' => [
             'dentists' => $dentists->map(function (DentistProfile $d) use ($dutyByDentist, $weekly, $work, $editable, $visibleBranchIds) {
@@ -101,8 +105,19 @@ class WorkScheduleController extends Controller
                 ];
             })->values(),
             'duty' => ['date' => $todayDate, 'as_of' => $now->toIso8601String(), 'rows' => $duty],
-            'staff_roster_publication_available' => \Illuminate\Support\Facades\Schema::hasTable('staff_roster_publications'),
-            'staff' => $staffProfiles->map(fn (\App\Models\StaffProfile $s) => [
+            'staff_roster_publication_available' => $publicationAvailable,
+            'self_staff' => $selfStaff ? $this->staffView($selfStaff,$user) : null,
+            'staff' => $staffProfiles->map(fn (\App\Models\StaffProfile $s) => $this->staffView($s,$user))->values(),
+            'exceptions' => $exceptions->map(fn (DentistScheduleException $e) => $this->exceptionView($e, $editable))->values(),
+            'branches' => $branches->map(fn (Branch $b) => ['id' => $b->legacy_ref, 'name' => $b->name, 'hours' => collect(self::WEEKDAYS)->mapWithKeys(fn ($n, $i) => [$i => $b->hoursOnDay($i)])])->values(),
+            'weekdays' => self::WEEKDAYS,
+            'wording_approved' => MessageTemplates::approved(ScheduleNotices::TEMPLATE),
+        ]]);
+    }
+
+    private function staffView(\App\Models\StaffProfile $s, User $user): array
+    {
+        return [
                 'id' => $s->legacy_ref,
                 'name' => $s->person ? $s->person->fullName() : $s->legacy_ref,
                 'title' => $s->title,
@@ -112,12 +127,7 @@ class WorkScheduleController extends Controller
                 'shift_end' => $s->shift_end ? substr((string) $s->shift_end, 0, 5) : null,
                 'available' => (bool) $s->available,
                 'revision' => \App\Services\Scheduling\StaffShiftRevision::for($s),
-            ])->values(),
-            'exceptions' => $exceptions->map(fn (DentistScheduleException $e) => $this->exceptionView($e, $editable))->values(),
-            'branches' => $branches->map(fn (Branch $b) => ['id' => $b->legacy_ref, 'name' => $b->name, 'hours' => collect(self::WEEKDAYS)->mapWithKeys(fn ($n, $i) => [$i => $b->hoursOnDay($i)])])->values(),
-            'weekdays' => self::WEEKDAYS,
-            'wording_approved' => MessageTemplates::approved(ScheduleNotices::TEMPLATE),
-        ]]);
+        ];
     }
 
     /** Set (or remove) one weekly row: a dentist's hours at a branch on a weekday. */
