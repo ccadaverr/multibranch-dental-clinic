@@ -19,3 +19,7 @@ backend/run_tests.ps1
 backend/run_phpunit.ps1
 
 .agent/
+
+# Python validation artifacts (may retain compiled source/configuration literals).
+__pycache__/
+*.py[cod]
