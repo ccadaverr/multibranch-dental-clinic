@@ -3,6 +3,8 @@ import importlib.util
 from pathlib import Path
 import sys
 import unittest
+import tempfile
+import fcntl
 from unittest.mock import patch
 
 sys.dont_write_bytecode = True
@@ -12,6 +14,15 @@ spec.loader.exec_module(lab)
 
 
 class ClinicalRuntimeLabGuardTest(unittest.TestCase):
+    def test_normal_test_profile_lock_prevents_a_concurrent_snapshot(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runtime=Path(directory)
+            with (runtime/'dental_clinic_test.lock').open('a') as owner:
+                fcntl.flock(owner,fcntl.LOCK_EX|fcntl.LOCK_NB)
+                with patch.object(lab.local,'target',return_value=({'test_database':'dental_clinic_test'},runtime)),patch.object(lab.local,'verify'),patch.object(lab.local,'migrations'),patch.object(lab.local,'sql',return_value='[0,0,0,0]'),patch.object(lab.local,'clone_test') as clone:
+                    with self.assertRaises(BlockingIOError):lab.run_lab('unused.json')
+                    clone.assert_not_called()
+
     def test_missing_target_never_connects_or_clones(self):
         with patch.object(lab.local, 'verify') as verify, patch.object(lab.local, 'clone_test') as clone:
             with self.assertRaises(ValueError):

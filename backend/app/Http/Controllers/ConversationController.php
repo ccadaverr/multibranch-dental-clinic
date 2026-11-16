@@ -78,16 +78,21 @@ class ConversationController extends Controller
     {
         abort_unless($request->user()->role === \App\Enums\Role::Staff && $conversation->accessibleTo($request->user()), 403);
 
-        return response()->json(['data' => $this->messaging->dentistOptions($conversation)]);
+        if (! app(\App\Services\Messaging\ConversationDentistAccess::class)->available()) throw new \App\Services\Visits\VisitCommandException(409, 'conversation_grants_unavailable', 'Dentist reassignment is unavailable. No access was changed. Contact the clinic administrator.');
+
+        return response()->json(['data' => $this->messaging->dentistOptions($conversation),
+            'meta' => ['grant_required' => app(\App\Services\Messaging\ConversationDentistAccess::class)->enforced(), 'revision' => $conversation->revision,
+                'context' => ['conversation_id' => $conversation->public_id, 'patient_id' => $conversation->patient->public_id, 'branch_id' => $conversation->branch->legacy_ref]]])->header('Cache-Control', 'private, no-store');
     }
 
     public function addParticipant(Request $request, Conversation $conversation): JsonResponse
     {
-        abort_unless($conversation->accessibleTo($request->user()), 403);
-        $v = $request->validate(['dentist_id' => ['required', 'string', 'size:26'], ...array_fill_keys(['user_id', 'role', 'patient_id', 'branch_id'], ['prohibited'])]);
-        $added = $this->messaging->addDentist($request->user(), $conversation, $v['dentist_id']);
-
-        return response()->json(['data' => ['id' => $conversation->public_id, 'added' => $added]], $added ? 201 : 200);
+        abort_unless($request->user()->role === \App\Enums\Role::Staff && $conversation->accessibleTo($request->user()), 403);
+        $access = app(\App\Services\Messaging\ConversationDentistAccess::class);
+        if (! $access->available()) throw new \App\Services\Visits\VisitCommandException(409, 'conversation_grants_unavailable', 'Dentist reassignment is unavailable. No access was changed. Contact the clinic administrator.');
+        $v = $request->validate(['dentist_id' => ['required', 'string', 'size:26'], 'expected_revision' => ['required', 'integer', 'min:1'],
+            'reason' => ['required', 'string', 'max:500'], ...array_fill_keys(['user_id', 'role', 'patient_id', 'branch_id'], ['prohibited'])]);
+        return $access->reassign($request->user(), $conversation, $v['dentist_id'], $v['expected_revision'], $v['reason'], $this->idempotencyKey($request, true));
     }
 
     /** The viewer's conversations, newest-created first (keyset by id), with an unread count and no message text. */

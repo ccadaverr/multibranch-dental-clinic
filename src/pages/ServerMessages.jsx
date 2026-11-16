@@ -226,7 +226,7 @@ function MessageWorkspace({ store, role, initial = null }) {
   useEffect(() => {
     const handlers = {
       posted: ({ conversation_id: id }) => { refreshList(); if (id && threadsRef.current[id]?.messages) syncNewer(id) },
-      changed: () => refreshList(),
+      changed: () => {refreshList();if(selectedRef.current)syncNewer(selectedRef.current)},
       read: () => refreshList(),
     }
     const off = channels.map(name => subscribe(name, handlers))
@@ -234,7 +234,7 @@ function MessageWorkspace({ store, role, initial = null }) {
   }, [channels.join()])
   useEffect(() => {
     if (!selectedId) return undefined
-    return subscribe(`conversation.${selectedId.toLowerCase()}`, { posted: () => syncNewer(selectedId), changed: () => refreshList() })
+    return subscribe(`conversation.${selectedId.toLowerCase()}`, { posted: () => syncNewer(selectedId), changed: () => {refreshList();syncNewer(selectedId)} })
   }, [selectedId])
   // Polling fallback: every 10 s while the socket is not live; a slow safety re-read even when it is.
   useVisibleRefresh(() => { refreshList(); if (selectedRef.current) syncNewer(selectedRef.current) }, { active: !!list, intervalMs: live === 'live' ? SAFETY_POLL_MS : POLL_MS })
@@ -387,7 +387,7 @@ function MessageWorkspace({ store, role, initial = null }) {
           <header className="chat-thread-head">
             <button type="button" className="chat-back" onClick={() => setSelectedId(null)} aria-label="Back to conversations"><Icon name="chevron" size={18}/></button>
             <div><b>{title(selected)}</b><small>{subtitle(selected)}{selected.participants.some(p => p.role === 'Dentist') ? ` · Dentist participants: ${selected.participants.filter(p => p.role === 'Dentist').map(p => p.name).join(', ')}` : ''}</small></div>
-            <div className="chat-thread-actions">{staff && !selected.closed && !error && !closing && !closeAttempt.current && <AddDentist key={selected.id} conversationId={selected.id} onAdded={refreshList} toast={toast} current={() => currentConversation(conversationSnapshot(selected))}/>}{!patient && !selected.closed && <Button size="sm" variant="ghost" disabled={closing || !!error} onClick={() => setConfirmClose(closeAttempt.current || Object.freeze({...conversationSnapshot(selected),key:commandKey()}))}>Close</Button>}</div>
+            <div className="chat-thread-actions">{staff && !selected.closed && !error && !closing && !closeAttempt.current && <AddDentist key={selected.id} conversationId={selected.id} context={{patientId:selected.patientId,branchId:selected.branchId}} onAdded={refreshList} toast={toast} current={() => currentConversation(conversationSnapshot(selected))}/>}{!patient && !selected.closed && <Button size="sm" variant="ghost" disabled={closing || !!error} onClick={() => setConfirmClose(closeAttempt.current || Object.freeze({...conversationSnapshot(selected),key:commandKey()}))}>Close</Button>}</div>
           </header>
           {searchQuery && <section className="chat-search-results" aria-label="Matching messages" aria-busy={!!hits?.loading}>
             <b>Matching messages in this conversation</b>
@@ -498,9 +498,11 @@ function NewConversation({ drafts, current = () => true, prefill = '', onCancel,
   </form>
 }
 
-function AddDentist({ conversationId, onAdded, toast, current = () => true }) {
+export function AddDentist({ conversationId, context, onAdded, toast, current = () => true }) {
   const [open, setOpen] = useState(false), [rows, setRows] = useState(null), [choice, setChoice] = useState(''), [busy,setBusy]=useState(false), [error,setError]=useState('')
   const live=useRef(false), pending=useRef(false), sequence=useRef(0), latest=useRef(current), trigger=useRef(null), restoreFocus=useRef(false)
+  const [grantPolicy,setGrantPolicy]=useState(null),[reason,setReason]=useState(''),[uncertain,setUncertain]=useState(false)
+  const attempt=useRef(null)
   latest.current=current
   useLayoutEffect(()=>{if(restoreFocus.current&&!open){restoreFocus.current=false;if(document.activeElement===document.body)trigger.current?.focus()}},[open])
   useLayoutEffect(()=>{live.current=true;return()=>{live.current=false;sequence.current++}},[])
@@ -508,20 +510,22 @@ function AddDentist({ conversationId, onAdded, toast, current = () => true }) {
   const show = async () => {
     if (!owns() || pending.current) return
     const ticket=++sequence.current
-    setOpen(true);setRows(null);setChoice('');setError('')
-    const result = await loadDentistOptions(conversationId)
+    setOpen(true);setRows(null);setChoice('');setError('');setReason('');setUncertain(false);attempt.current=null
+    const result = await loadDentistOptions(conversationId,context)
     if (!owns() || ticket!==sequence.current) return
-    if (!result.ok) { setError('Dentist options could not be confirmed. Cancel and try again.');return }
-    setRows(result.rows)
+    if (!result.ok) { setError(result.message||'Dentist options could not be confirmed. Cancel and try again.');return }
+    setRows(result.rows);setGrantPolicy(result.grantRequired?{revision:result.revision,patientId:result.patientId,branchId:result.branchId}:null)
   }
   const add = async () => {
     if (!owns() || pending.current || !rows?.some(d=>d.id===choice&&!d.participant)) return
+    if(grantPolicy&&!reason.trim())return setError('Enter the reason for changing the active Dentist.')
     pending.current=true;setBusy(true);setError('')
     const selected=choice,ticket=sequence.current
     try {
-      const result = await addDentist(conversationId, selected, () => owns()&&sequence.current===ticket)
+      if(grantPolicy&&!attempt.current)attempt.current=Object.freeze({...grantPolicy,key:commandKey(),reason:reason.trim()})
+      const result = await addDentist(conversationId, selected, () => owns()&&sequence.current===ticket, attempt.current)
       if (!owns() || sequence.current!==ticket) return
-      if (!result.ok) {setError(result.message||'The switch could not be confirmed.');return toast(result.message||'The switch could not be confirmed.','warning')}
+      if (!result.ok) {const unknown=['network','server','unconfirmed'].includes(result.kind);setUncertain(unknown);if(!unknown)attempt.current=null;setError(result.code==='stale_revision'?'This conversation changed. Cancel and reload before switching.':result.message||'The switch could not be confirmed.');return toast(result.message||'The switch could not be confirmed.','warning')}
       toast(result.added ? 'Switched dentist for this conversation.' : 'That Dentist already handles this conversation.', 'success')
       restoreFocus.current=true;setOpen(false);onAdded()
     } finally {pending.current=false;if(live.current)setBusy(false)}
@@ -529,11 +533,13 @@ function AddDentist({ conversationId, onAdded, toast, current = () => true }) {
   if (!open) return <Button ref={trigger} size="sm" variant="soft" onClick={show}>Switch dentist</Button>
   return <span className="chat-add-dentist" aria-busy={busy||!rows&&!error}>
     <label className="sr-only" htmlFor={`dentist-${conversationId}`}>Dentist to switch to</label>
-    <select id={`dentist-${conversationId}`} value={choice} onChange={e => setChoice(e.target.value)} disabled={!rows||busy}>
+    <select id={`dentist-${conversationId}`} value={choice} onChange={e => setChoice(e.target.value)} disabled={!rows||busy||uncertain}>
       <option value="">{rows ? 'Choose a dentist' : 'Loading…'}</option>
       {(rows || []).map(d => <option key={d.id} value={d.id} disabled={d.participant}>{d.name}{d.participant ? ' (current)' : ''}</option>)}
     </select>
+    {grantPolicy&&<label>Reason for reassignment<input required maxLength={500} placeholder="e.g., Staff-approved change of Dentist" value={reason} onChange={e=>setReason(e.target.value)} disabled={busy||uncertain}/></label>}
+    {uncertain&&<span role="status">The reassignment outcome is unverified. Retry the same request to recover its saved result.</span>}
     {error&&<span role="alert">{error}</span>}
-    <Button size="sm" disabled={!choice||busy} onClick={add}>{busy?'Switching…':'Switch'}</Button><Button size="sm" variant="ghost" disabled={busy} onClick={() => {sequence.current++;restoreFocus.current=true;setOpen(false)}}>Cancel</Button>
+    <Button size="sm" disabled={!choice||busy||!!grantPolicy&&!reason.trim()} onClick={add}>{busy?'Switching…':uncertain?'Retry reassignment':'Switch'}</Button><Button size="sm" variant="ghost" disabled={busy||uncertain} onClick={() => {sequence.current++;restoreFocus.current=true;setOpen(false)}}>Cancel</Button>
   </span>
 }

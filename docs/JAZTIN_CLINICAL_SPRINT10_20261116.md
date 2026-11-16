@@ -1,3 +1,5 @@
+> Final addendum: [grant/runtime qualification](JAZTIN_CLINICAL_SPRINT10_GRANTS_20261116.md) supersedes this initial checkpoint where results differ. New reassignment is blocked on unmigrated services; the approved positive grant workflow is tested only in NEW disposable clusters. No existing-service migration, Operations import or publication.
+
 # Sprint10 — isolated runtime and recovery checkpoint
 
 2026-11-16 Asia/Manila. Starting HEAD `a60f7816af4e45ccdf811204de7e692e05e91c9e`, clean Clinical feature branch; published Clinical `4cbb1386dbc4fd959b74882a95d370320d2a63e6` and baseline `a0725e645df6f8266c2bc4bebacc9d62dd18e7c1` verified as ancestors. No push, PR change, source import, merge or deployment.

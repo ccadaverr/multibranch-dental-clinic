@@ -104,16 +104,21 @@ export async function startConversation(branchId, body, key, beforeDispatch) {
   return { ok: true, conversationId: result.data?.conversation?.id, reused: result.data?.conversation?.reused === true, message: mapMessage(result.data?.message || {}) }
 }
 
-export async function loadDentistOptions(conversationId) {
+export async function loadDentistOptions(conversationId, expected) {
   const result = await api.conversationDentistOptions(conversationId)
   if (!result.ok) return normalizeFailure(result)
   if (!validRows(result.data, d => identifier(d?.id) && typeof d.name === 'string' && typeof d.participant === 'boolean')) return unavailable()
-  return { ok: true, rows: result.data.map(d => ({ id: d.id, name: d.name ?? '', participant: d.participant === true })) }
+  if (result.meta?.grant_required !== true) return unavailable()
+  if (result.meta && 'grant_required' in result.meta && typeof result.meta.grant_required !== 'boolean') return unavailable()
+  if (result.meta?.grant_required && (!expected || !messageContext(result,conversationId,expected) || !Number.isSafeInteger(result.meta.revision) || result.meta.revision < 1)) return unavailable()
+  return { ok: true, rows: result.data.map(d => ({ id: d.id, name: d.name ?? '', participant: d.participant === true })), ...(result.meta?.grant_required ? {grantRequired:true,revision:result.meta.revision,patientId:result.meta.context.patient_id,branchId:result.meta.context.branch_id} : {}) }
 }
 
-export async function addDentist(conversationId, dentistId, beforeDispatch) {
-  const result = await api.addConversationDentist(conversationId, dentistId, beforeDispatch)
+export async function addDentist(conversationId, dentistId, beforeDispatch, grant) {
+  if (!grant || !identifier(grant.key) || !identifier(grant.patientId) || !identifier(grant.branchId) || !Number.isSafeInteger(grant.revision) || grant.revision<1 || !grant.reason?.trim()) return {ok:false,kind:'validation',message:'Refresh the conversation and enter the authorized reassignment details before trying again.'}
+  const result = await api.addConversationDentist(conversationId, dentistId, beforeDispatch, grant)
   if (!result.ok) return normalizeFailure(result)
+  if (grant) return result.data?.id===conversationId && result.data.dentist_id===dentistId && result.data.patient_id===grant.patientId && result.data.branch_id===grant.branchId && identifier(result.data.grant_id) && Number.isSafeInteger(result.data.revision) && typeof result.data.changed==='boolean' && result.data.revision===grant.revision+(result.data.changed?1:0) ? {ok:true,added:result.data.changed,revision:result.data.revision} : unconfirmed()
   return result.data?.id === conversationId && typeof result.data.added === 'boolean' ? {ok:true,added:result.data.added} : unconfirmed()
 }
 

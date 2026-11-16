@@ -62,8 +62,11 @@ def run_lab(source):
     if empty != [0, 0, 0, 0]:
         raise ValueError('The source test database must contain no existing fixtures; nothing was reset.')
     # Lock the source while taking its consistent initial snapshot. All subsequent writes are to a new cluster.
-    with (runtime / 'database.lock').open('w') as lock:
+    with (runtime / (c['test_database']+'.lock')).open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if json.loads(local.sql(c, runtime, 'dental_clinic_test',
+                "SELECT json_build_array((SELECT count(*) FROM patients),(SELECT count(*) FROM jobs),(SELECT count(*) FROM mail_dispatches),(SELECT count(*) FROM documents))")) != [0,0,0,0]:
+            raise ValueError('The source changed before snapshot; nothing was reset.')
         manifest = local.clone_test(c, runtime)
     lab, root, env, port = prepare(manifest)
     restored = None

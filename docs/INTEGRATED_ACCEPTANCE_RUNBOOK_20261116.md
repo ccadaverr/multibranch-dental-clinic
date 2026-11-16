@@ -94,3 +94,16 @@ PYTHONDONTWRITEBYTECODE=1 python3 scripts/clinical-runtime-lab.py --target /priv
 It creates NEW disposable clusters, never resets/migrates the source, exercises source due-mail scheduling/real workers and PostgreSQL contention, then restores exact private document/state/key/access. Successful evidence is private `result.json` and logs. It stops both clusters; retain evidence. If provisioning fails before the cleanup scope, use the printed/created private target and reviewed `local-system.py --profile test stop`; never kill another target's PostgreSQL or delete evidence without cleanup approval. Full application scheduler, four-role integrated flows and all68 acceptance remain NOT RUN until candidate gates clear.
 
 Owner FIFO and conversation-specific grant/revocation decisions are in `CLINICAL_OWNER_POLICY_DECISIONS_20261116.md`. The grant proposal is outside automatic migrations and approved only for testing in a NEW disposable cluster, not existing services. Notification/Archives/workforce comparison remains source-dependent.
+
+## Reviewed grant-profile prerequisite (separate from Operations integration)
+
+The owner separately approved the exact proposal for NEW disposable cluster testing. The proposal SHA is pinned in the lab runner and migration profile; it remains outside automatic migration discovery. This command runs the exact reviewed schema delta, focused lifecycle, real PostgreSQL races and optional real browser:
+
+```sh
+PLAYWRIGHT_MODULE=/path/to/installed/playwright PYTHONDONTWRITEBYTECODE=1 \
+python3 scripts/clinical-grants-lab.py --target /private/tmp/jaztin-clinical-20261115c/target.json --browser
+```
+
+Use only the verified empty owned test source. Both labs acquire its ordinary `dental_clinic_test.lock` and recheck emptiness under that lock before snapshot. They never reset it. The grant runner creates a new cluster and skips all already applied reviewed migrations; only the pinned proposal is newly executed, with all four held migrations excluded. Runtime access is append/read only for grant history. Every new grant needs explicit Staff scope/reason/revision/key; no legacy backfill. Generic legacy mutation fails closed. Installation permanently enables grant-based reads even if creation is later paused. Existing-service migration/flag activation requires separate review; do not promote this schema or reuse a candidate's target manifest without review.
+
+Successful local grant browser evidence is not merged-system acceptance. Actual Reverb delivery, complete operational scheduler behavior, Operations notification contracts, workforce publication, full cross-role care/financial flows and all68 integrated criteria remain pending authentic source and a reviewed candidate. See JAZTIN_CLINICAL_SPRINT10_GRANTS_20261116.md for tested versus untested boundaries.

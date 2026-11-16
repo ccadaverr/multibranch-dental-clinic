@@ -21,7 +21,17 @@ final class LocalMigrationProfile
 
     public static function paths(array $target): array
     {
-        return array_map(fn ($name) => 'database/'.(str_ends_with($name, '_preserve_queue_state_vocabulary') ? 'compatibility/' : 'migrations/').$name.'.php', $target['selected_migrations']);
+        $proposal = $target['reviewed_proposal'] ?? null;
+        if ($proposal && (($proposal['path'] ?? null) !== 'docs/integration/proposals/2026_11_16_001000_add_conversation_dentist_grants.php'
+            || ($proposal['sha256'] ?? null) !== '9b53175b26d656c62c29524da742d7f654bc2a0ce1451704784bb101fae56612'
+            || ! str_starts_with(basename($target['runtime'] ?? ''), 'contention-')
+            || env('DENTALOPS_GRANT_LAB') !== ($target['cluster_id'] ?? null)
+            || config('database.connections.pgsql.database') !== 'dental_clinic_test')) {
+            throw new RuntimeException('The grant proposal is approved only in a new explicit disposable test cluster.');
+        }
+        return array_map(fn ($name) => $proposal && $name === pathinfo($proposal['path'], PATHINFO_FILENAME)
+            ? '../'.$proposal['path']
+            : 'database/'.(str_ends_with($name, '_preserve_queue_state_vocabulary') ? 'compatibility/' : 'migrations/').$name.'.php', $target['selected_migrations']);
     }
 
     public static function assertSelection(string $command, array $paths, array $target): void
@@ -49,7 +59,7 @@ final class LocalMigrationProfile
         $target = self::target();
         if (! $target) return;
         $file = (new \ReflectionClass($event->migration))->getFileName();
-        $allowed = array_map(fn ($path) => base_path($path), self::paths($target));
+        $allowed = array_map(fn ($path) => realpath(base_path($path)), self::paths($target));
         if ($event->method !== 'up' || ! in_array($file, $allowed, true)) {
             throw new RuntimeException('This migration is held outside the reviewed local preservation profile.');
         }

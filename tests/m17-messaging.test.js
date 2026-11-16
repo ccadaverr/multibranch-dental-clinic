@@ -19,6 +19,32 @@ const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8'
 const posts = () => calls.filter(c => c.method === 'POST')
 const msg = (n, over = {}) => ({ id: `01k00000000000000000000m0${n}`, body: `message ${n}`, sender: { name: 'Staff Name', role: 'Staff' }, mine: false, sent_at: '2026-09-28T10:00:00+08:00', ...over })
 
+test('grant options require exact conversation Patient and branch context and a valid revision', async () => {
+  const data=[{id:'dentist-a',name:'Synthetic Dentist',participant:false}]
+  const meta={grant_required:true,revision:7,context:{conversation_id:'conversation-a',patient_id:'patient-a',branch_id:'b1'}}
+  stubFetch(json(200,{data,meta}))
+  assert.deepEqual(await messaging.loadDentistOptions('conversation-a',{patientId:'patient-a',branchId:'b1'}),
+    {ok:true,rows:data,grantRequired:true,revision:7,patientId:'patient-a',branchId:'b1'})
+  for(const context of [{patientId:'foreign',branchId:'b1'},{patientId:'patient-a',branchId:'b2'},null]){
+    stubFetch(json(200,{data,meta}));assert.equal((await messaging.loadDentistOptions('conversation-a',context)).ok,false)
+  }
+  stubFetch(json(200,{data}));assert.equal((await messaging.loadDentistOptions('conversation-a',{patientId:'patient-a',branchId:'b1'})).ok,false,'An unverified legacy options contract cannot authorize reassignment.')
+})
+
+test('a grant request carries its original key and CAS revision while a receipt must match every selected identity', async () => {
+  const grant={key:'original-grant-key',revision:7,reason:'Synthetic approved reassignment',patientId:'patient-a',branchId:'b1'}
+  const data={id:'conversation-a',grant_id:'grant-a',dentist_id:'dentist-a',patient_id:'patient-a',branch_id:'b1',revision:8,changed:true}
+  assert.equal((await messaging.addDentist('conversation-a','dentist-a',()=>true)).kind,'validation');assert.equal(calls.length,0)
+  stubFetch(json(200,{}),json(201,{data}))
+  assert.deepEqual(await messaging.addDentist('conversation-a','dentist-a',()=>true,grant),{ok:true,added:true,revision:8})
+  assert.deepEqual(posts()[0].body,{dentist_id:'dentist-a',expected_revision:7,reason:grant.reason})
+  assert.equal(posts()[0].headers['Idempotency-Key'],grant.key)
+  for(const patch of [{id:'foreign'},{dentist_id:'foreign'},{patient_id:'foreign'},{branch_id:'b2'},{grant_id:''},{revision:9}]){
+    api.__resetCsrfCacheForTests();stubFetch(json(200,{}),json(201,{data:{...data,...patch}}))
+    assert.equal((await messaging.addDentist('conversation-a','dentist-a',()=>true,grant)).kind,'unconfirmed')
+  }
+})
+
 test('a message is sent as {body} only, trimmed, with an Idempotency-Key; the sender is never supplied by the browser', async () => {
   stubFetch(json(200, {}), json(201, { data: msg(1, { mine: true, body:'Hello' }) }))
   const result = await messaging.sendMessage('01k0000000000000000000c001', '  Hello  ', 'key-1')

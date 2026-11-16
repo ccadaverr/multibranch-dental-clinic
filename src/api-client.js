@@ -360,7 +360,7 @@ export function conversationStartOptions() { return request('/api/conversations/
 export function startConversation(payload, key, beforeDispatch) { return command('/api/conversations', payload, key, beforeDispatch) }
 export function conversationPresence() { return request('/api/conversations/presence', { method: 'POST', body: '{}' }) }
 export function conversationDentistOptions(id) { return request(`/api/conversations/${encodeURIComponent(id)}/dentist-options`) }
-export function addConversationDentist(id, dentistId, beforeDispatch) { return request(`/api/conversations/${encodeURIComponent(id)}/participants`, { method: 'POST', body: JSON.stringify({ dentist_id: dentistId }), beforeDispatch }) }
+export function addConversationDentist(id, dentistId, beforeDispatch, grant) { return request(`/api/conversations/${encodeURIComponent(id)}/participants`, { method: 'POST', body: JSON.stringify({ dentist_id: dentistId, ...(grant ? {expected_revision:grant.revision,reason:grant.reason} : {}) }), headers:grant?{'Idempotency-Key':grant.key}:{}, beforeDispatch }) }
 // M17 realtime: private-channel authorization for the socket client (same session cookie + CSRF as every call).
 export function authorizeChannel(socketId, channelName) { return request('/api/broadcasting/auth', { method: 'POST', body: JSON.stringify({ socket_id: socketId, channel_name: channelName }) }) }
 

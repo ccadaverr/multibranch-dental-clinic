@@ -70,7 +70,7 @@ class Conversation extends Model
         return match ($user->role) {
             Role::Patient => $participant($query->where('patient_id', $user->patient?->id ?? 0)),
             Role::Staff => $query->whereIn('branch_id', UserBranchScope::select('branch_id')->where('user_id', $user->id)),
-            Role::Dentist => $participant($query->whereIn('branch_id', DentistProfile::where('person_id', $user->person_id)->join('dentist_branches', 'dentist_branches.dentist_profile_id', '=', 'dentist_profiles.id')->select('dentist_branches.branch_id'))),
+            Role::Dentist => $this->dentistScope($participant($query->whereIn('branch_id', DentistProfile::where('person_id', $user->person_id)->join('dentist_branches', 'dentist_branches.dentist_profile_id', '=', 'dentist_profiles.id')->select('dentist_branches.branch_id'))), $user),
             default => $query->whereRaw('false'),
         };
     }
@@ -78,5 +78,15 @@ class Conversation extends Model
     public function accessibleTo(User $user): bool
     {
         return static::visibleTo($user)->whereKey($this->id)->exists();
+    }
+
+    private function dentistScope(Builder $query, User $user): Builder
+    {
+        // Reviewed-schema cutover only: no grant is inferred for legacy participant rows.
+        $grants = app(\App\Services\Messaging\ConversationDentistAccess::class);
+        if (! $grants->enforced()) return $query;
+        if (! $grants->schemaInstalled()) return $query->whereRaw('false');
+        return $query->whereIn('active_dentist_grant_id', ConversationDentistGrant::select('id')->where('dentist_user_id', $user->id)
+            ->whereColumn('conversation_id', 'conversations.id')->whereColumn('patient_id', 'conversations.patient_id')->whereColumn('branch_id', 'conversations.branch_id'));
     }
 }

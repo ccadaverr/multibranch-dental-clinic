@@ -36,7 +36,8 @@
     "Staff request/approval/separate publication/effective duty revision and branch authority contracts; OWN-11 exact evidence",
     "Patient Archives.jsx authentic Operations bytes and contracts for identity, paging, errors, receipt links/PDF authorization, permissions and history",
     "Queue/encounter/chart/prescription/billing/message/notification/audit contract changes; preserve Served as treatment start",
-    "Isolated synthetic PostgreSQL target identity, reviewed schema and recoverable private backup/restore plan; worker/scheduler and local mail-capture evidence"
+    "Isolated synthetic PostgreSQL target identity, reviewed schema and recoverable private backup/restore plan; worker/scheduler and local mail-capture evidence",
+    "Compare the reviewed conversation-specific grant/CAS/idempotency/revocation contract and existing message_received recipient notification kind; no unsupported notification enum or legacy reassignment fallback"
   ],
   "patient_archives": {
     "clinical_path": "src/patient/pages/Archives.jsx",
@@ -109,5 +110,15 @@
     "den14": "docs/CLINICAL_OWNER_POLICY_DECISIONS_20261116.md",
     "queue_order": "docs/CLINICAL_OWNER_POLICY_DECISIONS_20261116.md",
     "implemented_acceptance": false
+  },
+  "common_published_baseline": "a0725e645df6f8266c2bc4bebacc9d62dd18e7c1",
+  "clinical_grant_schema": {
+    "proposal_path": "docs/integration/proposals/2026_11_16_001000_add_conversation_dentist_grants.php",
+    "sha256": "9b53175b26d656c62c29524da742d7f654bc2a0ce1451704784bb101fae56612",
+    "owner_authorization": "Testing in NEW disposable synthetic clusters only",
+    "existing_service_migrated": false,
+    "legacy_reassignment": "Fails closed until reviewed grants are available",
+    "authorization_after_install": "Sticky strict grants even when new grant creation is disabled",
+    "operations_comparison_pending": true
   }
 }
