@@ -106,6 +106,43 @@ class AuditQueryTest extends TestCase
         $this->assertSame(50, $this->getJson('/api/audit-logs')->json('meta.per_page'));
     }
 
+    public function test_history_and_csv_use_event_time_even_when_insertion_ids_arrive_out_of_order(): void
+    {
+        $target = 'audit-history-001';
+        $fixtures = [
+            'history.newer' => '2026-11-15T16:01:00Z',
+            'history.early' => '2026-11-15T16:00:00Z',
+            'history.previous_day' => '2026-11-15T15:59:59Z',
+            'history.tie' => '2026-11-15T16:01:00Z',
+        ];
+        $ids = [];
+        foreach ($fixtures as $action => $instant) {
+            $ids[$action] = strtolower((string) \Illuminate\Support\Str::ulid());
+            DB::table('audit_logs')->insert([
+                'public_id' => $ids[$action],
+                'action' => $action,
+                'branch_id' => $this->b['b1']->id,
+                'auditable_type' => 'UserNotification',
+                'auditable_public_id' => $target,
+                'created_at' => $instant,
+            ]);
+        }
+        $filter = '?branch_id=b1&date_from=2026-11-16&date_to=2026-11-16&target_type=UserNotification&target_id='.$target;
+        $ordered = ['history.tie', 'history.newer', 'history.early'];
+        $cursor = null;
+        foreach ($ordered as $action) {
+            $query = $filter.'&per_page=1'.($cursor === null ? '' : '&cursor='.$cursor);
+            $page = $this->getJson('/api/audit-logs'.$query)->assertOk()
+                ->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $ids[$action])->json();
+            $cursor = $page['meta']['next_cursor'];
+        }
+        $this->assertNull($cursor);
+
+        $csv = $this->get('/api/audit-logs/export'.$filter)->assertOk()->streamedContent();
+        $lines = array_slice(explode("\n", trim($csv)), 1);
+        $this->assertSame($ordered, array_map(fn ($line) => str_getcsv($line, escape: '')[2], $lines));
+    }
+
     public function test_the_page_size_can_never_exceed_the_bound(): void
     {
         DB::table('audit_logs')->insert(array_map(fn ($i) => [

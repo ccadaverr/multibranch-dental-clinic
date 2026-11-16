@@ -45,3 +45,54 @@ Separate follow-up in the AnalyticsPage section of `src/pages/Admin.jsx`, a file
 ## Git handoff
 
 READY FOR CODEX A COMMIT. Stage only the owned paths above. The separate mixed-file AnalyticsPage request and GEN-11 policy gaps remain open. Codex B performed read-only Git operations.
+
+## Round 2 from d9663e8
+
+Round 1 was committed as fe8c7d8. The A-owned dispatch guard was committed as d9663e8. The isolated CSV helper is **READY - isolated helper complete, awaits A UI wiring**. New files: `src/clinic-csv.js`, `tests/clinic-csv-transport.test.js`. Updated adapters and regression: `src/analytics-api.js`, `src/audit-api.js`, `tests/owner-report-export.test.js`. Reserve AuditTrail and the dedicated audit controller/tests for independent work below. No A-owned files edited.
+
+### OWN-01 reporting and GEN-11 audit CSV contract
+
+Import `requestAnalyticsCsv` and `saveClinicCsv` from `src/analytics-api.js`. Call `requestAnalyticsCsv({ branch_id, period, date_from?, date_to? }, { signal })` with an explicit resolved public/legacy branch ID or the literal `'all'` for an explicit All Branches selection, and the current nonblank report period. The optional dates use the existing analytics route contract. A missing named branch must be rejected before requesting. The isolated requester refuses absent/blank branch or period. Audit consumers can use `requestAuditLogsCsv(filters, { signal })` from `src/audit-api.js`; paired exact `target_type` and `target_id` and existing date/branch/search semantics are retained.
+
+Both requesters use the established API base and authenticated GET, refuse redirects, perform no retry, and resolve `{ blob, filename, truncated, limit }` without downloading. Filename uses a safe server attachment name when visible, or the Manila-dated fallback. HTTP failures throw an Error with numeric `status` and a safe message. Error and non-CSV bodies are excluded from payloads. Abort checks run before fetch, after headers, and after the body read. Caller abort reasons and fetch/body AbortError or TimeoutError propagate. A stale call must still fail the UI request identity check, including filter A-to-B-to-A and account/session changes.
+
+In A-owned AnalyticsPage, keep the existing owner and resolved-branch guards. Allocate an AbortController per accepted export and cancel it on branch/period/actor change or unmount. Use a unique export identity and controller for cleanup and completion. A superseded request must not lock the next request or clear that request's busy state. Example inside the existing ownership lifecycle:
+
+```js
+const result = await requestAnalyticsCsv({
+  branch_id: activeBranch === 'All Branches' ? 'all' : activeBranchId,
+  period: period.toLowerCase(),
+}, { signal: controller.signal })
+if (!ownsRequest() || controller.signal.aborted) return
+saveClinicCsv(result)
+toast('Operational analytics CSV exported successfully.', 'success')
+```
+
+Call `saveClinicCsv` only after the current-request check above. Send error feedback only for the current request. The compatibility `downloadAnalyticsCsv(params, isCurrent)` honors the callback immediately before saving and returns false when superseded, so the already committed call-site can safely run before cancellable UI wiring. For this adapter only, explicit null is its old All Branches sentinel. A should test cancellation through the real request/save split using a delayed response and an immediate replacement export.
+
+Focused Node tests: `node --test tests/clinic-csv-transport.test.js tests/owner-report-export.test.js tests/audit-api.test.js` (17 passed). Cases cover authenticated origin and scope, exact record pairs, status failures, HTML instead of CSV, safe metadata, pre-abort, late headers and body, abort-like errors, no automatic save, and independent requests. Combined A UI acceptance is pending.
+
+### Independent audit completion
+
+- GEN-11 original acceptance: "No record is permanently deleted by normal users; each role sees only permitted archives; Dr Dana sees all." The authorized history subset now orders both list and CSV by stored event time, then internal ID for equal instants. The existing public-ID cursor resolves inside the same filters and advances by the timestamp/ID tuple. CSV and list agree even if insert sequence differs from event time. The regression reproduced the old ordering failure on real PostgreSQL before the controller edit. Existing date bounds, exact record matching, Owner-only routes, append-only schema and export limits remain in force.
+- GEN-13 original acceptance: "No text refresh buttons remain; icon triggers refresh with visible loading state." Audit Trail could previously reload a successful result only by changing filters or reopening the page. It now uses the existing keyboard-operable refresh icon and spinner to reload the current filter set.
+- Audit Trail releases a prepared CSV only after the existing `GET /api/me` confirms the same public ID, Active status and Owner role, followed by a request-identity check. The export uses a unique AbortController, cancellable pending state, and current-request-only cleanup. Filter changes, refresh, account changes and unmount supersede the request. No new route or schema change.
+- GEN-11 remains partial under the approved rules. Universal access to private notifications and clinical archives, restoration, permanent removal and retention need entity-specific policy. GEN-10 recipient archive permissions and receipts retain their prior acceptance.
+
+### Round 2 verification
+
+- `node --test tests/clinic-csv-transport.test.js tests/owner-report-export.test.js tests/audit-api.test.js tests/m22-audit-trail.test.js tests/owner-revenue-analytics.test.js tests/owner-analytics-a5.test.js`: 32 passed.
+- `node tests/owner-audit-record.browser.mjs <Playwright index.mjs>`: Chrome passed at 390 and 1440 px on B-only port 5197. Exact-record filter and CSV, keyboard refresh with busy state, explicit abort, immediate replacement and revoked Owner refusal verified with synthetic responses.
+- B-only Docker runtime `dentalops-codex-b-20261116`, `/private/audit-b-full/target.json` on loopback 55517, guarded `dental_clinic_test`. Focused Laravel command using `scripts/local-system.py --target /private/audit-b-full/target.json --profile test test` with AuditQueryTest, OperationalArchiveScopeTest, OperationalArchiveActivityTest and NotificationArchiveTest passed 16 tests and 230 assertions. Four held migrations preserved. B's test snapshot was backed up and the runtime stopped.
+- PHP lint, scoped diff whitespace and secret-pattern checks passed. The inherited automation-health setup 404 was outside this round's focused run. Full suites, global build and predefense were deferred under the concurrent testing protocol. A owns shared AnalyticsPage integration and its end-to-end verification.
+
+### Final Round 2 Git handoff
+
+**READY - self-contained audit QA change complete.** The isolated reporting helper is also **READY** for A's shared AnalyticsPage wiring and acceptance. Stage only these Round 2 B-owned paths, separately from A's work:
+
+- `src/clinic-csv.js`, `src/analytics-api.js`, `src/audit-api.js`, `src/pages/AuditTrail.jsx`
+- `backend/app/Http/Controllers/AuditController.php`, `backend/tests/Feature/Audit/AuditQueryTest.php`
+- `tests/clinic-csv-transport.test.js`, `tests/owner-report-export.test.js`, `tests/m22-audit-trail.test.js`, `tests/owner-audit-record.browser.mjs`, `tests/fixtures/owner-audit-record.html`
+- `docs/coordination/JOEVAN_CODEX_B_20261116.md`
+
+Round 1 is already committed. No A-owned files or Git state changes by B. No additional independently actionable original reporting or archive criterion was demonstrated in this pass.

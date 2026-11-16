@@ -9,6 +9,7 @@ import { AuditTrailPage } from '/src/pages/AuditTrail.jsx'
 import '/src/styles.css'
 import '/src/foundation.css'
 
+window.auditMessages = []
 const store = {
   session: { serverUserId: 'owner-server', userId: 'owner', role: 'owner', active: true },
   state: {
@@ -16,7 +17,7 @@ const store = {
     users: [{ id: 'owner', personId: 'person-owner', roleName: 'Owner / Admin', accountStatus: 'Active', permissions: ['all'] }],
     branches: [{ id: 'b1', name: 'Synthetic Branch' }],
   },
-  toast() {},
+  toast(message) { window.auditMessages.push(message) },
   getAuthGeneration: () => 1,
 }
 createRoot(document.getElementById('root')).render(React.createElement(AuditTrailPage, { store }))

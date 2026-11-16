@@ -70,7 +70,9 @@ test('Owner navigation includes Audit Trail and safeguards restrict to owner', (
 test('AuditTrail.jsx provides forensic filtering, inspection modal, and CSV export', () => {
   assert.match(auditPage, /Audit Event Filters/)
   assert.match(auditPage, /fetchAuditLogs/)
-  assert.match(auditPage, /downloadAuditLogsCsv/)
+  assert.match(auditPage, /requestAuditLogsCsv/)
+  assert.match(auditPage, /await me\(options\)/)
+  assert.match(auditPage, /saveClinicCsv\(result\)/)
   assert.match(auditPage, /Export Audit Trail \(CSV\)/)
   assert.match(auditPage, /Audit Event Inspection/)
   assert.match(auditPage, /Event Payload \(Sanitized\)/)

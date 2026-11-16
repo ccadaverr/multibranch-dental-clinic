@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Brand } from '../Brand.jsx'
-import { Button, Card, Field, FilterBar, Modal, Notice, PageHeader, Status, Table } from '../components.jsx'
-import { fetchAuditLogs, downloadAuditLogsCsv } from '../audit-api.js'
+import { Button, Card, Field, FilterBar, Modal, Notice, PageHeader, RefreshButton, Status, Table } from '../components.jsx'
+import { fetchAuditLogs, requestAuditLogsCsv } from '../audit-api.js'
+import { saveClinicCsv } from '../clinic-csv.js'
+import { me } from '../api-client.js'
 import { canAccessPage } from '../safeguards.js'
 
 export function AuditTrailPage({ store }) {
@@ -28,7 +30,7 @@ function AuditLifetime({ store }) {
   const [selection, setInspectLog] = useState(null)
   const [target, setTarget] = useState(null)
   const [loadedKey,setLoadedKey]=useState(null),[action,setAction]=useState('')
-  const epoch=useRef(0),mounted=useRef(false),morePending=useRef(false),exportPending=useRef(false),currentKey=useRef('')
+  const epoch=useRef(0),mounted=useRef(false),morePending=useRef(false),exportRequest=useRef(null),currentKey=useRef('')
   const auth=store.getAuthGeneration?.()
   const [exporting, setExporting] = useState(false)
   const rangeInvalid = !!(dateFrom && dateTo && dateFrom > dateTo)
@@ -51,7 +53,23 @@ function AuditLifetime({ store }) {
   const inspectLog=shownLogs.find(row=>row.id===selection?.id)||null
   const viewStatus=loadedKey===filterKey?status:'loading'
   const layoutEffect=typeof window==='undefined'?useEffect:React.useLayoutEffect
-  layoutEffect(()=>{mounted.current=true;return()=>{mounted.current=false;epoch.current++}},[])
+  layoutEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false; epoch.current++ }
+  }, [])
+  layoutEffect(() => {
+    setExporting(false)
+    return () => {
+      const request = exportRequest.current
+      exportRequest.current = null
+      request?.abort()
+    }
+  }, [filterKey, attempt, auth])
+
+  const refresh = () => {
+    setStatus('loading')
+    setAttempt(current => current + 1)
+  }
 
   // Debounced server query. A response for an older filter set is discarded, and a failure is an explicit error with Retry:
   // never an empty list and never browser-held or demo activity.
@@ -101,19 +119,41 @@ function AuditLifetime({ store }) {
     }
   }
 
+  const cancelExport = () => {
+    const request = exportRequest.current
+    if (!request) return
+    exportRequest.current = null
+    request.abort()
+    setExporting(false)
+    toast('Audit export cancelled.')
+  }
+
   const handleExport = async () => {
-    if(rangeInvalid||loadedKey!==filterKey||viewStatus!=='ready'||exportPending.current)return
-    const ticket={epoch:epoch.current,key:filterKey,auth}
-    exportPending.current=true
+    if (rangeInvalid || loadedKey !== filterKey || viewStatus !== 'ready' || exportRequest.current) return
+    const ticket = { epoch: epoch.current, key: filterKey, auth, actorId: store.session.serverUserId }
+    const request = new AbortController()
+    const isCurrent = () => owns(ticket) && exportRequest.current === request && !request.signal.aborted
+      && store.session.serverUserId === ticket.actorId
+    exportRequest.current = request
     try {
       setExporting(true)
-      const result = await downloadAuditLogsCsv(filters(),()=>owns(ticket))
-      if(!owns(ticket))return
+      const options = { signal: request.signal }
+      const result = await requestAuditLogsCsv(filters(), options)
+      if (!isCurrent()) return
+      const identity = await me(options)
+      if (!isCurrent()) return
+      if (!identity.ok || identity.data?.id !== ticket.actorId || identity.data?.role !== 'owner' || identity.data?.account_status !== 'Active') {
+        throw new Error('Your Owner access could not be verified. Sign in and try again.')
+      }
+      saveClinicCsv(result)
       toast(result.truncated ? `Export generated, but cut at the newest ${result.limit} matching events. Narrow the filters for the rest.` : 'Audit trail export generated.', result.truncated ? 'warning' : 'success')
     } catch (err) {
-      if(owns(ticket))toast(err.message || 'Failed to export audit logs.', 'warning')
+      if (isCurrent()) toast(err.message || 'Failed to export audit logs.', 'warning')
     } finally {
-      exportPending.current=false;if(mounted.current)setExporting(false)
+      if (exportRequest.current === request) {
+        exportRequest.current = null
+        setExporting(false)
+      }
     }
   }
 
@@ -134,9 +174,15 @@ function AuditLifetime({ store }) {
         text="Append-only record of significant events written by the clinic server. The Owner can review and export it; nothing in this screen can change or delete an entry. Details are kept minimal and credentials are redacted."
         aside={
           <div className="row-actions">
+            <RefreshButton size="sm" title="Refresh audit events" ariaLabel="Refresh audit events"
+              loading={viewStatus === 'loading' && !rangeInvalid} disabled={rangeInvalid} onClick={refresh}/>
             <Button size="sm" variant="soft" onClick={handleExport} disabled={exporting||rangeInvalid||viewStatus!=='ready'}>
-              {exporting ? 'Generating Export...' : 'Export Audit Trail (CSV)'}
+              Export Audit Trail (CSV)
             </Button>
+            {exporting && <>
+              <span role="status">Preparing audit CSV...</span>
+              <Button size="sm" variant="ghost" onClick={cancelExport}>Cancel audit export</Button>
+            </>}
             <Button size="sm" variant="ghost" disabled={rangeInvalid||viewStatus!=='ready'} onClick={() => window.print()} icon="file">
               Print loaded audit events
             </Button>
@@ -260,7 +306,7 @@ function AuditLifetime({ store }) {
           ) : viewStatus === 'loading' ? (
             <Notice>Loading audit records...</Notice>
           ) : viewStatus === 'error' ? (
-            <Notice tone="warning" title="Audit trail unavailable">{loadError} <Button size="sm" variant="ghost" onClick={() => setAttempt(attempt + 1)}>Retry</Button></Notice>
+            <Notice tone="warning" title="Audit trail unavailable">{loadError} <Button size="sm" variant="ghost" onClick={refresh}>Retry</Button></Notice>
           ) : shownLogs.length === 0 ? (
             <Notice tone="info">No audit records match the current filter criteria.</Notice>
           ) : (

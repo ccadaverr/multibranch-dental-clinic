@@ -32,6 +32,6 @@ test('Owner CSV uses the portal origin, preserves all-time and branch, and refus
   assert.equal(links[0].download, 'operational-analytics-2026-11-16.csv')
 
   contentType = 'text/html'
-  await assert.rejects(downloadAnalyticsCsv(), /did not return a CSV/)
+  await assert.rejects(downloadAnalyticsCsv({ period: 'today', branch_id: 'b1' }), /did not return a CSV/)
   assert.equal(links.length, 1)
 })

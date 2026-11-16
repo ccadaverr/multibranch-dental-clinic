@@ -82,7 +82,7 @@ class AuditController extends Controller
             $query->where('created_at', '<', ClinicClock::at($v['date_to'], '00:00')->addDay()->startOfDay()->toIso8601String());
         }
 
-        return $query;
+        return $query->orderByDesc('created_at')->orderByDesc('id');
     }
 
     public function index(Request $request): JsonResponse
@@ -91,12 +91,16 @@ class AuditController extends Controller
         $v = $this->validatedFilters($request, true);
         $perPage = (int) ($v['per_page'] ?? 50);
 
-        $query = $this->filtered($v)->orderByDesc('id');
+        $query = $this->filtered($v);
         if (! empty($v['cursor'])) {
-            // Keyset pagination on the public id of the last row seen: stable under concurrent inserts, no offset scans, and
-            // no internal id ever leaves the server. An unknown cursor yields an empty page.
-            $anchor = (clone $query)->where('public_id', strtolower($v['cursor']))->value('id');
-            $query->where('id', '<', $anchor ?? 0);
+            // Resolve the public cursor inside the active filters. The stored timestamp carries its database offset.
+            $anchor = (clone $query)->toBase()->reorder()
+                ->where('public_id', strtolower($v['cursor']))->first(['created_at', 'id']);
+            if ($anchor) {
+                $query->whereRaw('(created_at, id) < (?, ?)', [$anchor->created_at, $anchor->id]);
+            } else {
+                $query->whereRaw('false');
+            }
         }
 
         $rows = $query->limit($perPage + 1)->get();
@@ -122,7 +126,7 @@ class AuditController extends Controller
         $v = $this->validatedFilters($request, false);
 
         // One extra row tells us honestly whether the export was cut at the bound.
-        $rows = $this->filtered($v)->orderByDesc('id')->limit(self::EXPORT_LIMIT + 1)->get();
+        $rows = $this->filtered($v)->limit(self::EXPORT_LIMIT + 1)->get();
         $truncated = $rows->count() > self::EXPORT_LIMIT;
         $logs = $rows->take(self::EXPORT_LIMIT);
         $filename = 'audit_trail_'.ClinicClock::now()->format('Ymd_His').'.csv';

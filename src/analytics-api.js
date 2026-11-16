@@ -2,6 +2,9 @@
 import * as api from './api-client.js'
 import { normalizeFailure } from './appointments-api.js'
 import { clinicDate } from './clock.js'
+import { requestClinicCsv, saveClinicCsv } from './clinic-csv.js'
+
+export { saveClinicCsv }
 
 export async function fetchExecutiveSummary(params = {}) {
   const res = await api.getExecutiveSummary(params)
@@ -27,30 +30,29 @@ export async function fetchWeeklyRevenueHistogram(params = {}) {
   return res.data
 }
 
-export async function downloadAnalyticsCsv(params = {}) {
-  const query = Object.entries(params)
-    .filter(([, value]) => value !== null && value !== undefined && value !== '')
-    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
-    .join('&')
-
-  const url = `${api.apiBase()}/api/analytics/export${query ? `?${query}` : ''}`
-
-  const res = await fetch(url, { credentials: 'include' })
-  if (!res.ok) {
-    throw new Error(res.status === 403 ? 'Analytics export is restricted to the clinic Owner.' : 'Failed to export analytics report.')
+export async function requestAnalyticsCsv(params, { signal } = {}) {
+  const { branch_id: branchId, period } = params ?? {}
+  if (typeof branchId !== 'string' || !branchId || branchId !== branchId.trim() || typeof period !== 'string' || !period.trim()) {
+    throw new Error('Choose a report branch and period before exporting.')
   }
+  return requestClinicCsv('/api/analytics/export', params, {
+    signal,
+    fallbackFilename: `operational-analytics-${clinicDate()}.csv`,
+    failureMessage: 'Failed to export analytics report.',
+  })
+}
 
-  const contentType = res.headers?.get?.('Content-Type') || ''
-  if (!/^text\/csv(?:\s*;|$)/i.test(contentType)) {
-    throw new Error('The clinic server did not return a CSV file.')
+// Compatibility for the existing AnalyticsPage consumer. The new requester requires explicit scope.
+export async function downloadAnalyticsCsv(params = {}, isCurrent = () => true) {
+  if (!isCurrent()) return false
+  let result
+  try {
+    result = await requestAnalyticsCsv({ ...params, branch_id: params.branch_id === null ? 'all' : params.branch_id })
+  } catch (error) {
+    if (!isCurrent()) return false
+    throw error
   }
-  const blob = await res.blob()
-  const blobUrl = window.URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = blobUrl
-  a.download = `operational-analytics-${clinicDate()}.csv`
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  window.URL.revokeObjectURL(blobUrl)
+  if (!isCurrent()) return false
+  saveClinicCsv(result)
+  return true
 }
