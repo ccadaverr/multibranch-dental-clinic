@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 export async function runOwnerAnalyticsAcceptance(page, base = 'http://127.0.0.1:5176') {
   let mode = 'normal'
   let hold = false
+  let reportingDay
   const pending = []
   const requests = []
   const addDays = (date, days) => { const d=new Date(date+'T00:00:00Z'); d.setUTCDate(d.getUTCDate()+days); return d.toISOString().slice(0,10) }
@@ -15,7 +16,7 @@ export async function runOwnerAnalyticsAcceptance(page, base = 'http://127.0.0.1
     if(hold && branchId?.endsWith('b01')) await new Promise(resolve=>pending.push(resolve))
     if(mode==='error') return route.fulfill({status:503,json:{message:'Unavailable'}})
     if(mode==='loading') await new Promise(resolve=>setTimeout(resolve,250))
-    const today=new URL(page.url()).searchParams.get('today')||'2026-10-31'
+    const today=reportingDay||new URL(page.url()).searchParams.get('today')||'2026-10-31'
     const zero=mode==='empty'
     const gross=zero?'0.00':branchId?.endsWith('b01')?'1000.10':branchId?.endsWith('b02')?'2000.20':'3000.30'
     const refund=zero?'0.00':branchId?.endsWith('b01')?'125.05':branchId?.endsWith('b02')?'25.05':'150.10'
@@ -79,6 +80,22 @@ export async function runOwnerAnalyticsAcceptance(page, base = 'http://127.0.0.1
     cases.push(`Owner ${width}: loading, line/bar exact focus/hover tooltip, table, period/date/branch mapping, Saturday/historical status, stale-response isolation, responsive layout`)
   }
   mode='normal'
+  await page.goto(`${base}/tests/fixtures/owner-analytics.html?today=2026-10-31`)
+  const saturdaySummary = page.getByText(/^Saturday summary .* in progress until the reporting day ends\.$/)
+  await saturdaySummary.waitFor()
+  reportingDay = '2026-11-01'
+  const fetchedWeeks = requests.filter(url => url.pathname.endsWith('/weekly-histogram')).length
+  await page.evaluate(async date => {
+    const { setClockSource } = await import('/src/clock.js')
+    setClockSource(() => new Date(date + 'T00:00:01+08:00'))
+  }, reportingDay)
+  await page.getByRole('combobox', { name: 'Report period' }).selectOption('This Month')
+  await page.getByText(/^Week finalized .* Saturday has passed\.$/).waitFor()
+  const weeks = requests.filter(url => url.pathname.endsWith('/weekly-histogram'))
+  assert.equal(weeks.length, fetchedWeeks + 1)
+  assert.equal(weeks.at(-1).searchParams.get('date'), '2026-10-31')
+  reportingDay = undefined
+  cases.push('Retained Saturday selection reloads its finalization status on the next Manila day')
   await page.goto(`${base}/tests/fixtures/owner-analytics.html?today=2026-10-29`)
   await page.getByRole('button',{name:'Preview in-progress week'}).waitFor()
   assert.equal(await page.getByRole('group',{name:'Monday–Saturday gross collections and net cash flow chart',exact:true}).count(),0)

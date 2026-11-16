@@ -26,6 +26,7 @@ function AuditLifetime({ store }) {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [selection, setInspectLog] = useState(null)
+  const [target, setTarget] = useState(null)
   const [loadedKey,setLoadedKey]=useState(null),[action,setAction]=useState('')
   const epoch=useRef(0),mounted=useRef(false),morePending=useRef(false),exportPending=useRef(false),currentKey=useRef('')
   const auth=store.getAuthGeneration?.()
@@ -40,6 +41,8 @@ function AuditLifetime({ store }) {
     date_from: dateFrom || undefined,
     date_to: dateTo || undefined,
     action: action || undefined,
+    target_type: target?.type,
+    target_id: target?.id,
   })
   const filterKey=JSON.stringify(filters())
   currentKey.current=filterKey
@@ -135,7 +138,7 @@ function AuditLifetime({ store }) {
               {exporting ? 'Generating Export...' : 'Export Audit Trail (CSV)'}
             </Button>
             <Button size="sm" variant="ghost" disabled={rangeInvalid||viewStatus!=='ready'} onClick={() => window.print()} icon="file">
-              Download / Print PDF
+              Print loaded audit events
             </Button>
           </div>
         }
@@ -145,7 +148,7 @@ function AuditLifetime({ store }) {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Brand />
           <div style={{ textAlign: 'right' }}>
-            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800' }}>Official Audit Trail & Compliance Log</h3>
+            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800' }}>Audit Trail</h3>
             <span style={{ fontSize: '11px', color: '#64748b' }}>Generated on {new Date().toLocaleDateString('en-PH',{timeZone:'Asia/Manila'})}</span>
           </div>
         </div>
@@ -159,6 +162,10 @@ function AuditLifetime({ store }) {
 <Card title="Audit Event Filters">
         <Field label="Operational activity"><select aria-label="Operational activity" value={action} onChange={e=>setAction(e.target.value)}><option value="">All authorized audit events</option><option value="notification.archived">Notification archive activity (metadata only)</option><option value="staff_profile.updated">Staff profile changes</option><option value="staff_roster.draft_saved">Dated Staff draft preparation</option><option value="staff_roster.saved">Staff roster drafts and requests</option><option value="staff_roster.approved">Staff roster approvals</option><option value="staff_roster.published">Staff roster publications</option></select></Field>
         {action==='notification.archived'&&<Notice>Archive activity shows who archived a notification and when. Notification contents remain private to their recipient. This view cannot restore or delete records.</Notice>}
+        {target && <div className="row-actions">
+          <span role="status">Record filter: {target.type} <code>{target.id}</code></span>
+          <Button size="sm" variant="ghost" onClick={() => setTarget(null)}>Clear record filter</Button>
+        </div>}
         <FilterBar
           search={search}
           onSearchChange={setSearch}
@@ -202,8 +209,8 @@ function AuditLifetime({ store }) {
               ],
             },
           ]}
-          count={logs.length}
-          onReset={search || category !== 'all' || severity !== 'all' || branchId || dateFrom || dateTo || action ? () => {
+          count={viewStatus === 'ready' && !rangeInvalid ? shownLogs.length : undefined}
+          onReset={search || category !== 'all' || severity !== 'all' || branchId || dateFrom || dateTo || action || target ? () => {
             setSearch('')
             setCategory('all')
             setSeverity('all')
@@ -211,6 +218,7 @@ function AuditLifetime({ store }) {
             setDateFrom('')
             setDateTo('')
             setAction('')
+            setTarget(null)
           } : null}
         />
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginTop: '12px', flexWrap: 'wrap', paddingTop: '10px', borderTop: '1px solid var(--line)' }}>
@@ -226,7 +234,7 @@ function AuditLifetime({ store }) {
         </div>
       </Card>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '20px' }}>
+      {viewStatus === 'ready' && !rangeInvalid && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '20px' }}>
         <div style={{ padding: '14px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)' }}>
           <span style={{ fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: '700' }}>Events loaded</span>
           <b style={{ display: 'block', fontSize: '20px', marginTop: '4px' }}>{shownLogs.length}</b>
@@ -243,7 +251,7 @@ function AuditLifetime({ store }) {
           <span style={{ fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: '700' }}>Clinical (loaded)</span>
           <b style={{ display: 'block', fontSize: '20px', marginTop: '4px' }}>{clinicalCount}</b>
         </div>
-      </div>
+      </div>}
 
       <div style={{ marginTop: '20px' }}>
         <Card title="Activity Log" subtitle="Newest first, recorded by the clinic server. Entries cannot be edited or deleted from the application.">
@@ -299,7 +307,7 @@ function AuditLifetime({ store }) {
                 {
                   key: 'branch',
                   label: 'Branch',
-                  render: l => l.branch?.name || 'All Branches',
+                  render: l => l.branch?.name || 'No branch recorded',
                 },
                 {
                   key: 'target',
@@ -349,7 +357,7 @@ function AuditLifetime({ store }) {
               </div>
               <div>
                 <small style={{ color: 'var(--muted)', display: 'block' }}>Branch</small>
-                <span>{inspectLog.branch?.name || 'All Branches'}</span>
+                <span>{inspectLog.branch?.name || 'No branch recorded'}</span>
               </div>
               <div>
                 <small style={{ color: 'var(--muted)', display: 'block' }}>Timestamp</small>
@@ -387,6 +395,12 @@ function AuditLifetime({ store }) {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+              {inspectLog.auditableType && inspectLog.auditableId && (
+                <Button variant="soft" onClick={() => {
+                  setTarget({ type: inspectLog.auditableType, id: inspectLog.auditableId })
+                  setInspectLog(null)
+                }}>Filter to this record</Button>
+              )}
               <Button onClick={() => setInspectLog(null)}>Close</Button>
             </div>
           </div>

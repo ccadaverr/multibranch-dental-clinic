@@ -266,7 +266,7 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
           ))}
         </select>
         <Button size="sm" variant="secondary" icon="download" disabled={!recordsForTab.length} onClick={handleExportCsv}>
-          Export Archive CSV
+          {tab === 'visits' && store.appointmentsTruncated ? 'Export loaded appointments CSV' : 'Export Archive CSV'}
         </Button>
       </FilterBar>
 
@@ -278,6 +278,9 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
 
       {tab === 'visits' && (
         <Card title="Historical Appointments" subtitle="Past or terminal appointments; inclusion here does not confirm completed care.">
+          {store.appointmentsTruncated && <Notice tone="warning" title="Appointment history is partial">
+            Search, counts and CSV export cover the loaded appointments. Older matches may exist.
+          </Notice>}
           {appointmentsLoading ? <Notice title="Loading historical appointments">
             Refreshing clinic records. {archivedVisits.length > 0 && 'Previously loaded appointments remain visible below.'}
           </Notice> : appointmentsFailed ? <Notice tone="error" title="Historical appointments could not be refreshed">

@@ -40,6 +40,10 @@ class AuditController extends Controller
             'date_from' => ['nullable', 'date_format:Y-m-d'],
             'date_to' => ['nullable', 'date_format:Y-m-d'],
         ];
+        $rules += [
+            'target_type' => ['nullable', 'required_with:target_id', 'string', 'max:100'],
+            'target_id' => ['nullable', 'required_with:target_type', 'string', 'max:50'],
+        ];
         if ($paged) {
             $rules += ['per_page' => ['nullable', 'integer', 'min:1', 'max:'.self::MAX_PER_PAGE], 'cursor' => ['nullable', 'string', 'size:26']];
         }
@@ -65,6 +69,11 @@ class AuditController extends Controller
         if (! empty($v['action'])) {
             $query->where('action', $v['action']);
         }
+        if (isset($v['target_type'], $v['target_id'])) {
+            $query->where('auditable_type', $v['target_type'])
+                ->where('auditable_public_id', $v['target_id']);
+        }
+
         // Dates are clinic (Asia/Manila) business days; the stored instants are timestamptz.
         if (! empty($v['date_from'])) {
             $query->where('created_at', '>=', ClinicClock::at($v['date_from'], '00:00')->startOfDay()->toIso8601String());
@@ -125,7 +134,7 @@ class AuditController extends Controller
                 $payloadText = json_encode($log->payload ?? [], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
                 fputcsv($handle, array_map($this->sanitizeCsvCell(...), [
                     $log->public_id, ClinicClock::local($log->created_at)->toIso8601String(), $log->action, $log->category, $log->severity,
-                    $log->actor_name ?? '', $log->actor_role ?? '', $log->branch?->name ?? 'All Branches', $log->auditable_type ?? '',
+                    $log->actor_name ?? '', $log->actor_role ?? '', $log->branch?->name ?? 'No branch recorded', $log->auditable_type ?? '',
                     $log->auditable_public_id ?? '', $log->ip_address ?? '', $payloadText,
                 ]));
             }

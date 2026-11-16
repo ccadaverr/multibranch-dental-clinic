@@ -78,3 +78,13 @@ test('AUD-03: shared Table keeps default, custom empty and populated semantics',
   assert.match(html, /scope="col"/)
   assert.match(html, /synthetic/)
 })
+
+test('a bounded appointment projection labels its history and export as partial', () => {
+  const store = fixture('ready', [row])
+  store.appointmentsTruncated = true
+  const html = render(store)
+  assert.match(html, /Appointment history is partial/)
+  assert.match(html, /Older matches may exist/)
+  assert.match(html, /Export loaded appointments CSV/)
+  assert.match(html, /SYN-APT/)
+})

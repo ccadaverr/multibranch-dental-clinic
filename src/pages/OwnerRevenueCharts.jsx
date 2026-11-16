@@ -106,7 +106,7 @@ export function OwnerRevenueCharts({ branchId, branchName, period, serverSession
     <div className={showWeekly?'owner-revenue-grid':''}>
       <RevenueReport key={`daily:${branchId || 'all'}:${period}:${today}`} params={{ period: period.toLowerCase(), branch_id: branchId }} today={today}/>
       {showWeekly&&<div>{!dashboard&&<Field label="Week containing date"><input type="date" aria-label="Week containing date" value={weekDate} max={today} onChange={e => setWeekDate(e.target.value)}/></Field>}
-        {validWeek ? <RevenueReport key={`weekly:${branchId || 'all'}:${selectedWeek}`} weekly params={{ date: selectedWeek, branch_id: branchId }} today={today}/>
+        {validWeek ? <RevenueReport key={`weekly:${branchId || 'all'}:${selectedWeek}:${today}`} weekly params={{ date: selectedWeek, branch_id: branchId }} today={today}/>
           : <Notice tone="warning">Choose a valid date no later than today.</Notice>}
       </div>}
     </div>

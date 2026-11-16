@@ -53,12 +53,18 @@ test('an event is requested by its encoded public id', async () => {
 test('the export reports truncation and explains refusals', async () => {
   globalThis.window = { URL: { createObjectURL: () => 'blob:x', revokeObjectURL: () => {} } }
   globalThis.document = { cookie: '', createElement: () => ({ click() {}, remove() {} }), body: { appendChild() {} } }
-  stubFetch(json(200, {}, { 'X-Audit-Export-Truncated': 'true', 'X-Audit-Export-Limit': '5000' }))
+  stubFetch(json(200, {}, { 'Content-Type': 'text/csv', 'X-Audit-Export-Truncated': 'true', 'X-Audit-Export-Limit': '5000' }))
   assert.deepEqual(await downloadAuditLogsCsv({ category: 'financial', severity: 'all' }), { truncated: true, limit: 5000 })
   assert.match(calls[0].url, /category=financial/)
   assert.doesNotMatch(calls[0].url, /severity/, 'the "all" placeholder is not sent')
-  stubFetch(json(200, {}, { 'X-Audit-Export-Truncated': 'false', 'X-Audit-Export-Limit': '5000' }))
-  assert.equal((await downloadAuditLogsCsv()).truncated, false)
+  stubFetch(json(200, {}, { 'Content-Type': 'text/csv', 'X-Audit-Export-Truncated': 'false', 'X-Audit-Export-Limit': '5000' }))
+  assert.equal((await downloadAuditLogsCsv({ search: 'all', target_type: 'UserNotification', target_id: 'exact/id' })).truncated, false)
+  const query = new URL(calls.at(-1).url).searchParams
+  assert.equal(query.get('search'), 'all')
+  assert.equal(query.get('target_type'), 'UserNotification')
+  assert.equal(query.get('target_id'), 'exact/id')
+  stubFetch(json(200, {}, { 'Content-Type': 'text/html' }))
+  await assert.rejects(() => downloadAuditLogsCsv(), /did not return a CSV/)
   for (const [status, message] of [[403, /Owner/], [422, /not valid/], [500, /Failed/]]) {
     stubFetch(json(status, {}))
     await assert.rejects(() => downloadAuditLogsCsv(), message)
