@@ -83,3 +83,40 @@ Accepted implementation anchor is ca9074a; review the complete history from a072
 Potential shared collisions: backend/routes/api.php; src/pages/Admin.jsx, Staffing.jsx, src/reference-data-bridge.js and shared api-client helpers; exact migration profile/orchestration. Resolve semantic identities, scope, receipt/error shapes and capability flags before mechanical conflicts. Do not replace Doctor availability/clinical booking with Staff duty. Preserve operational audit filters/cursors and recipient-only inboxes.
 
 Retain OWN-10/11, STF-08/OWN-12, OWN-01 and operational GEN-10 candidates; STF-25/DEN-16 ready only for verified archive-detail scope. GEN-11 and global GEN-02/13 remain partial; GEN-06/DEN-03 need original reproductions. Prior focused tests/browsers/build are historical evidence, not production readiness. Unified integration, comprehensive system tests, provider delivery, storage recovery and deployed rollback remain deferred. No68/68 claim.
+
+## Runtime acceptance follow-up — November16 (starting23cf477)
+
+Demonstrated configuration correction: Supervisor timeout600 exceeded database retry_after90 and equalled the outbox claim lease600. Supervisor now uses60, matching the established local/Laravel default; local-system worker explicitly declares the same60. Effective demo configuration was read through Laravel: database dental_clinic_demo, queue database, retry_after90, outbox claim600. LocalCaptureTransport already has a5-second socket timeout. The ordering60<90 and60<600 permits the worker to exit before another reservation/stale claim is eligible. A regression test reads these versioned defaults and asserts the ordering. Future operators MUST inspect effective overrides and job-specific timeout properties: reserve/claim leases must exceed the maximum running-job timeout. Linux/POSIX signal support is required. Do not increase worker timeout for a slow job without reviewing both leases. The earlier recommendation to override retry_after for a600-second worker is superseded by this correction. No production settings changed.
+
+The private Docker toolchain lacked GD, producing a real dompdf failure. Added php8.3-gd to its versioned Dockerfile and installed the distribution package only inside A's existing container. No application/PDF authorization change. Three initial outbox failures were caused by running tests that expect sync/array under the demo-style database/local_capture defaults; explicit test-process MAIL_MAILER=array and QUEUE_CONNECTION=sync restore their intended baseline. Tests explicitly selecting database queue still exercise it. Neither runtime .env nor assertions were changed.
+
+Executed focused checks after correction:
+
+- Python startup/configuration safety3/3 passed; AUTO_MIGRATE=true refusal remains enforced.
+- Real PostgreSQL MailOutboxTest, BillingDocumentDownloadTest and BookingSessionAcceptanceTest:20tests/135assertions passed. Covers actual database worker processing after commit, transient retry/backoff, exhaustion, duplicate intents/jobs, held/stale claims, rollback, append-only attempts, one-time non-retryable mail, PDF ownership and session rules. Mail is faked/array in these tests; no delivery claim.
+- All five services started in A's verified profile: PostgreSQL, API8104, frontend5195, database queue worker, scheduler. Frontend points explicitly to API8104; container-loopback5195 bridges to the host frontend for diagnostics. No B process/database/cache changed.
+- Exactly one local-only predefense run with services up passed ALL required checks,0FAIL/3WARN. Warnings remain external integration skipped, missing branch3 email and9 draft assistant answers. Five Patients and unpaid invoice already existed; no speculative seeding needed. This run does not exercise SMTP capture or validate process identity merely from its global process-name check.
+- Actual schedule:run executed mail:process-due, automations:run and expired-hold release successfully on synthetic demo data. Existing scheduler process also ran; no business rule changes or provider activation.
+- Actual owned demo worker was terminated and restarted, with new PID and explicit timeout60. A separate isolated runtime-probe queue in A's test database exercised SIGKILL while a synthetic job was executing, then simulated expiry ONLY on its reservation (rather than waiting90seconds). Restart exposed one failed job; a replacement synthetic idempotent operation left one effect marker. Fixture source/logs remain private under /private/roster11b. This proves real process interruption/restart/failure visibility plus fixture idempotency; it is not proof of exactly-once SMTP delivery.
+- Actual Chrome Owner sign-in, reload and exact /api/me identity survived an API stop/restart after waiting for /up. Early probe setup omitted the sign-in hash/Origin and later reloaded before readiness; corrected harness passed without changing auth code. Session persistence is backed by the existing database and unchanged APP_KEY.
+
+Python3.12 in the private image lacks smtpd/asyncore required by the existing Python3.9–3.11 capture script. Live local-capture delivery remains environment-blocked, even though required predefense passes with an empty outbox; provision the documented compatible capture process before a real local mail journey. Never infer delivery from that check. Encrypted/private-object restoration and hosted rollback remain unexecuted. The existing MailOutbox contract explicitly permits at-least-once delivery after a crash between transport acceptance and recorded outcome; timeout correction does not remove that ambiguity. No old failures were deleted or blindly replayed. Probe failure evidence is retained in the test database.
+
+### Offline transfer: technically possible, credential review BLOCKED
+
+Scanned3,864 reachable historical text blobs across all Git refs with private-key, provider-token and credential-URL patterns. One candidate was found in historical `.agents/mcp_config.json`, object d062dc45729e44cb500c090026dd70a1409faf19, introduced in f4b04f6. It contains a loopback PostgreSQL credential URL whose password is not a recognized placeholder. The value was never printed or added to this report; validity and reuse are unknown. Metadata-only scan report is in the private backup directory. This heuristic scan is not proof that no other secret exists (binary/encoded credentials and unrecognized formats need further review).
+
+Do NOT transfer/publish the complete-history bundle as credential-cleared. Owner must privately review the historical value, determine affected systems and rotate/revoke it if valid/reused before sharing, and approve secure delivery to Jaztin. Preserve the current25+ commits; do not silently rewrite/remove history. Encryption protects transfer/storage but does not neutralize a credential present in the bundle. No bundle was sent.
+
+After credential review and an approved private channel, Jaztin can verify/import without touching her work:
+
+```bash
+git bundle verify /private/path/joevan-qa-TIMESTAMP.bundle
+git init /private/new-operations-review
+git -C /private/new-operations-review fetch /private/path/joevan-qa-TIMESTAMP.bundle refs/heads/feature/joevan-qa-20261115:refs/heads/joevan-review
+git -C /private/new-operations-review rev-parse refs/heads/joevan-review
+# Compare the full accepted SHA from Joevan's final report; inspect history/contracts here.
+# Do not merge, reset, replace credentials, or import runtime/mail/database files into Jaztin's branch.
+```
+
+The hosting evidence list above still applies: actual Vercel preview API isolation/branch triggers, every Render/Railway production service exclusion and GitHub App/webhook/workflow triggers. No credentials or secret screenshots are requested. No push/merge/deploy is authorized until that gate is satisfied. Existing dump/restore evidence was retained and not repeated.

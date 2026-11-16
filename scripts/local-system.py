@@ -281,7 +281,7 @@ def main():
         if args.profile != 'demo':
             raise ValueError('Background services run only against the owned demo database.')
         os.chdir(ROOT / 'backend')
-        command = ['queue:work', '--queue=mail,default', '--sleep=1', '--tries=1'] if args.action == 'worker' else ['schedule:work']
+        command = ['queue:work', '--queue=mail,default', '--sleep=1', '--tries=1', '--timeout=60'] if args.action == 'worker' else ['schedule:work']
         os.execve(c['php'], [c['php'], 'artisan', *command, '--no-interaction'], environment(c, runtime, 'demo'))
     elif args.action == 'ui':
         env = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': str(Path.home()), 'VITE_API_BASE_URL': 'http://127.0.0.1:8104', 'TZ': 'Asia/Manila'}
