@@ -1,5 +1,7 @@
 # Chart recording API v1 — implemented, 2026-11-16 Asia/Manila
 
+**Write compatibility superseded by [v2](CHART_RECORDING_API_V2.md): every chart mutation now requires an original tooth revision and an Idempotency-Key. The unkeyed legacy fallback described below is historical and is no longer accepted. Read projections/history remain compatible.**
+
 Clinical owner: Jaztin. Additive protocol on existing chart routes, notation, status list and append-only tooth history. No migration; the held tooth backfill remains held. This does not activate other-target AUD-10, introduce sign-off/correction policy or change workforce authority.
 
 ## Read and capability

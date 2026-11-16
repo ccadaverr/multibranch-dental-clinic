@@ -428,16 +428,20 @@ export function resendBillingReceipt(invoiceId) {
   return request(`/api/invoices/${encodeURIComponent(invoiceId)}/resend-receipt`, { method: 'POST' })
 }
 /** Downloads an appointment booking deposit receipt PDF and saves it in the browser. */
-export async function downloadAppointmentReceiptPdf(appointmentId, code = null) {
+export async function downloadAppointmentReceiptPdf(appointmentId, code = null, {isCurrent=()=>true} = {}) {
+  if(!isCurrent())return {ok:false,kind:'stale_context'}
   let response
   try {
     response = await rawFetch(`/api/appointments/${encodeURIComponent(appointmentId)}/receipt-pdf`, { headers: { Accept: 'application/pdf' } })
   } catch {
     return { ok: false, kind: 'network', message: 'Could not reach the clinic system. Check your connection and try again.' }
   }
+  if(!isCurrent())return {ok:false,kind:'stale_context'}
   if (!response.ok) return response.status === 404 ? { ok: false, kind: 'not_found', message: 'This deposit receipt is not available.' } : parseFailure(response)
   const name = /filename="([^"]+)"/.exec(response.headers.get('Content-Disposition') || '')?.[1] || `Booking-Deposit-Receipt${code ? `-${code}` : ''}.pdf`
-  const url = URL.createObjectURL(await response.blob())
+  const blob=await response.blob()
+  if(!isCurrent())return {ok:false,kind:'stale_context'}
+  const url = URL.createObjectURL(blob)
   const a = Object.assign(document.createElement('a'), { href: url, download: name })
   document.body.appendChild(a); a.click(); a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
@@ -445,16 +449,20 @@ export async function downloadAppointmentReceiptPdf(appointmentId, code = null) 
 }
 
 /** M19: downloads a prescription PDF (issued or void) the signed-in person may read. */
-export async function downloadPrescriptionPdf(id, number = null) {
+export async function downloadPrescriptionPdf(id, number = null, {isCurrent=()=>true} = {}) {
+  if(!isCurrent())return {ok:false,kind:'stale_context'}
   let response
   try {
     response = await rawFetch(`/api/prescriptions/${encodeURIComponent(id)}/pdf`, { headers: { Accept: 'application/pdf' } })
   } catch {
     return { ok: false, kind: 'network', message: 'Could not reach the clinic system. Check your connection and try again.' }
   }
+  if(!isCurrent())return {ok:false,kind:'stale_context'}
   if (!response.ok) return response.status === 404 ? { ok: false, kind: 'not_found', message: 'This document is not available.' } : parseFailure(response)
   const name = /filename="([^"]+)"/.exec(response.headers.get('Content-Disposition') || '')?.[1] || `Prescription${number ? `-${number}` : ''}.pdf`
-  const url = URL.createObjectURL(await response.blob())
+  const blob=await response.blob()
+  if(!isCurrent())return {ok:false,kind:'stale_context'}
+  const url = URL.createObjectURL(blob)
   const a = Object.assign(document.createElement('a'), { href: url, download: name })
   document.body.appendChild(a); a.click(); a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 1000)

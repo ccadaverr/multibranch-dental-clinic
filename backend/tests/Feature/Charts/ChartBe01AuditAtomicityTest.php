@@ -26,10 +26,13 @@ class ChartBe01AuditAtomicityTest extends TestCase
 
     private function record(array $extra = [])
     {
+        // Each helper invocation is a newly reviewed intent; stale/replay tests retain explicit originals elsewhere.
+        $extra += ['expected_revision' => ToothChartEntry::where('patient_id', $this->p['A']->id)->where('tooth', $extra['tooth'] ?? '36')->count()];
+        if (!empty($extra['treatment_id'])) $extra += ['expected_treatment_revision' => \App\Models\Treatment::where('public_id', $extra['treatment_id'])->value('revision') ?? 1];
         return $this->postJson('/api/patients/'.$this->p['A']->public_id.'/chart', $extra + [
             'tooth' => '36', 'status' => 'Caries', 'surfaces' => ['O'],
             'branch_ref' => 'b1', 'recorded_on' => ClinicClock::today(), 'note' => 'CHART-BE-01 private note',
-        ]);
+        ], ['Idempotency-Key' => (string) \Illuminate\Support\Str::uuid()]);
     }
 
     public function test_success_records_correct_provenance_and_minimal_audit(): void
@@ -104,7 +107,7 @@ class ChartBe01AuditAtomicityTest extends TestCase
         $this->assertSame($before, $first->fresh()->getAttributes());
         $this->assertSame(2, ToothChartEntry::distinct()->count('public_id'));
         $this->assertSame(2, AuditLog::where('action', 'chart.recorded')->count());
-        // Existing append behavior is preserved; no API idempotency contract is introduced.
+        // Distinct reviewed commands append; same-key retries are covered by ChartCommandRecoveryTest.
     }
 
     public function test_permissions_and_read_redaction_remain_unchanged(): void

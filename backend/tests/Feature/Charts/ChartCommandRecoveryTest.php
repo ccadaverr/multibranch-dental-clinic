@@ -19,7 +19,7 @@ final class ChartCommandRecoveryTest extends TestCase
   return $this->postJson('/api/visits/'.$v['id'].'/treatment',['expected_revision'=>1],['Idempotency-Key'=>'chart-start'])->assertCreated()->json('data');
  }
  public function test_same_command_new_auth_recovers_exact_entry_revision_without_duplicate_history_or_audit():void{
-  $this->getJson('/api/patients/'.$this->p['A']->public_id.'/chart')->assertOk()->assertJsonPath('data.write_contract.version',1);
+  $this->getJson('/api/patients/'.$this->p['A']->public_id.'/chart')->assertOk()->assertJsonPath('data.write_contract.version',2);
   $first=$this->record()->assertCreated()->assertJsonPath('meta.chart_receipt.revision',1)->json();$id=$first['meta']['chart_receipt']['entry_id'];
   $this->app['auth']->forgetGuards();$this->actingAsUser('dentist1');$r=$this->record()->assertCreated()->assertHeader('Idempotent-Replayed','true');self::assertSame($first,$r->json());
   $this->getJson('/api/patients/'.$this->p['A']->public_id.'/chart')->assertOk()->assertJsonPath('data.tooth_revisions.36',1)->assertJsonPath('data.history.0.id',$id)->assertJsonPath('data.history.0.branch.id','b1');
@@ -64,6 +64,19 @@ final class ChartCommandRecoveryTest extends TestCase
   $this->mock(AuditService::class,fn($m)=>$m->shouldReceive('recordAdministrative')->andThrow(new \RuntimeException('Synthetic chart audit refusal')));
   $this->withoutExceptionHandling();try{$this->record();self::fail('Audit refusal must propagate');}catch(\RuntimeException $e){self::assertSame('Synthetic chart audit refusal',$e->getMessage());}
   self::assertSame(0,ToothChartEntry::count());self::assertSame(0,CommandKey::where('command','chart.record')->count());
+ }
+ public function test_legacy_unkeyed_or_revision_free_payload_cannot_supersede_a_newer_finding():void{
+  $this->record()->assertCreated();$before=ToothChartEntry::sole()->getRawOriginal();
+  foreach([[],['Idempotency-Key'=>'legacy-no-revision']]as$headers)$this->postJson('/api/patients/'.$this->p['A']->public_id.'/chart',['tooth'=>'36','status'=>'Filled'],$headers)->assertUnprocessable()->assertJsonValidationErrors('expected_revision');
+  $this->postJson('/api/patients/'.$this->p['A']->public_id.'/chart',['tooth'=>'36','status'=>'Filled','expected_revision'=>1])->assertUnprocessable();
+  $this->record(['status'=>'Filled'],'stale-client')->assertConflict()->assertJsonPath('code','chart_revision_changed');
+  self::assertSame($before,ToothChartEntry::sole()->getRawOriginal());self::assertSame(1,CommandKey::where('command','chart.record')->count());
+ }
+ public function test_v1_keyed_original_journal_is_readable_without_rewriting_its_snapshot():void{
+  $old=$this->record()->assertCreated()->json();$old['data']['write_contract']=['version'=>1,'revision_scheme'=>'tooth_entry_count','idempotency'=>true];
+  CommandKey::where('command','chart.record')->sole()->update(['response_body'=>$old]);
+  self::assertSame($old,$this->record()->assertCreated()->assertHeader('Idempotent-Replayed','true')->json());
+  $this->getJson('/api/patients/'.$this->p['A']->public_id.'/chart')->assertOk()->assertJsonPath('data.write_contract.version',2);self::assertSame(1,ToothChartEntry::count());
  }
  public function test_revision_command_requires_key_and_complete_link_pair():void{
   $this->postJson('/api/patients/'.$this->p['A']->public_id.'/chart',['tooth'=>'36','status'=>'Caries','expected_revision'=>0])->assertUnprocessable();

@@ -12,6 +12,7 @@ import { IdCheck } from './CounterIntake.jsx'
 import { HandoverPanel } from './Handovers.jsx'
 import { FollowupPanel } from './ServerFollowups.jsx'
 import { ChartView } from './DentalChart.jsx'
+import { ClinicalHistory } from './ClinicalHistory.jsx'
 
 import { visibleHmo, HMO_PROVIDERS } from '../phase3-contracts.js'
 import { visiblePrescriptions, prescriptionTasks, linkedTreatment, followupDisplayState } from '../phase2.js'
@@ -40,7 +41,7 @@ function PatientRecordsBody({ role, store, context, setPage }) {
   const [selected,setSelected]=useState(context?.patientId||availablePatients[0]?.id||'')
   React.useEffect(()=>{if(context?.patientId)setSelected(context.patientId)},[context?.patientId])
   const [bookingPatient,setBookingPatient]=useState(null)
-  const [tab,setTab]=useState('summary')
+  const [tab,setTab]=useState((context?.historyTreatmentId||context?.historyTab)?'clinical':'summary')
   const [search,setSearch]=useState('')
   const filteredPatients=availablePatients.filter(p=>{
     if(branchFilter!=='All'&&p.preferredBranch!==branchFilter)return false
@@ -52,6 +53,7 @@ function PatientRecordsBody({ role, store, context, setPage }) {
   const [newPatient,setNewPatient]=useState({firstName:'',lastName:'',dob:'',sex:'Female',sexOther:'',phone:'',email:'',address:'',preferredBranch:'Dr. Dana Roxas Dental Clinic',hmo:'None',hmoMember:'—',allergies:'None',medicalHistory:'',dentalHistory:'',emergencyContact:'',consent:false,createPortalAccount:false})
   const patient=availablePatients.find(p=>p.id===selected)
   const serverPatient=serverSession&&!!patient?.serverProjection
+  const serverClinical=serverPatient&&['staff','dentist'].includes(role)
   const [searchError,setSearchError]=useState('')
   const [searchAttempt,setSearchAttempt]=useState(0)
   const [registering,setRegistering]=useState(false)
@@ -103,7 +105,7 @@ function PatientRecordsBody({ role, store, context, setPage }) {
     setSelected(result.record.id);setNewOpen(false)
     setNewPatient({firstName:'',lastName:'',dob:'',sex:'Female',sexOther:'',phone:'',email:'',address:'',preferredBranch:'Dr. Dana Roxas Dental Clinic',hmo:'None',hmoMember:'—',allergies:'None',medicalHistory:'',dentalHistory:'',emergencyContact:'',consent:false,createPortalAccount:false})
   }
-  const tabs=[{key:'summary',label:'Summary'},{key:'visits',label:'Visit history',count:visits.length},{key:'clinical',label:'Clinical',count:treatments.length},{key:'hmo',label:'HMO',count:hmo.length},{key:'documents',label:'Documents'}]
+  const tabs=[{key:'summary',label:'Summary'},{key:'visits',label:'Visit history',count:visits.length},{key:'clinical',label:'Clinical',count:serverClinical?undefined:treatments.length},{key:'hmo',label:'HMO',count:hmo.length},{key:'documents',label:'Documents'}]
   return <>
     {role==='dentist'&&context?.returnEncounter&&<Button variant="ghost" onClick={()=>setPage('treatment',context.returnEncounter)}>Return to encounter</Button>}
     <PageHeader title="Centralized Patient Records" text="Identity and contact details are shared across the patient record. Staff may maintain approved demographics; dentists see those fields read-only and edit only clinical information." aside={role==='dentist'&&encounter&&(['Called','Treatment Ready'].includes(encounter.status)||encounter.status==='Served'&&encounter.visitStatus==='In Treatment')?<Button onClick={()=>setPage('treatment',context)}>{encounter.treatmentId?'Continue Treatment':'Open Treatment'}</Button>:null}/>
@@ -126,7 +128,8 @@ function PatientRecordsBody({ role, store, context, setPage }) {
           :<SummaryTab key={patient.id} patient={patient} role={role} onSave={saveRecord}/>)}
         {role==='staff'&&!publicPatientIdFor(patient.id,{session,users:state.users,patients:state.patients})&&<Notice>This patient has no verified clinic server identity. Select a server-backed record before booking.</Notice>}
         {tab==='visits'&&<Card title="Cross-branch visit history"><Table rows={visits} columns={[{key:'date',label:'Date',render:a=>dateLabel(a.date)},{key:'branch',label:'Branch'},{key:'service',label:'Service'},{key:'dentist',label:'Dentist',render:a=>dentistName(a.dentistId,state.dentists)},{key:'status',label:'Status',render:a=><Status>{a.status}</Status>}]} /></Card>}
-        {tab==='clinical'&&<Card title="Treatment history" subtitle={role==='dentist'?'Clinic server records you may read: your own treatments and, while you treat this patient, their earlier completed treatments. Read-only unless you are the treating Dentist.':'Staff read-only clinical record'}>{treatments.length?treatments.map(t=><div className="clinical-history" key={t.id}><div><b>{dateLabel(t.date)} • {t.procedure||t.plan||'Treatment in progress'}</b>{t.complaint&&<p>Complaint: {t.complaint}</p>}{t.plan&&<p>Plan: {t.plan}</p>}{t.notes&&<p>{t.notes}</p>}{Array.isArray(t.procedures)&&t.procedures.length>0&&<p>{t.procedures.map(p=>`${p.serviceName||state.services.find(s=>s.id===p.serviceId)?.name||'Service'} × ${p.quantity}`).join(', ')}</p>}<small>{t.dentistName||dentistName(t.dentistId,state.dentists)} • {t.status}</small>{!t.server&&<small className="block-muted">{t.legacyAppointment?'Historical demo record':'Recorded before server treatment records'} — read-only</small>}</div><Status>{t.status}</Status></div>):<Notice>No treatment history recorded.</Notice>}</Card>}
+        {tab==='clinical'&&serverClinical&&<ClinicalHistory store={store} patient={patient} selectedId={context?.historyTreatmentId||null}/>}
+        {tab==='clinical'&&!serverClinical&&<Card title="Treatment history" subtitle={role==='dentist'?'Clinic server records you may read: your own treatments and, while you treat this patient, their earlier completed treatments. Read-only unless you are the treating Dentist.':'Staff read-only clinical record'}>{treatments.length?treatments.map(t=><div className="clinical-history" key={t.id}><div><b>{dateLabel(t.date)} • {t.procedure||t.plan||'Treatment in progress'}</b>{t.complaint&&<p>Complaint: {t.complaint}</p>}{t.plan&&<p>Plan: {t.plan}</p>}{t.notes&&<p>{t.notes}</p>}{Array.isArray(t.procedures)&&t.procedures.length>0&&<p>{t.procedures.map(p=>`${p.serviceName||state.services.find(s=>s.id===p.serviceId)?.name||'Service'} × ${p.quantity}`).join(', ')}</p>}<small>{t.dentistName||dentistName(t.dentistId,state.dentists)} • {t.status}</small>{!t.server&&<small className="block-muted">{t.legacyAppointment?'Historical demo record':'Recorded before server treatment records'} — read-only</small>}</div><Status>{t.status}</Status></div>):<Notice>No treatment history recorded.</Notice>}</Card>}
         {tab==='hmo'&&<Card title="HMO record" subtitle="Server HMO cases for this patient's visits; earlier browser records are marked as history. Membership is recorded in HMO Management."><Table rows={hmo} columns={[{key:'provider',label:'Provider'},{key:'memberId',label:'Member ID'},{key:'clinicDate',label:'Visit',render:h=>h.clinicDate?dateLabel(h.clinicDate):h.legacy?'Earlier record':'—'},{key:'eligibility',label:'Eligibility',render:h=><Status>{h.eligibility}</Status>},{key:'status',label:'Status',render:h=><Status>{h.status}</Status>}]} /></Card>}
         {tab==='documents'&&<PatientDocumentsTab patient={patient} role={role} store={store}/>}
       </div>:<Card title="Patient record"><p>Select a patient from the list to open their record.</p></Card>}

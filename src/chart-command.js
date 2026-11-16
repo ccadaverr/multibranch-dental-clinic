@@ -1,13 +1,13 @@
 import {commandKey} from './appointments-api.js'
 import {recordChartEntry} from './api-client.js'
-export const chartReady = data => data?.write_contract?.version===1 && data.write_contract.revision_scheme==='tooth_entry_count' && data.write_contract.idempotency===true && !!data.tooth_revisions && !Array.isArray(data.tooth_revisions) && Array.isArray(data.history)
+export const chartReady = data => data?.write_contract?.version===2 && data.write_contract.revision_scheme==='tooth_entry_count' && data.write_contract.idempotency===true && data.write_contract.requires_revision===true && data.write_contract.requires_idempotency===true && !!data.tooth_revisions && !Array.isArray(data.tooth_revisions) && Array.isArray(data.history)
 export function chartMatches(data,patientId){
  return data?.patient?.id===patientId && Array.isArray(data.current) && Array.isArray(data.summary) && (data.history===null||Array.isArray(data.history))
 }
 export function patientChartMatches(data,patientId){return !!patientId&&chartMatches(data,patientId)&&data.history===null&&data.current.every(e=>!Object.hasOwn(e,'note')&&!Object.hasOwn(e,'treatment_id')&&!Object.hasOwn(e,'visit_id'))}
 export function chartReceiptMatches(result,patientId,payload,dentistId){
  const row=result?.data,proof=result?.meta?.chart_receipt
- if(!result?.ok||!chartMatches(row,patientId)||!chartReady(row)||proof?.patient_id!==patientId||proof.tooth!==payload.tooth||
+ if(!result?.ok||!chartMatches(row,patientId)||!Array.isArray(row.history)||!row.tooth_revisions||![1,2].includes(row.write_contract?.version)||row.write_contract.revision_scheme!=='tooth_entry_count'||row.write_contract.idempotency!==true||proof?.patient_id!==patientId||proof.tooth!==payload.tooth||
    proof.revision!==payload.expected_revision+1||row.tooth_revisions[payload.tooth]!==proof.revision||proof.dentist_ref!==dentistId||
    (proof.treatment_id??null)!==(payload.treatment_id??null)||payload.branch_ref&&proof.branch_ref!==payload.branch_ref||
    payload.expected_treatment_revision&&proof.treatment_revision!==payload.expected_treatment_revision)return false
@@ -29,7 +29,7 @@ export function beginChartCommand({patientId,payload,dentistId,isCurrent,key=com
    if(!isCurrent())return {ok:false,outcome:'obsolete',message:'The chart session changed. No result was adopted.'}
    if(!result?.ok){if(uncertain||!['validation','conflict','forbidden','not_found','unauthenticated','rate_limited','stale_context'].includes(result?.kind))return unknown();phase='refused';return {...result,outcome:phase}}
    if(!chartReceiptMatches(result,patientId,intent,dentistId))return unknown()
-   phase='verified';return {...result,recovered:uncertain,outcome:phase,revision:result.meta.chart_receipt.revision,entryId:result.meta.chart_receipt.entry_id}
+   phase='verified';return {...result,recovered:uncertain||result.data.write_contract.version!==2,outcome:phase,revision:result.meta.chart_receipt.revision,entryId:result.meta.chart_receipt.entry_id}
   }finally{clearTimeout(timer);pending=false}
  }}
 }

@@ -117,16 +117,15 @@ class DentalChartController extends Controller
             'note' => ['nullable', 'string', 'max:1000'],
             'recorded_on' => ['nullable', 'date_format:Y-m-d'],
             'treatment_id' => ['nullable', 'string', 'max:40'],
-            'expected_revision' => ['sometimes', 'required', 'integer', 'min:0', 'max:2147483647'],
+            'expected_revision' => ['required', 'integer', 'min:0', 'max:2147483647'],
             'expected_treatment_revision' => ['sometimes', 'required', 'integer', 'min:1', 'required_with:treatment_id'],
             'branch_id' => ['nullable', 'integer', 'exists:branches,id', 'prohibits:branch_ref'],
             'branch_ref' => ['nullable', 'string', 'exists:branches,legacy_ref', 'prohibits:branch_id'],
             ...array_fill_keys(['patient_id','dentist_id','dentist_ref','visit_id','created_by_user_id','created_at','history','id','revision'], ['prohibited']),
         ]);
         if (isset($data['expected_treatment_revision']) && empty($data['treatment_id'])) throw ValidationException::withMessages(['treatment_id' => ['A treatment revision requires its exact treatment.']]);
-        $key = $this->idempotencyKey($request, array_key_exists('expected_revision', $data) || array_key_exists('expected_treatment_revision', $data));
-        if ($key !== null && !array_key_exists('expected_revision', $data)) throw ValidationException::withMessages(['expected_revision' => ['Review this tooth revision before a keyed chart command.']]);
-        if ($key !== null && !empty($data['treatment_id']) && !isset($data['expected_treatment_revision'])) throw ValidationException::withMessages(['expected_treatment_revision' => ['Review the linked treatment revision before recording.']]);
+        $key = $this->idempotencyKey($request, true);
+        if (!empty($data['treatment_id']) && !isset($data['expected_treatment_revision'])) throw ValidationException::withMessages(['expected_treatment_revision' => ['Review the linked treatment revision before recording.']]);
         $on = $data['recorded_on'] ?? ClinicClock::today();
         $treatment = null;
         if (! empty($data['treatment_id'])) {
@@ -175,10 +174,8 @@ class DentalChartController extends Controller
                 'treatment_revision' => $treatment?->revision,
             ]]], 201];
         };
-        if ($key !== null) return IdempotentCommand::run(CommandKey::class, $user, $key, 'chart.record', ['patient' => $patient->public_id, 'data' => $data], $work,
+        return IdempotentCommand::run(CommandKey::class, $user, $key, 'chart.record', ['patient' => $patient->public_id, 'data' => $data], $work,
             fn () => VisitCommandException::rule('idempotency_key_reused', 'This key was used for a different chart command.', 'idempotency_key'))->header('Cache-Control', 'private, no-store');
-        [$body, $statusCode] = DB::transaction($work);
-        return response()->json($body, $statusCode)->header('Cache-Control', 'private, no-store');
     }
 
     // ---- helpers ------------------------------------------------------------------------------------------------------
@@ -369,7 +366,7 @@ class DentalChartController extends Controller
             'current' => $currentEntries->values(),
             'summary' => $summary,
             'history' => $history ? $entries->reverse()->map(fn ($e) => $view($e))->values() : null,
-        ] + ($notes ? ['write_contract' => ['version' => 1, 'revision_scheme' => 'tooth_entry_count', 'idempotency' => true],
+        ] + ($notes ? ['write_contract' => ['version' => 2, 'revision_scheme' => 'tooth_entry_count', 'idempotency' => true, 'requires_revision' => true, 'requires_idempotency' => true],
             'tooth_revisions' => (object) $entries->groupBy('tooth')->map(fn ($rows) => $rows->count())->all()] : []);
     }
 }

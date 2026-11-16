@@ -34,32 +34,37 @@ class TreatmentController extends Controller
     {
         $validated = $request->validate([
             'date' => ['nullable', 'date_format:Y-m-d', 'prohibits:from,to'],
+            'patient_id' => ['nullable', 'string', 'size:26'],
             'from' => ['nullable', 'date_format:Y-m-d', 'required_with:to'],
             'to' => ['nullable', 'date_format:Y-m-d', 'required_with:from', 'after_or_equal:from'],
             'status' => ['nullable', 'in:In Treatment,Completed'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
         [$from, $to] = isset($validated['date']) ? [$validated['date'], $validated['date']] : [$validated['from'] ?? null, $validated['to'] ?? null];
-        if (! $from) {
-            $from = $to = ClinicClock::today();
-        }
-        if (ClinicClock::at($from, '00:00')->diffInDays(ClinicClock::at($to, '00:00')) >= self::MAX_RANGE_DAYS) {
+        $historical = !empty($validated['patient_id']) && !$from;
+        if ($historical && isset($validated['status']) && $validated['status'] !== 'Completed') throw ValidationException::withMessages(['status' => ['Patient history without a date window contains Completed records only.']]);
+        if (!$from && !$historical) $from = $to = ClinicClock::today();
+        if ($from && ClinicClock::at($from, '00:00')->diffInDays(ClinicClock::at($to, '00:00')) >= self::MAX_RANGE_DAYS) {
             throw ValidationException::withMessages(['to' => 'A date range may cover at most '.self::MAX_RANGE_DAYS.' days.']);
         }
         $query = Treatment::visibleTo($request->user())->with(TreatmentService::RELATIONS)
-            ->whereHas('visit', fn ($v) => $v->whereBetween('clinic_date', [$from, $to]))
+            ->whereHas('visit', function ($v) use ($from, $to, $validated) {
+                if ($from) $v->whereBetween('clinic_date', [$from, $to]);
+                if (!empty($validated['patient_id'])) $v->whereHas('patient', fn ($p) => $p->where('public_id', strtolower($validated['patient_id'])));
+            })
+            ->when($historical, fn ($q) => $q->where('status', 'Completed'))
             ->when($validated['status'] ?? null, fn ($q, $status) => $q->where('status', $status))
-            ->orderBy('started_at')->orderBy('id');
+            ->orderBy('started_at', $historical ? 'desc' : 'asc')->orderBy('id', $historical ? 'desc' : 'asc');
 
-        return TreatmentResource::collection($query->paginate($validated['per_page'] ?? 50)->withQueryString());
+        return TreatmentResource::collection($query->paginate($validated['per_page'] ?? 50)->withQueryString())->response()->header('Cache-Control', 'private, no-store');
     }
 
-    public function show(Treatment $treatment): TreatmentResource
+    public function show(Treatment $treatment): JsonResponse
     {
         $treatment->load([...TreatmentService::RELATIONS, 'history']);
         Gate::authorize('view', $treatment);
 
-        return new TreatmentResource($treatment);
+        return (new TreatmentResource($treatment))->response()->header('Cache-Control', 'private, no-store');
     }
 
     /**
@@ -85,7 +90,7 @@ class TreatmentController extends Controller
         $rows = $query->with(['visit', 'dentist.person', 'procedures'])->orderByDesc('completed_at')->orderByDesc('id')->limit($per + 1)->get();
         $page = $rows->take($per)->values();
 
-        return response()->json(['data' => PatientTreatmentResource::collection($page)->resolve($request), 'meta' => ['per_page' => $per, 'next_cursor' => $rows->count() > $per ? $page->last()->public_id : null]]);
+        return response()->json(['data' => PatientTreatmentResource::collection($page)->resolve($request), 'meta' => ['per_page' => $per, 'next_cursor' => $rows->count() > $per ? $page->last()->public_id : null]])->header('Cache-Control', 'private, no-store');
     }
 
     public function forVisit(Request $request, Visit $visit): JsonResponse

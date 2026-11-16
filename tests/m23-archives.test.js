@@ -552,11 +552,11 @@ test('Archives component source contracts: verify PDF triggers, empty states, an
   const staffPage = readFileSync('src/pages/ArchivesPage.jsx', 'utf8')
 
   // Patient Archives contract
-  assert.match(patientPage, /downloadPrescriptionPdf\(id,\s*number\)/)
+  assert.match(patientPage, /downloadPrescriptionPdf\(id,\s*number,\{isCurrent\}\)/)
   assert.match(patientPage, /handleDownloadRx\(p\.id,\s*p\.number\)/)
-  assert.match(patientPage, /downloadBillingPdf\(id,\s*kind\)/)
-  assert.match(patientPage, /handleDownloadPdf\(inv\.id,\s*'receipt'\)/)
-  assert.match(patientPage, /handleDownloadPdf\(inv\.id,\s*'invoice'\)/)
+  assert.match(patientPage, /downloadBillingPdf\(inv\.id,\s*kind,\{patientId:inv\.patient\.id/)
+  assert.match(patientPage, /handleDownloadPdf\(inv,\s*'receipt'\)/)
+  assert.match(patientPage, /handleDownloadPdf\(inv,\s*'invoice'\)/)
   assert.match(patientPage, /downloadAppointmentReceiptPdf/)
   assert.match(patientPage, /handleDownloadBookingDeposit/)
   assert.match(patientPage, /isBookingDeposit/)
