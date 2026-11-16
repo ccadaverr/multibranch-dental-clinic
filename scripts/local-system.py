@@ -126,6 +126,7 @@ def clone_test(c, runtime):
     (clone / 'env/test.env').chmod(0o600)
     verify(state, clone, 'dental_clinic_test')
     print('Isolated contention target:', manifest)
+    return manifest
 
 
 def main():

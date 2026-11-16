@@ -1,9 +1,9 @@
 {
   "checkpoint_date_timezone": "2026-11-16 Asia/Manila",
-  "clinical_start_head": "fe66059691ba32ec4caa6803a82e8fd779bb9fd5",
+  "clinical_start_head": "a60f7816af4e45ccdf811204de7e692e05e91c9e",
   "published_clinical_head": "4cbb1386dbc4fd959b74882a95d370320d2a63e6",
-  "expected_operations_head": "4703fec9b1119d543478619db40dd53081b1eceb",
-  "superseded_expected_operations_head": "54a727274901b9db2256fb8c6b1bef64eaa1c0d2",
+  "expected_operations_head": "8de2cf3f37e8ae253ec8d918e3690bdde3a1b1cb",
+  "superseded_expected_operations_head": "4703fec9b1119d543478619db40dd53081b1eceb",
   "operations_source_received": false,
   "independent_sha256": null,
   "digest_verified": false,
@@ -20,11 +20,12 @@
     "local_integration": "Owner conditional YES after authentic receipt, independent digest/ancestry and safe database/migration isolation",
     "merge_now": false,
     "push_or_pr_change": false,
-    "production_deployment": false
+    "production_deployment": false,
+    "import_now": false
   },
   "accepted_delivery_shapes": [
     "Complete authentic history reaching the expected Operations HEAD",
-    "Authentic complete predecessor plus independently hashed deltas; every prerequisite/parent and final expected HEAD verified"
+    "Authentic complete predecessor plus independently hashed deltas ONLY if separately approved; every prerequisite/parent and final expected HEAD verified"
   ],
   "requested_evidence": [
     "Independent SHA-256 for every delivered source component; never infer from filename or compute an expected value from the received file itself",
@@ -88,5 +89,25 @@
     "partial": 36,
     "blocked": 11,
     "integrated_acceptance_pending": 68
+  },
+  "reported_checkpoint_chain": [
+    "54a727274901b9db2256fb8c6b1bef64eaa1c0d2",
+    "4703fec9b1119d543478619db40dd53081b1eceb",
+    "8de2cf3f37e8ae253ec8d918e3690bdde3a1b1cb"
+  ],
+  "reported_bundle": {
+    "filename": "joevan-source-20261116-192627.bundle",
+    "sha256": "7db4ed03b04f5f5f59d382bd7bf8c218437d85d8f821bb99b7510ce3f632066f",
+    "receiver_verified": false,
+    "local_path": null
+  },
+  "ancestry_verified": false,
+  "conditions_met": false,
+  "merge_executed": false,
+  "preferred_delivery_shape": "Latest complete authentic source bundle; predecessor-plus-delta only with express transfer-scope approval",
+  "owner_policy_updates": {
+    "den14": "docs/CLINICAL_OWNER_POLICY_DECISIONS_20261116.md",
+    "queue_order": "docs/CLINICAL_OWNER_POLICY_DECISIONS_20261116.md",
+    "implemented_acceptance": false
   }
 }

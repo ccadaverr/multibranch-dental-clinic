@@ -82,3 +82,15 @@ Candidate can proceed to comprehensive acceptance only after reviewed source/anc
 Explicit transaction-safe synchronous-suite qualification now uses `--profile test --test-mail-profile suite test <reviewed files>`. It deliberately matches existing PHPUnit array/sync assumptions and does not represent a queued worker. Default `target` keeps database queue/local capture. Verify the separate `QueuedLocalCaptureTest.php` and `LocalCaptureTransportTest.php` against a running private loopback capture; do not replace either lane with the other or claim inbox delivery. SMTP capture accepts only synthetic `@example.test` recipients. Never start all demo scheduled tasks merely to turn a process check green: current scheduler also runs clinical/appointment automations and hold release. Review a dedicated synthetic candidate fixture and enabled rules first.
 
 These are local Clinical qualifications and prepared integration steps. Full frontend retains two inherited failures; predefense and integrated readiness remain red/unestablished. All original 68 candidate acceptances, including workload publication, four-role/auth revocation, backup/restore and real write contention, remain to execute after authentic source and isolation gates pass.
+
+## Sprint10 executable isolated runtime prerequisite
+
+Before authentic integration, the independent Clinical lab may run against the exact owned empty test target:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/clinical-runtime-lab.py --target /private/tmp/jaztin-clinical-20261115c/target.json
+```
+
+It creates NEW disposable clusters, never resets/migrates the source, exercises source due-mail scheduling/real workers and PostgreSQL contention, then restores exact private document/state/key/access. Successful evidence is private `result.json` and logs. It stops both clusters; retain evidence. If provisioning fails before the cleanup scope, use the printed/created private target and reviewed `local-system.py --profile test stop`; never kill another target's PostgreSQL or delete evidence without cleanup approval. Full application scheduler, four-role integrated flows and all68 acceptance remain NOT RUN until candidate gates clear.
+
+Owner FIFO and conversation-specific grant/revocation decisions are in `CLINICAL_OWNER_POLICY_DECISIONS_20261116.md`. The grant proposal is outside automatic migrations and approved only for testing in a NEW disposable cluster, not existing services. Notification/Archives/workforce comparison remains source-dependent.
