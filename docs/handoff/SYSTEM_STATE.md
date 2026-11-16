@@ -1,3 +1,6 @@
+<!-- CLINICAL_BATCH08_20261116 -->
+> Clinical feature update, 2026-11-16 Asia/Manila: Batch07 actual starting HEAD `801309084d59823368903708e87337c83f3c02b8` preserved. Exact Patient/Visit/branch prescription review added to completed/historical encounter, view-only with explicit read recovery; no migration/role/write change. See [Batch08](../JAZTIN_CLINICAL_BATCH08_20261116.md), [68-QA reconciliation](../QA_RECONCILIATION_20261116.md) and [prepared integrated runbook](../INTEGRATED_ACCEPTANCE_RUNBOOK_20261116.md). Counts remain 21 Complete/36 Partial/11 Blocked; all 68 integrated acceptance pending. Focused PostgreSQL/frontend/browser, smoke/build pass; full frontend has four reproduced starting-HEAD failures (1939 pass/4 fail/8 skip), local predefense 5 FAIL/6 WARN. No broad backend/hosted acceptance. Operations source undelivered; no integration/main merge/deployment. Older sections below retain their dated context.
+
 # System State: Multi-Branch Dental Clinic System
 
 > **Date:** 2026-10-20 (Asia/Manila)  

@@ -81,7 +81,7 @@ Potential overlap: appointment availability callers consume the established sche
 
 ## Changed-file inventory since collaboration baseline
 
-The following inventory is generated from Git plus the current Batch07 working changes, not from Joevan's unpublished branch. It includes test/document/runtime safeguards; no secrets/dumps/runtime screenshots are included. Final delivery records actual committed HEAD and push state.
+The following inventory is generated from Git plus the current Batch08 working changes, not from Joevan's unpublished branch. It includes test/document/runtime safeguards; no secrets/dumps/runtime screenshots are included. Final delivery records actual committed HEAD and push state.
 
 * `backend/.env.example`
 * `backend/app/Http/Controllers/BillingController.php`
@@ -233,3 +233,17 @@ The following inventory is generated from Git plus the current Batch07 working c
 * `tests/support/den-ui-02-fixture.js`
 * `tests/support/mock-server-world.js`
 * `tests/yzh-clin-12-followup-lifecycle.test.js`
+
+## Batch08 delivery supplement — exact prescription review
+
+Starting actual Batch07 HEAD `801309084d59823368903708e87337c83f3c02b8` was verified clean; PR #9 independently verified draft/open/unmerged at that SHA. [Batch08 report](JAZTIN_CLINICAL_BATCH08_20261116.md) contains the new bounded GEN-09 subset, every remaining GEN-07/DEN-14 task, all 11 blocker decisions and actual test limits. [Integrated acceptance runbook](INTEGRATED_ACCEPTANCE_RUNBOOK_20261116.md) is prepared, not an executed integrated result.
+
+Additive prescription contract: [exact encounter read v1](contracts/ENCOUNTER_PRESCRIPTION_READ_API_V1.md). Existing index accepts optional `visit_id` combined with Patient/status and role/branch filtering; non-Owner projections add stable `branch_id`; list/detail are private/no-store. Shared completed/historical encounter Review opens exact saved prescription in a view-only existing dialog. No schema, writes, permissions, notifications or held migration changed. Preserve this during PrescriptionController/ServerPrescriptions/EncounterCare/ClinicalHistory conflict resolution.
+
+Additional inventory: `backend/app/Http/Controllers/PrescriptionController.php`, `backend/tests/Feature/Prescriptions/PrescriptionTest.php`, `src/pages/ServerPrescriptions.jsx`, `src/pages/EncounterCare.jsx`, `src/pages/ClinicalHistory.jsx`, `src/pages/EncounterPrescriptions.jsx`, `src/prescription-readback.js`, `tests/prescription-readback.test.js`, `tests/yzh-clin-13-prescription-void.test.js`, `tests/local-encounter-prescriptions.browser.mjs`, `scripts/validate-qa-reconciliation.py`, the new API contract/Batch08/runbook, plus reconciliation and system-state updates. No hosting configuration change.
+
+Current evidence: PostgreSQL two-file suite 11/210 passed; final no-store exact-Visit case 1/43 passed (overlap); focused frontend checks pass; five actual browser groups/six widths pass; smoke/build pass. Full frontend 1951 tests: 1939 pass, **four starting-HEAD-reproduced failures**, eight skipped. New full run identifies inherited queue-policy text, missing-context positive message fixture, OWN-11 schedule and chart-recovery wording assertions; do not silently clear them. Full reset-based backend not run on the held-migration profile; prior receipt-email/Intake failures stay unresolved. Owned local predefense: **5 FAIL/6 WARN**, actual current prerequisites in Batch08; no external delivery/hosted pass.
+
+Authoritative counts stay **21 Complete / 36 Partial / 11 Blocked = 68**, all integration pending. Original source wording/tasks/owners and ten-column matrix are checked by `python3 scripts/validate-qa-reconciliation.py`. Operations transfer approval, exact bundle/hash, intended recipient/private channel and explicit integration authorization are still absent. Ready for Clinical contract review only; no candidate integration or deployment.
+
+Batch08 implementation commit: **`b82da11813401c85fb938e9f17e06bef625c32a7`**. Final schema check 1/9, two changed PHP syntax checks, exact-source ledger validation, diff and 17-file credential scan passed. All source delivery/integration gates above remain unchanged.
