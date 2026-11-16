@@ -430,6 +430,8 @@ function rxVoidLedger(read, generation) {
   return ledger
 }
 const rxRecordValid = (p, id) => p?.id === id && Object.hasOwn(TONE, p.status) && Number.isSafeInteger(p.revision) && p.revision > 0
+const rxContextMatches = (p, expected) => !expected || !!expected.patientId && !!expected.visitId && !!expected.branchId &&
+  p?.patient?.id === expected.patientId && p.visit === expected.visitId && p.branch_id === expected.branchId
 const rxSamePrescription = (p, original) => p?.id === original.id && p.patient?.id === original.patientId && p.visit === original.visit && p.number === original.number
 const rxSnapshotCurrent = (p, known) => {
   if (!known) return true
@@ -452,8 +454,9 @@ const rxRemember = (ledger, p) => ledger?.known.set(p.id, {revision: p.revision,
 export function PrescriptionDialog(props) {
   const selection = useRef(null), next = useRef(0)
   const generation = props.getAuthGeneration?.()
-  if (!selection.current || selection.current.id !== props.id || selection.current.reader !== props.getAuthGeneration || selection.current.generation !== generation) {
-    selection.current = {id: props.id, reader: props.getAuthGeneration, generation, key: ++next.current, closed: false}
+  const contextKey = JSON.stringify(props.expectedContext || null)
+  if (!selection.current || selection.current.id !== props.id || selection.current.reader !== props.getAuthGeneration || selection.current.generation !== generation || selection.current.contextKey !== contextKey) {
+    selection.current = {id: props.id, reader: props.getAuthGeneration, generation, contextKey, key: ++next.current, closed: false}
   }
   const scope = selection.current
   const isCurrent = () => selection.current === scope && !scope.closed &&
@@ -466,7 +469,7 @@ export function PrescriptionDialog(props) {
   const ledger = rxVoidLedger(scope.reader, scope.generation)
   return <PrescriptionDialogBody {...props} key={scope.key} ledger={ledger} isCurrent={isCurrent} onClose={dismiss}/>
 }
-function PrescriptionDialogBody({ clinicalContext, id, toast, onClose, onChanged, onEdit, ledger, isCurrent }) {
+function PrescriptionDialogBody({ clinicalContext, id, toast, onClose, onChanged, onEdit, ledger, isCurrent, expectedContext, viewOnly = false }) {
   const mounted = useRef(false), serial = useRef(0), pending = useRef(null)
   useLayoutEffect(() => { mounted.current = true; return () => { mounted.current = false; serial.current++ } }, [])
   const owns = () => mounted.current && isCurrent()
@@ -484,7 +487,7 @@ function PrescriptionDialogBody({ clinicalContext, id, toast, onClose, onChanged
     if (!owns() || serial.current !== attempt) return false
     if (ledger && ledger.version !== version) { setError('The Void result settled after this read began. Reload the prescription again.'); return false }
     const outstanding = ledger?.operations.get(id)
-    if (!r?.ok || !rxRecordValid(r.data, id) || !rxSnapshotCurrent(r.data, ledger?.known.get(id)) || outstanding && !rxSamePrescription(r.data, outstanding.submitted)) {
+    if (!r?.ok || !rxRecordValid(r.data, id) || !rxContextMatches(r.data, expectedContext) || !rxSnapshotCurrent(r.data, ledger?.known.get(id)) || outstanding && !rxSamePrescription(r.data, outstanding.submitted)) {
       setError(r?.ok ? 'The prescription response did not match this record or its verified state. Reload it before continuing.' : r?.message || 'This prescription could not be opened.')
       return false
     }
@@ -505,9 +508,10 @@ function PrescriptionDialogBody({ clinicalContext, id, toast, onClose, onChanged
     return () => { current = false }
   }, [operation])
   const doVoid = async (retry = false) => {
+    if (viewOnly) return
     if (!owns() || pending.current || ledger?.operations.has(id) && retry !== true) return
     if (!ledger) return setVoidError('Your authentication could not be confirmed. Sign in again before voiding. No Void request was started.')
-    if (!p || p.id !== id || p.status !== 'Issued' || p.can_void !== true || !p.patient?.id || !p.visit || !rxSnapshotCurrent(p, ledger.known.get(id))) return setVoidError('This prescription is not confirmed as eligible for voiding. Reload it before continuing.')
+    if (!p || p.id !== id || p.status !== 'Issued' || p.can_void !== true || !p.patient?.id || !p.visit || !rxContextMatches(p, expectedContext) || !rxSnapshotCurrent(p, ledger.known.get(id))) return setVoidError('This prescription is not confirmed as eligible for voiding. Reload it before continuing.')
     if (retry !== true && (reason.trim().length < 3 || reason.trim().length > 300)) return setVoidError('Enter a reason between 3 and 300 characters.')
     const submitted = retry === true ? ledger.operations.get(id)?.submitted : {id, reason: reason.trim(), revision: p.revision, patientId: p.patient.id, visit: p.visit, number: p.number, key:commandKey()}
     if (!submitted) return
@@ -537,7 +541,7 @@ function PrescriptionDialogBody({ clinicalContext, id, toast, onClose, onChanged
   return <Modal open title={p ? `${p.number || 'Draft'}${p.patient ? ` · ${p.patient.name}` : ''}` : 'Prescription'} onClose={onClose}>
     {error && <Notice tone="warning" title="Unavailable">{error} <RefreshButton title="Reload prescription" ariaLabel="Reload prescription" onClick={reload}/></Notice>}
     {voidError && <div role="alert"><p className="au-error">{voidError}</p>{!error && operation?.phase !== 'recovery' && <RefreshButton title="Reload prescription" ariaLabel="Reload prescription" onClick={reload}/>}</div>}
-    {operation?.phase === 'recovery' && <Notice tone="warning" title="Void result unconfirmed"><Button disabled={busy} onClick={() => doVoid(true)}>Retry same Void request</Button> The original request may have succeeded. Reload to check for a verified Void state; do not repeat it based on an unchanged Issued record. {!error && <RefreshButton title="Reload prescription" ariaLabel="Reload prescription" onClick={reload}/>}</Notice>}
+    {operation?.phase === 'recovery' && <Notice tone="warning" title="Void result unconfirmed">{!viewOnly && <Button disabled={busy} onClick={() => doVoid(true)}>Retry same Void request</Button>} The original request may have succeeded. Reload to check for a verified Void state; do not repeat it based on an unchanged Issued record. {!error && <RefreshButton title="Reload prescription" ariaLabel="Reload prescription" onClick={reload}/>}</Notice>}
     {(busy || operation?.phase === 'pending') && <p role="status">Voiding the original prescription. Closing this dialog does not cancel the transmitted request.</p>}
     {!isCurrent() && <Notice title="Session unavailable">Close this dialog and sign in again before continuing.</Notice>}
     {!p ? !error && isCurrent() && <p className="au-muted" role="status">Loading…</p> : <div className="st-handover">
@@ -550,10 +554,10 @@ function PrescriptionDialogBody({ clinicalContext, id, toast, onClose, onChanged
       {p.note && <p><b>Note:</b> {p.note}</p>}
       {voiding && <Field label="Reason for voiding" required><input value={reason} disabled={protectedVoid} maxLength={300} onChange={e => setReason(e.target.value)}/></Field>}
       <div className="ns-actions">
-        {onEdit && p.status === 'Draft' && p.can_edit && <Button variant="soft" onClick={() => onEdit(p.id)}>Edit draft</Button>}
+        {!viewOnly && onEdit && p.status === 'Draft' && p.can_edit && <Button variant="soft" onClick={() => onEdit(p.id)}>Edit draft</Button>}
         {p.status !== 'Draft' && Array.isArray(p.lines) && <Button variant="soft" icon="download" onClick={async () => { const r = await downloadPrescriptionPdf(p.id, p.number); if (!r.ok&&owns()) toast(r.message || 'The PDF could not be downloaded.', 'warning') }}>Download PDF</Button>}
-        {p.can_void && p.status === 'Issued' && !voiding && <Button disabled={protectedVoid || !ledger} variant="ghost" onClick={() => setVoiding(true)}>Void…</Button>}
-        {voiding && <Button disabled={protectedVoid || !ledger || reason.trim().length < 3} onClick={doVoid}>{busy ? 'Voiding…' : 'Void this prescription'}</Button>}
+        {!viewOnly && p.can_void && p.status === 'Issued' && !voiding && <Button disabled={protectedVoid || !ledger} variant="ghost" onClick={() => setVoiding(true)}>Void…</Button>}
+        {!viewOnly && voiding && <Button disabled={protectedVoid || !ledger || reason.trim().length < 3} onClick={doVoid}>{busy ? 'Voiding…' : 'Void this prescription'}</Button>}
         <Button variant="ghost" onClick={onClose}>Close</Button>
       </div>
     </div>}

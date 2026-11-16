@@ -4,6 +4,7 @@ import {getTreatment,listTreatments} from '../api-client.js'
 import {clinicalSessionKey} from '../encounter.js'
 import {boundedClinicalRead,clinicalHistoryMatches} from '../clinical-history.js'
 import {ChartView} from './DentalChart.jsx'
+import {EncounterPrescriptions} from './EncounterPrescriptions.jsx'
 
 /** Existing authorized Completed Treatment read, independent of the current queue/date-window projection. No mutations. */
 export function ClinicalHistory({store,patient,selectedId=null}){
@@ -50,6 +51,7 @@ function History({store,patient,selectedId}){
    <dl>{[['Chief complaint',detail.chief_complaint],['Treatment plan',detail.treatment_plan],['Performed treatment',detail.procedure_summary],['Clinical notes',detail.clinical_notes]].map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value||'Not recorded'}</dd></div>)}</dl>
    <ul>{detail.procedures.map(p=><li key={p.id}>{p.service.name} × {p.quantity}{p.notes?' · '+p.notes:''}</li>)}</ul>
    <p>Completed {detail.completed_at} · Revision {detail.revision}. This completed documentation cannot be edited here.</p>
+   <EncounterPrescriptions store={store} patientId={detail.patient.id} visitId={detail.visit.id} branchId={detail.branch.id}/>
    <details><summary>Documentation revision history</summary>{(detail.history||[]).map(h=><article key={h.revision}><p>Revision {h.revision} · {h.occurred_at} · {h.actor_role} · {h.to_status}</p>{h.snapshot&&<dl>{[['Chief complaint',h.snapshot.chief_complaint],['Treatment plan',h.snapshot.treatment_plan],['Performed treatment',h.snapshot.procedure_summary],['Clinical notes',h.snapshot.clinical_notes]].map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value||'Not recorded'}</dd></div>)}</dl>}</article>)}</details>
    <Button variant="soft" onClick={()=>setChart(v=>!v)} aria-expanded={chart}>Review current Patient chart</Button>
    {chart&&<><p>Current findings across visits. Select a tooth to review its dated history; this is separate from the completed encounter above.</p><ChartView patientId={patient.id} canRecord={false} toast={store.toast} store={store}/></>}
