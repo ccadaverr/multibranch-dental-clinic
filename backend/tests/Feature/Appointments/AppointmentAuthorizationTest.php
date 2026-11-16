@@ -47,7 +47,7 @@ class AppointmentAuthorizationTest extends TestCase
         $this->getJson('/api/appointments/'.$this->b2->public_id)->assertNotFound();
         $this->postJson('/api/appointments/'.$this->b2->public_id.'/cancel', ['expected_revision' => 1])->assertForbidden();
         $this->postJson('/api/appointments/'.$this->b2->public_id.'/reschedule', ['expected_revision' => 1, 'date' => '2026-10-02', 'start_time' => '10:00'])->assertForbidden();
-        $this->getJson('/api/appointments/availability?branch_ref=b2&service_ref=svc1&date=2026-10-02&appointment_id='.$this->b2->public_id)->assertForbidden();
+        $this->getJson('/api/appointments/availability?branch_ref=b2&service_ref=svc1&date=2026-10-02&appointment_id='.$this->b2->public_id)->assertUnprocessable();
         $this->assertSame('Confirmed', $this->b2->fresh()->status);
     }
 

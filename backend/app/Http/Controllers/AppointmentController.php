@@ -98,9 +98,12 @@ class AppointmentController extends Controller
         return new AppointmentResource($appointment->load([...self::RELATIONS, 'history']));
     }
 
-    public function receiptPdf(Request $request, Appointment $appointment, BillingDocuments $documents): Response
+    public function receiptPdf(Request $request, string $appointment, BillingDocuments $documents): Response|JsonResponse
     {
-        Gate::authorize('view', $appointment);
+        $appointment = Appointment::visibleTo($request->user())->where('public_id', $appointment)->first();
+        if (! $appointment || Gate::denies('view', $appointment)) {
+            return response()->json(['message' => 'Appointment not found.'], 404);
+        }
         abort_unless($appointment->booking_payment_status === 'paid' && (float) ($appointment->booking_fee_php ?? 0) > 0, 404);
 
         return response($documents->bookingDepositPdf($appointment), 200, [
@@ -179,8 +182,10 @@ class AppointmentController extends Controller
 
         $ignore = null;
         if ($publicId = $request->validated('appointment_id')) {
-            $ignore = Appointment::where('public_id', $publicId)->firstOrFail();
-            Gate::authorize('reschedule', $ignore);
+            $ignore = Appointment::where('public_id', $publicId)->first();
+            if (! $ignore || Gate::denies('reschedule', $ignore)) {
+                throw ValidationException::withMessages(['appointment_id' => ['The selected appointment id is invalid.']]);
+            }
             $patient = $ignore->patient;
         }
 
@@ -309,8 +314,10 @@ class AppointmentController extends Controller
         $isPatient = $user->role === Role::Patient;
         $ignore = null;
         if (! empty($data['appointment_id'])) {
-            $ignore = Appointment::where('public_id', $data['appointment_id'])->firstOrFail();
-            Gate::authorize('reschedule', $ignore);
+            $ignore = Appointment::where('public_id', $data['appointment_id'])->first();
+            if (! $ignore || Gate::denies('reschedule', $ignore)) {
+                abort(404, 'Appointment not found.');
+            }
         }
         [$first, $last] = $this->scheduling->patientWindow();
         $month = $data['month'] ?? substr($first, 0, 7);

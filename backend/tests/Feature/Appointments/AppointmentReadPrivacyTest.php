@@ -123,4 +123,71 @@ class AppointmentReadPrivacyTest extends TestCase
         $this->assertSame('held', $this->foreign->fresh()->booking_payment_status);
         $this->assertSame(0, AppointmentHistory::count());
     }
+
+    public function test_booking_receipt_pdf_and_reschedule_availability_do_not_disclose_foreign_ids(): void
+    {
+        foreach (['patientA', 'staffB1', 'staffNone'] as $who) {
+            $this->actingAsUser($who);
+            $denied = $this->get('/api/appointments/'.$this->foreign->public_id.'/receipt-pdf')->assertNotFound();
+            $missing = $this->get('/api/appointments/'.self::MISSING.'/receipt-pdf')->assertNotFound();
+            $this->assertSame($missing->getContent(), $denied->getContent());
+            $this->assertSame(['message' => 'Appointment not found.'], $denied->json());
+
+        }
+        foreach (['patientA', 'staffB1'] as $who) {
+            $this->actingAsUser($who);
+            $query = '?branch_ref=b1&service_ref=svc1&date=2026-10-02&appointment_id=';
+            $deniedAvailability = $this->getJson('/api/appointments/availability'.$query.$this->foreign->public_id)->assertUnprocessable();
+            $missingAvailability = $this->getJson('/api/appointments/availability'.$query.self::MISSING)->assertUnprocessable();
+            $this->assertSame($missingAvailability->getContent(), $deniedAvailability->getContent());
+            $this->assertArrayNotHasKey('data', $deniedAvailability->json());
+            $forbiddenBranchQuery = '?branch_ref=b2&service_ref=svc1&date=2026-10-02&appointment_id=';
+            $existingForbiddenBranch = $this->getJson('/api/appointments/availability'.$forbiddenBranchQuery.$this->foreign->public_id);
+            $missingForbiddenBranch = $this->getJson('/api/appointments/availability'.$forbiddenBranchQuery.self::MISSING);
+            $expectedBranchStatus = $who === 'staffB1' ? 403 : 422;
+            $this->assertSame($expectedBranchStatus, $existingForbiddenBranch->status());
+            $this->assertSame($missingForbiddenBranch->status(), $existingForbiddenBranch->status());
+            $this->assertSame($missingForbiddenBranch->getContent(), $existingForbiddenBranch->getContent());
+        }
+        $this->assertSame(2, Appointment::count());
+    }
+
+    public function test_reschedule_calendar_denials_and_success_keep_exact_scope(): void
+    {
+        foreach (['patientA', 'staffB1'] as $who) {
+            $this->actingAsUser($who);
+            $base = '/api/appointments/calendar?branch_ref=b1&service_ref=svc1&month=2026-10&appointment_id=';
+            $hidden = $this->getJson($base.$this->foreign->public_id)->assertNotFound();
+            foreach ([self::MISSING, (string) $this->foreign->id, 'malformed'] as $id) {
+                $missing = $this->getJson($base.$id)->assertNotFound();
+                $this->assertSame($hidden->getContent(), $missing->getContent());
+            }
+            $this->getJson($base.$this->own->public_id)->assertOk();
+            $this->assertArrayNotHasKey('data', $hidden->json());
+        }
+    }
+
+    public function test_companion_reads_keep_revoked_session_denials_independent_of_ids(): void
+    {
+        foreach (['receipt', 'availability', 'calendar'] as $route) {
+            $bodies = [];
+            foreach ([$this->own->public_id, self::MISSING] as $id) {
+                $this->travel(1)->minutes(); // Separate deliberate sign-ins beyond the login rate window.
+                $user = $this->u['patientA']->fresh();
+                $user->update(['account_status' => 'Active']);
+                Auth::forgetGuards();
+                $this->postJson('/api/login', ['email' => $user->email, 'password' => 'Passw0rd!'])->assertOk();
+                $user->increment('auth_version');
+                Auth::forgetGuards();
+                $url = match ($route) {
+                    'receipt' => '/api/appointments/'.$id.'/receipt-pdf',
+                    'availability' => '/api/appointments/availability?branch_ref=b1&service_ref=svc1&date=2026-10-02&appointment_id='.$id,
+                    default => '/api/appointments/calendar?branch_ref=b1&service_ref=svc1&month=2026-10&appointment_id='.$id,
+                };
+                $bodies[] = $this->getJson($url)->assertForbidden()->assertJsonPath('code', 'session_revoked')->getContent();
+                Auth::forgetGuards();
+            }
+            $this->assertSame($bodies[0], $bodies[1]);
+        }
+    }
 }

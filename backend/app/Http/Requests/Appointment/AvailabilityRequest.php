@@ -25,7 +25,9 @@ class AvailabilityRequest extends FormRequest
             'for_patient_id' => $patient ? ['nullable', 'string', 'max:40'] : ['prohibited'],
             'patient_id' => $patient ? ['prohibited'] : ['nullable', 'string', 'exists:patients,public_id'],
             'patient_code' => ['prohibited'],
-            'appointment_id' => ['nullable', 'string', 'exists:appointments,public_id'],
+            // Existence is checked only after the requested branch is authorized;
+            // a database existence validator here would run before that gate.
+            'appointment_id' => ['nullable', 'string', 'max:40'],
             // Staff/Owner may check one specific eligible Dentist (explicit selection or a Dentist-requested follow-up);
             // a Patient never chooses a Dentist.
             // A Patient may prefer a Dentist (optional; "Any available" keeps the automatic assignment). The scheduling rules still

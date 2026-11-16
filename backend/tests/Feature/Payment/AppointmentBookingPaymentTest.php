@@ -278,6 +278,7 @@ class AppointmentBookingPaymentTest extends TestCase
         $this->assertSame('Settled', $session->status);
 
         // Triggers appointment confirmation email with .ics calendar file and attached booking deposit PDF receipt
+        \Illuminate\Support\Facades\Artisan::call('queue:work', ['connection' => 'database', '--queue' => 'mail', '--stop-when-empty' => true, '--tries' => 1]);
         Mail::assertSent(AppointmentConfirmationMail::class, function (AppointmentConfirmationMail $mail) use ($fresh) {
             $attachments = collect($mail->attachments());
             $hasIcs = $attachments->contains(fn ($a) => $a->as === 'appointment.ics' && $a->mime === 'text/calendar');
@@ -535,6 +536,7 @@ class AppointmentBookingPaymentTest extends TestCase
         $this->assertSame('600.00', (string) $receipt->amount);
 
         // When the invoice is issued and settled by the deposit, PaymentReceiptMail is queued/sent
+        \Illuminate\Support\Facades\Artisan::call('queue:work', ['connection' => 'database', '--queue' => 'mail', '--stop-when-empty' => true, '--tries' => 1]);
         Mail::assertSent(PaymentReceiptMail::class, function (PaymentReceiptMail $mail) use ($invoice, $receipt) {
             return $mail->invoice->id === $invoice->id && $mail->receipt->id === $receipt->id;
         });
