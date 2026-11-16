@@ -7,11 +7,29 @@ import { EmptyState, ErrorState, PageHead, Pill, Skeleton } from '../ui.jsx'
 
 const addDays = (d, n) => { const x = new Date(`${d}T00:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10) }
 
+async function loadInvoiceHistory(fetchPage) {
+  const data = []
+  const cursors = new Set()
+  let cursor = null
+  do {
+    const result = await fetchPage({ per_page: 100, ...(cursor ? { cursor } : {}) })
+    if (!result.ok || !Array.isArray(result.data)) return { ok: false }
+    data.push(...result.data)
+    cursor = result.meta?.next_cursor ?? null
+    if (cursor !== null) {
+      if (cursor !== result.data.at(-1)?.id || cursors.has(cursor)) return { ok: false }
+      cursors.add(cursor)
+    }
+  } while (cursor !== null)
+  return { ok: true, data }
+}
+
 export function ArchivesPage({ toast = () => {} }) {
   const [tab, setTab] = useState('visits') // visits | prescriptions | receipts
   const [visits, setVisits] = useState({ loading: true, data: [], error: '' })
   const [prescriptions, setPrescriptions] = useState({ loading: true, data: [], error: '' })
   const [invoices, setInvoices] = useState({ loading: true, data: [], error: '' })
+  const [receiptAttempt, setReceiptAttempt] = useState(0)
   const [downloading, setDownloading] = useState('')
 
   useEffect(() => {
@@ -50,12 +68,21 @@ export function ArchivesPage({ toast = () => {} }) {
         setPrescriptions({ loading: false, data: [], error: r.message || 'Could not load prescriptions.' })
       }
     }).catch(() => setPrescriptions({ loading: false, data: [], error: 'Could not load prescriptions.' }))
+  }, [])
 
-    // Load archived invoices & receipts (clinical invoices + paid PayMongo booking deposits)
+  useEffect(() => {
+    let active = true
+    const whileActive = fetchPage => async params => {
+      if (!active) return { ok: false }
+      const result = await fetchPage(params)
+      return active && result.ok && Array.isArray(result.data) ? result : { ok: false }
+    }
+
     Promise.allSettled([
-      myBillingInvoices({ per_page: 50 }),
-      listAppointments({ per_page: 50 }),
+      loadInvoiceHistory(whileActive(myBillingInvoices)),
+      loadPatientAppointments(whileActive(listAppointments)),
     ]).then(([invSettled, apptSettled]) => {
+      if (!active) return
       const invRes = invSettled.status === 'fulfilled' ? invSettled.value : null
       const apptRes = apptSettled.status === 'fulfilled' ? apptSettled.value : null
 
@@ -85,13 +112,26 @@ export function ArchivesPage({ toast = () => {} }) {
         : []
 
       const mergedInvoices = [...clinicalInvoices, ...bookingReceipts]
+      const errors = [
+        !invRes?.ok && 'Invoice receipts could not be loaded.',
+        !apptRes?.ok && 'Booking deposit receipts could not be loaded.',
+      ].filter(Boolean)
       setInvoices({
         loading: false,
         data: mergedInvoices,
-        error: (mergedInvoices.length === 0 && invRes && !invRes.ok) ? (invRes.message || 'Could not load billing archives.') : '',
+        error: errors.join(' '),
       })
-    }).catch(() => setInvoices({ loading: false, data: [], error: 'Could not load billing archives.' }))
-  }, [])
+    }).catch(() => {
+      if (active) setInvoices({ loading: false, data: [], error: 'Could not load billing archives.' })
+    })
+
+    return () => { active = false }
+  }, [receiptAttempt])
+
+  const retryReceipts = () => {
+    setInvoices(previous => ({ ...previous, loading: true, error: '' }))
+    setReceiptAttempt(attempt => attempt + 1)
+  }
 
   const handleDownloadPdf = async (id, kind) => {
     setDownloading(`${id}:${kind}`)
@@ -216,9 +256,9 @@ export function ArchivesPage({ toast = () => {} }) {
         <section aria-labelledby="archive-receipts-heading">
           <h2 id="archive-receipts-heading" className="sr-only">Receipts Archive</h2>
           {invoices.loading && <Skeleton lines={4} label="Loading receipts"/>}
-          {invoices.error && <ErrorState text={invoices.error} />}
+          {invoices.error && <ErrorState text={invoices.error} onRetry={retryReceipts}/>}
           {!invoices.loading && !invoices.error && !invoices.data.filter(i => i.receipt).length && (
-            <EmptyState icon="receipt" title="No archived receipts" text="Official receipts and settled invoices are recorded here."/>
+            <EmptyState icon="receipt" title="No archived receipts" text="Payment receipts and settled invoices are recorded here."/>
           )}
           {!invoices.loading && invoices.data.filter(i => i.receipt).length > 0 && (
             <ul className="pp-list" aria-label="Archived receipts">

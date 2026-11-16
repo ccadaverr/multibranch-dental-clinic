@@ -7,6 +7,7 @@ use App\Models\Invoice;
 use App\Models\QueueEntry;
 use App\Models\Treatment;
 use App\Models\Visit;
+use App\Services\Automation\WorkflowAutomationService;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -379,11 +380,29 @@ class AnalyticsCorrectionsTest extends TestCase
     public function test_automation_health_is_null_without_actions_and_exact_with_them(): void
     {
         $this->actingAsUser('owner');
-        $this->assertNull($this->summary('period=all')->json('data.automation.health_rate_pct'));
-        $this->postJson('/api/automation/dispatch', ['rule_code' => 'R3_CAPACITY_ALERT', 'payload' => ['estimated_wait_minutes' => 10]])->assertCreated();
-        $this->assertSame(100, $this->summary('period=all')->json('data.automation.health_rate_pct'));
-        $this->postJson('/api/automation/dispatch', ['rule_code' => 'R3_CAPACITY_ALERT', 'payload' => ['estimated_wait_minutes' => 99]])->assertCreated();
-        $this->assertSame(50, $this->summary('period=all')->json('data.automation.health_rate_pct'));
-        $this->assertSame(2, $this->summary('period=all')->json('data.automation.total_actions'));
+        $this->summary('period=all')->assertOk()
+            ->assertJsonPath('data.automation.health_rate_pct', null)->assertJsonPath('data.automation.total_actions', 0);
+
+        // Reports read persisted evaluations. The legacy monitor's manual HTTP dispatch was retired.
+        $automation = app(WorkflowAutomationService::class);
+        $recordCapacity = fn (string $branch, int $wait) => $automation->recordEvent([
+            'event_type' => 'patientflow.capacity.updated',
+            'idempotency_key' => 'analytics-capacity-'.$branch,
+            'domain' => 'patientflow',
+            'branch_id' => $this->b[$branch]->id,
+            'payload' => ['estimated_wait_minutes' => $wait],
+        ]);
+
+        $this->assertSame('Success', $recordCapacity('b1', 10)->actions()->sole()->status);
+        $this->summary('period=all')->assertOk()->assertJsonPath('data.automation.health_rate_pct', 100);
+        $warning = $recordCapacity('b2', 99)->actions()->sole();
+        $this->assertSame('Warning', $warning->status);
+        $this->assertSame($warning->public_id, $recordCapacity('b2', 99)->actions()->sole()->public_id);
+        $this->summary('period=all')->assertOk()
+            ->assertJsonPath('data.automation.health_rate_pct', 50)->assertJsonPath('data.automation.total_actions', 2);
+        $this->summary('period=all&branch_id='.$this->b['b1']->public_id)->assertOk()
+            ->assertJsonPath('data.automation.health_rate_pct', 100)->assertJsonPath('data.automation.total_actions', 1);
+        $this->summary('period=all&branch_id='.$this->b['b2']->public_id)->assertOk()
+            ->assertJsonPath('data.automation.health_rate_pct', 0)->assertJsonPath('data.automation.total_actions', 1);
     }
 }

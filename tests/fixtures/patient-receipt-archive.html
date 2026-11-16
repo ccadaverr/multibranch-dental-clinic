@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Patient receipt archive fixture</title></head>
+<body>
+<main id="root" class="patient-portal"></main>
+<script type="module">
+import React from 'react'
+import { createRoot } from 'react-dom/client'
+import { flushSync } from 'react-dom'
+import { ArchivesPage } from '/src/patient/pages/Archives.jsx'
+import '/src/styles.css'
+import '/src/foundation.css'
+import '/src/patient/portal.css'
+
+const root = createRoot(document.getElementById('root'))
+window.unmountArchive = () => flushSync(() => root.render(null))
+root.render(React.createElement(ArchivesPage))
+</script>
+</body>
+</html>
