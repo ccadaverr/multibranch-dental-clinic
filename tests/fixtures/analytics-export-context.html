@@ -4,15 +4,17 @@
 import React,{useState} from 'react'
 import {createRoot} from 'react-dom/client'
 import {AnalyticsPage} from '/src/pages/Admin.jsx'
+import {AuditTrailPage} from '/src/pages/AuditTrail.jsx'
 import '/src/styles.css'
 import '/src/foundation.css'
-const state={branches:[{id:'b1',name:'Synthetic B1'},{id:'b2',name:'Synthetic B2'}],appointments:[],queue:[],hmo:[],invoices:[],inquiries:[],conversations:[],dentists:[],patients:[]}
+const state={branches:[{id:'b1',name:'Synthetic B1'},{id:'b2',name:'Synthetic B2'}],users:[{id:'owner-local',personId:'owner-person',roleName:'Owner / Admin',accountStatus:'Active',permissions:['all']}],persons:[{id:'owner-person'}],appointments:[],queue:[],hmo:[],invoices:[],inquiries:[],conversations:[],dentists:[],patients:[]}
 let auth=1
 const getAuthGeneration=()=>auth
 function Fixture(){
-  const [branch,setBranch]=useState('Unavailable branch'),[session,setSession]=useState({serverUserId:'synthetic-owner',role:'owner',active:true}),[notice,setNotice]=useState('')
-  window.analyticsContext={setBranch,setSession,invalidate:()=>auth++}
-  return React.createElement(React.Fragment,null,React.createElement('p',{'aria-label':'Export result'},notice),React.createElement(AnalyticsPage,{activeBranch:branch,store:{state,session,getAuthGeneration,toast:setNotice}}))
+  const [branch,setBranch]=useState('Unavailable branch'),[session,setSession]=useState({serverUserId:'synthetic-owner',userId:'owner-local',role:'owner',active:true}),[notice,setNotice]=useState(''),[view,setView]=useState('analytics')
+  window.analyticsContext={setBranch,setSession,setView,invalidate:()=>auth++,clearNotice:()=>setNotice(''),snapshot:{branch,session,view}}
+  const store={state,session,getAuthGeneration,toast:setNotice}
+  return React.createElement(React.Fragment,null,React.createElement('p',{'aria-label':'Export result'},notice),view==='analytics'?React.createElement(AnalyticsPage,{activeBranch:branch,store}):view==='audit'?React.createElement(AuditTrailPage,{store}):React.createElement('p',null,'Synthetic navigation destination'))
 }
 createRoot(document.getElementById('root')).render(React.createElement(Fixture))
 </script></body></html>

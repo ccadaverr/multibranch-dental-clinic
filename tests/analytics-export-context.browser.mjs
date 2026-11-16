@@ -12,6 +12,7 @@ try {
     }
     return route.fulfill({status:503,json:{message:'Synthetic report unavailable'}})
   })
+  await page.route('**/api/me',route=>route.fulfill({json:{data:{id:'synthetic-owner',role:'owner',account_status:'Active'}}}))
   await page.goto('http://127.0.0.1:5195/tests/fixtures/analytics-export-context.html')
   const buttons=[page.getByRole('button',{name:'Export Report CSV',exact:true}),page.getByRole('button',{name:'Export Executive Analytics CSV',exact:true})]
   for(const button of buttons)assert.equal(await button.isDisabled(),true)
@@ -23,11 +24,22 @@ try {
   assert.ok(download.suggestedFilename().startsWith('operational-analytics-'))
   await page.getByLabel('Export result',{exact:true}).getByText('Operational analytics CSV exported successfully.',{exact:true}).waitFor()
   assert.equal(exports.length,1);assert.equal(exports[0].searchParams.get('branch_id'),'b2');assert.equal(exports[0].searchParams.get('period'),'this week')
+  let release
+  await page.route('**/api/analytics/export?**',async route=>{
+    await new Promise(resolve=>release=resolve)
+    try{await route.fulfill({contentType:'text/csv',body:'Branch,Value\nb2,0'})}catch{/* Cancelled transport. */}
+  })
+  await buttons[0].focus();await page.keyboard.press('Enter')
+  const cancel=page.getByRole('button',{name:'Cancel analytics export',exact:true})
+  await cancel.waitFor()
+  await cancel.focus();await page.keyboard.press('Enter')
+  await page.getByText('Analytics export cancelled. No file was downloaded.',{exact:true}).waitFor()
+  release()
   for(const session of [{serverUserId:'other',role:'staff',active:true},{serverUserId:'synthetic-owner',role:'owner',active:false},{role:'owner',active:true}]){
     await page.evaluate(session=>window.analyticsContext.setSession(session),session)
     await page.waitForFunction(()=>[...document.querySelectorAll('button')].filter(b=>['Export Report CSV','Export Executive Analytics CSV'].includes(b.textContent.trim())).every(b=>b.disabled))
     for(const button of buttons)assert.equal(await button.isDisabled(),true)
   }
   assert.equal(exports.length,1);assert.deepEqual(errors,[])
-  console.log(JSON.stringify({synthetic:true,unresolvedBranchNoDispatch:true,exactBranchPeriodCsv:true,bothControlsRoleGuarded:true,delayedDownload:'Not certified: B transport callback pending'}))
+  console.log(JSON.stringify({synthetic:true,unresolvedBranchNoDispatch:true,exactBranchPeriodCsv:true,bothControlsRoleGuarded:true,keyboardCancel:true}))
 }finally{await browser.close()}

@@ -13,8 +13,8 @@ import { syncBranchUpdate, syncBranchServiceToggle, syncPersonnelUpdate } from '
 import { createUserAccountRemote, deleteUserAccountRemote, fetchUserAccounts, updateUserAccountRemote } from '../user-management-bridge.js'
 import { DEFAULT_COUNTRY, normalizePhoneNumber, sanitizePhoneInput } from '../phone.js'
 import { fetchAutomationSnapshot, dispatchAutomationRule, downloadAutomationCsv } from '../automation-api.js'
-import { fetchExecutiveSummary, fetchBranchPerformance, downloadAnalyticsCsv } from '../analytics-api.js'
-import { sendTestEmail, listStaff, workSchedules } from '../api-client.js'
+import { fetchExecutiveSummary, fetchBranchPerformance, requestAnalyticsCsv, saveClinicCsv } from '../analytics-api.js'
+import { sendTestEmail, listStaff, workSchedules, me } from '../api-client.js'
 import { personnelDutyRows } from '../personnel-duty.js'
 import { mapStaffProfile } from '../reference-data-bridge.js'
 import { EmployeeInvitations } from './EmployeeInvitations.jsx'
@@ -495,10 +495,28 @@ export function AnalyticsPage({ activeBranch, store }) {
   const canExport = isServerSession && store.session?.role === 'owner' && store.session?.active === true &&
     (!store.getAuthGeneration || exportAuth != null) && (activeBranch === 'All Branches' || !!activeBranchId)
   const exportKey = JSON.stringify([store.session?.serverUserId, store.session?.role, store.session?.active, exportAuth, activeBranch, activeBranchId, period])
-  const exportContext = useRef(exportKey), exportMounted = useRef(true), exportPending = useRef(false)
+  const exportContext = useRef(exportKey), exportMounted = useRef(false), exportPending = useRef(null)
   const [exporting, setExporting] = useState(false)
+  const [exportNotice, setExportNotice] = useState('')
   exportContext.current = exportKey
-  React.useEffect(() => { exportMounted.current = true; return () => { exportMounted.current = false } }, [])
+  const cancelAnalyticsExport = () => {
+    const pending = exportPending.current
+    if (!pending) return
+    exportPending.current = null
+    pending.controller.abort()
+    if (exportMounted.current) { setExporting(false); setExportNotice('Analytics export cancelled. No file was downloaded.') }
+  }
+  React.useLayoutEffect(() => {
+    exportMounted.current = true
+    setExporting(false)
+    setExportNotice('')
+    return () => {
+      exportMounted.current = false
+      const pending = exportPending.current
+      exportPending.current = null
+      pending?.controller.abort()
+    }
+  }, [exportKey])
 
   const loadData = async () => {
     const request = ++loadRequest.current
@@ -531,18 +549,39 @@ export function AnalyticsPage({ activeBranch, store }) {
 
   const exportServerCsv = async () => {
     if (!canExport || !exportMounted.current || exportPending.current) return
-    const key = exportKey, observedAuth = exportAuth
-    const owns = () => exportMounted.current && exportContext.current === key && observedAuth === store.getAuthGeneration?.()
-    exportPending.current = true
+    const ticket = { key: exportKey, auth: exportAuth, actor: store.session.serverUserId, controller: new AbortController() }
+    const owns = () => exportMounted.current && exportPending.current === ticket && !ticket.controller.signal.aborted &&
+      exportContext.current === ticket.key && ticket.auth === store.getAuthGeneration?.()
+    exportPending.current = ticket
     setExporting(true)
+    setExportNotice('Preparing analytics CSV…')
     try {
-      const downloaded = await downloadAnalyticsCsv({ period: period.toLowerCase(), branch_id: activeBranchId }, owns)
-      if (downloaded !== false && owns()) toast('Operational analytics CSV exported successfully.', 'success')
+      const result = await requestAnalyticsCsv({ period: period.toLowerCase(), branch_id: activeBranch === 'All Branches' ? 'all' : activeBranchId }, { signal: ticket.controller.signal })
+      if (!owns()) return
+      const identity = await me({ signal: ticket.controller.signal })
+      if (!owns()) return
+      if (!identity.ok || identity.data?.id !== ticket.actor || identity.data?.role !== 'owner' || identity.data?.account_status !== 'Active') {
+        throw new Error('Your current Owner authority could not be confirmed. No file was downloaded. Review your session and try again.')
+      }
+      saveClinicCsv(result)
+      setExportNotice('Analytics CSV downloaded.')
+      toast('Operational analytics CSV exported successfully.', 'success')
     } catch (err) {
-      if (owns()) toast(err.message || 'Could not export server CSV.', 'warning')
+      if (owns()) {
+        const message = err?.name === 'AbortError' || err?.name === 'TimeoutError'
+          ? 'Analytics export stopped. No file was downloaded. Try again.' : err.message || 'Could not export server CSV.'
+        setExportNotice(message)
+        toast(message, 'warning')
+      }
     } finally {
-      exportPending.current = false
-      if (exportMounted.current) setExporting(false)
+      if (exportPending.current === ticket) {
+        const stillCurrent = owns()
+        exportPending.current = null
+        if (exportMounted.current) {
+          setExporting(false)
+          if (!stillCurrent) setExportNotice('Analytics export stopped because your session changed. No file was downloaded.')
+        }
+      }
     }
   }
 
@@ -601,6 +640,8 @@ export function AnalyticsPage({ activeBranch, store }) {
         </Button>
       </div>}
     />
+    {exportNotice && <p role="status">{exportNotice}</p>}
+    {exporting && <Button variant="ghost" onClick={cancelAnalyticsExport}>Cancel analytics export</Button>}
     <OwnerRevenueCharts branchId={activeBranchId} branchName={activeBranch} period={period} serverSession={isServerSession} validBranch={activeBranch === 'All Branches' || !!activeBranchId}/>
     {isServerSession && loadError && <Notice tone="warning">
       Analytics are unavailable right now, so no figures are shown. <Button variant="ghost" onClick={loadData}>Try again</Button>
