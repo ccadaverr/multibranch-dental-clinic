@@ -102,15 +102,10 @@ class AuditLog extends Model
         });
     }
 
-    /** Branch filter by the M2 references: the legacy_ref or the ULID public_id — never the internal bigint id. */
-    public function scopeForBranch(Builder $query, ?string $branchRef): Builder
+    /** The branch ID is resolved once from the request's public reference. */
+    public function scopeForBranch(Builder $query, ?int $branchId): Builder
     {
-        if ($branchRef === null || $branchRef === '') {
-            return $query;
-        }
-
-        return $query->whereIn('branch_id', Branch::select('id')
-            ->where('legacy_ref', $branchRef)->orWhereRaw('lower(public_id) = ?', [strtolower($branchRef)]));
+        return $branchId === null ? $query : $query->where('branch_id', $branchId);
     }
 
     /**

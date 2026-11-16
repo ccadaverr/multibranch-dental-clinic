@@ -10,7 +10,6 @@ use App\Support\ClinicClock;
 use Illuminate\Contracts\Database\Eloquent\Builder as BuilderContract;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -51,8 +50,12 @@ class AuditController extends Controller
         if (! empty($v['date_from']) && ! empty($v['date_to']) && $v['date_from'] > $v['date_to']) {
             throw ValidationException::withMessages(['date_to' => 'The end date must not be before the start date.']);
         }
-        if (! empty($v['branch_id']) && ! Branch::where('legacy_ref', $v['branch_id'])->orWhereRaw('lower(public_id) = ?', [strtolower($v['branch_id'])])->exists()) {
-            throw ValidationException::withMessages(['branch_id' => 'Choose an existing branch.']);
+        if (isset($v['branch_id']) && $v['branch_id'] !== '') {
+            $branch = Branch::fromPublicReference($v['branch_id']);
+            if (! $branch) {
+                throw ValidationException::withMessages(['branch_id' => 'Choose an existing branch.']);
+            }
+            $v['resolved_branch_id'] = $branch->id;
         }
 
         return $v;
@@ -64,7 +67,7 @@ class AuditController extends Controller
             ->search($v['search'] ?? null)
             ->byCategory($v['category'] ?? null)
             ->bySeverity($v['severity'] ?? null)
-            ->forBranch($v['branch_id'] ?? null);
+            ->forBranch($v['resolved_branch_id'] ?? null);
 
         if (! empty($v['action'])) {
             $query->where('action', $v['action']);

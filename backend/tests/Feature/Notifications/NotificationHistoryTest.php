@@ -50,4 +50,53 @@ class NotificationHistoryTest extends TestCase
         $this->postJson('/api/notifications/'.$oldest->public_id.'/read')->assertOk()->assertJsonPath('meta.read_id', $oldest->public_id);
         $this->assertTrue($firstRead->equalTo($oldest->fresh()->read_at));
     }
+
+    public function test_history_pages_by_recorded_time_then_id_across_manila_midnight(): void
+    {
+        $recipient = $this->u['staffB1'];
+        $center = app(NotificationCenter::class);
+        $atMidnight = \Carbon\CarbonImmutable::parse('2026-09-28T16:00:00Z');
+        $this->travelTo($atMidnight);
+        $center->staffNotice($recipient, 'record_shared', 'Midnight notice', null, 'leave', null, 'history-midnight');
+        $this->travelTo($atMidnight->subSecond());
+        $center->staffNotice($recipient, 'record_shared', 'Previous day', null, 'leave', null, 'history-previous-day');
+        $this->travelTo($atMidnight);
+        $center->staffNotice($recipient, 'record_shared', 'Same instant', null, 'leave', null, 'history-same-instant');
+        $this->travelTo($atMidnight->subDays(2));
+        $center->staffNotice($recipient, 'record_shared', 'Old event inserted late', null, 'leave', null, 'history-old-event');
+
+        $page = $this->getJson('/api/notifications')->assertOk()->assertJsonCount(50, 'data')
+            ->assertJsonPath('data.0.title', 'Same instant')->assertJsonPath('data.1.title', 'Midnight notice')
+            ->assertJsonPath('data.1.created_at', '2026-09-29T00:00:00+08:00')
+            ->assertJsonPath('data.2.title', 'Previous day')->assertJsonPath('data.2.created_at', '2026-09-28T23:59:59+08:00')->json();
+        $second = $this->getJson('/api/notifications?before='.$page['meta']['next_before'])
+            ->assertOk()->assertJsonCount(50, 'data')->json();
+        $last = $this->getJson('/api/notifications?before='.$second['meta']['next_before'])
+            ->assertOk()->assertJsonCount(7, 'data')->assertJsonPath('data.6.title', 'Old event inserted late')
+            ->assertJsonPath('meta.next_before', null)->json();
+        $ids = array_merge(array_column($page['data'], 'id'), array_column($second['data'], 'id'), array_column($last['data'], 'id'));
+        $this->assertCount(107, array_unique($ids));
+        $this->assertEqualsCanonicalizing(UserNotification::where('user_id', $recipient->id)->pluck('public_id')->all(), $ids);
+    }
+
+    public function test_rejected_receipt_filters_do_not_mark_any_notification_read(): void
+    {
+        $mine = UserNotification::where('user_id', $this->u['staffB1']->id)->oldest('id')->firstOrFail();
+        $foreign = UserNotification::where('user_id', $this->u['staffB2']->id)->sole();
+        $this->postJson('/api/notifications/'.$mine->public_id.'/read?before='.$foreign->public_id)->assertNotFound();
+        $this->assertNull($mine->fresh()->read_at);
+        $this->postJson('/api/notifications/read-all?collection=invalid')->assertUnprocessable();
+        $this->assertSame(0, UserNotification::whereNotNull('read_at')->count());
+    }
+
+    public function test_revoked_account_cannot_read_or_mutate_notification_history(): void
+    {
+        $mine = UserNotification::where('user_id', $this->u['staffB1']->id)->oldest('id')->firstOrFail();
+        $this->u['staffB1']->forceFill(['account_status' => 'Inactive'])->save();
+
+        $this->getJson('/api/notifications')->assertForbidden();
+        $this->postJson('/api/notifications/'.$mine->public_id.'/read')->assertForbidden();
+        $this->postJson('/api/notifications/read-all')->assertForbidden();
+        $this->assertSame(0, UserNotification::whereNotNull('read_at')->count());
+    }
 }

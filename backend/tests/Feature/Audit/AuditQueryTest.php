@@ -77,6 +77,22 @@ class AuditQueryTest extends TestCase
         $this->assertSame([], $search("x' OR '1'='1"));
     }
 
+    public function test_branch_public_id_cannot_include_another_branch_with_the_same_legacy_reference(): void
+    {
+        $publicId = $this->b['b1']->public_id;
+        $this->b['b2']->update(['legacy_ref' => $publicId]);
+        $selected = $this->emit('test.selected_branch', extra: ['branch_id' => $this->b['b1']->id]);
+        $this->emit('test.other_branch', extra: ['branch_id' => $this->b['b2']->id]);
+
+        $filter = '?branch_id='.$publicId;
+        $this->getJson('/api/audit-logs'.$filter)->assertOk()->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $selected->public_id);
+        $csv = $this->get('/api/audit-logs/export'.$filter)->assertOk()->streamedContent();
+        $rows = explode("\n", trim($csv));
+        $this->assertCount(2, $rows);
+        $this->assertSame($selected->public_id, str_getcsv($rows[1], escape: '')[0]);
+    }
+
     public function test_pagination_is_bounded_cursor_based_and_deterministic(): void
     {
         $made = [];
