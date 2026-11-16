@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Synthetic export context</title></head>
+<body><div id="root"></div><script type="module">
+import React,{useState} from 'react'
+import {createRoot} from 'react-dom/client'
+import {AnalyticsPage} from '/src/pages/Admin.jsx'
+import '/src/styles.css'
+import '/src/foundation.css'
+const state={branches:[{id:'b1',name:'Synthetic B1'},{id:'b2',name:'Synthetic B2'}],appointments:[],queue:[],hmo:[],invoices:[],inquiries:[],conversations:[],dentists:[],patients:[]}
+let auth=1
+const getAuthGeneration=()=>auth
+function Fixture(){
+  const [branch,setBranch]=useState('Unavailable branch'),[session,setSession]=useState({serverUserId:'synthetic-owner',role:'owner',active:true}),[notice,setNotice]=useState('')
+  window.analyticsContext={setBranch,setSession,invalidate:()=>auth++}
+  return React.createElement(React.Fragment,null,React.createElement('p',{'aria-label':'Export result'},notice),React.createElement(AnalyticsPage,{activeBranch:branch,store:{state,session,getAuthGeneration,toast:setNotice}}))
+}
+createRoot(document.getElementById('root')).render(React.createElement(Fixture))
+</script></body></html>

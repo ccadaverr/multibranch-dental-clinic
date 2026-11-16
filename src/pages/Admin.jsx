@@ -491,6 +491,14 @@ export function AnalyticsPage({ activeBranch, store }) {
   const activeBranchRecord = state.branches.find(b => b.name === activeBranch)
   // The server resolves a public ULID (preferred) or the transitional legacy reference; never an internal number.
   const activeBranchId = activeBranch === 'All Branches' ? null : (activeBranchRecord?.publicId || activeBranchRecord?.id || null)
+  const exportAuth = store.getAuthGeneration?.()
+  const canExport = isServerSession && store.session?.role === 'owner' && store.session?.active === true &&
+    (!store.getAuthGeneration || exportAuth != null) && (activeBranch === 'All Branches' || !!activeBranchId)
+  const exportKey = JSON.stringify([store.session?.serverUserId, store.session?.role, store.session?.active, exportAuth, activeBranch, activeBranchId, period])
+  const exportContext = useRef(exportKey), exportMounted = useRef(true), exportPending = useRef(false)
+  const [exporting, setExporting] = useState(false)
+  exportContext.current = exportKey
+  React.useEffect(() => { exportMounted.current = true; return () => { exportMounted.current = false } }, [])
 
   const loadData = async () => {
     const request = ++loadRequest.current
@@ -522,11 +530,19 @@ export function AnalyticsPage({ activeBranch, store }) {
   }, [period, activeBranch, activeBranchId, isServerSession])
 
   const exportServerCsv = async () => {
+    if (!canExport || !exportMounted.current || exportPending.current) return
+    const key = exportKey, observedAuth = exportAuth
+    const owns = () => exportMounted.current && exportContext.current === key && observedAuth === store.getAuthGeneration?.()
+    exportPending.current = true
+    setExporting(true)
     try {
-      await downloadAnalyticsCsv({ period: period.toLowerCase(), branch_id: activeBranchId })
-      toast('Operational analytics CSV exported successfully.', 'success')
+      const downloaded = await downloadAnalyticsCsv({ period: period.toLowerCase(), branch_id: activeBranchId }, owns)
+      if (downloaded !== false && owns()) toast('Operational analytics CSV exported successfully.', 'success')
     } catch (err) {
-      toast(err.message || 'Could not export server CSV.', 'warning')
+      if (owns()) toast(err.message || 'Could not export server CSV.', 'warning')
+    } finally {
+      exportPending.current = false
+      if (exportMounted.current) setExporting(false)
     }
   }
 
@@ -577,7 +593,7 @@ export function AnalyticsPage({ activeBranch, store }) {
           <option>This Year</option>
           <option>All Time</option>
         </select>
-        <Button onClick={exportServerCsv} variant="secondary">
+        <Button onClick={exportServerCsv} disabled={!canExport || exporting} variant="secondary">
           Export Report CSV
         </Button>
         <Button onClick={() => window.print()} variant="soft" icon="download">
@@ -631,7 +647,7 @@ export function AnalyticsPage({ activeBranch, store }) {
       </Card>
       <Card title="Report actions" subtitle="Executive exports & reconciliation">
         <div className="action-stack">
-          <Button onClick={exportServerCsv}>Export Executive Analytics CSV</Button>
+          <Button onClick={exportServerCsv} disabled={!canExport || exporting}>Export Executive Analytics CSV</Button>
           <Button variant="soft" onClick={() => window.print()}>Export Analytics PDF with Logo</Button>
           <Button variant="ghost" onClick={() => makeCsv('branch-capacity.csv', exportRows)}>Export Local Capacity CSV</Button>
           <Button variant="ghost" onClick={() => makeCsv('hmo-report.csv', hmo.map(x => ({ Patient: patientName(x.patientId, state.patients), Provider: x.provider, Branch: x.branch, Status: x.status, PendingHours: pendingHours(x, state.clock), Reference: x.reference || '' })))}>Export HMO CSV</Button>
