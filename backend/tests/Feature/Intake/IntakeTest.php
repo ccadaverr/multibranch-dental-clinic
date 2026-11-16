@@ -147,7 +147,7 @@ class IntakeTest extends TestCase
         Mail::assertSent(AppointmentConfirmationMail::class, fn ($m) => $m->hasTo('guardian@mailbox.ph'));
         $this->getJson("/api/appointments/$id")->assertOk();
         $this->actingAsUser('patientB');
-        $this->getJson("/api/appointments/$id")->assertForbidden();
+        $this->getJson("/api/appointments/$id")->assertNotFound()->assertExactJson(['message' => 'Appointment not found.']);
         $this->book(['for_patient_id' => $ana])->assertForbidden();
 
         // Years later Ana is an adult: the guardian invites her, she claims her account, and the guardian's access ends.
@@ -166,7 +166,7 @@ class IntakeTest extends TestCase
         $this->assertSame('ended', PatientGuardian::whereHas('dependent', fn ($q) => $q->where('public_id', $adult))->sole()->status);
         $this->assertTrue(AuditLog::where('action', 'patient.guardian_access_ended')->exists());
         $this->actingAsUser('patientA');
-        $this->getJson("/api/appointments/$adultAppt")->assertForbidden();
+        $this->getJson("/api/appointments/$adultAppt")->assertNotFound()->assertExactJson(['message' => 'Appointment not found.']);
         $this->getJson("/api/appointments/$id")->assertOk(); // still the guardian of the child
         $this->assertSame([$ana], array_column($this->getJson('/api/me/dependents')->json('data'), 'id'));
     }

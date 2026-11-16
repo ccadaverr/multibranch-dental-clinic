@@ -44,7 +44,7 @@ class AppointmentAuthorizationTest extends TestCase
         $this->assertSame([$this->a1->public_id], $this->ids($this->getJson('/api/appointments')->assertOk()));
         $this->getJson('/api/appointments/'.$this->a1->public_id)->assertOk()->assertJsonPath('data.patient.code', 'PAT-0001');
 
-        $this->getJson('/api/appointments/'.$this->b2->public_id)->assertForbidden();
+        $this->getJson('/api/appointments/'.$this->b2->public_id)->assertNotFound();
         $this->postJson('/api/appointments/'.$this->b2->public_id.'/cancel', ['expected_revision' => 1])->assertForbidden();
         $this->postJson('/api/appointments/'.$this->b2->public_id.'/reschedule', ['expected_revision' => 1, 'date' => '2026-10-02', 'start_time' => '10:00'])->assertForbidden();
         $this->getJson('/api/appointments/availability?branch_ref=b2&service_ref=svc1&date=2026-10-02&appointment_id='.$this->b2->public_id)->assertForbidden();
@@ -72,7 +72,7 @@ class AppointmentAuthorizationTest extends TestCase
     public function test_staff_out_of_scope_is_forbidden(): void
     {
         $this->actingAsUser('staffB1');
-        $this->getJson('/api/appointments/'.$this->b2->public_id)->assertForbidden();
+        $this->getJson('/api/appointments/'.$this->b2->public_id)->assertNotFound();
         $this->postJson('/api/appointments/'.$this->b2->public_id.'/cancel', ['expected_revision' => 1])->assertForbidden();
         $this->staffBook(['branch_ref' => 'b2'])->assertForbidden();
         $this->getJson('/api/appointments/availability?branch_ref=b2&service_ref=svc1&date=2026-10-02')->assertForbidden();
@@ -83,7 +83,7 @@ class AppointmentAuthorizationTest extends TestCase
     {
         $this->actingAsUser('staffNone');
         $this->getJson('/api/appointments')->assertOk()->assertJsonCount(0, 'data');
-        $this->getJson('/api/appointments/'.$this->a1->public_id)->assertForbidden();
+        $this->getJson('/api/appointments/'.$this->a1->public_id)->assertNotFound();
         $this->staffBook()->assertForbidden();
     }
 
@@ -93,14 +93,14 @@ class AppointmentAuthorizationTest extends TestCase
         \App\Models\StaffProfile::create(['person_id' => $this->u['staffNone']->person_id, 'branch_id' => $this->b['b1']->id,
             'shift_start' => '09:00', 'shift_end' => '18:00', 'available' => true]);
         $this->actingAsUser('staffNone');
-        $this->getJson('/api/appointments/'.$this->a1->public_id)->assertForbidden();
+        $this->getJson('/api/appointments/'.$this->a1->public_id)->assertNotFound();
         $this->staffBook()->assertForbidden();
 
         // staffB1 works at b2 operationally, but is only authorized for b1.
         \App\Models\StaffProfile::create(['person_id' => $this->u['staffB1']->person_id, 'branch_id' => $this->b['b2']->id,
             'shift_start' => '09:00', 'shift_end' => '18:00', 'available' => true]);
         $this->actingAsUser('staffB1');
-        $this->getJson('/api/appointments/'.$this->b2->public_id)->assertForbidden();
+        $this->getJson('/api/appointments/'.$this->b2->public_id)->assertNotFound();
         $this->staffBook(['branch_ref' => 'b2'])->assertForbidden();
     }
 
@@ -142,7 +142,7 @@ class AppointmentAuthorizationTest extends TestCase
         $this->actingAsUser('dentist1');
         $this->assertSame([$this->a1->public_id], $this->ids($this->getJson('/api/appointments')->assertOk()));
         $this->getJson('/api/appointments/'.$this->a1->public_id)->assertOk();
-        $this->getJson('/api/appointments/'.$this->b2->public_id)->assertForbidden();
+        $this->getJson('/api/appointments/'.$this->b2->public_id)->assertNotFound();
         $this->book(['patient_id' => $this->p['A']->public_id])->assertForbidden();
         $this->postJson('/api/appointments/'.$this->a1->public_id.'/cancel', ['expected_revision' => 1])->assertForbidden();
         $this->postJson('/api/appointments/'.$this->a1->public_id.'/reschedule', ['expected_revision' => 1, 'date' => '2026-10-02', 'start_time' => '10:00'])->assertForbidden();

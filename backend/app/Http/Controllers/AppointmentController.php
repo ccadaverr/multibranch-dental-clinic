@@ -78,9 +78,15 @@ class AppointmentController extends Controller
         return AppointmentResource::collection($query->paginate($validated['per_page'] ?? 50)->withQueryString());
     }
 
-    public function show(Request $request, Appointment $appointment): AppointmentResource
+    public function show(Request $request, string $appointment): AppointmentResource|JsonResponse
     {
-        Gate::authorize('view', $appointment);
+        // Resolve inside the read scope: binding a global model first exposes
+        // existence through different absent/forbidden responses. Keep mutations
+        // on their established policy contract and authenticate before this lookup.
+        $appointment = Appointment::visibleTo($request->user())->where('public_id', $appointment)->first();
+        if (! $appointment || Gate::denies('view', $appointment)) {
+            return response()->json(['message' => 'Appointment not found.'], 404);
+        }
 
         if ($appointment->booking_payment_status === 'held') {
             try {

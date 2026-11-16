@@ -57,9 +57,11 @@ class BookingSessionAcceptanceTest extends TestCase
         Auth::forgetGuards();
         $id = $this->book(['for_patient_id' => $dependent->public_id, 'pay_at_clinic' => true], ['Idempotency-Key' => 'qa-dependent'])
             ->assertCreated()->assertJsonPath('data.patient.id', $dependent->public_id)->json('data.id');
+        Auth::forgetGuards();
+        $this->getJson('/api/appointments/'.$id)->assertOk()->assertJsonPath('data.patient.id', $dependent->public_id);
         PatientGuardian::where('dependent_patient_id', $dependent->id)->update(['status' => 'ended', 'ended_at' => now(), 'ended_reason' => 'Synthetic revocation']);
         Auth::forgetGuards();
-        $this->getJson('/api/appointments/'.$id)->assertForbidden();
+        $this->getJson('/api/appointments/'.$id)->assertNotFound()->assertExactJson(['message' => 'Appointment not found.']);
         Auth::forgetGuards();
         $this->getJson(self::OPTIONS.'&for_patient_id='.$dependent->public_id)->assertForbidden();
         Auth::forgetGuards();

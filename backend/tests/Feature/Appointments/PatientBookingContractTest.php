@@ -68,7 +68,7 @@ class PatientBookingContractTest extends TestCase
         $this->assertSame('Cancelled', $rows[$cancelled->public_id]['status']);
         $this->assertSame('No-show', $rows[$missed->public_id]['status']);
         $this->assertFalse($rows->has($other->public_id));
-        $this->getJson("/api/appointments/{$other->public_id}")->assertForbidden();
+        $this->getJson("/api/appointments/{$other->public_id}")->assertNotFound()->assertExactJson(['message' => 'Appointment not found.']);
         $this->assertSame(0, Visit::count());
         $this->getJson('/api/treatments/mine')->assertOk()->assertJsonCount(0, 'data');
     }
