@@ -8,6 +8,7 @@ use App\Models\Branch;
 use App\Models\CommandKey;
 use App\Models\Inquiry;
 use App\Models\InquiryHistory;
+use App\Models\StaffProfile;
 use App\Models\User;
 use App\Models\UserBranchScope;
 use App\Services\Audit\AuditService;
@@ -16,6 +17,7 @@ use App\Support\ClinicClock;
 use App\Support\IdempotentCommand;
 use Closure;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 
 // M16 named commands (Staff only; Idempotency-Key required). No generic status update exists.
 //   create:  a Staff member in the branch's authorization scope records an inquiry they received through a channel THEY report.
@@ -139,21 +141,46 @@ final class InquiryService
 
     private function idempotent(User $actor, string $key, string $command, array $payload, Closure $work): JsonResponse
     {
-        return IdempotentCommand::run(
-            CommandKey::class, $actor, $key, $command, $payload,
-            function () use ($work) {
-                [$inquiry, $status] = $work();
-                $body = (new InquiryResource($inquiry->fresh(['branch', 'assignee.person', 'patient.person', 'appointment'])))->response()->getData(true);
-
-                return [$body, $status];
-            },
-            fn () => VisitCommandException::rule('idempotency_key_reused', 'This Idempotency-Key was already used for a different request.', 'idempotency_key'),
-            function (\Illuminate\Database\QueryException $e) {
-                if (in_array($e->getCode(), ['40P01', '40001'], true)) {
-                    throw new VisitCommandException(409, 'conflict', 'Another request changed this inquiry at the same time. Reload and try again.');
+        return DB::transaction(function () use ($actor, $key, $command, $payload, $work) {
+            // Match personnel assignment writers: profile gate before linked account.
+            $profile = StaffProfile::where('person_id', $actor->person_id)->lockForUpdate()->first();
+            $current = User::whereKey($actor->id)->lock('for no key update')->first();
+            if (! $current || $current->role->value !== 'staff' || $current->account_status !== 'Active'
+                || $current->auth_version !== $actor->auth_version || $current->person_id !== $actor->person_id) {
+                throw new VisitCommandException(403, 'forbidden', 'Your Staff session changed. Refresh and try again.');
+            }
+            if (StaffProfile::where('person_id', $current->person_id)->value('id') !== $profile?->id) {
+                throw new VisitCommandException(403, 'forbidden', 'Your Staff assignment changed. Refresh and try again.');
+            }
+            if ($command === 'inquiry.create') {
+                $branchId = (int) $payload['branch'];
+                if ($profile?->branch_id !== null && (int) $profile->branch_id !== $branchId) {
+                    throw new VisitCommandException(403, 'forbidden', 'This branch is outside your active branch assignment.');
                 }
-            },
-            self::ATTEMPTS,
-        );
+                $this->authorizeBranch($current, $branchId);
+            } else {
+                $inquiry = Inquiry::find($payload['inquiry']);
+                if (! $inquiry || ! $inquiry->visibleToUser($current)) {
+                    throw new VisitCommandException(403, 'forbidden', 'This inquiry is outside your scope.');
+                }
+            }
+            // Authority is checked before replay, not only before first execution.
+            return IdempotentCommand::run(
+                CommandKey::class, $current, $key, $command, $payload,
+                function () use ($work) {
+                    [$inquiry, $status] = $work();
+                    $body = (new InquiryResource($inquiry->fresh(['branch', 'assignee.person', 'patient.person', 'appointment'])))->response()->getData(true);
+
+                    return [$body, $status];
+                },
+                fn () => VisitCommandException::rule('idempotency_key_reused', 'This Idempotency-Key was already used for a different request.', 'idempotency_key'),
+                function (\Illuminate\Database\QueryException $e) {
+                    if (in_array($e->getCode(), ['40P01', '40001'], true)) {
+                        throw new VisitCommandException(409, 'conflict', 'Another request changed this inquiry at the same time. Reload and try again.');
+                    }
+                },
+                self::ATTEMPTS,
+            );
+        });
     }
 }

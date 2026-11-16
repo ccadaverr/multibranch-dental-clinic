@@ -1,0 +1,18 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Synthetic inquiry scope</title></head><body><main id="root"></main><script type="module">
+import React,{useState,useRef} from 'react'
+import {createRoot} from 'react-dom/client'
+import {ServerInquiriesPage} from '/src/pages/Inquiries.jsx'
+import '/src/styles.css'
+import '/src/foundation.css'
+import '/src/polish.css'
+window.inquiryFixture={auth:1,feedback:[]}
+function Fixture(){
+ const [branchId,setBranch]=useState('b1'),[role,setRole]=useState('staff'),[scopes,setScopes]=useState(['b1','b2']),[account,setAccount]=useState('A')
+ const getAuthGeneration=useRef(()=>window.inquiryFixture.auth).current
+ Object.assign(window.inquiryFixture,{setBranch,setRole,setScopes,setAccount})
+ const store={session:{serverUserId:'synthetic-'+account,userId:'user-'+account,role,active:true,branchId,branchScopes:scopes},getAuthGeneration,
+ state:{branches:[{id:'b1',name:'Synthetic B1'},{id:'b2',name:'Synthetic B2'}],appointments:[]},toast:(...args)=>window.inquiryFixture.feedback.push(args)}
+ return React.createElement(React.Fragment,null,React.createElement('p',{id:'synthetic-branch'},branchId),React.createElement(ServerInquiriesPage,{store}))
+}
+createRoot(document.getElementById('root')).render(React.createElement(Fixture))
+</script></body></html>

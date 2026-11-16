@@ -33,6 +33,12 @@ class BranchController extends Controller
                     && $actor->auth_version === $request->user()->auth_version, 403);
                 $current = Branch::whereKey($branch->id)->lockForUpdate()->firstOrFail();
                 $data = $request->validated();
+                // Route binding may predate this lock. An old legacy code cannot
+                // become a new choice after another command has replaced it.
+                if (isset($data['branch_code']) && ! in_array($data['branch_code'], config('branch_codes'), true)
+                    && $data['branch_code'] !== $current->branch_code) {
+                    throw ValidationException::withMessages(['branch_code' => 'Choose an allowed branch code.']);
+                }
                 // Validate the effective pair, including PATCH requests that change only one endpoint.
                 if (isset($data['open_time']) || isset($data['close_time'])) {
                     $open = substr($data['open_time'] ?? $current->open_time, 0, 5);

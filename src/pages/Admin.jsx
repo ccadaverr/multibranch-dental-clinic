@@ -23,8 +23,9 @@ import '../owner-branches.css'
 import { OwnerRevenueCharts } from './OwnerRevenueCharts.jsx'
 import { schedulingActorKey, useRequestOwner } from '../appointment-ui.js'
 import { canAccessPage } from '../safeguards.js'
+import { BRANCH_CODE_OPTIONS, isAllowedBranchCode } from '../branch-codes.js'
 
-export const ALLOWED_BRANCH_CODES = ['BRC-A', 'BRC-B', 'BRC-C', 'BRC-D', 'BRC-E', 'BRC-F', 'MNL', 'QC', 'MKTI', 'BGC', 'ORT', 'ALB', 'CEB', 'DVO', 'PAS']
+export const ALLOWED_BRANCH_CODES = BRANCH_CODE_OPTIONS
 
 // Match UpdateBranchRequest's paired, nullable coordinates and existing branch bounds.
 export function branchPinError(latitude, longitude) {
@@ -118,9 +119,9 @@ function BranchConfiguration({ store }) {
   const codesInUse = useMemo(() => new Set(state.branches.filter(b => b.id !== selected).map(b => b.branchCode)), [state.branches, selected])
   const branchCodeOptions = useMemo(() => {
     const list = [...ALLOWED_BRANCH_CODES]
-    if (form.branchCode && !list.includes(form.branchCode)) list.unshift(form.branchCode)
+    if (branch?.branchCode && !list.includes(branch.branchCode)) list.unshift(branch.branchCode)
     return list
-  }, [form.branchCode])
+  }, [branch?.branchCode])
 
   // Phase 2A: branches/branchServices are backend-authoritative — the API call happens first, and only its
   // confirmed response is adopted into local state (never an optimistic local success ahead of the
@@ -129,6 +130,9 @@ function BranchConfiguration({ store }) {
   const save=async()=>{
     if(!allowed)return
     if(selectedRef.current!==selected||form.id!==selected){setSaveError('The selected branch changed. Review its details before publishing.');return}
+    if (!isAllowedBranchCode(form.branchCode, branch?.branchCode)) {
+      setSaveError('Choose an allowed branch code.'); toast('Choose an allowed branch code.', 'warning'); return
+    }
     if (coordinateError) return toast(coordinateError, 'warning')
     if (codesInUse.has(form.branchCode)) {
       return toast(`Branch code ${form.branchCode} is already assigned to another branch.`, 'warning')

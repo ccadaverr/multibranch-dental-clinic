@@ -30,7 +30,7 @@ function Harness(){
 }createRoot(document.getElementById('root')).render(<Harness/>);`;
 const bundle = await build({ stdin: { contents: source, resolveDir: process.cwd(), loader: "jsx" }, bundle: true, write: false, outfile: "harness.js", format: "iife", platform: "browser", plugins: [{ name: "isolated-duty-and-baseline", setup(b) {
   b.onLoad({ filter: /[\\/]src[\\/].*\.(jsx|js|css)$/ }, (args) => {
-    const rel = args.path.slice(process.cwd().length + 1);
+    const rel = args.path.slice(process.cwd().length + 1).replaceAll('\\', '/');
     let contents = process.env.QA_BASELINE === "1" ? execFileSync("git", ["show", "HEAD:" + rel], { encoding: "utf8" }) : readFileSync(args.path, "utf8");
     if (rel === "src/pages/StaffOnDuty.jsx") contents = contents.replace("import { workSchedules } from '../api-client.js'", "const workSchedules=()=>{window.batch.calls++;return new Promise(r=>window.batch.resolve=r)}");
     if (rel === "src/pages/Automations.jsx") contents = contents.replace("previewMessageTemplate,", "previewMessageTemplate as unusedPreviewMessageTemplate,") + "\nconst previewMessageTemplate=()=>{window.batch.calls++;return new Promise(r=>window.batch.resolve=r)}";
@@ -38,7 +38,7 @@ const bundle = await build({ stdin: { contents: source, resolveDir: process.cwd(
   });
 } }] });
 const server = createServer((req, res) => {
-  const f = bundle.outputFiles.find((f2) => f2.path.endsWith(req.url));
+  const f = bundle.outputFiles.find((f2) => f2.path.replaceAll('\\', '/').endsWith(req.url));
   if (f) {
     res.setHeader("Content-Type", req.url.endsWith(".css") ? "text/css" : "text/javascript");
     res.end(f.contents);

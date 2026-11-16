@@ -12,8 +12,22 @@ const emptyForm = branchId => ({ branchId: branchId || '', source: SOURCES[0], n
 const when = iso => (iso ? `${dateLabel(iso.slice(0, 10))} ${displayTime(iso.slice(11, 16))}` : '—')
 
 export function ServerInquiriesPage({ store }) {
+  const session = store.session
+  const auth = store.getAuthGeneration?.()
+  const allowed = !!session?.serverUserId && session.role === 'staff' && session.active === true &&
+    Array.isArray(session.branchScopes) && session.branchScopes.includes(session.branchId) &&
+    (!store.getAuthGeneration || auth != null)
+  if (!allowed) return <Notice tone="warning" title="Inquiries unavailable">Your active Staff account and branch access could not be verified. Refresh your session before recording an inquiry.</Notice>
+  const context = JSON.stringify([auth, session.serverUserId, session.userId, session.role, session.active, session.branchId, session.branchScopes])
+  return <InquirySession key={context} store={store}/>
+}
+
+function InquirySession({ store }) {
   const { state, toast } = store
   const session = store.session
+  const auth = store.getAuthGeneration?.(), live = useRef(false), pending = useRef(false), reading = useRef(0)
+  const owns = () => live.current && auth === store.getAuthGeneration?.()
+  React.useLayoutEffect(() => { live.current = true; return () => { live.current = false; reading.current++ } }, [])
   const branches = (session?.branchScopes || []).map(id => ({ id, name: state.branches.find(b => b.id === id)?.name || id })); const sessionBranchId = session?.branchId && (!branches.length || branches.some(b => b.id === session.branchId)) ? session.branchId : ''
   const [rows, setRows] = useState(null)
   const [nextCursor, setNextCursor] = useState(null)
@@ -30,18 +44,24 @@ export function ServerInquiriesPage({ store }) {
   const [linking, setLinking] = useState(null)
   const [appointmentId, setAppointmentId] = useState('')
   const key = useRef(commandKey())
-  const edit = patch => { key.current = commandKey(); setForm(previous => ({ ...previous, ...patch })) }
+  const edit = patch => { if (!owns() || pending.current) return; key.current = commandKey(); setForm(previous => ({ ...previous, ...patch })) }
 
   const load = async () => {
+    if (!owns()) return
+    const ticket = ++reading.current
     setError('')
+    setNextCursor(null); setLoadingMore(false)
     const result = await loadInquiries()
+    if (!owns() || ticket !== reading.current) return
     if (result.ok) { setRows(result.rows); setNextCursor(result.nextCursor); setMoreError('') } else setError(result.message || 'Inquiries could not be loaded.')
   }
   useEffect(() => { load() }, [])
   const loadOlder = async () => {
-    if (!nextCursor || loadingMore) return
+    if (!owns() || !nextCursor || loadingMore) return
+    const ticket = ++reading.current
     setLoadingMore(true); setMoreError('')
     const result = await loadInquiries(nextCursor)
+    if (!owns() || ticket !== reading.current) return
     setLoadingMore(false)
     if (!result.ok) return setMoreError(result.message || 'Older inquiries could not be loaded.')
     setRows(previous => [...previous, ...result.rows.filter(r => !previous.some(p => p.id === r.id))]); setNextCursor(result.nextCursor)
@@ -49,20 +69,31 @@ export function ServerInquiriesPage({ store }) {
 
   const replace = row => setRows(previous => (previous || []).map(r => (r.id === row.id ? row : r)))
   const run = async (action, message) => {
+    if (!owns() || pending.current) return false
+    pending.current = true
     setBusy(true)
-    const result = await action()
+    let result
+    try { result = await action() } catch { result = {ok:false,message:'The inquiry change could not be confirmed. Retry after checking the current record.'} }
+    pending.current = false
+    if (!owns()) return false
     setBusy(false)
     if (!result.ok) { toast(result.message, 'warning'); if (result.code === 'stale_revision' || result.kind === 'conflict') load(); return false }
     replace(result.row); toast(message, 'success'); return true
   }
   const add = async () => {
+    if (!owns() || pending.current) return
     if (!sessionBranchId) return toast('Your active branch could not be determined for this session.', 'warning')
     const scopedForm = { ...form, branchId: sessionBranchId }
+    pending.current = true
     setBusy(true)
-    const result = await captureInquiry(scopedForm, key.current)
+    let result
+    try { result = await captureInquiry(scopedForm, key.current) } catch { result = {ok:false,message:'The inquiry could not be confirmed. Retry the same unchanged request.'} }
+    pending.current = false
+    if (!owns()) return
     setBusy(false)
     if (!result.ok) return toast(result.message, 'warning')
-    setRows(previous => [result.row, ...(previous || []).filter(r => r.id !== result.row.id)])
+    if (result.row?.branchId !== sessionBranchId) return toast('The recorded branch could not be confirmed. Refresh before retrying.', 'warning')
+    load()
     setForm(emptyForm(sessionBranchId)); key.current = commandKey(); toast('Inquiry recorded and assigned to you.', 'success')
   }
   const link = async () => {
@@ -76,10 +107,10 @@ export function ServerInquiriesPage({ store }) {
     <Notice tone="info" title="Recorded manually">Staff type each inquiry in. The source is only where Staff say it came from: it does not mean the clinic has an official account there, and this system is not connected to Facebook, Instagram, the website or any other platform, fetches nothing from them and sends no messages. “Responded” only records that you replied outside this system. You see the inquiries assigned to you in your branches.</Notice>
     <Card title="Record an inquiry"><div className="form-grid">
 
-      <Field label="Source reported by Staff" required><select value={form.source} onChange={e => edit({ source: e.target.value })}>{SOURCES.map(s => <option key={s}>{s}</option>)}</select></Field>
-      <Field label="Contact name" required><input value={form.name} maxLength={LIMITS.name} onChange={e => edit({ name: e.target.value })}/></Field>
-      <Field label="Contact handle or number"><input value={form.contact} maxLength={LIMITS.contact} autoComplete="off" onChange={e => edit({ contact: e.target.value })}/></Field>
-      <Field label="What they asked" required><textarea value={form.topic} maxLength={LIMITS.topic} onChange={e => edit({ topic: e.target.value })}/></Field>
+      <Field label="Source reported by Staff" required><select disabled={busy} value={form.source} onChange={e => edit({ source: e.target.value })}>{SOURCES.map(s => <option key={s}>{s}</option>)}</select></Field>
+      <Field label="Contact name" required><input disabled={busy} value={form.name} maxLength={LIMITS.name} onChange={e => edit({ name: e.target.value })}/></Field>
+      <Field label="Contact handle or number"><input disabled={busy} value={form.contact} maxLength={LIMITS.contact} autoComplete="off" onChange={e => edit({ contact: e.target.value })}/></Field>
+      <Field label="What they asked" required><textarea disabled={busy} value={form.topic} maxLength={LIMITS.topic} onChange={e => edit({ topic: e.target.value })}/></Field>
       {(()=>{
         const pot = (form.name.trim() || form.contact.trim()) ? (rows || []).find(r => {
           if (!sessionBranchId || r.branchId !== sessionBranchId) return false

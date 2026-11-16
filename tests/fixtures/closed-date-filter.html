@@ -1,0 +1,14 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Synthetic closure filters</title></head><body><main id="root"></main><script type="module">
+import React,{useState} from 'react'
+import {createRoot} from 'react-dom/client'
+import {ClosedDatesPage} from '/src/pages/ClosedDates.jsx'
+import '/src/styles.css'
+import '/src/foundation.css'
+import '/src/polish.css'
+function Fixture(){
+ const [branches,setBranches]=useState([{id:'b1',name:'Synthetic B1'},{id:'b2',name:'Synthetic B2'}])
+ window.closureFixture={rename:()=>setBranches(rows=>rows.map(row=>row.id==='b1'?{...row,name:'Renamed B1'}:row))}
+ return React.createElement(ClosedDatesPage,{role:'staff',store:{state:{branches,appointments:[]},toast(){}}})
+}
+createRoot(document.getElementById('root')).render(React.createElement(Fixture))
+</script></body></html>

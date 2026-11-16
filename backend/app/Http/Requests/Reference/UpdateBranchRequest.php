@@ -21,7 +21,9 @@ class UpdateBranchRequest extends FormRequest
         $branchId = $this->route('branch')?->id;
 
         return [
-            'branch_code' => ['sometimes', 'string', 'max:50', Rule::unique('branches', 'branch_code')->ignore($branchId)],
+            'branch_code' => ['sometimes', 'string', 'max:50',
+                Rule::in(array_merge(config('branch_codes'), [$this->route('branch')?->branch_code])),
+                Rule::unique('branches', 'branch_code')->ignore($branchId)],
             'name' => ['sometimes', 'required', 'string', 'max:150', Rule::unique('branches', 'name')->ignore($branchId)],
             'city' => ['sometimes', 'string', 'max:100'],
             'address' => ['sometimes', 'string', 'max:255'],

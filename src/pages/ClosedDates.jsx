@@ -57,7 +57,7 @@ export function ClosedDatesPage({ store, role }) {
   }
   const active = (rows || []).filter(r => r.status === 'active'), suggested = (rows || []).filter(r => r.status === 'suggested')
   const visibleActive = active.filter(r => {
-    if (filterBranch !== 'All' && r.branch?.name !== filterBranch && r.branch?.legacy_ref !== filterBranch) return false
+    if (filterBranch !== 'All' && r.branch && r.branch.id !== filterBranch) return false
     if (filterSearch.trim()) {
       const q = filterSearch.trim().toLowerCase()
       const d = (r.date || '').toLowerCase()
@@ -111,7 +111,7 @@ export function ClosedDatesPage({ store, role }) {
       >
         {branches.length > 1 && <select aria-label="Filter closures by branch" value={filterBranch} onChange={e => setFilterBranch(e.target.value)}>
           <option value="All">All branches</option>
-          {branches.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
+          {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
         </select>}
       </FilterBar>
       {!rows ? <p className="au-muted" role="status">Loading…</p> : !active.length ? <p className="au-muted">No upcoming closures.</p>
