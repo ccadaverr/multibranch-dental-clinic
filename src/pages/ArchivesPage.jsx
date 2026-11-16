@@ -22,7 +22,7 @@ export function ArchivesPage({ store, role: propRole, activeBranch = 'All Branch
   // A keyed lifetime discards old selections, filters and event handlers on identity,
   // permission or scope replacement, including A→B→A. Names never grant Staff access.
   const accessKey = JSON.stringify([session?.serverUserId, session?.userId, role, session?.active, session?.branchId,
-    scopes, session?.dentistId, account?.accountStatus || account?.status, [...(account?.permissions || [])].sort(), enabled])
+    scopes, session?.dentistId, activeBranch, store.getAuthGeneration?.(), account?.accountStatus || account?.status, [...(account?.permissions || [])].sort(), enabled])
   return <ArchiveLifetime key={accessKey} store={store} role={role} session={session} scopes={scopes} enabled={enabled} activeBranch={activeBranch}/>
 }
 
@@ -39,12 +39,10 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
   const appointmentsLoading = retrying || !retryFailed && ['idle', 'loading'].includes(store.appointmentsStatus)
   const appointmentsFailed = !appointmentsLoading && (retryFailed || store.appointmentsStatus === 'error')
   useEffect(() => { setRetryFailed(false) }, [store.appointmentsStatus])
-  const [selectedBranch, setSelectedBranch] = useState(
-    role === 'owner' ? (activeBranch || 'All Branches') : (activeBranch && activeBranch !== 'All Branches' ? activeBranch : 'All Branches')
-  )
+  const [selectedBranch, setSelectedBranch] = useState()
   const [recordSelection, setRecordSelection] = useState(null)
   const setViewRecord = selection => setRecordSelection(selection ? {
-    ...selection, id: selection.record.id, patientId: patientIdOf(selection.record),
+    ...selection, id: selection.record.id, patientId: patientIdOf(selection.record), branchId: branchIdOf(selection.record),
   } : null)
   const noStaffScope = role === 'staff' && scopes.length === 0
   const retryAppointments = async () => {
@@ -62,51 +60,53 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
       if (live.current) setRetrying(false)
     }
   }
+  const allBranches = state.branches || []
+  const displayBranch = branch => allBranches.some(other => other.id !== branch.id && other.name === branch.name)
+    ? `${branch.name} (${branch.branchCode || branch.id})`
+    : branch.name
   const branchLabel = item => {
-    const canonical = (state.branches || []).find(branch => branch.id === branchIdOf(item))
-    return canonical?.name || (typeof item.branch === 'object' && item.branch ? item.branch.name : item.branch || item.branchName) || 'Branch unavailable'
+    const canonical = allBranches.find(branch => branch.id === branchIdOf(item))
+    if (canonical) return displayBranch(canonical)
+    return (typeof item.branch === 'object' && item.branch ? item.branch.name : item.branch || item.branchName) || 'Branch unavailable'
   }
 
-  // Authorized branches by role and branch access policy
   const branches = useMemo(() => {
-    const allBranches = state.branches || []
-    if (role === 'owner') {
-      return ['All Branches', ...allBranches.map(b => b.name)]
-    }
-    if (role === 'staff') {
-      if (!scopes.length) return []
-      const allowed = allBranches.filter(b => scopes.includes(b.id)).map(b => b.name)
-      return allowed.length === 1 ? allowed : ['All Branches', ...allowed]
-    }
+    if (role === 'staff') return allBranches.filter(branch => scopes.includes(branch.id))
     if (role === 'dentist') {
-      const dentist = (state.dentists || []).find(d => d.id === session?.dentistId || d.userId === session?.userId)
-      const allowed = dentist?.branches?.length ? dentist.branches : (activeBranch && activeBranch !== 'All Branches' ? [activeBranch] : allBranches.map(b => b.name))
-      return allowed.length > 1 ? ['All Branches', ...allowed] : allowed
+      const dentist = state.dentists?.find(d => d.id === session?.dentistId || d.userId === session?.userId)
+      const assigned = dentist?.branchIds
+      if (Array.isArray(assigned)) return allBranches.filter(branch => assigned.includes(branch.id))
+      return allBranches.filter(branch => dentist?.branches?.includes(branch.name)
+        && allBranches.filter(other => other.name === branch.name).length === 1)
     }
-    return ['All Branches']
-  }, [state.branches, state.dentists, role, session, activeBranch, scopes])
+    return allBranches
+  }, [allBranches, state.dentists, role, session, scopes])
 
-  const effectiveBranch = branches.includes(selectedBranch) ? selectedBranch : (branches[0] || 'All Branches')
-  useEffect(() => {
-    if (!branches.includes(selectedBranch)) setSelectedBranch(branches[0] || 'All Branches')
-  }, [branches, selectedBranch])
+  const canSelectAll = role === 'owner' || branches.length > 1
+    || (role === 'staff' && branches.length === 0 && scopes.length > 0)
+  const defaultBranch = canSelectAll ? '' : branches[0]?.id ?? null
+  const namedBranch = activeBranch && activeBranch !== 'All Branches'
+  const startingMatches = namedBranch ? allBranches.filter(branch => branch.name === activeBranch) : []
+  const requestedBranch = selectedBranch !== undefined ? selectedBranch
+    : namedBranch ? (startingMatches.length === 1 ? startingMatches[0].id : null) : defaultBranch
+  const effectiveBranch = (requestedBranch === '' && canSelectAll) || branches.some(branch => branch.id === requestedBranch)
+    ? requestedBranch : null
+  const branchUnavailable = effectiveBranch === null
+  const exportBranch = branches.find(branch => branch.id === effectiveBranch)
 
-  // Filter helper enforcing both role/branch access scope and the selected branch dropdown
+  // Names are presentation data. Both role scope and the selected branch are matched by stable ID.
   const branchAndRoleFilter = item => {
-    if (!enabled || noStaffScope) return false
-    const bName = typeof item.branch === 'object' && item.branch !== null
-      ? (item.branch.name || item.branch.id)
-      : (item.branch || item.branchName)
+    if (!enabled || noStaffScope || branchUnavailable) return false
+    const id = branchIdOf(item)
     if (role === 'staff') {
-      const inStaffBranch = !!branchIdOf(item) && scopes.includes(branchIdOf(item))
+      const inStaffBranch = !!id && scopes.includes(id)
       if (!inStaffBranch) return false
     } else if (role === 'dentist') {
-      const inDentistBranch = (bName && branches.includes(bName)) || inScope(item, session, state)
+      const inDentistBranch = branches.some(branch => branch.id === id)
       const isDentistRecord = (item.dentistId && item.dentistId === session?.dentistId) || (item.dentist_id && item.dentist_id === session?.dentistId) || (item.dentist && (item.dentist.id === session?.dentistId || item.dentist === session?.dentistId)) || inScope(item, session, state)
       if (!inDentistBranch || !isDentistRecord) return false
     }
-    if (effectiveBranch === 'All Branches') return true
-    return (role === 'staff' ? branchLabel(item) : bName) === effectiveBranch
+    return effectiveBranch === '' || id === effectiveBranch
   }
 
   // 1. Historical appointments: preserve the existing past-or-terminal eligibility.
@@ -155,10 +155,12 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
   }, [state.invoices, effectiveBranch, query, canViewFinancials, role, branches])
 
   // Resolve details from the CURRENT authorized projection, never the stored object.
-  // Reused IDs with a different Patient also invalidate the previous selection.
+  // A branch or patient identity change invalidates the existing detail selection.
   const detailRows = recordSelection?.kind === 'visit' ? archivedVisits
     : recordSelection?.kind === 'prescription' ? archivedPrescriptions : canViewFinancials ? archivedInvoices : []
-  const currentRecord = recordSelection && detailRows.find(record => record.id === recordSelection.id &&
+  const currentRecord = recordSelection && detailRows.find(record =>
+    record.id === recordSelection.id && branchIdOf(record) === recordSelection.branchId &&
+    (recordSelection.branchId || record === recordSelection.record) &&
     (patientIdOf(record) ? patientIdOf(record) === recordSelection.patientId : !recordSelection.patientId && record === recordSelection.record))
   const viewRecord = currentRecord ? { kind: recordSelection.kind, record: currentRecord } : null
   useEffect(() => { if (recordSelection && !currentRecord) setViewRecord(null) }, [recordSelection, currentRecord])
@@ -177,8 +179,9 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
   }
 
   const handleExportCsv = () => {
-    if (!live.current || !enabled || noStaffScope || !recordsForTab.length) return
-    const scopeSlug = effectiveBranch.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+    if (!live.current || !enabled || noStaffScope || branchUnavailable || !recordsForTab.length) return
+    const scopeSlug = (exportBranch?.id || 'all-branches').toLowerCase().replace(/[^a-z0-9]+/g, '-')
+    const scopeLabel = exportBranch ? displayBranch(exportBranch) : 'All Branches'
     if (tab === 'visits') {
       const rows = archivedVisits.map(v => ({
         'Visit Date': v.date || '',
@@ -190,7 +193,7 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
         'Outcome Status': v.status || 'Status unavailable',
       }))
       makeCsv(`archives-historical-appointments-${scopeSlug}.csv`, rows)
-      logArchiveAudit('archive.exported', `visits:${scopeSlug}`, `Exported ${rows.length} archived visit(s) for ${effectiveBranch}`)
+      logArchiveAudit('archive.exported', `visits:${scopeSlug}`, `Exported ${rows.length} archived visit(s) for ${scopeLabel}`)
       toast?.('Historical appointments exported to CSV.', 'success')
     } else if (tab === 'prescriptions') {
       const rows = archivedPrescriptions.map(p => ({
@@ -205,7 +208,7 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
         'Status': p.status || 'Issued',
       }))
       makeCsv(`archives-prescriptions-${scopeSlug}.csv`, rows)
-      logArchiveAudit('archive.exported', `prescriptions:${scopeSlug}`, `Exported ${rows.length} archived prescription(s) for ${effectiveBranch}`)
+      logArchiveAudit('archive.exported', `prescriptions:${scopeSlug}`, `Exported ${rows.length} archived prescription(s) for ${scopeLabel}`)
       toast?.('Archived prescriptions exported to CSV.', 'success')
     } else if (tab === 'financials' && canViewFinancials) {
       const rows = archivedInvoices.map(i => ({
@@ -219,7 +222,7 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
         'Settlement Status': i.status || 'Paid',
       }))
       makeCsv(`archives-financial-receipts-${scopeSlug}.csv`, rows)
-      logArchiveAudit('archive.exported', `financials:${scopeSlug}`, `Exported ${rows.length} archived financial record(s) for ${effectiveBranch}`)
+      logArchiveAudit('archive.exported', `financials:${scopeSlug}`, `Exported ${rows.length} archived financial record(s) for ${scopeLabel}`)
       toast?.('Settled financial records exported to CSV.', 'success')
     }
   }
@@ -252,17 +255,19 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
         search={query}
         onSearchChange={setQuery}
         searchPlaceholder="Search by patient, code, number, dentist…"
-        onClear={(query || effectiveBranch !== (branches[0] || 'All Branches')) ? () => { setQuery(''); setSelectedBranch(branches[0] || 'All Branches') } : null}
+        onClear={(query || effectiveBranch !== defaultBranch) ? () => { setQuery(''); setSelectedBranch(defaultBranch) } : null}
       >
         <select
           className="filter-select"
           aria-label="Filter archive by branch"
-          value={effectiveBranch}
-          disabled={branches.length <= 1}
+          value={effectiveBranch ?? '__unresolved__'}
+          disabled={!branches.length || (!branchUnavailable && !canSelectAll)}
           onChange={e => setSelectedBranch(e.target.value)}
         >
-          {branches.map(b => (
-            <option key={b} value={b}>{b}</option>
+          {branchUnavailable && <option value="__unresolved__" disabled>Choose an available branch</option>}
+          {canSelectAll && <option value="">All Branches</option>}
+          {branches.map(branch => (
+            <option key={branch.id} value={branch.id}>{displayBranch(branch)}</option>
           ))}
         </select>
         <Button size="sm" variant="secondary" icon="download" disabled={!recordsForTab.length} onClick={handleExportCsv}>
@@ -270,6 +275,11 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
         </Button>
       </FilterBar>
 
+      {branchUnavailable && <Notice tone="warning" title="Archive branch unavailable">
+        Choose an available branch to view or export records.
+      </Notice>}
+
+      {!branchUnavailable && <>
       <Tabs
         tabs={availableTabs}
         active={tab}
@@ -389,6 +399,7 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
           </div>
         </Modal>
       )}
+      </>}
       </>}
     </div>
   )

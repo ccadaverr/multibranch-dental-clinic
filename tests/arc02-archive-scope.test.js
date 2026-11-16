@@ -75,6 +75,15 @@ test('ARC-02 12: Dentist retains existing encounter scope and excludes financial
   assert.match(html, /APT-a/)
   assert.doesNotMatch(html, /Settled Invoices|INV-a|INV-b|RCPT-a/)
 })
+test('Dentist archive branch authorization uses the assigned ID even when another branch has its display name', async () => {
+  const store = fixture('dentist')
+  store.state.dentists[0].branchIds = ['a']
+  store.state.dentists[0].branches = ['Branch a']
+  store.state.appointments[1].branchName = 'Branch a'
+  const html = await render(store)
+  assert.match(html, /APT-a/)
+  assert.doesNotMatch(html, /APT-b/)
+})
 test('ARC-02 13: Owner keeps clinic-wide archive oversight with no Staff scopes', async () => {
   const html = await render(fixture('owner', []))
   assert.match(html, /APT-a/); assert.match(html, /APT-b/)
@@ -91,6 +100,15 @@ test('ARC-02 14: missing IDs never gain Staff access by name; missing display na
   const unnamed = await render(store)
   assert.match(unnamed, /APT-a/); assert.match(unnamed, /Branch unavailable/)
   assert.doesNotMatch(unnamed, />Main<|Dr\. Reyes/)
+})
+test('Ambiguous or missing named shell branch cannot widen Owner history to all branches', async () => {
+  const store = fixture('owner')
+  store.state.branches = store.state.branches.map(branch => ({ ...branch, name: 'Same Branch Label' }))
+  for (const activeBranch of ['Same Branch Label', 'Missing Branch']) {
+    const html = await render(store, { activeBranch })
+    assert.match(html, /Archive branch unavailable/)
+    assert.doesNotMatch(html, /APT-[ab]|No historical appointments are available/)
+  }
 })
 test('ARC-02 15: empty, no-access and unavailable projections have distinct messages', async () => {
   const store = fixture(); store.state.appointments = []
@@ -161,11 +179,45 @@ export async function runArc02ArchiveScope(page, base, runCase = async (_name, b
   })
   await runCase('ARC-02 8: an unauthorized selected branch is reconciled before rendering/export', async () => {
     await setup(); await setScopes(['a','b'])
-    await page.getByLabel('Filter archive by branch').selectOption('Synthetic Branch a')
+    await page.getByLabel('Filter archive by branch').selectOption({ label: 'Synthetic Branch a' })
     await setScopes(['b'])
-    assert.equal(await page.getByLabel('Filter archive by branch').inputValue(), 'Synthetic Branch b')
+    assert.equal(await page.getByLabel('Filter archive by branch').inputValue(), 'b')
     const csv = await exportText()
     assert.match(csv, /APT-b/); assert.doesNotMatch(csv, /APT-a/)
+  })
+  await runCase('Selected branch limits all archive categories and CSV even when display names collide', async () => {
+    await setup()
+    await setScopes(['a', 'b'])
+    await page.evaluate(() => window.arc02.patchState({
+      branches: window.arc02.state.branches.map(branch => ({ ...branch, name: 'Same Branch Label' })),
+    }))
+    await page.getByLabel('Filter archive by branch').selectOption({ index: 1 })
+    await page.getByRole('button', { name: 'View details for APT-a', exact: true }).waitFor()
+    assert.equal(await page.getByRole('button', { name: 'View details for APT-b', exact: true }).count(), 0)
+    await page.evaluate(() => window.arc02.patchState({
+      branches: window.arc02.state.branches.map(branch =>
+        branch.id === 'a' ? { ...branch, name: 'Renamed Branch' } : branch),
+    }))
+    assert.equal(await page.getByLabel('Filter archive by branch').inputValue(), 'a')
+    for (const tab of [/^Historical Appointments/, /^Prescriptions/, /^Settled Invoices/]) {
+      await page.getByRole('button', { name: tab }).click()
+      const csv = await exportText()
+      assert.match(csv, /Synthetic Patient A/)
+      assert.doesNotMatch(csv, /Synthetic Patient B/)
+    }
+  })
+  await runCase('Open archive detail closes when the same record and patient move to another branch', async () => {
+    await setup()
+    await setScopes(['a', 'b'])
+    await page.getByRole('button', { name: 'View details for APT-a', exact: true }).click()
+    await detail().waitFor()
+    await page.evaluate(() => window.arc02.patchState({
+      appointments: window.arc02.state.appointments.map(row =>
+        row.code === 'APT-a' ? { ...row, branchId: 'b', branchName: 'Synthetic Branch b' } : row),
+    }))
+    assert.equal(await detail().count(), 0)
+    await page.getByRole('button', { name: 'View details for APT-a', exact: true }).click()
+    await detail().getByText('Synthetic Branch b', { exact: false }).waitFor()
   })
   await runCase('ARC-02 9: losing record access suppresses its content and controls immediately', async () => {
     await setup()
