@@ -18,6 +18,7 @@ use App\Support\ClinicClock;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 // M8 Patient Check-In and the shared Visit API. Controllers only resolve references and authorize; every rule and
@@ -59,11 +60,23 @@ class VisitController extends Controller
         return VisitResource::collection($query->paginate($validated['per_page'] ?? 50)->withQueryString());
     }
 
-    public function show(Visit $visit): VisitResource
+    public function show(Request $request, string $visit): JsonResponse
     {
-        Gate::authorize('view', $visit);
+        // Do not implicitly bind an arbitrary Visit before account/role checks. Missing, malformed and
+        // out-of-scope IDs share one non-disclosing response, including when APP_DEBUG is enabled.
+        $notFound = response()->json(['message' => 'Visit not found.'], 404)->header('Cache-Control', 'private, no-store');
+        if (! Str::isUlid($visit)) {
+            return $notFound;
+        }
 
-        return new VisitResource($visit->load([...self::RELATIONS, 'history']));
+        $actor = $request->user(); // EnsureAccountAccess refreshed this identity; the guard may still cache an old role.
+        $current = Visit::visibleTo($actor)->where('public_id', $visit)->first();
+        // Recheck policy with that same actor: a branch grant can be revoked after the scoped query.
+        if (! $current || Gate::forUser($actor)->denies('view', $current)) {
+            return $notFound;
+        }
+
+        return (new VisitResource($current->load([...self::RELATIONS, 'history'])))->response()->header('Cache-Control', 'private, no-store');
     }
 
     /** Original receipt for an exact Visit and the same account, including after reload/new sign-in. */

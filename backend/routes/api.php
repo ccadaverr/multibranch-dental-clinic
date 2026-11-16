@@ -446,7 +446,10 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
         Route::post('/check-in', [VisitController::class, 'checkIn'])->middleware('role:staff,owner');
         Route::post('/walk-in', [VisitController::class, 'walkIn'])->middleware('role:staff,owner');
         Route::get('/{visit}/arrival-receipt', [VisitController::class, 'arrivalReceipt'])->middleware('role:staff,owner');
-        Route::get('/{visit}', [VisitController::class, 'show'])->middleware('role:staff,dentist,owner');
+        // Direct reads use the authoritative visibility scope AND VisitPolicy; unpermitted roles (including
+        // Patients) receive the same 404 as missing IDs. No Patient Visit permission is added. Session/account
+        // middleware still runs first; leave every other Visit route's role and lifecycle contracts intact.
+        Route::get('/{visit}', [VisitController::class, 'show']);
         // M5: starting treatment is the atomic Treatment command (Queue Served + Visit/appointment In Treatment +
         // Treatment created). There is no standalone Visit start-treatment or complete endpoint.
         Route::post('/{visit}/treatment', [TreatmentController::class, 'start'])->middleware('role:dentist');

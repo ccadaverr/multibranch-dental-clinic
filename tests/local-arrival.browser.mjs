@@ -61,7 +61,7 @@ try{
  pass('new authenticated Staff session recovers the exact original arrival receipt')
  const patient=await login('sprint02.patient@example.test',390)
  assert.equal((await get(patient.page,'/api/appointments/'+state.appointment.id)).body.data.status,'Checked In')
- assert.equal((await get(patient.page,'/api/visits/'+state.visit.id)).status,403)
+ assert.equal((await get(patient.page,'/api/visits/'+state.visit.id)).status,404)
  const dentist=await login('sprint02.dentist@example.test')
  const seen=await get(dentist.page,'/api/visits/'+state.visit.id);assert.equal(seen.status,200);assert.equal(seen.body.data.queue.status,'Waiting');assert.equal(seen.body.data.status,'Checked In')
  const other=await login('patient@example.test',390);assert.equal((await get(other.page,'/api/appointments/'+state.appointment.id)).status,403)
