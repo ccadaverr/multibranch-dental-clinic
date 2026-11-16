@@ -45,19 +45,25 @@ export function changedFields(record, form) {
 
 export async function loadPatientRecord(id) {
   const result = await api.getPatientRecord(id)
-  return result.ok ? { ok: true, record: mapPatientRecord(result.data) } : normalizeFailure(result)
+  if (!result.ok) return normalizeFailure(result)
+  if (result.data?.id !== id || !['full','identity'].includes(result.data.profile_access)) return {ok:false,kind:'unverified',message:'The returned profile did not identify the selected Patient. No record was adopted.'}
+  return { ok: true, record: mapPatientRecord(result.data) }
 }
 
 /** Saves the changed fields against the revision that was loaded; a 409 means someone else saved first. */
-export async function savePatientRecord(record, form) {
+export async function savePatientRecord(record, form, {key,beforeDispatch} = {}) {
+  if (record?.access !== 'full' || !Number.isSafeInteger(record.revision) || record.revision < 1) return {ok:false,kind:'forbidden',message:'This profile is not available for editing.'}
   const changes = changedFields(record, form)
   if (!Object.keys(changes).length) return { ok: true, unchanged: true, record }
-  const result = await api.updatePatientRecordRemote(record.id, { ...changes, expected_revision: record.revision })
+  const result = await api.updatePatientRecordRemote(record.id, { ...changes, expected_revision: record.revision }, key, beforeDispatch)
   if (!result.ok) {
     const failure = normalizeFailure(result)
     return failure.kind === 'conflict' ? { ...failure, message: 'This patient record changed after you opened it. Reload it before saving again.' } : failure
   }
-  return { ok: true, record: mapPatientRecord(result.data) }
+  if (result.data?.id !== record.id || result.data.profile_access !== 'full' ||
+      result.data.revision !== record.revision + 1 && !(result.meta?.unchanged === true && result.data.revision === record.revision))
+    return {ok:false,kind:'unverified',message:'The save response did not match this Patient and observed revision. The outcome is unconfirmed; review current records before another save.'}
+  return { ok: true, unchanged:result.meta?.unchanged===true, record: mapPatientRecord(result.data) }
 }
 
 /** The read-only index of linked records: counts per family plus the families that have no server source yet. */
@@ -66,6 +72,7 @@ export async function loadPatientRecordIndex(id) {
   if (!result.ok) return normalizeFailure(result)
   const d = result.data
   const families = ['appointments', 'visits', 'treatments', 'invoices', 'hmo_cases']
+  if (d?.patient?.id !== id || families.some(f=>!Array.isArray(d[f]))) return {ok:false,kind:'unverified',message:'Linked records could not be verified for the selected Patient.'}
   return {
     ok: true,
     counts: Object.fromEntries(families.map(f => [f, Array.isArray(d[f]) ? d[f].length : 0])),

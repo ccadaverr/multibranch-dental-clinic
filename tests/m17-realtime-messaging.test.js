@@ -63,7 +63,7 @@ test('without Reverb configured the client stays in polling mode instead of fail
 // ---- API contract ---------------------------------------------------------------------------------------------------------
 
 test('the sync read asks for messages after the last one shown (same endpoint as polling)', async () => {
-  respond({ data: [{ id: 'm2', body: 'hi', sender: { name: 'A', role: 'Staff' }, mine: false, sent_at: '2026-10-13T10:00:00+08:00' }], meta: { more: false } })
+  respond({ data: [{ id: 'm2', body: 'hi', sender: { name: 'A', role: 'Staff' }, mine: false, sent_at: '2026-10-13T10:00:00+08:00' }], meta: {context:{conversation_id:'c1',patient_id:'p',branch_id:'b'}, more: false } })
   const result = await loadNewerMessages('c1', 'm1')
   assert.match(calls.at(-1).url, /\/api\/conversations\/c1\/messages\?after=m1&per_page=100$/)
   assert.deepEqual(result.rows.map(r => r.id), ['m2'])

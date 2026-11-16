@@ -97,19 +97,20 @@ class MessageSearchTest extends TestCase
         $this->getJson('/api/conversations?q=no-match')->assertOk()->assertJsonCount(0, 'data');
     }
 
-    public function test_existing_dentist_switch_keeps_authorship_and_limits_posting_to_the_new_dentist(): void
+    public function test_unmigrated_dentist_switch_fails_closed_without_changing_authorship_or_existing_access(): void
     {
         \Illuminate\Support\Facades\Mail::fake();
         $c = $this->conversation();
         $message = ConversationMessage::create(['conversation_id' => $c->id, 'sender_user_id' => $this->u['dentist1']->id, 'body' => 'Original dentist reply', 'created_at' => now()]);
         $this->actingAsUser('staffB1');
-        $this->postJson("/api/conversations/{$c->public_id}/participants", ['dentist_id' => $this->u['dentist2']->public_id])->assertCreated();
+        $this->postJson("/api/conversations/{$c->public_id}/participants", ['dentist_id' => $this->u['dentist2']->public_id])->assertConflict()->assertJsonPath('code', 'conversation_grants_unavailable');
         $this->actingAsUser('dentist1');
         $this->getJson("/api/conversations/{$c->public_id}/messages?q=Original")->assertOk()->assertJsonPath('data.0.body', 'Original dentist reply');
-        $this->postJson("/api/conversations/{$c->public_id}/messages", ['body' => 'Old dentist cannot post'], ['Idempotency-Key' => 'old-dentist-denial'])->assertForbidden();
         $this->actingAsUser('dentist2');
-        $this->postJson("/api/conversations/{$c->public_id}/messages", ['body' => 'New dentist reply'], ['Idempotency-Key' => 'new-dentist-reply'])->assertCreated();
+        $this->postJson("/api/conversations/{$c->public_id}/messages", ['body' => 'Unassigned dentist cannot reply'], ['Idempotency-Key' => 'unassigned-dentist-reply'])->assertForbidden();
         $this->assertSame($this->u['dentist1']->id, $message->fresh()->sender_user_id);
+        $this->assertSame(1, ConversationMessage::where('conversation_id', $c->id)->count());
+        $this->assertFalse(ConversationParticipant::where('conversation_id', $c->id)->where('user_id', $this->u['dentist2']->id)->exists());
     }
 
     public function test_patient_search_does_not_disclose_staff_names_hidden_by_summary_projection(): void
@@ -118,6 +119,17 @@ class MessageSearchTest extends TestCase
         ConversationParticipant::create(['conversation_id' => $c->id, 'user_id' => $this->u['staffB1']->id, 'created_at' => now()]);
         $this->actingAsUser('patientA');
         $this->getJson('/api/conversations?q='.urlencode($this->u['staffB1']->person->fullName()))->assertOk()->assertJsonCount(0, 'data');
+    }
+
+    public function test_every_message_read_mode_identifies_exact_conversation_patient_branch_and_is_not_cached(): void
+    {
+        $c = $this->conversation(); $m = $this->message($c, 'Synthetic matching context');
+        $this->actingAsUser('staffB1');
+        foreach (['', '?q=matching', '?q=absent', '?after='.$m->public_id] as $suffix) {
+            $r = $this->getJson('/api/conversations/'.$c->public_id.'/messages'.$suffix)->assertOk()
+                ->assertJsonPath('meta.context.conversation_id', $c->public_id)->assertJsonPath('meta.context.patient_id', $this->p['A']->public_id)->assertJsonPath('meta.context.branch_id', 'b1');
+            self::assertTrue($r->headers->hasCacheControlDirective('no-store'));
+        }
     }
 
     public function test_search_is_rate_limited_without_limiting_ordinary_history(): void

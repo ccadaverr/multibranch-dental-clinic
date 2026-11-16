@@ -91,6 +91,17 @@ final class Followups
         }
     }
 
+    /** A Dentist-requested review stays with that Dentist; ordinary Staff tasks may use assignment. */
+    public static function selectedDentist(FollowupTask $task, ?\App\Models\DentistProfile $requested): ?\App\Models\DentistProfile
+    {
+        if ($task->dentist_profile_id === null) return $requested;
+        if ($requested && (int) $requested->id !== (int) $task->dentist_profile_id) {
+            throw AppointmentCommandException::rule('followup_dentist_mismatch', 'Keep the Dentist requested by this follow-up.', 'dentist_ref');
+        }
+
+        return $task->dentist()->firstOrFail();
+    }
+
     /** The appointment is provisional; the caller holds the task lock through linkage, proof serialization and commit. */
     public static function bookSelected(FollowupTask $task, Appointment $appointment, User $actor): array
     {

@@ -292,7 +292,7 @@ final class SelectedFollowupBookingTest extends TestCase
         $this->p['A']->person->update(['date_of_birth' => '1985-01-01']);
         $this->actingAsUser('patientA');
         $dependentId = $this->postJson('/api/me/dependents', ['first_name' => 'Synthetic', 'last_name' => 'Dependent',
-            'date_of_birth' => '2016-02-02', 'relationship' => 'Daughter', 'consent' => true])->assertCreated()->json('data.id');
+            'date_of_birth' => '2016-02-02', 'relationship' => 'Daughter', 'consent' => true], ['Idempotency-Key' => (string) \Illuminate\Support\Str::uuid()])->assertCreated()->json('data.id');
         $dependent = \App\Models\Patient::where('public_id', $dependentId)->firstOrFail();
         $task = $this->task(['patient_id' => $dependent->id]);
         $response = $this->book(['for_patient_id' => $dependentId, 'pay_at_clinic' => true])->assertCreated();

@@ -6,6 +6,7 @@ use App\Http\Requests\Patient\UpdatePatientRecordRequest;
 use App\Http\Resources\PatientRecordResource;
 use App\Models\Appointment;
 use App\Models\Branch;
+use App\Models\CommandKey;
 use App\Models\HmoCase;
 use App\Models\Invoice;
 use App\Models\Patient;
@@ -16,6 +17,8 @@ use App\Models\Visit;
 use App\Services\Audit\AuditService;
 use App\Services\Visits\VisitCommandException;
 use App\Support\ClinicClock;
+use App\Support\IdempotentCommand;
+use App\Http\Controllers\Concerns\ReadsIdempotencyKey;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -28,21 +31,40 @@ use Illuminate\Support\Facades\Gate;
 // (balances, treatment documentation, HMO decisions) — and each list is filtered by that module's own read scope.
 class PatientRecordController extends Controller
 {
+    use ReadsIdempotencyKey;
     private const INDEX_LIMIT = 100;
 
     public function show(Request $request, Patient $patient): JsonResponse
     {
         Gate::authorize('view', $patient);
 
-        return response()->json(['data' => new PatientRecordResource($patient->load(['person.user', 'preferredBranch']))]);
+        return response()->json(['data' => new PatientRecordResource($patient->load(['person.user', 'preferredBranch']))])->header('Cache-Control', 'private, no-store');
     }
 
     public function update(UpdatePatientRecordRequest $request, Patient $patient): JsonResponse
     {
-        Gate::authorize('update', $patient);
+        $this->authorizeProfileUpdate($request->user(), $patient);
         $data = $request->validated();
         $actor = $request->user();
+        $key = $this->idempotencyKey($request);
+        $write = fn () => $this->applyProfileUpdate($request, $patient, $actor, $data);
+        if ($key !== null) {
+            return IdempotentCommand::run(CommandKey::class, $actor, $key, 'patient.profile.update', ['patient' => $patient->public_id, 'data' => $data], $write,
+                fn () => VisitCommandException::rule('idempotency_key_reused', 'This Idempotency-Key was used for another request.', 'idempotency_key'))->header('Cache-Control', 'private, no-store');
+        }
+        [$body, $status] = $write();
+        return response()->json($body, $status)->header('Cache-Control', 'private, no-store');
+    }
 
+    private function authorizeProfileUpdate(User $actor, Patient $patient): void
+    {
+        $current = $actor->fresh();
+        abort_unless($current && $current->account_status === 'Active' && $current->auth_version === $actor->auth_version && $current->person_id === $actor->person_id, 403);
+        Gate::forUser($current)->authorize('update', $patient);
+    }
+
+    private function applyProfileUpdate(Request $request, Patient $patient, User $actor, array $data): array
+    {
         try {
             $record = DB::transaction(function () use ($data, $patient, $actor) {
                 // Changing an email shares the registration paths' patients-table lock so a concurrent registration cannot
@@ -51,6 +73,7 @@ class PatientRecordController extends Controller
                     DB::statement('LOCK TABLE patients IN SHARE ROW EXCLUSIVE MODE');
                 }
                 $locked = Patient::whereKey($patient->id)->lockForUpdate()->firstOrFail();
+                $this->authorizeProfileUpdate($actor, $locked);
                 if ($locked->revision !== (int) $data['expected_revision']) {
                     throw new VisitCommandException(409, 'stale_revision', 'This patient record changed after it was opened. Reload it before trying again.', ['current_revision' => $locked->revision]);
                 }
@@ -86,7 +109,8 @@ class PatientRecordController extends Controller
             throw $e;
         }
 
-        return response()->json(['data' => new PatientRecordResource($record->load(['person.user', 'preferredBranch']))]);
+        return [['data' => (new PatientRecordResource($record->load(['person.user', 'preferredBranch'])))->resolve($request),
+            'meta' => ['unchanged' => $record->revision === (int) $data['expected_revision']]], 200];
     }
 
     public function records(Request $request, Patient $patient): JsonResponse
@@ -120,7 +144,7 @@ class PatientRecordController extends Controller
             // Record families with no server-authoritative source yet. They are listed so the client never presents an
             // empty list as "no records".
             'unavailable' => ['clinical_history', 'prescriptions', 'follow_ups'],
-        ]]);
+        ]])->header('Cache-Control', 'private, no-store');
     }
 
     private function resolveBranch(string $reference): Branch

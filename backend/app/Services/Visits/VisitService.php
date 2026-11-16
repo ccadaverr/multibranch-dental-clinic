@@ -17,6 +17,8 @@ use App\Services\Queue\QueueService;
 use App\Services\Scheduling\SchedulingService;
 use App\Support\ClinicClock;
 use App\Support\IdempotentCommand;
+use App\Enums\Role;
+use Illuminate\Support\Facades\Gate;
 use Closure;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
@@ -42,12 +44,16 @@ final class VisitService
         private readonly QueueService $queue,
     ) {}
 
-    public function checkInScheduled(User $actor, Appointment $appointment, int $expectedRevision, string $key): JsonResponse
+    public function checkInScheduled(User $actor, Appointment $appointment, int $expectedRevision, string $key, ?bool $idConfirmed = null): JsonResponse
     {
+        $this->authorizeArrival($actor, $appointment);
         $payload = ['appointment' => $appointment->id, 'expected_revision' => $expectedRevision];
+        if ($idConfirmed !== null) $payload['id_confirmed'] = $idConfirmed;
 
-        return $this->idempotent($actor, $key, 'visit.check_in', $payload, function () use ($actor, $appointment, $expectedRevision) {
+        return $this->idempotent($actor, $key, 'visit.check_in', $payload, function () use ($actor, $appointment, $expectedRevision, $idConfirmed) {
             $current = Appointment::whereKey($appointment->id)->lockForUpdate()->firstOrFail();
+            $this->authorizeArrival($actor, $current);
+            if ($idConfirmed === false) throw VisitCommandException::rule('id_confirmation_required', 'Confirm the physical ID check before recording arrival.', 'id_confirmed');
             if (Visit::where('appointment_id', $current->id)->exists()) {
                 throw VisitCommandException::visitExists();
             }
@@ -83,6 +89,8 @@ final class VisitService
                 'source' => 'appointment',
                 'responsible_dentist_profile_id' => $current->dentist_profile_id,
             ], $late);
+            if ($idConfirmed) app(\App\Services\Audit\AuditService::class)->recordAdministrative('visit.id_presented_confirmed', $actor, $visit->patient,
+                ['visit' => $visit->public_id, 'appointment' => $current->public_id]);
 
             return [$visit, 201];
         });
@@ -90,9 +98,16 @@ final class VisitService
 
     public function walkIn(User $actor, Patient $patient, Branch $branch, ?Service $service, ?DentistProfile $dentist, string $key): JsonResponse
     {
+        $this->authorizeArrival($actor, $branch);
         $payload = ['patient' => $patient->id, 'branch' => $branch->id, 'service' => $service?->id, 'dentist' => $dentist?->id];
 
         return $this->idempotent($actor, $key, 'visit.walk_in', $payload, function () use ($actor, $patient, $branch, $service, $dentist) {
+            $branch = $branch->fresh();
+            $patient = $patient->fresh();
+            abort_unless($branch && $patient, 404);
+            $this->authorizeArrival($actor, $branch);
+            if ($service) $service = Service::whereKey($service->id)->firstOrFail();
+            if ($dentist) $dentist = DentistProfile::whereKey($dentist->id)->firstOrFail();
             $failures = $this->walkInFailures($branch, $service, $dentist);
             if ($failures) {
                 throw VisitCommandException::ineligible($failures);
@@ -187,6 +202,15 @@ final class VisitService
         if (Visit::where('patient_id', $patientId)->whereIn('status', Visit::ACTIVE_STATUSES)->exists()) {
             throw VisitCommandException::activeVisitExists();
         }
+    }
+
+    /** Current authority precedes journal replay and is repeated against the transactional context. */
+    private function authorizeArrival(User $actor, Appointment|Branch $context): void
+    {
+        $current = $actor->fresh();
+        abort_unless($current && $current->account_status === 'Active' && $current->auth_version === $actor->auth_version
+            && in_array($current->role, [Role::Staff, Role::Owner], true) && $current->person, 403);
+        Gate::forUser($current)->authorize($context instanceof Appointment ? 'checkIn' : 'walkIn', [Visit::class, $context]);
     }
 
     private function open(User $actor, array $attributes, bool $late = false): Visit

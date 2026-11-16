@@ -71,6 +71,19 @@ final class MessagingService
 
     public function send(User $actor, Conversation $conversation, string $body, string $key): JsonResponse
     {
+        if (! app(ConversationDentistAccess::class)->enforced()) return $this->sendCommand($actor, $conversation, $body, $key);
+        // Include idempotent receipt recovery in the same authorization lock; a revoked sender cannot recover old message text.
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($actor, $conversation, $body, $key) {
+            $locked = Conversation::whereKey($conversation->id)->lockForUpdate()->firstOrFail();
+            $currentActor = User::whereKey($actor->id)->lockForUpdate()->first();
+            if (! $currentActor || $currentActor->account_status !== 'Active') throw new VisitCommandException(403, 'forbidden', 'This conversation is outside your access.');
+            $current = $this->lock($currentActor, $locked);
+            return $this->sendCommand($currentActor, $current, $body, $key)->header('Cache-Control', 'private, no-store');
+        }, self::ATTEMPTS);
+    }
+
+    private function sendCommand(User $actor, Conversation $conversation, string $body, string $key): JsonResponse
+    {
         $payload = ['conversation' => $conversation->id, 'body' => self::fingerprint($body)];
 
         return $this->withBodies(IdempotentCommand::run(
@@ -81,12 +94,16 @@ final class MessagingService
                     throw VisitCommandException::rule('conversation_closed', 'This conversation is closed and cannot receive new messages.', 'conversation');
                 }
                 if ($actor->role === Role::Dentist) {
+                    $grants = app(ConversationDentistAccess::class);
+                    if ($grants->enforced() && ! $grants->permits($actor, $current)) {
+                        throw new VisitCommandException(403, 'forbidden', 'Your conversation grant is no longer active.');
+                    }
                     $activeDentistId = ConversationParticipant::where('conversation_id', $current->id)
                         ->whereIn('user_id', User::where('role', Role::Dentist->value)->select('id'))
                         ->orderByDesc('created_at')
                         ->orderByDesc('id')
                         ->value('user_id');
-                    if ($activeDentistId && $activeDentistId !== $actor->id) {
+                    if (! $grants->enforced() && $activeDentistId && $activeDentistId !== $actor->id) {
                         throw new VisitCommandException(403, 'forbidden', 'Only the currently assigned Dentist can post messages to this conversation.');
                     }
                 }
@@ -152,46 +169,11 @@ final class MessagingService
         );
     }
 
-    /** Staff bring a Dentist into the conversation (decision 3). The Dentist must be Active and assigned to the conversation's branch. */
+    /** Legacy participant mutation cannot establish the approved immutable conversation grant. */
     public function addDentist(User $actor, Conversation $conversation, string $dentistUserPublicId): bool
     {
-        if ($actor->role !== Role::Staff) throw new VisitCommandException(403, 'forbidden', 'Only branch Staff can add a Dentist to a conversation.');
-        $added = false;
-        $this->inTransaction(function () use ($actor, $conversation, $dentistUserPublicId, &$added) {
-            $current = $this->lock($actor, $conversation);
-            if ($current->status !== 'Open') throw VisitCommandException::rule('conversation_closed', 'This conversation is closed.', 'conversation');
-            $dentist = User::where('public_id', strtolower($dentistUserPublicId))->where('role', Role::Dentist->value)->where('account_status', 'Active')->first();
-            $assigned = $dentist && DentistProfile::where('person_id', $dentist->person_id)
-                ->whereHas('branches', fn ($q) => $q->where('branches.id', $current->branch_id))->exists();
-            if (! $assigned) throw VisitCommandException::rule('dentist_not_available', 'Choose a Dentist who works at this branch.', 'dentist');
-            $activeDentistId = ConversationParticipant::where('conversation_id', $current->id)
-                ->whereIn('user_id', User::where('role', Role::Dentist->value)->select('id'))
-                ->orderByDesc('created_at')
-                ->orderByDesc('id')
-                ->value('user_id');
-            $alreadyActive = $activeDentistId === $dentist->id;
-
-            ConversationParticipant::where('conversation_id', $current->id)
-                ->whereIn('user_id', User::where('role', Role::Dentist->value)->where('id', '<>', $dentist->id)->select('id'))
-                ->whereNotIn('user_id', ConversationMessage::where('conversation_id', $current->id)->select('sender_user_id'))
-                ->delete();
-
-            $exists = ConversationParticipant::where('conversation_id', $current->id)->where('user_id', $dentist->id)->exists();
-            if ($exists) {
-                if (! $alreadyActive) {
-                    ConversationParticipant::where('conversation_id', $current->id)->where('user_id', $dentist->id)->update(['created_at' => ClinicClock::now()]);
-                    $added = true;
-                }
-            } else {
-                $added = $this->join($current, $dentist);
-            }
-            if ($added) {
-                $this->audit->recordAdministrative('conversation.participant_added', $actor, $current, ['role' => 'dentist']);
-                $this->changed($current, 'participant_added');
-            }
-        });
-
-        return $added;
+        if ($actor->role !== Role::Staff) throw new VisitCommandException(403, 'forbidden', 'Only authorized Staff can reassign a conversation.');
+        throw new VisitCommandException(409, 'conversation_grant_required', 'Use an authorized reassignment with a reason and current revision.');
     }
 
     /** Dentists who may be added: Active accounts assigned to the conversation's branch. */
@@ -202,6 +184,9 @@ final class MessagingService
             ->orderByDesc('created_at')
             ->orderByDesc('id')
             ->value('user_id');
+        if (app(ConversationDentistAccess::class)->schemaInstalled()) {
+            $activeDentistId = \App\Models\ConversationDentistGrant::whereKey($conversation->active_dentist_grant_id)->value('dentist_user_id');
+        }
 
         return User::where('role', Role::Dentist->value)->where('account_status', 'Active')
             ->whereIn('person_id', DentistProfile::whereHas('branches', fn ($q) => $q->where('branches.id', $conversation->branch_id))->select('person_id'))
@@ -226,6 +211,15 @@ final class MessagingService
         ConversationParticipant::where('conversation_id', $conversation->id)->where('user_id', $actor->id)->update(['last_read_message_id' => $message->id, 'last_read_at' => ClinicClock::now()]);
         $this->alertPatientIfOffline($conversation, $message, $actor);
         if ($actor->role !== Role::Patient) app(\App\Services\Notifications\NotificationCenter::class)->messageReceived($conversation, $message->id);
+        $grantAccess = app(ConversationDentistAccess::class);
+        if ($grantAccess->schemaInstalled() && $conversation->active_dentist_grant_id) {
+            $grant = \App\Models\ConversationDentistGrant::find($conversation->active_dentist_grant_id);
+            $recipient = $grant ? User::find($grant->dentist_user_id) : null;
+            if ($recipient && $recipient->id !== $actor->id && $grantAccess->permits($recipient, $conversation)) {
+                app(\App\Services\Notifications\NotificationCenter::class)->staffNotice($recipient, 'message_received', 'New conversation message', null,
+                    'messages', $conversation->public_id, 'conversation_message:'.$message->public_id.':'.$recipient->public_id);
+            }
+        }
         RealtimeEvents::afterCommit(new MessagePosted($conversation->public_id, $message->public_id, $actor->role->value, $conversation->branch->public_id, $this->personalChannels($conversation)));
 
         return $message;
@@ -267,7 +261,7 @@ final class MessagingService
     private function personalChannels(Conversation $conversation): array
     {
         return User::whereIn('id', ConversationParticipant::where('conversation_id', $conversation->id)->select('user_id'))
-            ->whereIn('role', [Role::Patient->value, Role::Dentist->value])->pluck('public_id')->all();
+            ->whereIn('role', [Role::Patient->value, Role::Dentist->value])->get()->filter(fn ($user) => $conversation->accessibleTo($user))->pluck('public_id')->values()->all();
     }
 
     private function projection(ConversationMessage $message, User $viewer): array

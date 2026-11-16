@@ -35,7 +35,7 @@ class VisitSettlementJourneyTest extends TestCase
         $this->postJson('/api/visits/check-in', $arrival, ['Idempotency-Key' => 'journey-other-arrive'])->assertConflict();
         foreach (['staffB2', 'dentist2', 'patientB'] as $actor) {
             $this->actingAsUser($actor);
-            $this->getJson('/api/visits/'.$visit['id'])->assertForbidden();
+            $this->getJson('/api/visits/'.$visit['id'])->assertNotFound();
         }
         $this->actingAsUser('dentist1');
         $this->postJson('/api/queue/'.$visit['queue']['id'].'/call', ['expected_revision' => 1], ['Idempotency-Key' => 'journey-call'])->assertOk();

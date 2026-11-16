@@ -52,9 +52,10 @@ class PrescriptionController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $data = $request->validate(['patient_id' => ['nullable', 'string', 'max:40'], 'status' => ['nullable', 'in:Draft,Issued,Void']]);
+        $data = $request->validate(['patient_id' => ['nullable', 'string', 'max:40'], 'visit_id' => ['nullable', 'string', 'max:40'], 'status' => ['nullable', 'in:Draft,Issued,Void']]);
         $q = Prescription::with(['patient.person', 'branch', 'dentist.person', 'visit'])->orderByDesc('id')->limit(200)
             ->when($data['patient_id'] ?? null, fn ($q, $p) => $q->whereIn('patient_id', Patient::select('id')->where('public_id', $p)))
+            ->when($data['visit_id'] ?? null, fn ($q, $v) => $q->whereIn('visit_id', Visit::select('id')->where('public_id', $v)))
             ->when($data['status'] ?? null, fn ($q, $s) => $q->where('status', $s));
         $q = match ($user->role->value) {
             'dentist' => $q->whereIn('branch_id', $this->dentistBranchIds($user)),
@@ -63,7 +64,7 @@ class PrescriptionController extends Controller
             default => abort(403),
         };
 
-        return response()->json(['data' => $q->get()->map(fn (Prescription $p) => $this->view($p, $user, false))->values()]);
+        return response()->json(['data' => $q->get()->map(fn (Prescription $p) => $this->view($p, $user, false))->values()])->header('Cache-Control', 'private, no-store');
     }
 
     /** Patient (and guardian): their own issued and void prescriptions, read-only. */
@@ -223,7 +224,7 @@ class PrescriptionController extends Controller
             $this->audit($user, 'prescription.viewed', $prescription);
         }
 
-        return response()->json(['data' => $this->view($prescription->load(['patient.person', 'branch', 'dentist.person', 'lines']), $user, $content)]);
+        return response()->json(['data' => $this->view($prescription->load(['patient.person', 'branch', 'dentist.person', 'lines']), $user, $content)])->header('Cache-Control', 'private, no-store');
     }
 
     public function pdf(Request $request, Prescription $prescription)
@@ -342,7 +343,7 @@ class PrescriptionController extends Controller
         if ($viewer->role->value === 'owner') {
             return $out;
         } // metadata only
-        $out += ['patient' => ['id' => $p->patient?->public_id, 'name' => $p->patient?->person?->fullName()], 'visit' => $p->visit?->public_id,
+        $out += ['patient' => ['id' => $p->patient?->public_id, 'name' => $p->patient?->person?->fullName()], 'visit' => $p->visit?->public_id, 'branch_id' => $p->branch?->legacy_ref,
             'voided' => $p->voided_at ? ['at' => $p->voided_at->toIso8601String(), 'reason' => $p->void_reason] : null,
             'can_edit' => $viewer->role->value === 'dentist' && $p->status === 'Draft' && in_array($p->branch_id, $this->dentistBranchIds($viewer), true),
             'can_void' => $viewer->role->value === 'dentist' && $p->status === 'Issued' && in_array($p->branch_id, $this->dentistBranchIds($viewer), true)];

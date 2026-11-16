@@ -2,7 +2,7 @@
 
 require getcwd().'/vendor/autoload.php';
 $app = require getcwd().'/bootstrap/app.php';
-$app->make(Kernel::class)->bootstrap();
+$app->make(\Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 use App\Models\Branch;
 use App\Models\BranchService;
 use App\Models\DentistProfile;

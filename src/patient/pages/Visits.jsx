@@ -76,6 +76,7 @@ export function VisitsPage({ context, onNavigate, toast }) {
           <p>{dateLong(a.date)}{a.start_time ? ` · ${time12(a.start_time)}${a.end_time ? ` – ${time12(a.end_time)}` : ''}` : ''}</p>
           <p className="pp-muted"><Icon name="pin" size={14}/> {a.branch?.name}{a.dentist?.name ? ` · ${a.dentist.name}` : ''}</p>
           <p className="pp-muted">Ref. {a.code} <Pill>{a.status}</Pill></p>
+          {['Checked In','In Treatment','Completed'].includes(a.status)&&<Button size="sm" variant="soft" icon="receipt" onClick={()=>onNavigate('billing',{appointmentId:a.id,patientId:a.patient?.id,receiptOnly:true})}>Invoice and receipt</Button>}
           {tab === 'upcoming' && a.date === today && ['Pending', 'Confirmed'].includes(a.status) && <OnMyWay appointment={a} toast={toast}/>}
           {a.status === 'Pending' && <p className="pp-hint">{a.booking_payment_status === 'held' ? 'Awaiting verified online payment. Your slot hold expires if payment is not completed.' : 'Waiting for the front desk to confirm this booking.'}</p>}
           {tab === 'upcoming' && ['Pending', 'Confirmed'].includes(a.status) && <div className="pp-actions">

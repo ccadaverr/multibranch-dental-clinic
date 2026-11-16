@@ -2,9 +2,10 @@ import { useClinicalSession } from '../use-clinical-session.js'
 import { clinicalSessionKey, resolveEncounter } from '../encounter.js'
 import { ClinicalNavigation } from '../clinical-navigation.jsx'
 import React, { useEffect, useState } from 'react'
-import { Button, Card, ConfirmDialog, Field, Notice, PageHeader } from '../components.jsx'
-import { patientChart, prescriptionVisits, recordChartEntry, searchPatients } from '../api-client.js'
+import { Button, Card, ConfirmDialog, Field, Notice, PageHeader, RefreshButton } from '../components.jsx'
+import { patientChart, prescriptionVisits, searchPatients } from '../api-client.js'
 import { Odontogram, toothLabel } from '../components/odontogram/index.js'
+import {beginChartCommand,chartMatches,chartReady} from '../chart-command.js'
 
 export { toothLabel } from '../components/odontogram/index.js'
 
@@ -12,15 +13,18 @@ const firstError = r => (r.kind === 'validation' ? Object.values(r.errors || {})
 
 /** Unified ChartView (shared between Dentist page, Staff patient record, and drawer) */
 export function ChartView(props) {
-  return <ChartRecord key={clinicalSessionKey(props.store?.session)+props.patientId} {...props}/>
+  return <ChartRecord key={clinicalSessionKey(props.store?.session)+props.patientId+'|'+props.store?.getAuthGeneration?.()+'|'+(props.recordContext?.treatmentId||'')} {...props}/>
 }
-function ChartRecord({ patientId, canRecord, toast, store, onDirtyChange, isCurrent = () => true }) {
+function ChartRecord({ patientId, canRecord, toast, store, recordContext = null, onDirtyChange, isCurrent = () => true }) {
   const [data, setData] = useState(null), [error, setError] = useState(''), [picked, setPicked] = useState(null), [attempt,setAttempt]=useState(0)
   const live=React.useRef(true), recording=React.useRef(false)
+  const actor=React.useRef({key:clinicalSessionKey(store?.session),auth:store?.getAuthGeneration?.()}),latest=React.useRef(store);latest.current=store
+  const command=React.useRef(null),link=React.useRef(recordContext)
+  const [feedback,setFeedback]=useState(null),[reviewOpen,setReviewOpen]=useState(false)
   const dirty=React.useRef(false), editGeneration=React.useRef(0)
   const scope=React.useRef({canRecord,isCurrent})
   scope.current={canRecord,isCurrent}
-  const ownsChart=()=>live.current&&scope.current.isCurrent()
+  const ownsChart=()=>live.current&&scope.current.isCurrent()&&actor.current.key===clinicalSessionKey(latest.current?.session)&&actor.current.auth===latest.current?.getAuthGeneration?.()
   const register=React.useContext(ClinicalNavigation)
   // Match the shared navigation ref contract, with synchronous reads of the
   // current patient/editor. Tooth edits need not wait for a React state update.
@@ -48,32 +52,51 @@ function ChartRecord({ patientId, canRecord, toast, store, onDirtyChange, isCurr
   }
 
   useEffect(() => {
-    let current=true;setData(null);setError('');setPicked(null)
-    patientChart(patientId).then(r => {if(current&&ownsChart()){if(r.ok)setData(r.data);else setError(r.message || 'The chart could not be loaded.')}})
-    return()=>{current=false}
+    let current=true,timer;setData(null);setError('');setPicked(null)
+    Promise.race([patientChart(patientId),new Promise(resolve=>{timer=setTimeout(()=>resolve({ok:false,message:'The chart read timed out. Retry to review the saved findings.'}),30000)})]).then(r => {
+      clearTimeout(timer);if(current&&ownsChart()){if(r.ok&&chartMatches(r.data,patientId))setData(r.data);else setError(r.message || 'The returned chart did not identify this Patient. No chart was adopted.')}
+    }).catch(()=>{if(current&&ownsChart())setError('The chart could not be loaded. Retry to read the saved findings.')})
+    return()=>{current=false;clearTimeout(timer)}
   }, [patientId,attempt])
 
   if (error) return <Notice tone="warning" title="Chart unavailable">{error}<Button variant="ghost" onClick={()=>setAttempt(attempt+1)}>Retry chart</Button></Notice>
   if (!data) return <p className="au-muted" role="status">Loading the chart…</p>
 
-  const branches = store?.state?.branches || []
-  const activeBranchId = store?.session?.branchId || null
+  const dentist=store?.state?.dentists?.find(d=>d.id===store?.session?.dentistId)
+  const branches = (store?.state?.branches || []).filter(b=>link.current?.branchId?b.id===link.current.branchId:!canRecord||dentist?.branchIds?.includes(b.id))
+  const activeBranchId = link.current?.branchId || store?.session?.branchId || null
+  const writable=canRecord&&chartReady(data)
 
   const handleRecord = async (payload, ownsEditor = () => true) => {
-    if(!scope.current.canRecord||!ownsChart()||recording.current)return {ok:false,message:'Recording is unavailable or already in progress.'}
+    if(!scope.current.canRecord||!chartReady(data)||!ownsChart()||recording.current)return {ok:false,message:'Recording is unavailable or already in progress.'}
     const submittedGeneration=editGeneration.current
     recording.current=true; setRecordingPending(true)
     try {
-      const res = await recordChartEntry(patientId, payload)
+      const context=link.current?.treatmentId?{treatment_id:link.current.treatmentId,expected_treatment_revision:link.current.revision}:{}
+      const submitted={...payload,...context}
+      if(command.current?.outcome==='unknown'&&JSON.stringify(command.current.intent)!==JSON.stringify(submitted))return {ok:false,uncertain:true,message:'Retry the original finding on its selected tooth, or review the saved chart before another command.'}
+      if(!command.current||command.current.outcome!=='unknown')command.current=beginChartCommand({patientId,payload:submitted,dentistId:store?.session?.dentistId,isCurrent:ownsChart})
+      const res = await command.current.submit()
       if(!scope.current.canRecord||!ownsChart())return {ok:false,message:'The chart context changed.'}
       if (res.ok) {
         // Authoritative data belongs to this patient; transient feedback also
         // requires the original tooth selection and edit generation to remain current.
-        setData(res.data)
+        let current=res.data,needsReview=false,message=''
+        if(res.recovered){
+          let timer,read
+          try{read=await Promise.race([patientChart(patientId),new Promise(resolve=>{timer=setTimeout(()=>resolve(null),30000)})])}catch{read=null}finally{clearTimeout(timer)}
+          if(!ownsChart())return {ok:false,message:'The chart context changed.'}
+          if(read?.ok&&chartMatches(read.data,patientId)&&chartReady(read.data)&&read.data.history.some(e=>e.id===res.entryId)){
+            current=read.data;needsReview=current.tooth_revisions[payload.tooth]!==res.revision
+            if(needsReview)message='This finding is saved, and a newer tooth revision is visible. Review the saved chart before another entry; your draft is retained.'
+          }else{needsReview=true;message='The original finding is saved. This is its original snapshot; current chart status could not be verified. Review the saved chart before another entry.'}
+        }
+        setData(current);setFeedback({ok:true,message:`Finding ${res.entryId} saved for tooth ${payload.tooth}, revision ${res.revision}.`+(message?' '+message:'')})
         if (ownsEditor()&&editGeneration.current===submittedGeneration) toast?.('Tooth ' + toothLabel(payload.tooth, data.settings?.numbering) + ' recorded.', 'success')
-        return { ok: true }
+        return { ok: true,revision:res.revision,needsReview,message }
       }
-      return { ok: false, message: firstError(res) }
+      const message=firstError(res);setFeedback({ok:false,message})
+      return { ok: false,uncertain:res.uncertain,needsReview:res.kind==='conflict',message }
     } catch {
       return { ok: false, message: 'The finding could not be confirmed. Check the chart before retrying.' }
     } finally {
@@ -84,17 +107,21 @@ function ChartRecord({ patientId, canRecord, toast, store, onDirtyChange, isCurr
 
   return (
     <div className="tc-unified-chart">
+      <div className="row-actions"><RefreshButton title="Review saved chart" ariaLabel="Review saved chart" disabled={recordingPending} onClick={()=>{if(dirty.current||command.current?.outcome==='unknown')setReviewOpen(true);else{command.current=null;setAttempt(attempt+1)}}}/></div>
+      {canRecord&&!writable&&<Notice tone="warning">Recording is unavailable on this server until the revision and receipt contract is ready. The saved chart remains read-only.</Notice>}
       <Odontogram
         data={data}
         selected={picked}
         onSelect={setPicked}
-        canRecord={canRecord}
+        canRecord={writable}
         onRecord={handleRecord}
         branches={branches}
         activeBranchId={activeBranchId}
         recordingPending={recordingPending}
         onDirtyChange={reportDirty}
       />
+      {feedback&&<p role={feedback.ok?'status':'alert'}>{feedback.message}</p>}
+      <ConfirmDialog open={reviewOpen} title="Review the saved chart?" confirmLabel="Load saved chart" onCancel={()=>setReviewOpen(false)} onConfirm={()=>{command.current=null;setReviewOpen(false);dirty.current=false;onDirtyChange?.(false);setFeedback(null);setAttempt(attempt+1)}}><p>This replaces the unsaved finding editor with saved history. A read does not prove an earlier pending command failed. No historical finding is changed or deleted.</p></ConfirmDialog>
     </div>
   )
 }
@@ -263,7 +290,7 @@ function DentistChartBody({ store, context, setPage, linked }) {
     <PageHeader kicker="Clinical" title="Dental chart" text="Record what you find per tooth and surface. Each entry is kept; the latest one is the current chart. The system makes no diagnosis or suggestion."/>
     <Card>
       {linked?<><Button variant="ghost" onClick={()=>setPage('treatment',context.returnEncounter)}>Return to encounter</Button><h2>{linked.patient.name}</h2><p>This dental chart is separate from the treatment documentation. Unsaved findings are kept only on this screen.</p></>:<SearchablePatientPicker selectedPatient={selectedPatient} onSelect={selectPatient} store={store} inputRef={patientSearch}/>}
-      {selectedPatient && <ChartView patientId={selectedPatient.id} canRecord toast={toast} store={store} isCurrent={ownsPatient} onDirtyChange={value => { if(ownsPatient())dirty.current=value }}/>}
+      {selectedPatient && <ChartView patientId={linked?.record?.patientPublicId||selectedPatient.publicId||selectedPatient.id} canRecord toast={toast} store={store} recordContext={linked?.treatment?{treatmentId:linked.treatment.id,revision:linked.treatment.revision,branchId:linked.record.branchId}:null} isCurrent={ownsPatient} onDirtyChange={value => { if(ownsPatient())dirty.current=value }}/>}
     </Card>
   </div>
 }

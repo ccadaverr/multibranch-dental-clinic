@@ -13,7 +13,7 @@ use Symfony\Component\Process\InputStream;
 use Tests\Feature\Appointments\SchedulingFixture;
 use Tests\TestCase;
 
-/** AUTHORED, NOT EXECUTED. Committed synthetic fixtures on EMPTY, approved disposable PostgreSQL only.
+/** Committed synthetic fixtures on EMPTY, approved disposable PostgreSQL only.
  * No automatic migrations, resets or cleanup. Do not run with the ordinary Feature suite: explicit opt-in,
  * scratch guard, empty-fixture checks and independently approved provisioning are all required.
  */
@@ -39,7 +39,8 @@ final class SelectedFollowupConcurrencyTest extends TestCase
     public function test_real_row_lock_contention_serializes_selected_bookings_replay_and_closure(): void
     {
         $token = $this->u['staffB1']->createToken('aud10-disposable-worker')->plainTextToken;
-        foreach (['different_keys', 'same_key', 'closed_while_waiting', 'ordinary_competitor'] as $index => $scenario) {
+        $otherStaffToken = $this->u['staffBoth']->createToken('aud10-second-staff-worker')->plainTextToken;
+        foreach (['different_keys', 'same_key', 'closed_while_waiting', 'ordinary_competitor', 'two_staff_accounts'] as $index => $scenario) {
             $task = FollowupTask::create(['patient_id' => $this->p['A']->id, 'branch_id' => $this->b['b1']->id,
                 'reason' => 'Synthetic contention task', 'source' => 'front_desk', 'status' => 'Open',
                 'due_on' => ClinicClock::today(), 'revision' => 7]);
@@ -62,7 +63,8 @@ final class SelectedFollowupConcurrencyTest extends TestCase
                     $key = 'aud10-'.$scenario.'-'.($scenario === 'same_key' ? 0 : $number);
                     $process = new Process([PHP_BINARY, base_path('tests/Support/aud10_booking_worker.php')], base_path(),
                         $this->workerEnvironment(),
-                        json_encode(['worker' => $name, 'token' => $token, 'payload' => $payload, 'key' => $key], JSON_THROW_ON_ERROR), 30);
+                        json_encode(['worker' => $name, 'token' => $scenario === 'two_staff_accounts' && $number === 1 ? $otherStaffToken : $token,
+                            'payload' => $payload, 'key' => $key], JSON_THROW_ON_ERROR), 30);
                     $process->start();
                     $workers[] = $process;
                 }
@@ -106,7 +108,7 @@ final class SelectedFollowupConcurrencyTest extends TestCase
                 self::assertSame($before + 1, Appointment::count());
                 self::assertSame($beforeKeys + 1, AppointmentCommandKey::count());
                 self::assertSame(8, $task->fresh()->revision);
-            } elseif ($scenario === 'different_keys') {
+            } elseif (in_array($scenario, ['different_keys', 'two_staff_accounts'], true)) {
                 self::assertSame([201, 409], $statuses);
                 self::assertSame($before + 1, Appointment::count());
                 self::assertSame($beforeKeys + 1, AppointmentCommandKey::count());
@@ -134,7 +136,7 @@ final class SelectedFollowupConcurrencyTest extends TestCase
             'reason' => 'Synthetic opposing-cycle task', 'source' => 'front_desk', 'status' => 'Open',
             'due_on' => ClinicClock::today(), 'revision' => 7]);
         $base = ['patient_id' => $this->p['A']->public_id, 'branch_ref' => 'b1', 'service_ref' => 'svc1', 'dentist_ref' => 'd1',
-            'date' => ClinicClock::now()->addDays(11)->toDateString(), 'start_time' => '10:00'];
+            'date' => ClinicClock::now()->addDays(14)->toDateString(), 'start_time' => '10:00'];
         $before = Appointment::count();
         $beforeKeys = AppointmentCommandKey::count();
         $workers = [];

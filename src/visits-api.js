@@ -55,15 +55,16 @@ const commandResult = result => (result.ok ? { ok: true, row: result.data } : no
 
 /** Scheduled Check-In: the server moves the appointment to Checked In and opens the Visit in one transaction. */
 export async function checkIn(appointment, key, beforeDispatch) {
-  return commandResult(await api.checkInVisit({ appointment_id: appointment.id, expected_revision: appointment.revision }, key, beforeDispatch))
+  return commandResult(await api.checkInVisit({ appointment_id: appointment.id, expected_revision: appointment.revision,
+    ...(appointment.idConfirmed===true?{id_confirmed:true}:{}) }, key, beforeDispatch))
 }
 
 /** Walk-In admission: a Visit with no appointment. The Dentist may be omitted (the server allows an unresolved one). */
-export async function walkIn({ patientPublicId, branchId, serviceId = null, dentistId = null }, key) {
+export async function walkIn({ patientPublicId, branchId, serviceId = null, dentistId = null }, key, beforeDispatch) {
   const payload = { patient_id: patientPublicId, branch_ref: branchId }
   if (serviceId) payload.service_ref = serviceId
   if (dentistId) payload.dentist_ref = dentistId
-  return commandResult(await api.walkInVisit(payload, key))
+  return commandResult(await api.walkInVisit(payload, key, beforeDispatch))
 }
 
 /** Minimal front-desk Patient registration (Person + Patient, no login). Returns the directory shape. */

@@ -78,16 +78,21 @@ class ConversationController extends Controller
     {
         abort_unless($request->user()->role === \App\Enums\Role::Staff && $conversation->accessibleTo($request->user()), 403);
 
-        return response()->json(['data' => $this->messaging->dentistOptions($conversation)]);
+        if (! app(\App\Services\Messaging\ConversationDentistAccess::class)->available()) throw new \App\Services\Visits\VisitCommandException(409, 'conversation_grants_unavailable', 'Dentist reassignment is unavailable. No access was changed. Contact the clinic administrator.');
+
+        return response()->json(['data' => $this->messaging->dentistOptions($conversation),
+            'meta' => ['grant_required' => app(\App\Services\Messaging\ConversationDentistAccess::class)->enforced(), 'revision' => $conversation->revision,
+                'context' => ['conversation_id' => $conversation->public_id, 'patient_id' => $conversation->patient->public_id, 'branch_id' => $conversation->branch->legacy_ref]]])->header('Cache-Control', 'private, no-store');
     }
 
     public function addParticipant(Request $request, Conversation $conversation): JsonResponse
     {
-        abort_unless($conversation->accessibleTo($request->user()), 403);
-        $v = $request->validate(['dentist_id' => ['required', 'string', 'size:26'], ...array_fill_keys(['user_id', 'role', 'patient_id', 'branch_id'], ['prohibited'])]);
-        $added = $this->messaging->addDentist($request->user(), $conversation, $v['dentist_id']);
-
-        return response()->json(['data' => ['id' => $conversation->public_id, 'added' => $added]], $added ? 201 : 200);
+        abort_unless($request->user()->role === \App\Enums\Role::Staff && $conversation->accessibleTo($request->user()), 403);
+        $access = app(\App\Services\Messaging\ConversationDentistAccess::class);
+        if (! $access->available()) throw new \App\Services\Visits\VisitCommandException(409, 'conversation_grants_unavailable', 'Dentist reassignment is unavailable. No access was changed. Contact the clinic administrator.');
+        $v = $request->validate(['dentist_id' => ['required', 'string', 'size:26'], 'expected_revision' => ['required', 'integer', 'min:1'],
+            'reason' => ['required', 'string', 'max:500'], ...array_fill_keys(['user_id', 'role', 'patient_id', 'branch_id'], ['prohibited'])]);
+        return $access->reassign($request->user(), $conversation, $v['dentist_id'], $v['expected_revision'], $v['reason'], $this->idempotencyKey($request, true));
     }
 
     /** The viewer's conversations, newest-created first (keyset by id), with an unread count and no message text. */
@@ -127,7 +132,7 @@ class ConversationController extends Controller
         $rows = $query->with(['patient.person', 'branch', 'participants.user.person', 'assignee.person'])->orderByDesc('id')->limit($per + 1)->get();
         $page = $rows->take($per)->values();
 
-        return response()->json(['data' => ConversationResource::collection($page)->resolve($request), 'meta' => ['per_page' => $per, 'next_cursor' => $rows->count() > $per ? $page->last()->public_id : null, 'channels' => $this->inboxChannels($user)]]);
+        return response()->json(['data' => ConversationResource::collection($page)->resolve($request), 'meta' => ['per_page' => $per, 'next_cursor' => $rows->count() > $per ? $page->last()->public_id : null, 'channels' => $this->inboxChannels($user)]])->header('Cache-Control', 'private, no-store');
     }
 
     /** Realtime inbox channels this account may subscribe to (the same rules as routes/channels.php): branch inboxes for Staff, own channel otherwise. */
@@ -164,6 +169,7 @@ class ConversationController extends Controller
         Presence::touch($request->user());
         $v = $request->validate(['per_page' => ['nullable', 'integer', 'min:1', 'max:'.self::MAX_PER_PAGE], 'cursor' => ['nullable', 'string', 'size:26'], 'after' => ['nullable', 'string', 'size:26', 'prohibits:cursor,q'], 'q' => ['nullable', 'string', 'max:120']]);
         $per = (int) ($v['per_page'] ?? 30);
+        $context = ['conversation_id' => $conversation->public_id, 'patient_id' => $conversation->patient->public_id, 'branch_id' => $conversation->branch->legacy_ref];
         if (! empty($v['after'])) {
             // Realtime and polling sync: messages NEWER than `after` (a message of THIS conversation), oldest first. This is the one read
             // path used both after a socket signal and by the polling fallback, so both show the same projection.
@@ -172,7 +178,7 @@ class ConversationController extends Controller
             $rows = ConversationMessage::where('conversation_id', $conversation->id)->where('id', '>', $after)->with('sender.person')->orderBy('id')->limit($per + 1)->get();
             $page = $rows->take($per)->values();
 
-            return response()->json(['data' => MessageResource::collection($page)->resolve($request), 'meta' => ['per_page' => $per, 'order' => 'oldest_first', 'more' => $rows->count() > $per]]);
+            return response()->json(['data' => MessageResource::collection($page)->resolve($request), 'meta' => ['context' => $context, 'per_page' => $per, 'order' => 'oldest_first', 'more' => $rows->count() > $per]])->header('Cache-Control', 'private, no-store');
         }
         $query = ConversationMessage::where('conversation_id', $conversation->id);
         if (! empty($v['cursor'])) {
@@ -192,13 +198,13 @@ class ConversationController extends Controller
             $page = $matches->take($per)->values();
             $page->load('sender.person');
             return response()->json(['data' => MessageResource::collection($page)->resolve($request), 'meta' => [
-                'per_page' => $per, 'next_cursor' => $matches->count() > $per ? $page->last()->public_id : null,
-            ]]);
+                'context' => $context, 'per_page' => $per, 'next_cursor' => $matches->count() > $per ? $page->last()->public_id : null,
+            ]])->header('Cache-Control', 'private, no-store');
         }
         $rows = $query->with('sender.person')->orderByDesc('id')->limit($per + 1)->get();
         $page = $rows->take($per)->values();
 
-        return response()->json(['data' => MessageResource::collection($page)->resolve($request), 'meta' => ['per_page' => $per, 'next_cursor' => $rows->count() > $per ? $page->last()->public_id : null]]);
+        return response()->json(['data' => MessageResource::collection($page)->resolve($request), 'meta' => ['context' => $context, 'per_page' => $per, 'next_cursor' => $rows->count() > $per ? $page->last()->public_id : null]])->header('Cache-Control', 'private, no-store');
     }
 
     public function send(SendMessageRequest $request, Conversation $conversation): JsonResponse

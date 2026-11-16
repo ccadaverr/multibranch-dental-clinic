@@ -2,6 +2,8 @@
 
 // M17 technical send bounds per account (spam/storage amplification). Not clinic policy; multi-instance deployments need a shared cache.
 return [
+    // Reviewed grant-schema acceptance/cutover gate. Enable only on a separately approved schema/target.
+    'conversation_grants_enabled' => (bool) env('DENTALOPS_CONVERSATION_GRANTS_ENABLED', false),
     'per_minute' => (int) env('MESSAGING_RATE_PER_MINUTE', 20),
     'per_hour' => (int) env('MESSAGING_RATE_PER_HOUR', 200),
     // New front-desk conversations a Patient may start per hour (their open conversation at a branch is reused, so this is a spam bound).

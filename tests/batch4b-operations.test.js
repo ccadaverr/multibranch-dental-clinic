@@ -21,7 +21,11 @@ test('M8/M9 Unified registration entry point in Check-In and removal from Clinic
   assert.match(patientFlow, /Creates a clinic patient record only — no login account/)
   // Verify upcoming appointment check is advisory
   assert.match(patientFlow, /upcomingAppt/)
-  assert.match(patientFlow, /Walk-ins are queued behind scheduled arrivals and must not displace confirmed appointments/)
+  // Owner's 2026-11-16 FIFO decision supersedes scheduled-first wording. Actual PostgreSQL arrival/tie/identity/history
+  // acceptance is in ClinicalArrivalOrderingTest; this check guards the advisory copy and reservation boundary only.
+  assert.match(patientFlow, /Queue order follows recorded arrivals and authorized queue controls; this does not reserve appointment time/)
+  assert.match(patientFlow, /A walk-in does not reserve Dentist appointment time/)
+  assert.doesNotMatch(patientFlow, /Walk-ins are queued behind scheduled arrivals/)
 })
 
 test('M4 Calendar click passing date and branch to AppointmentForm without field lock', () => {

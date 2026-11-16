@@ -45,6 +45,18 @@ function dialog({respond=async()=>ok(voided()),read=async id=>ok(issued(id)),aut
 }
 
 const draftRead=(extra={})=>issued('A',{number:null,status:'Draft',revision:1,can_void:false,can_edit:true,...extra})
+test('GEN-09 encounter review rejects a correct prescription ID with foreign Patient, Visit or branch',async()=>{
+ for(const patch of [{patient:{id:'foreign'}},{visit:'foreign'},{branch_id:'foreign'},{branch_id:undefined}]){
+  const d=dialog({read:async()=>ok(issued('A',{branch_id:'b1',...patch}))})
+  d.render({expectedContext:{patientId:'patient-A',visitId:'visit-A',branchId:'b1'}});await d.flush()
+  assert.equal(d.value.p,null);assert.match(d.value.error,/did not match/);assert.deepEqual(d.calls,[]);d.unmount()
+ }
+})
+test('GEN-09 view-only review cannot dispatch Void even through a retained handler',async()=>{
+ const d=dialog({read:async()=>ok(issued('A',{branch_id:'b1'}))})
+ d.render({expectedContext:{patientId:'patient-A',visitId:'visit-A',branchId:'b1'},viewOnly:true});await d.flush();d.fill()
+ assert.equal(d.value.p.id,'A');await d.value.doVoid();assert.deepEqual(d.calls,[]);d.unmount()
+})
 for(const [name,before,after,expected]of [
  ['Draft to Issued assigns a number',draftRead(),issued(),true],
  ['Draft to later Void reflects both backend transitions',draftRead(),voided(),true],

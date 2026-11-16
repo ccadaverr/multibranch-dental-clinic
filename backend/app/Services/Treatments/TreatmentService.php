@@ -22,6 +22,8 @@ use App\Support\IdempotentCommand;
 use Closure;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 
 // M5 Treatment & Clinical Workflow — the ONLY authority for the clinical Treatment record (CONTRACTS.md §3). Three named
 // commands, each one transaction through the shared idempotency mechanism (Idempotency-Key required) and each writing an
@@ -46,21 +48,30 @@ final class TreatmentService
         private readonly QueueService $queue,
     ) {}
 
-    public function start(User $actor, Visit $visit, int $expectedRevision, string $key, Closure $present): JsonResponse
+    public function start(User $actor, Visit $visit, int $expectedRevision, string $key, Closure $present, ?array $reviewedQueue = null): JsonResponse
     {
+        $this->authorizeStart($actor, $visit);
         $payload = ['visit' => $visit->id, 'expected_revision' => $expectedRevision];
+        if ($reviewedQueue !== null) $payload['reviewed_queue'] = $reviewedQueue;
 
-        return $this->idempotent($actor, $key, 'treatment.start', $payload, $present, function () use ($actor, $visit, $expectedRevision) {
+        return $this->idempotent($actor, $key, 'treatment.start', $payload, $present, function () use ($actor, $visit, $expectedRevision, $reviewedQueue) {
             // Resolve persisted context, then preserve appointment -> Visit lock order and detect a changed link.
             $snapshot = Visit::whereKey($visit->id)->firstOrFail();
             $appointment = $snapshot->appointment_id ? Appointment::whereKey($snapshot->appointment_id)->lockForUpdate()->firstOrFail() : null;
             $current = Visit::whereKey($visit->id)->lockForUpdate()->firstOrFail();
+            $this->authorizeStart($actor, $current);
             $this->assertAppointmentLink($current, $appointment);
             if (Treatment::where('visit_id', $current->id)->exists()) {
                 throw self::treatmentExists();
             }
             if ($current->revision !== $expectedRevision) {
                 throw VisitCommandException::staleVisit();
+            }
+            if ($reviewedQueue !== null) {
+                $entry = $this->queue->forClinicalVisit($current, true);
+                if ($entry->public_id !== $reviewedQueue['queue_id'] || $entry->revision !== $reviewedQueue['expected_queue_revision']) {
+                    throw new VisitCommandException(409, 'queue_context_changed', 'The reviewed queue entry changed. Review this exact encounter before starting treatment.');
+                }
             }
             if ($current->status !== 'Checked In') {
                 throw VisitCommandException::rule('invalid_transition', "A visit that is {$current->status} cannot start treatment.", 'status');
@@ -101,6 +112,33 @@ final class TreatmentService
 
             return [$treatment, 201];
         });
+    }
+
+    /** Exact current encounter readback, including walk-ins and a new authenticated session. No creation or transition. */
+    public function forVisit(User $actor, Visit $visit): Treatment
+    {
+        return DB::transaction(function () use ($actor, $visit) {
+            $snapshot = Visit::whereKey($visit->id)->firstOrFail();
+            $appointment = $snapshot->appointment_id ? Appointment::whereKey($snapshot->appointment_id)->lockForUpdate()->firstOrFail() : null;
+            $current = Visit::whereKey($visit->id)->lockForUpdate()->firstOrFail();
+            $this->authorizeStart($actor, $current);
+            $this->assertAppointmentLink($current, $appointment);
+            $entry = $this->queue->forClinicalVisit($current);
+            $treatment = Treatment::where('visit_id', $current->id)->firstOrFail();
+            $treatment = $this->lockForAuthor($actor, $treatment);
+            if ($treatment->status !== $current->status || $entry->status !== 'Served') {
+                throw VisitCommandException::rule('encounter_mismatch', 'The saved treatment and visit states disagree. Clinic review is required.', 'visit');
+            }
+            return $treatment->load([...self::RELATIONS, 'history']);
+        });
+    }
+
+    private function authorizeStart(User $actor, Visit $visit): void
+    {
+        $current = $actor->fresh();
+        abort_unless($current && $current->account_status === 'Active' && $current->auth_version === $actor->auth_version && $current->person_id === $actor->person_id, 403);
+        $visit->unsetRelation('dentist');
+        Gate::forUser($current)->authorize('start', [Treatment::class, $visit]);
     }
 
     /**

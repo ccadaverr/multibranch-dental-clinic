@@ -140,6 +140,7 @@ class IntakeController extends Controller
         $p = $this->intake->recordIdCheck($patient, $request->user(), $data['id_type'], $data['id_last4'] ?? null, $data['other_details'] ?? null);
 
         return response()->json(['data' => [
+            'patient_id' => $p->public_id,
             'id_type' => $p->id_type,
             'other_details' => $p->id_type === 'other' ? $p->other_details : null,
             'id_verified_at' => $p->id_verified_at?->toIso8601String(),

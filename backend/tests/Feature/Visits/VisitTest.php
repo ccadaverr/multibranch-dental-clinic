@@ -382,11 +382,11 @@ class VisitTest extends TestCase
 
         $this->actingAsUser('staffB1');
         $this->getJson('/api/visits')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $mine);
-        $this->getJson("/api/visits/{$theirs}")->assertForbidden();
+        $this->getJson("/api/visits/{$theirs}")->assertNotFound();
         $this->actingAsUser('dentist1');
         $this->getJson('/api/visits')->assertOk()->assertJsonCount(1, 'data');
         $this->actingAsUser('dentist3');
-        $this->getJson("/api/visits/{$mine}")->assertForbidden();
+        $this->getJson("/api/visits/{$mine}")->assertNotFound();
         $this->actingAsUser('owner');
         $body = $this->getJson('/api/visits?date=2026-09-28')->assertOk()->assertJsonCount(2, 'data')->json();
         $this->getJson("/api/visits/{$mine}")->assertOk()->assertJsonPath('data.history.0.event', 'visit.checked_in');
@@ -394,7 +394,7 @@ class VisitTest extends TestCase
         $this->getJson('/api/visits?from=2026-01-01&to=2026-12-31')->assertStatus(422)->assertJsonValidationErrors('to');
         $this->actingAsUser('patientA');
         $this->getJson('/api/visits')->assertForbidden();
-        $this->getJson("/api/visits/{$mine}")->assertForbidden();
+        $this->getJson("/api/visits/{$mine}")->assertNotFound();
 
         $json = json_encode($body);
         foreach (['patient_id', 'branch_id', 'appointment_id', 'responsible_dentist_profile_id', 'person_id', 'created_by_user_id'] as $internal) {

@@ -48,7 +48,7 @@ export function world() {
   // The Treatment rows as the signed-in account receives them (`author` is per viewer; Visit status is current).
   const treatmentView = () => [...treatmentRows.values()].map(t => {
     const v = visits.get(t.visit.id)
-    return { ...t, author: session?.role === 'dentist' && session.dentistId === t.dentist.id, visit: { ...t.visit, status: v.status, revision: v.revision, queue: v.queue ? { id: v.queue.id, status: queueRows.get(v.queue.id).status } : null },
+    return { ...t, author: session?.role === 'dentist' && session.dentistId === t.dentist.id, visit: { ...t.visit, status: v.status, revision: v.revision, queue: v.queue ? { id: v.queue.id, status: queueRows.get(v.queue.id).status, revision:queueRows.get(v.queue.id).revision } : null },
       appointment: t.appointment ? { ...t.appointment, status: server.get(t.appointment.id).status } : null }
   })
   const project = () => {

@@ -39,12 +39,15 @@ export function ToothTimeline({
   })
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
+  const [uncertain,setUncertain]=useState(false),[needsReview,setNeedsReview]=useState(false)
+  const observed=useRef(data?.tooth_revisions?.[tooth]??0),submittedSave=useRef(null)
   const mounted = useRef(true), saving = useRef(false), edits = useRef(0)
   const draftKey = value => JSON.stringify({ ...value, branch_id: String(value.branch_id || '') })
   const form = useRef(f), cleanForm = useRef(draftKey(f))
   useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
   const ownsEditor = () => mounted.current && isCurrent()
   const changeForm = patch => {
+    if(uncertain||needsReview)return
     const next = { ...form.current, ...patch }
     form.current = next; edits.current++; setF(next)
     onDirtyChange?.(draftKey(next) !== cleanForm.current)
@@ -52,8 +55,8 @@ export function ToothTimeline({
 
   const handleSave = async (e) => {
     e.preventDefault()
-    if (!canRecord || !onRecord || saving.current || recordingPending) return
-    const revision = edits.current, submitted = form.current
+    if (!canRecord || !onRecord || saving.current || recordingPending || needsReview) return
+    const submitted = form.current
     // Production IDs are legacy refs; a native select also stringifies numeric
     // IDs supplied by internal callers. Recover only that original value type.
     const branch = branches.find(b => String(b.id) === String(submitted.branch_id))?.id ?? submitted.branch_id
@@ -63,22 +66,30 @@ export function ToothTimeline({
     }
     saving.current = true
     setBusy(true); setErr('')
-    const payload = { tooth, status: submitted.status, surfaces: [...submitted.surfaces], note: submitted.note.trim() || null, recorded_on: submitted.recorded_on }
+    let payload = { tooth, status: submitted.status, surfaces: [...submitted.surfaces], note: submitted.note.trim() || null, recorded_on: submitted.recorded_on,expected_revision:observed.current }
     if (submitted.branch_id) {
       if (typeof branch === 'number') payload.branch_id = branch
       else payload.branch_ref = String(submitted.branch_id)
     }
+    if(uncertain&&submittedSave.current)payload=submittedSave.current.payload
+    else submittedSave.current={payload,edits:edits.current}
+    const revision=submittedSave.current.edits
     try {
       const res = await onRecord(payload, ownsEditor)
-      if (!ownsEditor() || edits.current !== revision) return
+      if (!ownsEditor()) return
       if (res?.ok) {
+        setUncertain(false)
+        if(res.needsReview){setNeedsReview(true);setErr(res.message);return}
+        if(edits.current!==revision){setNeedsReview(true);setErr('The finding was saved; your newer draft is retained. Review the saved chart before recording that draft.');return}
+        if(Number.isSafeInteger(res.revision))observed.current=res.revision
+        submittedSave.current=null
         form.current = { ...form.current, surfaces: [], note: '' }
         cleanForm.current = draftKey(form.current)
         setF(x => ({ ...x, surfaces: [], note: '' }))
         onDirtyChange?.(false)
-      } else setErr(res?.message || 'Failed to record entry.')
+      } else {setUncertain(!!res?.uncertain);setNeedsReview(!!res?.needsReview);setErr(res?.message || 'Failed to record entry.')}
     } catch {
-      if (ownsEditor() && edits.current === revision) setErr('The finding could not be confirmed. Check the chart before retrying.')
+      if (ownsEditor()) {setUncertain(true);setErr('The finding could not be confirmed. Check the chart before retrying with different details. Retry the same finding to recover its original result, or review saved history.')}
     } finally {
       saving.current = false
       if (ownsEditor()) setBusy(false)
@@ -117,6 +128,7 @@ export function ToothTimeline({
         <form className="od-record-form au-form" onSubmit={handleSave}>
           <h5 className="od-section-title">Record finding</h5>
 
+          <fieldset disabled={uncertain||needsReview} style={{border:0,padding:0,margin:0,minWidth:0}}>
           <Field label="Status" required>
             <select
               value={f.status}
@@ -171,12 +183,13 @@ export function ToothTimeline({
               onChange={e => changeForm({ note: e.target.value })}
             />
           </Field>
+          </fieldset>
 
           {recordingPending && !busy && <p role="status">A submitted finding is still saving. You can keep editing this tooth.</p>}
           {err && <p className="au-error" role="alert">{err}</p>}
 
-          <Button type="submit" size="sm" disabled={busy || recordingPending || !f.status}>
-            {busy ? 'Saving…' : 'Record finding'}
+          <Button type="submit" size="sm" disabled={busy || recordingPending || !f.status || needsReview}>
+            {busy ? 'Saving…' : uncertain?'Retry same finding':'Record finding'}
           </Button>
         </form>
       )}
@@ -203,6 +216,9 @@ export function ToothTimeline({
                 {item.dentist && (
                   <div className="od-card-dentist">{item.dentist}</div>
                 )}
+                {item.branch&&<small className="block-muted">{item.branch.name}</small>}
+                {item.created_at&&<small className="block-muted">Recorded {new Date(item.created_at).toLocaleString('en-PH',{timeZone:'Asia/Manila'})}</small>}
+                {item.treatment_id&&<small className="block-muted" style={{overflowWrap:'anywhere'}}>Encounter {item.treatment_id} · Visit {item.visit_id}</small>}
                 {item.note && (
                   <div className="od-card-note">{item.note}</div>
                 )}

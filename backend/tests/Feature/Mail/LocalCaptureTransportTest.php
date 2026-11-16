@@ -33,4 +33,23 @@ final class LocalCaptureTransportTest extends TestCase
         $this->expectException(TransportException::class);
         new LocalCaptureTransport;
     }
+
+    public function test_capture_port_cannot_choose_a_remote_host_or_privileged_port(): void
+    {
+        $original = env('DENTALOPS_LOCAL_CAPTURE_PORT');
+        try {
+            foreach (['smtp.example.test:25', '25', '1023', '65536', '1026.0', ''] as $invalid) {
+                \Illuminate\Support\Env::getRepository()->set('DENTALOPS_LOCAL_CAPTURE_PORT', $invalid);
+                try {
+                    new LocalCaptureTransport;
+                    $this->fail('An invalid capture port must fail before connecting.');
+                } catch (TransportException $e) {
+                    $this->assertSame('Local capture requires an unprivileged loopback port.', $e->getMessage());
+                }
+            }
+        } finally {
+            if ($original === null) \Illuminate\Support\Env::getRepository()->clear('DENTALOPS_LOCAL_CAPTURE_PORT');
+            else \Illuminate\Support\Env::getRepository()->set('DENTALOPS_LOCAL_CAPTURE_PORT', (string) $original);
+        }
+    }
 }

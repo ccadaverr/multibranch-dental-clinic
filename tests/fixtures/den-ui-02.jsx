@@ -14,7 +14,7 @@ import {loadVisits,mapVisit} from '/src/visits-api.js'
 import {loadTreatments,mapTreatment} from '/src/treatments-api.js'
 import {setClockSource} from '/src/clock.js'
 import {reportSessionInvalidated} from '/src/api-client.js'
-import {clinicalFixture,today} from '../support/den-ui-02-fixture.js'
+import {clinicalFixture,today,canonicalClinical} from '../support/den-ui-02-fixture.js'
 import '/src/styles.css'
 import '/src/foundation.css'
 import '/src/patient.css'
@@ -22,7 +22,7 @@ import '/src/polish.css'
 import '/src/automations.css'
 setClockSource(()=>new Date(today+'T10:00:00+08:00'))
 function Fixture(){
-  const initial=useRef(clinicalFixture())
+  const initial=useRef(canonicalClinical(clinicalFixture()))
   const authGeneration=useRef(1), getAuthGeneration=useRef(()=>authGeneration.current).current
   const [state,setState]=useState(initial.current.state),[session,setSession]=useState(initial.current.session)
   const [status,setStatus]=useState('loading'),[page,setPage]=useState('queue'),[context,setContext]=useState(null)
@@ -37,7 +37,7 @@ function Fixture(){
   const flow=useRef(null)
   if(!flow.current)flow.current=createAppointmentFlow({getState:()=>latest.current,getSession:()=>actor.current,getActions:()=>({reconcileTreatmentHandoffs:()=>({ok:true,warnings:[]})}),refresh})
   useEffect(()=>{refresh()},[])
-  const go=(p,c=null)=>nav.request(()=>{setContext(c);setPage(p)})
+  const go=(p,c=null)=>nav.request(()=>{setContext(canonicalClinical(c));setPage(p)})
   window.encFixture={go,refresh,expire:()=>{authGeneration.current++;reportSessionInvalidated()},sessionChange:()=>{authGeneration.current++;setSession(null)},setStatus,changeState:patch=>{const n={...latest.current,...patch};latest.current=n;setState(n)},getContext:()=>context}
   const store={state,session,getAuthGeneration,appointmentsStatus:status,appointmentsTruncated:false,queueSnapshot:{date:today,truncated:false},appointmentFlow:flow.current,toast(){},actions:{},log(){}}
   const props={role:'dentist',store,context,setPage:go,activeBranch:'Illustrative Central Branch'}

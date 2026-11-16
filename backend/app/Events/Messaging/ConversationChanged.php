@@ -14,8 +14,11 @@ class ConversationChanged implements ShouldBroadcastNow
     public function broadcastOn(): array
     {
         // Channel names are always lower-case (ULIDs are case-insensitive; clients subscribe with lower-case ids).
-        return [new PrivateChannel('conversation.'.strtolower($this->conversationId)), new PrivateChannel('branch-inbox.'.strtolower($this->branchId)),
-            ...array_map(fn ($id) => new PrivateChannel('user.'.strtolower($id)), $this->userIds)];
+        $strict = app(\App\Services\Messaging\ConversationDentistAccess::class)->enforced();
+        $ids = $strict && $this->change !== 'dentist_reassigned'
+            ? \App\Services\Messaging\AuthorizedSignals::recipients($this->conversationId, $this->userIds) : $this->userIds;
+        return [...($strict ? [] : [new PrivateChannel('conversation.'.strtolower($this->conversationId))]), new PrivateChannel('branch-inbox.'.strtolower($this->branchId)),
+            ...array_map(fn ($id) => new PrivateChannel('user.'.strtolower($id)), $ids)];
     }
 
     public function broadcastAs(): string

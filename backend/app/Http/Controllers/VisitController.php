@@ -12,11 +12,13 @@ use App\Models\DentistProfile;
 use App\Models\Patient;
 use App\Models\Service;
 use App\Models\Visit;
+use App\Models\CommandKey;
 use App\Services\Visits\VisitService;
 use App\Support\ClinicClock;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 // M8 Patient Check-In and the shared Visit API. Controllers only resolve references and authorize; every rule and
@@ -58,11 +60,38 @@ class VisitController extends Controller
         return VisitResource::collection($query->paginate($validated['per_page'] ?? 50)->withQueryString());
     }
 
-    public function show(Visit $visit): VisitResource
+    public function show(Request $request, string $visit): JsonResponse
     {
-        Gate::authorize('view', $visit);
+        // Do not implicitly bind an arbitrary Visit before account/role checks. Missing, malformed and
+        // out-of-scope IDs share one non-disclosing response, including when APP_DEBUG is enabled.
+        $notFound = response()->json(['message' => 'Visit not found.'], 404)->header('Cache-Control', 'private, no-store');
+        if (! Str::isUlid($visit)) {
+            return $notFound;
+        }
 
-        return new VisitResource($visit->load([...self::RELATIONS, 'history']));
+        $actor = $request->user(); // EnsureAccountAccess refreshed this identity; the guard may still cache an old role.
+        $current = Visit::visibleTo($actor)->where('public_id', $visit)->first();
+        // Recheck policy with that same actor: a branch grant can be revoked after the scoped query.
+        if (! $current || Gate::forUser($actor)->denies('view', $current)) {
+            return $notFound;
+        }
+
+        return (new VisitResource($current->load([...self::RELATIONS, 'history'])))->response()->header('Cache-Control', 'private, no-store');
+    }
+
+    /** Original receipt for an exact Visit and the same account, including after reload/new sign-in. */
+    public function arrivalReceipt(Request $request, Visit $visit): JsonResponse
+    {
+        $current = Visit::visibleTo($request->user())->where('public_id', $visit->public_id)->firstOrFail();
+        Gate::authorize('view', $current);
+        $record = CommandKey::where('user_id', $request->user()->id)->whereIn('command', ['visit.check_in', 'visit.walk_in'])
+            ->where('response_body->data->id', $current->public_id)->where('response_status', 201)->firstOrFail();
+        $body = $record->response_body;
+        abort_unless(data_get($body, 'data.patient.id') === $current->patient->public_id
+            && data_get($body, 'data.branch.id') === $current->branch->legacy_ref
+            && data_get($body, 'data.appointment.id') === $current->appointment?->public_id, 404);
+
+        return response()->json(['data' => $body, 'meta' => ['historical_receipt' => true]])->header('Cache-Control', 'private, no-store');
     }
 
     public function checkIn(CheckInVisitRequest $request): JsonResponse
@@ -70,7 +99,8 @@ class VisitController extends Controller
         $appointment = Appointment::where('public_id', $request->validated('appointment_id'))->firstOrFail();
         Gate::authorize('checkIn', [Visit::class, $appointment]);
 
-        return $this->visits->checkInScheduled($request->user(), $appointment, (int) $request->validated('expected_revision'), $this->idempotencyKey($request, true));
+        return $this->visits->checkInScheduled($request->user(), $appointment, (int) $request->validated('expected_revision'), $this->idempotencyKey($request, true),
+            $request->has('id_confirmed') ? $request->boolean('id_confirmed') : null);
     }
 
     public function walkIn(WalkInVisitRequest $request): JsonResponse

@@ -197,21 +197,32 @@ final class IntakeService
         }
         $keepLast4 = (bool) (AutomationCatalog::setting('intake')?->settings['store_id_last4'] ?? false);
         $last4 = $keepLast4 && $last4 !== null ? strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $last4), -4)) : null;
-        $patient->forceFill([
-            'id_type' => $idType,
-            'other_details' => $otherDetails ?: null,
-            'id_last4' => $last4 ?: null,
-            'id_verified_by_user_id' => $staff->id,
-            'id_verified_at' => now(),
-        ])->save();
+        return DB::transaction(function () use ($patient, $staff, $idType, $last4, $otherDetails) {
+            $locked = Patient::whereKey($patient->id)->lockForUpdate()->firstOrFail();
+            // Existing intake/account-offer callers retain this model instance after the check.
+            $patient->setRawAttributes($locked->getAttributes(), true);
+            $dateFormat = $patient->getDateFormat();
+            $patient->setDateFormat('Y-m-d H:i:sP');
+            try {
+                $patient->forceFill([
+                    'id_type' => $idType,
+                    'other_details' => $otherDetails ?: null,
+                    'id_last4' => $last4 ?: null,
+                    'id_verified_by_user_id' => $staff->id,
+                    'id_verified_at' => ClinicClock::now(),
+                ])->save();
 
-        $auditPayload = ['id_type' => $idType, 'last4_kept' => $last4 !== null];
-        if ($otherDetails !== null && $otherDetails !== '') {
-            $auditPayload['other_details'] = $otherDetails;
-        }
-        app(AuditService::class)->recordAdministrative('patient.id_verified_in_person', $staff, $patient, $auditPayload);
+                $auditPayload = ['id_type' => $idType, 'last4_kept' => $last4 !== null];
+                if ($otherDetails !== null && $otherDetails !== '') {
+                    $auditPayload['other_details'] = $otherDetails;
+                }
+                app(AuditService::class)->recordAdministrative('patient.id_verified_in_person', $staff, $patient, $auditPayload);
 
-        return $patient;
+                return $patient;
+            } finally {
+                $patient->setDateFormat($dateFormat);
+            }
+        });
     }
 
     private function createPatient(array $self, User $staff): Patient

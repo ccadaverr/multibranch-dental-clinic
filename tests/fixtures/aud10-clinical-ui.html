@@ -25,6 +25,14 @@ window.fetch=async(url,options={})=>{
   fixture.requests.push({path,method,body:options.body?JSON.parse(options.body):null,credentials:options.credentials})
   if(path==='/sanctum/csrf-cookie'){document.cookie='XSRF-TOKEN=synthetic-csrf; path=/';return new Response(null,{status:204})}
   if(path==='/api/followups'&&method==='GET')return Response.json({data:fixture.rows,meta:{counts:{open:2,overdue:0,due_today:0}}})
+  if(path==='/api/followups/booking-capability')return Response.json({data:{contract:'followup-booking.v1',enabled:false}})
+  if(path.endsWith('/booking-receipt'))return Response.json({message:'No original receipt'},{status:404})
+  if(path.startsWith('/api/followups/')&&method==='GET'){
+    const id=path.split('/').at(-1),rows=(fixture.reviewResult?.data||fixture.rows).filter(t=>t.id===id)
+    if(fixture.holdReview)await new Promise(resolve=>{fixture.releaseReview=resolve})
+    if(fixture.reviewMode==='network')throw Error('Synthetic read unavailable')
+    return Response.json(fixture.reviewMode==='forbidden'?{message:'Do not expose this raw diagnostic'}:{data:rows.length===1?rows[0]:null},{status:fixture.reviewMode==='forbidden'?403:200})
+  }
   if(path===`/api/patients/${P}/followups`&&method==='GET'){
     const result=fixture.reviewResult||{data:fixture.rows}
     const mode=fixture.reviewMode

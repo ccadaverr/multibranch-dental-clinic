@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Branch;
+use App\Models\Appointment;
+use App\Models\AppointmentCommandKey;
 use App\Models\DentistProfile;
 use App\Models\FollowupTask;
 use App\Models\Patient;
@@ -10,6 +12,7 @@ use App\Models\Service;
 use App\Models\User;
 use App\Models\UserBranchScope;
 use App\Services\Audit\AuditService;
+use App\Services\Followups\Followups;
 use App\Support\ClinicClock;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -25,12 +28,45 @@ use Illuminate\Validation\ValidationException;
  */
 class FollowupController extends Controller
 {
+    /** Readiness is explicit and defaults closed; source support alone is not clinical acceptance. */
+    public function bookingCapability(): JsonResponse
+    {
+        $ready = \Illuminate\Support\Facades\Schema::hasColumns('followup_tasks', ['public_id', 'patient_id', 'branch_id', 'dentist_profile_id', 'appointment_id', 'revision'])
+            && \Illuminate\Support\Facades\Schema::hasColumns('appointment_command_keys', ['user_id', 'command', 'request_hash', 'response_status', 'response_body']);
+        return response()->json(['data' => ['contract' => 'followup-booking.v1',
+            'enabled' => $ready && (bool) config('clinic.selected_followup_booking_enabled', false), 'schema_ready' => $ready,
+            'exact_task_linkage' => true, 'receipt_recovery' => true, 'dentist_context' => true]])
+            ->header('Cache-Control', 'private, no-store');
+    }
+
+    /** Recover this account's original committed receipt after reload/sign-in, without a write or guessed match. */
+    public function bookingReceipt(Request $request, FollowupTask $followupTask): JsonResponse
+    {
+        $scoped = FollowupTask::where('public_id', $followupTask->public_id)
+            ->whereIn('branch_id', UserBranchScope::where('user_id', $request->user()->id)->select('branch_id'))->firstOrFail();
+        $task = Followups::selectedForBooking($request->user(), $scoped->branch, $scoped->public_id);
+        $record = AppointmentCommandKey::where('user_id', $request->user()->id)->where('command', 'appointment.create')
+            ->where('response_body->meta->followup_link->task_id', $task->public_id)
+            ->whereNotNull('response_status')->orderByDesc('id')->firstOrFail();
+        $body = $record->response_body;
+        $appointment = Appointment::where('public_id', data_get($body, 'meta.followup_link.appointment_id'))->firstOrFail();
+        abort_unless($request->user()->can('view', $appointment), 403);
+        // Reassigned/corrupt contexts may not disclose an old journal's patient data.
+        abort_unless($appointment->patient_id === $task->patient_id && $appointment->branch_id === $task->branch_id
+            && data_get($body, 'data.patient.id') === $task->patient->public_id
+            && data_get($body, 'data.branch.id') === $task->branch->legacy_ref
+            && data_get($body, 'data.id') === $appointment->public_id, 404);
+
+        return response()->json(['data' => $body, 'meta' => ['historical_receipt' => true]])
+            ->header('Cache-Control', 'private, no-store');
+    }
+
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
         $data = $request->validate(['branch_ref' => ['nullable', 'string', 'max:50'], 'status' => ['nullable', 'in:active,Open,Contacted,Booked,Closed'], 'due' => ['nullable', 'in:overdue,today,week,all']]);
         $today = ClinicClock::today();
-        $q = FollowupTask::with(['patient.person', 'branch', 'service', 'assignee.person', 'appointment'])->orderBy('due_on')->orderBy('id')->limit(300)
+        $q = FollowupTask::with(['patient.person', 'branch', 'service', 'dentist.person', 'assignee.person', 'appointment'])->orderBy('due_on')->orderBy('id')->limit(300)
             ->whereIn('branch_id', $this->branchIds($user))
             ->when(! empty($data['branch_ref']), fn ($q) => $q->whereIn('branch_id', Branch::select('id')->where('legacy_ref', $data['branch_ref'])))
             ->when(($data['status'] ?? 'active') === 'active', fn ($q) => $q->whereIn('status', FollowupTask::OPEN), fn ($q) => $q->where('status', $data['status']))
@@ -51,7 +87,7 @@ class FollowupController extends Controller
         // a stale route snapshot or rely on the capped/active work lists.
         $task = FollowupTask::where('public_id', $followupTask->public_id)
             ->whereIn('branch_id', $this->branchIds($user))
-            ->with(['patient.person', 'branch', 'service', 'assignee.person', 'appointment'])
+            ->with(['patient.person', 'branch', 'service', 'dentist.person', 'assignee.person', 'appointment'])
             ->firstOrFail();
 
         return response()->json(['data' => $this->view($task, $user)])
@@ -63,7 +99,7 @@ class FollowupController extends Controller
     {
         $user = $request->user();
         abort_unless($user->role->value === 'dentist' || $user->can('viewProfile', $patient), 403);
-        $rows = FollowupTask::where('patient_id', $patient->id)->whereIn('branch_id', $this->branchIds($user))->with(['patient.person', 'branch', 'service', 'assignee.person', 'appointment'])
+        $rows = FollowupTask::where('patient_id', $patient->id)->whereIn('branch_id', $this->branchIds($user))->with(['patient.person', 'branch', 'service', 'dentist.person', 'assignee.person', 'appointment'])
             ->orderByDesc('due_on')->limit(50)->get();
 
         return response()->json(['data' => $rows->map(fn (FollowupTask $t) => $this->view($t, $user))->values()]);
@@ -87,7 +123,7 @@ class FollowupController extends Controller
                 'status' => 'Open', 'created_by_user_id' => $user->id, 'updated_by_user_id' => $user->id]);
             $this->audit($user, 'followup.created', $task);
 
-            return $task->fresh(['patient.person', 'branch', 'service', 'assignee.person']);
+            return $task->fresh(['patient.person', 'branch', 'service', 'dentist.person', 'assignee.person']);
         });
 
         return response()->json(['data' => $this->view($task, $user)], 201);
@@ -97,12 +133,16 @@ class FollowupController extends Controller
     public function update(Request $request, FollowupTask $followupTask): JsonResponse
     {
         $user = $request->user();
-        $data = $request->validate(['action' => ['required', 'in:contacted,close'], 'note' => ['nullable', 'string', 'max:500']]);
+        $data = $request->validate(['action' => ['required', 'in:contacted,close'], 'note' => ['nullable', 'string', 'max:500'],
+            'expected_revision' => ['sometimes', 'required', 'integer', 'min:1', 'max:2147483647']]);
         $task = DB::transaction(function () use ($followupTask, $data, $user) {
             $t = FollowupTask::whereKey($followupTask->id)->lockForUpdate()->firstOrFail();
             // The route snapshot may predate a state/branch change. Authorize
             // and audit the locked row within the same transaction as its write.
             abort_unless(in_array($t->branch_id, $this->branchIds($user), true), 403);
+            if (isset($data['expected_revision']) && $t->revision !== (int) $data['expected_revision']) {
+                throw new \App\Services\Appointments\AppointmentCommandException(409, 'followup_conflict', 'The follow-up changed. Reload and review it before continuing.');
+            }
             if ($data['action'] === 'contacted') {
                 if ($t->status !== 'Open') throw ValidationException::withMessages(['action' => ["This follow-up is already {$t->status}."]]);
                 $t->update(['status' => 'Contacted', 'contacted_at' => now(), 'updated_by_user_id' => $user->id, 'revision' => $t->revision + 1]);
@@ -114,7 +154,7 @@ class FollowupController extends Controller
             }
             $this->audit($user, 'followup.'.($data['action'] === 'close' ? 'closed' : 'contacted'), $t);
 
-            return $t->load(['patient.person', 'branch', 'service', 'assignee.person', 'appointment']);
+            return $t->load(['patient.person', 'branch', 'service', 'dentist.person', 'assignee.person', 'appointment']);
         });
 
         return response()->json(['data' => $this->view($task, $user)]);
@@ -156,6 +196,7 @@ class FollowupController extends Controller
 
         return $out + ['patient' => ['id' => $t->patient?->public_id, 'name' => $t->patient?->person?->fullName(), 'code' => $t->patient?->patient_code, 'phone' => $t->patient?->person?->phone],
             'reason' => $t->reason, 'service' => $t->service ? ['id' => $t->service->legacy_ref, 'name' => $t->service->name] : null,
+            'dentist' => $t->dentist ? ['id' => $t->dentist->legacy_ref, 'name' => $t->dentist->person?->fullName()] : null,
             'assignee' => $t->assignee ? $t->assignee->person?->fullName() : 'Branch front desk', 'close_note' => $t->close_note,
             'appointment' => $t->appointment ? ['id' => $t->appointment->public_id, 'code' => $t->appointment->appointment_code, 'when' => $local->format('D, M j, g:i A')] : null,
             'can_contact' => $t->status === 'Open', 'can_close' => $t->status !== 'Closed', 'can_book' => in_array($t->status, FollowupTask::OPEN, true)];

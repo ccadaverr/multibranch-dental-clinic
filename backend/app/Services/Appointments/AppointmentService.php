@@ -60,6 +60,7 @@ final class AppointmentService
                 // This snapshot cannot authorize the transition; the locked record is rechecked immediately before linking.
                 $snapshot = Followups::selectedForBooking($actor, $branch, $input['followup_task_id']);
                 Followups::validateSelectedBooking($snapshot, $patient, $branch, $input['followup_expected_revision']);
+                $dentist = Followups::selectedDentist($snapshot, $dentist);
             }
             $isPatient = $actor->role === Role::Patient;
             // F7 (R2-17): a consultation-first or hidden service is not booked online; the front desk still can.
@@ -152,6 +153,7 @@ final class AppointmentService
                     // back every provisional write, including the appointment, slot claims, history and command key.
                     $task = Followups::selectedForBooking($actor, $branch, $input['followup_task_id'], lock: true);
                     Followups::validateSelectedBooking($task, $patient, $branch, $input['followup_expected_revision']);
+                    Followups::selectedDentist($task, $appointment->dentist);
                     $meta['followup_link'] = Followups::bookSelected($task, $appointment, $actor);
                 } else {
                     Followups::booked($appointment); // Ordinary booking keeps automatic matching.

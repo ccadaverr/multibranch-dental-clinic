@@ -73,8 +73,8 @@ const queueFailure = result => {
 const commandResult = result => (result.ok ? { ok: true, row: result.data } : queueFailure(result))
 
 /** Named transitions: 'call' | 'ready' | 'away' | 'return'. */
-export async function transitionQueue(entry, name, key) {
-  return commandResult(await api.queueCommand(entry.id, name, { expected_revision: entry.revision }, key))
+export async function transitionQueue(entry, name, key, beforeDispatch) {
+  return commandResult(await api.queueCommand(entry.id, name, { expected_revision: entry.revision }, key, beforeDispatch))
 }
 
 /** F2: restore a late arrival's normal place in the queue (Staff override of R2-07), reason required. */

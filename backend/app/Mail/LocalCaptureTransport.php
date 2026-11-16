@@ -14,7 +14,12 @@ final class LocalCaptureTransport extends EsmtpTransport
         if (! app()->environment(['local', 'testing']) || ! env('DENTALOPS_LOCAL_TARGET')) {
             throw new TransportException('Local capture requires the isolated development environment.');
         }
-        parent::__construct('127.0.0.1', 1026, false);
+        // Disposable runtime labs use their own loopback listener; the host can never be overridden.
+        $port = env('DENTALOPS_LOCAL_CAPTURE_PORT', '1026');
+        if (! preg_match('/\A[0-9]{4,5}\z/', (string) $port) || (int) $port < 1024 || (int) $port > 65535) {
+            throw new TransportException('Local capture requires an unprivileged loopback port.');
+        }
+        parent::__construct('127.0.0.1', (int) $port, false);
         $this->setAutoTls(false);
         $this->getStream()->setTimeout(5);
     }
