@@ -1,0 +1,92 @@
+{
+  "checkpoint_date_timezone": "2026-11-16 Asia/Manila",
+  "clinical_start_head": "fe66059691ba32ec4caa6803a82e8fd779bb9fd5",
+  "published_clinical_head": "4cbb1386dbc4fd959b74882a95d370320d2a63e6",
+  "expected_operations_head": "4703fec9b1119d543478619db40dd53081b1eceb",
+  "superseded_expected_operations_head": "54a727274901b9db2256fb8c6b1bef64eaa1c0d2",
+  "operations_source_received": false,
+  "independent_sha256": null,
+  "digest_verified": false,
+  "actual_operations_head": null,
+  "verified_operations_refs": [],
+  "integration_candidate_head": null,
+  "integration_executed": false,
+  "authorization": {
+    "recipient": "Jaztin",
+    "historical_url_classification": "Owner accepted apparent configuration template subject to recorded scan limitations",
+    "source_delivery_method": null,
+    "preferred_method": "GitHub after deployment-trigger clearance",
+    "source_delivery_authorization_finalized": false,
+    "local_integration": "Owner conditional YES after authentic receipt, independent digest/ancestry and safe database/migration isolation",
+    "merge_now": false,
+    "push_or_pr_change": false,
+    "production_deployment": false
+  },
+  "accepted_delivery_shapes": [
+    "Complete authentic history reaching the expected Operations HEAD",
+    "Authentic complete predecessor plus independently hashed deltas; every prerequisite/parent and final expected HEAD verified"
+  ],
+  "requested_evidence": [
+    "Independent SHA-256 for every delivered source component; never infer from filename or compute an expected value from the received file itself",
+    "Owner-approved exact source files, intended refs, recipient and delivery channel; GitHub publication needs deployment-trigger clearance",
+    "Exact Git refs, commit graph, common published baseline and complete intended branch history; no reconstruction",
+    "Joevan changed-file manifest since the common baseline, API/route/role/navigation contracts, focused acceptance commands/results and known failures",
+    "Actual migration filenames/hashes/ledger/dependencies and explicit review of all four held files; no blanket destructive migration chain",
+    "Staff request/approval/separate publication/effective duty revision and branch authority contracts; OWN-11 exact evidence",
+    "Patient Archives.jsx authentic Operations bytes and contracts for identity, paging, errors, receipt links/PDF authorization, permissions and history",
+    "Queue/encounter/chart/prescription/billing/message/notification/audit contract changes; preserve Served as treatment start",
+    "Isolated synthetic PostgreSQL target identity, reviewed schema and recoverable private backup/restore plan; worker/scheduler and local mail-capture evidence"
+  ],
+  "patient_archives": {
+    "clinical_path": "src/patient/pages/Archives.jsx",
+    "clinical_sha256": "9794bbecd0b069b10222776a8212e6d6d5f52e84fe2b21af639166f6bc92707a",
+    "operations_sha256": null,
+    "comparison_status": "Deferred until authentic Operations version is received",
+    "required_preservation": [
+      "Exact own/dependent Patient scope",
+      "Complete paged history with failed later pages reported as errors",
+      "Read-only historical clinical records and allowed content",
+      "Exact Invoice/Receipt navigation and authorized PDF identity",
+      "No archive-driven Owner clinical/message access, hard deletes, admission, completion or settlement"
+    ]
+  },
+  "held_migrations": {
+    "2026_11_10_000100_remove_patient_feedback_table.php": {
+      "clinical_sha256": "3c8af7cb8126866af3d67107bdd792960b5389922c762a09f6c08781db5b6df9",
+      "operations_sha256": null,
+      "execute": false
+    },
+    "2026_11_15_000400_backfill_tooth_chart_branch.php": {
+      "clinical_sha256": "36f0fa951bc7c612f87ba47e40307729e96e8d222d6fcc019dd7acb2dd249181",
+      "operations_sha256": null,
+      "execute": false
+    },
+    "2026_11_15_000500_add_critical_foreign_key_and_analytics_indexes.php": {
+      "clinical_sha256": "921a1dcfdfd321569ebcff08dcd72a069e32fb50bddc9c360af3ca795809711f",
+      "operations_sha256": null,
+      "execute": false
+    },
+    "2026_11_16_000500_update_queue_statuses_and_remove_urgent_priority.php": {
+      "clinical_sha256": "16b5eaddf6a725791fb74ef9a0d04b25187ba0e006fa885b7cd452df6feaed40",
+      "operations_sha256": null,
+      "execute": false
+    }
+  },
+  "prepared_not_executed_checks": [
+    "Hash/ref/ancestry and migration difference inspection",
+    "Side-by-side shared route/API/navigation/Archives contract comparison",
+    "Four-role Sanctum startup/authorization and session expiry/revocation",
+    "Patient registration/Family/booking/Check-In/queue/encounter/chart/prescription/billing/synthetic Cash/exact receipt",
+    "Owner/Staff roster request/approval/separate publication/effective duty, leave/branch/audit/notifications/archives/reports",
+    "Failure/retry/idempotency and actual PostgreSQL lock contention",
+    "Worker/scheduler with synthetic capture, failure/retry and PDF integrity/private backup/restore",
+    "Browser keyboard/focus and widths 375/390/430/768/1024/1440",
+    "All 68 exact original QA tasks and criteria at actual candidate HEAD"
+  ],
+  "qa_counts": {
+    "locally_complete": 21,
+    "partial": 36,
+    "blocked": 11,
+    "integrated_acceptance_pending": 68
+  }
+}
