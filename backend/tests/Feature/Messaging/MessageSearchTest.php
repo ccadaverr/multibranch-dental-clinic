@@ -120,6 +120,17 @@ class MessageSearchTest extends TestCase
         $this->getJson('/api/conversations?q='.urlencode($this->u['staffB1']->person->fullName()))->assertOk()->assertJsonCount(0, 'data');
     }
 
+    public function test_every_message_read_mode_identifies_exact_conversation_patient_branch_and_is_not_cached(): void
+    {
+        $c = $this->conversation(); $m = $this->message($c, 'Synthetic matching context');
+        $this->actingAsUser('staffB1');
+        foreach (['', '?q=matching', '?q=absent', '?after='.$m->public_id] as $suffix) {
+            $r = $this->getJson('/api/conversations/'.$c->public_id.'/messages'.$suffix)->assertOk()
+                ->assertJsonPath('meta.context.conversation_id', $c->public_id)->assertJsonPath('meta.context.patient_id', $this->p['A']->public_id)->assertJsonPath('meta.context.branch_id', 'b1');
+            self::assertTrue($r->headers->hasCacheControlDirective('no-store'));
+        }
+    }
+
     public function test_search_is_rate_limited_without_limiting_ordinary_history(): void
     {
         $c = $this->conversation();

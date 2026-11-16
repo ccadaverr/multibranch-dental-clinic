@@ -103,6 +103,7 @@ function MessageWorkspace({ store, role, initial = null }) {
   const accessVersion=id=>accessVersions.current.get(id)||0
   const currentConversation = snapshot => owns() && !deniedThreads.current.has(snapshot?.id) && !latest.current.error && selectedRef.current === snapshot?.id &&
     conversationMatches(snapshot, latest.current.list?.find(c=>c.id===snapshot.id) || latest.current.selected)
+  const readContext=id=>{const c=latest.current?.list?.find(c=>c.id===id)||(latest.current?.selected?.id===id?latest.current.selected:null);return c?{patientId:c.patientId,branchId:c.branchId}:null}
   const reads = useRef(new Map()), listFlight = useRef(null), paging = useRef(false), inFlight = useRef(new Set()), attempts = useRef(new Map())
   const closeAttempt = useRef(null), [closing,setClosing] = useState(false), closingFlight = useRef(false)
   useLayoutEffect(() => { alive.current=true; return () => {alive.current=false;listRequest.current++;hitRequest.current++;listFlight.current=null} }, [])
@@ -185,7 +186,7 @@ function MessageWorkspace({ store, role, initial = null }) {
     if (threadsRef.current[id]?.messages) return syncNewer(id)
     patchThread(id, () => ({ error: '' }))
     const ticket={},version=accessVersion(id);reads.current.set(id,ticket)
-    const result = await loadMessages(id)
+    const result = await loadMessages(id,null,'',readContext(id))
     if (!owns() || reads.current.get(id)!==ticket || accessVersion(id)!==version) return
     if (deniedRead(id,result)) return
     if (!result.ok) return patchThread(id, () => ({ error: result.message || 'Messages could not be loaded.' }))
@@ -198,7 +199,7 @@ function MessageWorkspace({ store, role, initial = null }) {
     const t = threadsRef.current[id]
     if (!t?.messages) return
     const last = t.messages[t.messages.length - 1]?.id,version=accessVersion(id)
-    const result = await loadNewerMessages(id, last)
+    const result = await loadNewerMessages(id, last,readContext(id))
     if(!owns() || accessVersion(id)!==version)return
     if (deniedRead(id,result)) return
     if (owns() && result.ok && result.rows.length) appendMessages(id, result.rows)
@@ -210,7 +211,7 @@ function MessageWorkspace({ store, role, initial = null }) {
     if (!t?.older || t.loadingOlder) return
     const version=accessVersion(id)
     patchThread(id, () => ({ loadingOlder: true, olderError: '' }))
-    const result = await loadMessages(id, t.older)
+    const result = await loadMessages(id, t.older,'',readContext(id))
     if (!owns() || accessVersion(id)!==version) return
     if (deniedRead(id,result)) return
     if (!result.ok) return patchThread(id, () => ({ loadingOlder: false, olderError: result.message || 'Older messages could not be loaded.' }))
@@ -342,7 +343,7 @@ function MessageWorkspace({ store, role, initial = null }) {
     if (!id || !query) return
     const request = ++hitRequest.current, version=accessVersion(id)
     setHits(previous => ({ ...(more ? previous : {}), loading: true, error: '' }))
-    const result = await loadMessages(id, more ? hits?.nextCursor : null, query)
+    const result = await loadMessages(id, more ? hits?.nextCursor : null, query,readContext(id))
     if (!owns() || accessVersion(id)!==version || request !== hitRequest.current || selectedRef.current !== id || queryRef.current !== query) return
     if (deniedRead(id,result)) return
     if (!result.ok) return setHits(previous => ({ ...previous, loading: false, error: result.message || 'Matching messages could not be loaded.' }))

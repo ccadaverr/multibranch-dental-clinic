@@ -661,7 +661,8 @@ export function verifyPatientId(patientId, body, beforeDispatch) { return reques
 export function branchPosterUrl(branchRef) { return `${apiBase()}/api/branches/${enc(branchRef)}/poster` }
 // Parents and guardians.
 export function myDependents() { return request('/api/me/dependents') }
-export function addDependent(body) { return json('/api/me/dependents', 'POST', body) }
+export function addDependent(body,key,beforeDispatch) { return command('/api/me/dependents',body,key,beforeDispatch) }
+export function dependentCreationReceipt(key) { return request('/api/me/dependents/creation-receipt',{headers:{'Idempotency-Key':key}}) }
 export function inviteToClaim(patientId, email) { return json(`/api/patients/${enc(patientId)}/claim-invite`, 'POST', { email }) }
 export function linkGuardian(patientId, body) { return json(`/api/patients/${enc(patientId)}/guardians`, 'POST', body) }
 export function myHmo() { return request('/api/me/hmo') }

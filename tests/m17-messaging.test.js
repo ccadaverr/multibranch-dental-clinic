@@ -66,11 +66,11 @@ test('failures are explicit and keep the information needed to retry: 422 closed
 })
 
 test('history is read newest-first through the server cursor; a failed older page is an error, never a shorter history', async () => {
-  stubFetch(json(200, { data: [msg(3), msg(2)], meta: { per_page: 30, next_cursor: 'c1' } }))
+  stubFetch(json(200, { data: [msg(3), msg(2)], meta: {context:{conversation_id:'conv',patient_id:'p',branch_id:'b'}, per_page: 30, next_cursor: 'c1' } }))
   const page = await messaging.loadMessages('conv')
   assert.deepEqual([page.ok, page.rows.map(r => r.body), page.nextCursor], [true, ['message 3', 'message 2'], 'c1'])
   assert.match(calls.at(-1).url, /per_page=30/)
-  stubFetch(json(200, { data: [msg(1)], meta: { per_page: 30, next_cursor: null } }))
+  stubFetch(json(200, { data: [msg(1)], meta: {context:{conversation_id:'conv',patient_id:'p',branch_id:'b'}, per_page: 30, next_cursor: null } }))
   assert.equal((await messaging.loadMessages('conv', 'c1')).nextCursor, null)
   assert.match(calls.at(-1).url, /cursor=c1/)
   stubFetch(json(500, { message: 'boom' }))

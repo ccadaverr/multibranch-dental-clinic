@@ -152,6 +152,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
     Route::post('/patients/{patient}/offer-account', [\App\Http\Controllers\IntakeController::class, 'offerAccount'])->middleware(['role:staff', 'throttle:12,1']);
     Route::get('/branches/{branch}/poster', [\App\Http\Controllers\BranchPosterController::class, 'show'])->middleware('role:staff,owner');
     // Parents and guardians (dependents), account-claim invites, Staff linking.
+    Route::get('/me/dependents/creation-receipt', [\App\Http\Controllers\GuardianController::class, 'creationReceipt'])->middleware('role:patient');
     Route::get('/me/dependents', [\App\Http\Controllers\GuardianController::class, 'mine'])->middleware('role:patient');
     Route::post('/me/dependents', [\App\Http\Controllers\GuardianController::class, 'add'])->middleware(['role:patient', 'throttle:20,1']);
     Route::post('/patients/{patient}/claim-invite', [\App\Http\Controllers\GuardianController::class, 'invite'])->middleware(['role:patient,staff,owner', 'throttle:6,1']);

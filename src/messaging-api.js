@@ -1,4 +1,6 @@
 import * as api from './api-client.js'
+import {boundedMessageRead} from './message-read.js'
+export {boundedMessageRead} from './message-read.js'
 import { normalizeFailure } from './appointments-api.js'
 
 // M17 client. Laravel/PostgreSQL is the ONLY authority for conversations and messages in a clinic-server session. These are in-app
@@ -14,6 +16,9 @@ export const messageReceipt = row => identifier(row?.id) && typeof row.body === 
   typeof row.sent_at === 'string' && Number.isFinite(Date.parse(row.sent_at))
 const validRows = (rows, check) => Array.isArray(rows) && rows.every(check) && new Set(rows.map(row=>row.id)).size === rows.length
 
+
+
+const messageContext=(result,id,expected)=>result?.meta?.context?.conversation_id===id&&identifier(result.meta.context.patient_id)&&identifier(result.meta.context.branch_id)&&(!expected||result.meta.context.patient_id===expected.patientId&&result.meta.context.branch_id===expected.branchId)
 
 export function mapConversation(row) {
   return {
@@ -44,7 +49,7 @@ export function mapMessage(row) {
 
 export async function loadConversations(cursor = null, search = '') {
   const q = String(search || '').trim()
-  const result = await api.listConversations({ per_page: 25, ...(cursor ? { cursor } : {}), ...(q ? { q } : {}) })
+  const result = await boundedMessageRead(()=>api.listConversations({ per_page: 25, ...(cursor ? { cursor } : {}), ...(q ? { q } : {}) }))
   if (!result.ok) return normalizeFailure(result)
   if (!validRows(result.data, row => identifier(row?.id) && Array.isArray(row.participants ?? []) && (row.participants ?? []).every(p=>p&&typeof p==='object') && (row.last_message_at == null || typeof row.last_message_at === 'string'))) return unavailable()
   return { ok: true, rows: result.data.map(mapConversation), nextCursor: result.meta?.next_cursor ?? null, channels: Array.isArray(result.meta?.channels) ? result.meta.channels : [] }
@@ -71,11 +76,11 @@ export async function findPatientConversation(patientId, branchId, patientCode) 
  * Messages NEWER than `afterId`, oldest first. The one sync read used both after a realtime signal and by the polling fallback, so the
  * two paths always show the same server projection.
  */
-export async function loadNewerMessages(conversationId, afterId) {
-  if (!afterId) return loadMessages(conversationId).then(r => (r.ok ? { ok: true, rows: [...r.rows].reverse(), more: false } : r))
-  const result = await api.listConversationMessages(conversationId, { after: afterId, per_page: 100 })
+export async function loadNewerMessages(conversationId, afterId, expectedContext = null) {
+  if (!afterId) return loadMessages(conversationId,null,'',expectedContext).then(r => (r.ok ? { ok: true, rows: [...r.rows].reverse(), more: false } : r))
+  const result = await boundedMessageRead(()=>api.listConversationMessages(conversationId, { after: afterId, per_page: 100 }))
   if (!result.ok) return normalizeFailure(result)
-  if (!validRows(result.data, messageReceipt)) return unavailable()
+  if (!messageContext(result,conversationId,expectedContext) || !validRows(result.data, messageReceipt)) return {ok:false,kind:'unverified',message:'The returned messages did not confirm the selected conversation and Patient. No messages were adopted.'}
   return { ok: true, rows: result.data.map(mapMessage), more: result.meta?.more === true }
 }
 
@@ -116,11 +121,11 @@ export async function addDentist(conversationId, dentistId, beforeDispatch) {
 export function sendPresence() { return api.conversationPresence() }
 
 /** Newest-first page (the server order). `cursor` continues to OLDER messages; a failed page is an error, never a shorter history. */
-export async function loadMessages(conversationId, cursor = null, search = '') {
+export async function loadMessages(conversationId, cursor = null, search = '', expectedContext = null) {
   const q = String(search || '').trim()
-  const result = await api.listConversationMessages(conversationId, { per_page: PAGE_SIZE, ...(cursor ? { cursor } : {}), ...(q ? { q } : {}) })
+  const result = await boundedMessageRead(()=>api.listConversationMessages(conversationId, { per_page: PAGE_SIZE, ...(cursor ? { cursor } : {}), ...(q ? { q } : {}) }))
   if (!result.ok) return normalizeFailure(result)
-  if (!validRows(result.data, messageReceipt)) return unavailable()
+  if (!messageContext(result,conversationId,expectedContext) || !validRows(result.data, messageReceipt)) return {ok:false,kind:'unverified',message:'The returned messages did not confirm the selected conversation and Patient. No messages were adopted.'}
   return { ok: true, rows: result.data.map(mapMessage), nextCursor: result.meta?.next_cursor ?? null }
 }
 

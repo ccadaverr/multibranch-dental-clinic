@@ -1,10 +1,26 @@
 # Clinical integration handoff — 2026-11-16 Asia/Manila
 
-Jaztin / Developer C. **Review-ready handoff, not merge/deployment authority.** Shared source baseline `a0725e645df6f8266c2bc4bebacc9d62dd18e7c1`; Batch06 starts at `e312f1aa4274ad97836da70b81547f113a822cdf` on `feature/jaztin-qa-20261115`, `/private/tmp/dentalops-jaztin-qa-20261115`. Draft PR #9 remains unmerged. Final commit/publication is recorded in the delivery message. Joevan local `ca9074a878870400a48b6c93763f4e4cdc432675` is user-reported only: no fetch, merge or independent source/test inspection until safe publication under his hosting gate.
+Jaztin / Developer C. **Review-ready handoff, not merge/deployment authority.** Shared source baseline `a0725e645df6f8266c2bc4bebacc9d62dd18e7c1`; Batch06 starts at `e312f1aa4274ad97836da70b81547f113a822cdf` on `feature/jaztin-qa-20261115`, `/private/tmp/dentalops-jaztin-qa-20261115`. Draft PR #9 remains unmerged. Final commit/publication is recorded in the delivery message. Expected Operations input is **`1b521b886c54fa0c222c640551431f3b191fc7e0`**, `feature/joevan-qa-20261115`, user-verified clean on Joevan’s Windows repository. Its source and three clearance/recovery/readiness documents are not yet available on this Mac. This is unavailable delivery, not missing implementation; no fetch, merge, reconstruction or independent source/test acceptance was attempted. Batch07 continues from published Clinical `b5a9b8abc05883e15ee2277f156552f5e161961e`.
 
 ## Integration decision
 
-**Clinical source/contracts ready for controlled review. No-go for actual merge or a shared acceptance target yet.** First obtain Joevan's safely published SHA, actual contracts, migrations and changed-file/test inventory, inspect overlaps and agree a private schema-preservation profile. Then request/use explicit merge authorization and run a consolidated milestone at the actual resulting HEAD. No production/hosted readiness claim. The [68-row reconciliation](QA_RECONCILIATION_20261116.md) is authoritative for this phase; unresolved policy is not completed by integration.
+**Clinical source/contracts ready for controlled review. No-go for actual merge or a shared acceptance target yet.** First obtain the approved exact Operations source through an approved private delivery channel, inspect its actual contracts, migrations and changed-file/test inventory, and agree a private schema-preservation profile. GitHub publication is not a prerequisite if a complete-history private bundle is approved; its hosting-trigger gate remains separate. Then request/use explicit merge authorization and run a consolidated milestone at the actual resulting HEAD. No production/hosted readiness claim. The [68-row reconciliation](QA_RECONCILIATION_20261116.md) is authoritative for this phase; unresolved policy is not completed by integration.
+
+## Operations delivery and review checklist (prepared, not executed)
+
+1. Joevan explicitly confirms Codex B has finished and will perform no further writes before Codex A takes sole Git ownership. Clean Git status does not establish agent inactivity or transfer permission.
+2. Owner classifies the historical PostgreSQL URL and approves the exact new complete-history bundle **including `1b521b886c54fa0c222c640551431f3b191fc7e0`** and the exact private delivery method. The reported password/database template markers are not evidence of a proven live secret. Do not send a bundle until both classification/transfer gates are satisfied. This Mac has neither the bundle nor its verified checksum; none is fabricated here.
+3. On separately authorized receipt: verify checksum, bundle heads/prerequisites and complete history in an isolated review repository; verify baseline ancestry and exact expected full HEAD without overwriting either developer’s worktree. Read `SECURITY_MAIL_CAPTURE_CLEARANCE_20261116.md`, `OPERATIONS_STORAGE_RECOVERY_20261116.md` and `OPERATIONS_RELEASE_READINESS_20261116.md` from that source. Preserve accepted runtime, security, Mailpit and storage-recovery evidence; do not rerun or reopen accepted Operations work without a demonstrated discrepancy.
+4. Inspect baseline-to-Operations changed files and actual contracts before selecting merge strategy. Compare route ordering, role/resource authorization, API-client exports, User/Patient/branch IDs, shared clinical navigation, document/storage recovery, mail capture, notification ownership, configuration and migration filename/dependency/constraint overlap. Keep all four held migrations protected. No competing workforce scheduling authority or implicit clinical availability cutover.
+5. Reconcile genuinely actionable Joevan-owned remaining criteria from the authoritative 68-row document against his inspected implementation/tests. A Partial label or provisional source does not prove missing code. Preserve both developers’ functionality in shared files; do not choose one whole file during conflict resolution.
+6. Keep GitHub publication blocked for Operations until authoritative **Vercel, Render, Railway and GitHub trigger evidence** is reviewed. Previous authorization for the Clinical feature branch does not clear Operations hosting or private transfer gates.
+7. Request/use **separate explicit integration authorization** before any merge/cherry-pick/shared-baseline change. Only then build an isolated combined target and run the later consolidated acceptance milestone at its real HEAD. PR #9 remains draft/unmerged; no deploy.
+
+## Batch07 contract additions and overlap
+
+* Family `GET /me/dependents` advertises safe creation capability; `POST /me/dependents` requires the existing command-key convention. New read-only `GET /me/dependents/creation-receipt` precedes dynamic resource binding. See [Dependent creation v1](contracts/DEPENDENT_CREATION_API_V1.md). Person/Patient/link/audit/receipt are atomic; current guardian authority applies to replay. Existing preferred branch inheritance, ten-dependent limit and invitation/claim semantics remain unchanged. No Visit/admission is created.
+* Message history/search/newer reads include exact conversation/Patient/branch proof. The shared client checks that proof and existing request lifetimes before adoption. See [Message read context v1](contracts/MESSAGE_READ_CONTEXT_API_V1.md). No sending, active-Dentist switch, notification or operational archive mutation changes.
+* Shared overlaps: one Family receipt route, API-client exports, Family props in Patient Portal, narrow ConversationController read response metadata/cache headers, ServerMessages read arguments, local runner contention lane and test fixtures. Deliver compatible read metadata/backend with frontend. No new middleware, App.jsx/layout.jsx, workforce code or schema changes.
 
 ## Clinical route inventory
 
@@ -65,13 +81,15 @@ Potential overlap: appointment availability callers consume the established sche
 
 ## Changed-file inventory since collaboration baseline
 
-The following inventory is generated from Git plus the current Batch06 working changes, not from Joevan's unpublished branch. It includes test/document/runtime safeguards; no secrets/dumps/runtime screenshots are included. Final delivery records actual committed HEAD and push state.
+The following inventory is generated from Git plus the current Batch07 working changes, not from Joevan's unpublished branch. It includes test/document/runtime safeguards; no secrets/dumps/runtime screenshots are included. Final delivery records actual committed HEAD and push state.
 
 * `backend/.env.example`
 * `backend/app/Http/Controllers/BillingController.php`
 * `backend/app/Http/Controllers/BillingDocumentController.php`
+* `backend/app/Http/Controllers/ConversationController.php`
 * `backend/app/Http/Controllers/DentalChartController.php`
 * `backend/app/Http/Controllers/FollowupController.php`
+* `backend/app/Http/Controllers/GuardianController.php`
 * `backend/app/Http/Controllers/IntakeController.php`
 * `backend/app/Http/Controllers/PatientRecordController.php`
 * `backend/app/Http/Controllers/TreatmentController.php`
@@ -94,9 +112,14 @@ The following inventory is generated from Git plus the current Batch06 working c
 * `backend/tests/Feature/Charts/ChartCommandContentionTest.php`
 * `backend/tests/Feature/Charts/ChartCommandRecoveryTest.php`
 * `backend/tests/Feature/Charts/DentalChartTest.php`
+* `backend/tests/Feature/Followups/SelectedFollowupBookingTest.php`
 * `backend/tests/Feature/Followups/SelectedFollowupConcurrencyTest.php`
 * `backend/tests/Feature/Followups/SelectedFollowupRecoveryTest.php`
+* `backend/tests/Feature/Intake/DependentCreationContentionTest.php`
+* `backend/tests/Feature/Intake/DependentCreationRecoveryTest.php`
 * `backend/tests/Feature/Intake/IdVerificationAtomicityTest.php`
+* `backend/tests/Feature/Intake/IntakeTest.php`
+* `backend/tests/Feature/Messaging/MessageSearchTest.php`
 * `backend/tests/Feature/Patients/ProfileSaveContentionTest.php`
 * `backend/tests/Feature/Patients/ProfileSaveRecoveryTest.php`
 * `backend/tests/Feature/Treatments/EncounterContentionTest.php`
@@ -106,7 +129,9 @@ The following inventory is generated from Git plus the current Batch06 working c
 * `backend/tests/Feature/Visits/ArrivalRecoveryTest.php`
 * `backend/tests/Support/arrival_worker.php`
 * `backend/tests/Support/chart_worker.php`
+* `backend/tests/Support/dependent_worker.php`
 * `backend/tests/Support/encounter_worker.php`
+* `backend/tests/Support/local_message_search_fixture.php`
 * `backend/tests/Support/local_receipt_fixture.php`
 * `backend/tests/Support/local_visit_fixture.php`
 * `backend/tests/Support/profile_worker.php`
@@ -116,14 +141,17 @@ The following inventory is generated from Git plus the current Batch06 working c
 * `docs/JAZTIN_CLINICAL_BATCH04_20261115.md`
 * `docs/JAZTIN_CLINICAL_BATCH05_20261116.md`
 * `docs/JAZTIN_CLINICAL_BATCH06_20261116.md`
+* `docs/JAZTIN_CLINICAL_BATCH07_20261116.md`
 * `docs/JAZTIN_CLINICAL_SPRINT_20261115.md`
 * `docs/QA_RECONCILIATION_20261116.md`
 * `docs/contracts/ARRIVAL_RECOVERY_API_V1.md`
 * `docs/contracts/CHART_RECORDING_API_V1.md`
 * `docs/contracts/CHART_RECORDING_API_V2.md`
 * `docs/contracts/CLINICAL_HISTORY_READ_API_V1.md`
+* `docs/contracts/DEPENDENT_CREATION_API_V1.md`
 * `docs/contracts/ENCOUNTER_RECOVERY_API_V1.md`
 * `docs/contracts/FOLLOWUP_BOOKING_API_V1.md`
+* `docs/contracts/MESSAGE_READ_CONTEXT_API_V1.md`
 * `docs/contracts/PATIENT_PROFILE_SAVE_API_V1.md`
 * `docs/contracts/PATIENT_RECEIPT_NAVIGATION_API_V1.md`
 * `docs/defense/FEATURE_ACCEPTANCE_MATRIX.md`
@@ -138,6 +166,8 @@ The following inventory is generated from Git plus the current Batch06 working c
 * `src/components/odontogram/ToothTimeline.jsx`
 * `src/encounter-readback.js`
 * `src/encounter.js`
+* `src/message-read.js`
+* `src/messaging-api.js`
 * `src/pages/ArrivalRecovery.jsx`
 * `src/pages/Clinical.jsx`
 * `src/pages/ClinicalHistory.jsx`
@@ -149,15 +179,18 @@ The following inventory is generated from Git plus the current Batch06 working c
 * `src/pages/PatientFlow.jsx`
 * `src/pages/Scheduling.jsx`
 * `src/pages/ServerFollowups.jsx`
+* `src/pages/ServerMessages.jsx`
 * `src/patient-profile-save.js`
 * `src/patient-records-api.js`
 * `src/patient/Portal.jsx`
 * `src/patient/archive-readback.js`
 * `src/patient/booking-flow.js`
+* `src/patient/dependent-command.js`
 * `src/patient/invoice-readback.js`
 * `src/patient/pages/Archives.jsx`
 * `src/patient/pages/Billing.jsx`
 * `src/patient/pages/Book.jsx`
+* `src/patient/pages/Family.jsx`
 * `src/patient/pages/Teeth.jsx`
 * `src/patient/pages/Visits.jsx`
 * `src/queue-api.js`
@@ -171,6 +204,7 @@ The following inventory is generated from Git plus the current Batch06 working c
 * `tests/chart-command.test.js`
 * `tests/clinical-history.test.js`
 * `tests/den-ui-02.browser.mjs`
+* `tests/dependent-command.test.js`
 * `tests/encounter-recovery.test.js`
 * `tests/fixtures/aud10-clinical-ui.html`
 * `tests/fixtures/den-ui-02.jsx`
@@ -180,13 +214,20 @@ The following inventory is generated from Git plus the current Batch06 working c
 * `tests/local-chart.browser.mjs`
 * `tests/local-clinical-history.browser.mjs`
 * `tests/local-encounter.browser.mjs`
+* `tests/local-family-acceptance.mjs`
 * `tests/local-followup.browser.mjs`
+* `tests/local-message-search-acceptance.mjs`
 * `tests/local-patient-booking.browser.mjs`
 * `tests/local-patient-profile.browser.mjs`
 * `tests/local-receipt-navigation.browser.mjs`
+* `tests/m17-message-search.test.js`
+* `tests/m17-messaging.test.js`
+* `tests/m17-realtime-messaging.test.js`
 * `tests/m23-archives.test.js`
+* `tests/message-read-context.test.js`
 * `tests/patient-booking-recovery.test.js`
 * `tests/patient-invoice-readback.test.js`
+* `tests/patient-portal.test.js`
 * `tests/patient-profile-save.test.js`
 * `tests/patient-records-api.test.js`
 * `tests/support/den-ui-02-fixture.js`
