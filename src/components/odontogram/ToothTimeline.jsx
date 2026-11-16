@@ -89,7 +89,7 @@ export function ToothTimeline({
         onDirtyChange?.(false)
       } else {setUncertain(!!res?.uncertain);setNeedsReview(!!res?.needsReview);setErr(res?.message || 'Failed to record entry.')}
     } catch {
-      if (ownsEditor()) {setUncertain(true);setErr('The finding could not be confirmed. Retry the same finding or review saved history.')}
+      if (ownsEditor()) {setUncertain(true);setErr('The finding could not be confirmed. Check the chart before retrying with different details. Retry the same finding to recover its original result, or review saved history.')}
     } finally {
       saving.current = false
       if (ownsEditor()) setBusy(false)

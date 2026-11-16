@@ -133,9 +133,13 @@ def main():
     parser.add_argument('--target', required=True, help='Private manifest for a newly provisioned, owned local cluster')
     parser.add_argument('--profile', choices=['demo', 'test'], default='demo')
     parser.add_argument('--filter', help='Optional PHPUnit test-name filter; explicit reviewed files remain required')
+    parser.add_argument('--test-mail-profile', choices=['target', 'suite'], default='target',
+                        help='For explicit test action only: target keeps queued capture; suite uses PHPUnit array/sync defaults')
     parser.add_argument('action', choices=['status', 'start', 'stop', 'backup', 'migrate', 'seed', 'seed-demo', 'visit-fixture', 'test', 'clone-test', 'concurrency', 'billing-concurrency', 'prescription-concurrency', 'arrival-concurrency', 'encounter-concurrency', 'profile-concurrency', 'chart-concurrency', 'dependent-concurrency', 'verify-schema', 'verify-guard', 'serve', 'ui', 'mailbox', 'worker', 'scheduler'])
     parser.add_argument('tests', nargs='*')
     args = parser.parse_args()
+    if args.test_mail_profile != 'target' and (args.action != 'test' or args.profile != 'test'):
+        raise ValueError('Suite mail defaults are available only for explicit test action and test profile.')
     c, runtime = target(args.target)
     database = c[args.profile + '_database']
     if args.action in ['start', 'stop']:
@@ -245,6 +249,10 @@ def main():
             if (('migrate:fresh' in file.read_text() or 'use DatabaseMigrations' in file.read_text()) and args.action != 'verify-guard') or ('Concurren' in file.name and args.action != 'concurrency'):
                 raise ValueError('This test requires a separately reviewed concurrency/reset runner.')
         test_env = environment(c, runtime, 'test')
+        if args.test_mail_profile == 'suite':
+            # phpunit.xml declares these defaults, but inherited target env wins over non-forced XML values.
+            # Opt in explicitly; demo/capture/worker/concurrency behavior and all database guards stay unchanged.
+            test_env.update(MAIL_MAILER='array', QUEUE_CONNECTION='sync')
         if args.action == 'verify-schema':
             test_env['DENTALOPS_SCHEMA_VERIFICATION'] = '1'
         if args.action == 'concurrency':
