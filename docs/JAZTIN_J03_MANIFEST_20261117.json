@@ -1,0 +1,112 @@
+{
+  "base_head": "53b0e2e1cea0a1c4db1c498eb80b8fb3e81d77da",
+  "implementation_head": "ed029a87362b6ef2f48069d7c79a079d190aa34e",
+  "published_remote_checkpoint": "53b0e2e1cea0a1c4db1c498eb80b8fb3e81d77da",
+  "j03_pushed": false,
+  "scope": "Clinical-branch candidates; authoritative ledger and Windows acceptance unchanged",
+  "excluded_self": "docs/JAZTIN_J03_MANIFEST_20261117.json",
+  "files": [
+    {
+      "path": "backend/app/Http/Controllers/DocumentController.php",
+      "bytes": 14917,
+      "sha256": "4a11edadcd3474de5dddbd298f2d16c714fa6205dcfd5d2514dd7bc902ac78f9",
+      "lf_sha256": "4a11edadcd3474de5dddbd298f2d16c714fa6205dcfd5d2514dd7bc902ac78f9"
+    },
+    {
+      "path": "backend/app/Services/Document/DocumentStorageService.php",
+      "bytes": 17165,
+      "sha256": "f6597d45445d801fb758ebb3bb2977bc8ea2a5e3a7d8b6b3ad0a028309ca58b9",
+      "lf_sha256": "f6597d45445d801fb758ebb3bb2977bc8ea2a5e3a7d8b6b3ad0a028309ca58b9"
+    },
+    {
+      "path": "backend/config/cors.php",
+      "bytes": 1303,
+      "sha256": "56936f6ead0943ae67e9a1ede185da33675a990e7d17cc673d9cad11abe0d925",
+      "lf_sha256": "56936f6ead0943ae67e9a1ede185da33675a990e7d17cc673d9cad11abe0d925"
+    },
+    {
+      "path": "backend/tests/Feature/Documents/PatientDocumentLibraryTest.php",
+      "bytes": 5381,
+      "sha256": "c7e4f92ceec1fc3d64445336b0100f8b675fbaa28f745954ae161eac5f06107f",
+      "lf_sha256": "c7e4f92ceec1fc3d64445336b0100f8b675fbaa28f745954ae161eac5f06107f"
+    },
+    {
+      "path": "docs/JAZTIN_J03_SPRINT_20261117.md",
+      "bytes": 19883,
+      "sha256": "5e4a73fd20603e32eaedab43edfc8a5de9c4a451e754577615714d17553dc6ab",
+      "lf_sha256": "5e4a73fd20603e32eaedab43edfc8a5de9c4a451e754577615714d17553dc6ab"
+    },
+    {
+      "path": "src/api-client.js",
+      "bytes": 56064,
+      "sha256": "4c31bf84c7a4c133882bbfb707b7862c74adfefc55b1bdbad1801308d288f553",
+      "lf_sha256": "4c31bf84c7a4c133882bbfb707b7862c74adfefc55b1bdbad1801308d288f553"
+    },
+    {
+      "path": "src/documents-api.js",
+      "bytes": 6556,
+      "sha256": "0df75811c6ae62fdca036cde244dcfd0f8cd2965408b7a1f79faa9b84aa655ff",
+      "lf_sha256": "0df75811c6ae62fdca036cde244dcfd0f8cd2965408b7a1f79faa9b84aa655ff"
+    },
+    {
+      "path": "src/pages/PatientMe.jsx",
+      "bytes": 17479,
+      "sha256": "cc5c7b48965ffff8b3c401f87e8baec01505b7e535a6f7c23571a16818e4cdf7",
+      "lf_sha256": "cc5c7b48965ffff8b3c401f87e8baec01505b7e535a6f7c23571a16818e4cdf7"
+    },
+    {
+      "path": "src/patient/care-experience.css",
+      "bytes": 7867,
+      "sha256": "85df2f1b7bdc828b54b9bf513da04fd9d45da8f16ae747f146b49d4e98b5cbb1",
+      "lf_sha256": "85df2f1b7bdc828b54b9bf513da04fd9d45da8f16ae747f146b49d4e98b5cbb1"
+    },
+    {
+      "path": "src/patient/document-experience.css",
+      "bytes": 3112,
+      "sha256": "490e1ec437ce6379852d3a9fa8c3f3f3fdcc8260e405b0226a6e7fb1e2397808",
+      "lf_sha256": "490e1ec437ce6379852d3a9fa8c3f3f3fdcc8260e405b0226a6e7fb1e2397808"
+    },
+    {
+      "path": "src/patient/document-workflow.js",
+      "bytes": 3974,
+      "sha256": "62b4c3ebfa682d46ffef62f880622278f5ccf8bcde55c16463aaabfb01bda143",
+      "lf_sha256": "62b4c3ebfa682d46ffef62f880622278f5ccf8bcde55c16463aaabfb01bda143"
+    },
+    {
+      "path": "src/patient/pages/Archives.jsx",
+      "bytes": 14020,
+      "sha256": "41a7efce860e6662839b33762b3d1f87166d220c0d371e339bb048661997b572",
+      "lf_sha256": "41a7efce860e6662839b33762b3d1f87166d220c0d371e339bb048661997b572"
+    },
+    {
+      "path": "tests/j03-document-download.test.js",
+      "bytes": 2168,
+      "sha256": "c8581d6c91beb3e934bbc7c3ee83f2afb275c4f0e224e0a688ed1f5386cd1a03",
+      "lf_sha256": "c8581d6c91beb3e934bbc7c3ee83f2afb275c4f0e224e0a688ed1f5386cd1a03"
+    },
+    {
+      "path": "tests/j03-document-workflow.test.js",
+      "bytes": 6032,
+      "sha256": "c8edc642549b97112144bc17929f5464aecc00319d8dc73b32f64411af2a70ac",
+      "lf_sha256": "c8edc642549b97112144bc17929f5464aecc00319d8dc73b32f64411af2a70ac"
+    },
+    {
+      "path": "tests/j03-patient-records.browser.mjs",
+      "bytes": 15185,
+      "sha256": "f3ad92f8b12f5559581a765a49397841439b8af00787a3d7029996fe8ba3c6ce",
+      "lf_sha256": "f3ad92f8b12f5559581a765a49397841439b8af00787a3d7029996fe8ba3c6ce"
+    },
+    {
+      "path": "tests/j03-records-layout.browser.mjs",
+      "bytes": 6181,
+      "sha256": "1e1781e229c03a8861bee3338a583ffde7303daf6801818016cdf7ce12219b04",
+      "lf_sha256": "1e1781e229c03a8861bee3338a583ffde7303daf6801818016cdf7ce12219b04"
+    },
+    {
+      "path": "tests/m14-documents.test.js",
+      "bytes": 4867,
+      "sha256": "72057ea8962da0152b967475d57c29a99f57d9f8d22039918d51e81867d39a18",
+      "lf_sha256": "72057ea8962da0152b967475d57c29a99f57d9f8d22039918d51e81867d39a18"
+    }
+  ]
+}
