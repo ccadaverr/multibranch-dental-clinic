@@ -1,0 +1,134 @@
+{
+  "synthetic_demo_readback": {
+    "appointments": 2,
+    "visits": 2,
+    "completed_treatments": 2,
+    "paid_invoices": 2,
+    "payments": 2,
+    "receipts": 2,
+    "grant_schema": false,
+    "applied_migrations": 87
+  },
+  "contention": [
+    {
+      "lane": "branch",
+      "target": "/private/contention-8b6e089d/target.json",
+      "exit": 0,
+      "log": "/private/contention-8b6e089d/logs/integration-branch.log"
+    },
+    {
+      "lane": "inquiry",
+      "target": "/private/contention-d137453f/target.json",
+      "exit": 0,
+      "log": "/private/contention-d137453f/logs/integration-inquiry.log"
+    },
+    {
+      "lane": "roster",
+      "target": "/private/contention-22a29212/target.json",
+      "exit": 0,
+      "log": "/private/contention-22a29212/logs/integration-roster.log"
+    },
+    {
+      "lane": "leave",
+      "target": "/private/contention-64051a86/target.json",
+      "exit": 0,
+      "log": "/private/contention-64051a86/logs/integration-leave.log"
+    },
+    {
+      "lane": "arrival",
+      "target": "/private/contention-518f2088/target.json",
+      "exit": 0,
+      "log": "/private/contention-518f2088/logs/integration-arrival.log"
+    },
+    {
+      "lane": "encounter",
+      "target": "/private/contention-7df63e42/target.json",
+      "exit": 0,
+      "log": "/private/contention-7df63e42/logs/integration-encounter.log"
+    },
+    {
+      "lane": "chart",
+      "target": "/private/contention-3e1518b9/target.json",
+      "exit": 0,
+      "log": "/private/contention-3e1518b9/logs/integration-chart.log"
+    },
+    {
+      "lane": "prescription",
+      "target": "/private/contention-a4cbf538/target.json",
+      "exit": 0,
+      "log": "/private/contention-a4cbf538/logs/integration-prescription.log"
+    },
+    {
+      "lane": "cash",
+      "target": "/private/contention-b6fa1500/target.json",
+      "exit": 0,
+      "log": "/private/contention-b6fa1500/logs/integration-cash.log"
+    }
+  ],
+  "runtime_lab": {
+    "source": "/private/integration/target.json",
+    "lab": "/private/contention-3661c92e/target.json",
+    "restore": "/private/contention-6ca192b5/target.json",
+    "schema_migrations_executed": 0,
+    "worker_failure_retry": true,
+    "interrupted_before_transport_ack": true,
+    "fresh_claim_not_stolen": true,
+    "stale_claim_recovered": true,
+    "postgresql_processors_observed_waiting_on_lock": 2,
+    "terminal_duplicate_suppressed": true,
+    "local_captures": 1,
+    "external_delivery_confirmed": false,
+    "restored_access_and_key_verified": true,
+    "scheduler_scope": "Source mail:process-due frequency only; clinical automations not executed",
+    "limitation": "At-least-once transport; a crash after SMTP acceptance can legitimately duplicate delivery."
+  },
+  "final_regular_backend": {
+    "tests": 1260,
+    "passing": 1219,
+    "failures": 37,
+    "errors": 1,
+    "skips": 3,
+    "assertions": 14435,
+    "failed_or_errored_tests": [
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_submitted_feedback_is_immutable_and_nothing_can_erase_it",
+      "Tests\\Feature\\Assistant\\AssistantTest::test_only_a_signed_in_patient_may_use_the_assistant",
+      "Tests\\Feature\\Assistant\\AssistantTest::test_tools_return_only_the_signed_in_patients_own_records_whatever_the_model_asks",
+      "Tests\\Feature\\Assistant\\AssistantTest::test_actions_are_buttons_only_and_nothing_is_booked",
+      "Tests\\Feature\\Assistant\\AssistantTest::test_an_invented_price_or_an_action_claim_is_never_kept",
+      "Tests\\Feature\\Assistant\\AssistantTest::test_a_provider_failure_falls_back_to_knowledge_mode_without_retrying",
+      "Tests\\Feature\\Assistant\\AssistantTest::test_the_key_goes_only_to_the_official_origin_and_no_question_answer_or_key_is_logged_or_stored",
+      "Tests\\Feature\\Assistant\\AssistantTest::test_the_stream_endpoint_sends_text_as_it_is_written_then_the_final_result",
+      "Tests\\Feature\\Assistant\\GeminiAuthorizationTest::test_existing_account_throttle_prevents_upstream_calls",
+      "Tests\\Feature\\Audit\\AuditHardeningTest::test_the_database_refuses_to_update_or_delete_an_audit_row_by_any_path",
+      "Tests\\Feature\\Automation\\AutomationControlTest::test_unauthenticated_cannot_access_automation_endpoints",
+      "Tests\\Feature\\Automation\\AutomationControlTest::test_staff_and_dentist_and_patient_are_forbidden_from_automation",
+      "Tests\\Feature\\Automation\\AutomationControlTest::test_owner_can_view_automation_rules_and_snapshot",
+      "Tests\\Feature\\Automation\\AutomationControlTest::test_owner_can_trigger_manual_evaluation_and_audit_is_created",
+      "Tests\\Feature\\Automation\\AutomationControlTest::test_csv_export_neutralizes_formula_injection",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_the_api_marks_every_action_row_as_evaluation_only_and_keeps_historical_text_unchanged",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_refuses_clinical_flags_and_every_foreign_field",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_validates_each_rule_observation",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_the_manual_message_says_evaluated_not_executed_and_the_event_stores_no_email",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_only_the_owner_may_dispatch_and_authorization_precedes_validation",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_is_rate_limited",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_audit_events_carry_no_event_body_and_the_csv_marks_evaluation_only",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_legacy_descriptions_are_qualified_inside_the_csv_cell_and_in_the_exception_projection",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_repeated_manual_dispatches_are_independent_evaluations_with_no_idempotency_contract",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_refuses_unexpected_top_level_fields_too",
+      "Tests\\Feature\\Automations\\InterviewRoundTwoTest::test_the_5_10_and_15_minute_late_steps",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_the_feature_is_patient_only_and_owner_staff_dentist_and_guests_are_all_refused_everywhere",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_owner_can_review_feedback_with_filters",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_a_patient_submits_free_text_about_their_own_completed_visit_and_the_record_is_minimal_and_server_derived",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_only_the_patients_own_completed_visits_are_eligible_and_every_other_case_is_one_indistinguishable_refusal",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_the_text_is_bounded_free_data_and_every_authority_or_policy_field_is_refused",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_submission_is_idempotent_a_new_key_is_a_separate_submission_and_no_uniqueness_is_invented",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_a_patient_reads_only_their_own_feedback_newest_first_with_a_cursor_that_reveals_nothing_about_others",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_m26_is_a_foundation_only_no_rating_category_status_reply_publication_marketing_or_other_module_side_effect",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_submission_is_rate_limited_per_account_and_explains_itself",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_patient_can_submit_1_to_5_star_rating_and_low_ratings_auto_create_followup_task",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_owner_can_review_patient_feedback_with_branch_and_dentist_filters",
+      "Tests\\Feature\\Queue\\QueueTest::test_backfill_uses_server_visits_only_is_idempotent_and_cannot_erase_history"
+    ],
+    "log": "/private/integration/logs/backend-final-reviewed.log"
+  }
+}
