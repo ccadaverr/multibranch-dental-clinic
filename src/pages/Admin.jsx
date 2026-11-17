@@ -106,6 +106,8 @@ function BranchConfiguration({ store }) {
   const branch=state.branches.find(b=>b.id===selected)
   const [form,setForm]=useState(branch||{})
   const [configTab,setConfigTab]=useState('details')
+  const [servicePage,setServicePage]=useState(1)
+  React.useEffect(()=>setServicePage(1),[selected])
   const owner=useRequestOwner(JSON.stringify([schedulingActorKey(store),selected]),store.getAuthGeneration)
   const [saveError,setSaveError]=useState('')
   const allowed=!!store.session&&Array.isArray(state.users)&&Array.isArray(state.persons)&&canAccessPage(state,store.session,'branches')
@@ -170,6 +172,10 @@ function BranchConfiguration({ store }) {
     finally{owner.finish(ticket)}
   }
   const activeServicesCount=state.services.filter(s=>s.status==='Active'&&serviceActive(s.id)).length
+  const availableServices=state.services.filter(s=>s.status==='Active')
+  const servicePages=Math.max(1,Math.ceil(availableServices.length/4))
+  const currentServicePage=Math.min(servicePage,servicePages)
+  const visibleServices=availableServices.slice((currentServicePage-1)*4,currentServicePage*4)
   const configTabs=[
     {key:'details',label:'Details & Contact'},
     {key:'hours',label:'Opening Hours'},
@@ -313,7 +319,13 @@ function BranchConfiguration({ store }) {
         </div>}
         {configTab==='services'&&<div style={{marginTop:'12px'}}>
           <label className="field-label">Available services <small>Branch services • scheduling reads this catalog directly</small></label>
-          <div className="branch-services-grid">{state.services.filter(s=>s.status==='Active').map(service=>{const active=serviceActive(service.id);return <label className={`branch-service-item ${active?'is-active':''}`} key={service.id}><input type="checkbox" checked={active} onChange={()=>toggleService(service.id)}/><div><b>{service.name}</b><small style={{display:'block',color:'var(--muted)'}}>{service.category} • {service.duration} min</small></div></label>})}</div>
+          <div className="branch-services-grid">{visibleServices.map(service=>{const active=serviceActive(service.id);return <label className={`branch-service-item ${active?'is-active':''}`} key={service.id}><input type="checkbox" checked={active} disabled={owner.busy} onChange={()=>toggleService(service.id)}/><div><b>{service.name}</b><small style={{display:'block',color:'var(--muted)'}}>{service.category} • {service.duration} min</small></div></label>})}</div>
+          {!availableServices.length&&<p>No active services are available in the current catalog.</p>}
+          {servicePages>1&&<div className="row-actions top-gap" role="group" aria-label="Service pages">
+            <Button variant="soft" disabled={currentServicePage===1||owner.busy} onClick={()=>setServicePage(currentServicePage-1)}>Previous services</Button>
+            <span role="status" aria-live="polite">Page {currentServicePage} of {servicePages} · {availableServices.length} services</span>
+            <Button variant="soft" disabled={currentServicePage===servicePages||owner.busy} onClick={()=>setServicePage(currentServicePage+1)}>Next services</Button>
+          </div>}
         </div>}
         {configTab !== 'details' && <p id="branch-coordinate-status" role={coordinateError ? 'alert' : 'status'}>{coordinateError || (locationChanged ? 'Unsaved location changes. Publish Branch Changes to save.' : 'Location matches the saved branch record.')}</p>}
         <div style={{marginTop:'16px',display:'flex',justifyContent:'flex-end'}}>
