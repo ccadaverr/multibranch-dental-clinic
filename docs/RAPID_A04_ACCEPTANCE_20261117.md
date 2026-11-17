@@ -1,0 +1,50 @@
+# Rapid delivery A04 — Operations integration checkpoint
+
+Verified November 17, 2026, Asia/Manila. Integration starting HEAD `6fdb5cfabdfc49595e02012d06e6ee495dcba4b4`, clean worktree at `../dentalops-integration-20261117`. The supplied workspace remained on Operations `9409b59e769de29ec0e58ab238b11d40fee29b45`; it was not switched or edited. No source publication, main merge, push, deployment or history rewrite.
+
+## Delivered
+
+- **GEN-10 integrated and accepted:** `d6a2fba6efd8f148611c6b6209760c43272981e0`. B's patch SHA-256 `36322733886011b92a9ad5232a34bf5c11b89b4cb43a0d1118bffee2472d496d` matched the manifest. Actual base `47c90ddb2c7ee219894a6d2bd6824b2cc022da27` was verified; the later starting HEAD changed documentation outside the patch. All eight applied Git blobs matched the supplied source, accounting for Windows checkout line endings. Indexed applicability/whitespace checks passed without conflict. No patch side was discarded and no migration was added.
+- Patient notifications now have Manila grouping, stable older-page loading, Inbox/Archived views, receipt-confirmed individual archive and exact-command retry. Unread totals stay authoritative while older history remains open. Read, read-all and archive recheck the locked actor's active account, role and auth version. Recipient isolation, indistinguishable foreign/missing404, immutable archive timestamps and independent read evidence passed. Existing Messages/grant authority is unchanged.
+- **Owner/Staff workforce polish:** `0c341ccaab387aab6e7ea6c1210c6400822e0f8e`. Published duty and draft review have separate scoped surfaces; concise Save → Approve → Publish guidance, persisted status badges, responsive fields and mobile controls clarify the task. Unchanged saved versions cannot be submitted again as new drafts. Explicit approval/publication and exact replay remain. No shared/global CSS or Clinical presentation changed. Applied Hick/Jakob principles to the action sequence, Fitts to mobile controls, Gestalt to duty/review grouping and Zeigarnik to unsaved-state feedback; no completion is inferred from a local draft.
+- Fixed the **committed contention harness**: the old broad invocation left its first scenario's records in the fixture required empty by the second. `operations-contention-suite.py` verifies an empty archive-only source, gives each scenario a fresh clone, and backs up/stops it in `finally`. It preserves failed history and never cleans/reset data. Both scenarios passed independently. README has the reproducible command.
+- Corrected the stale audit regression to require all six currently approved audit/PDF identity CORS headers, including browser exposure. Production CORS is unchanged. The QA validator now reads UTF-8 explicitly on Windows and checks the integration JSON's original68 wording/owners, separate acceptance states and balanced totals.
+- The runtime runbook now explicitly restores the Docker loopback adapter and exact Vite API/origin after a container restart. A missing adapter and a different frontend port must not be hidden manual fixes.
+
+## Executed checks
+
+| Check | Result |
+| --- | --- |
+| Notification frontend |31/31 passed |
+| Notification, role, branch, Messaging PostgreSQL |61 tests /866 assertions passed |
+| Notification browser presentation |24/24 role/width combinations: Patient/Staff/Dentist/Owner ×375/390/430/768/1024/1440; Los Angeles browser zone, Manila date groups,120 records over three pages, archive loss/retry, hover/focus/Escape |
+| History recovery browser |390/1440 passed |
+| Actual notification persistence |All four real login/cookie sessions at390: committed archive response dropped, exact retry, badge decrement, unread retained in Archived, stable replay timestamp, reload/readback, foreign/missing refusal, logout401 |
+| Workforce |27 backend /300 assertions;16 frontend tests passed. Real Staff request → Owner review → separate publication → new Staff session, exceptions, effective-date boundaries, history, conflict recovery, stale-duty response refusal and six widths passed. Owner/Staff screenshots inspected at390/1440; twelve width captures retained. OWN-11 remains an existing integrated pass, not a new promotion. |
+| Consolidated reviewed backend |**1292 tests /14896 assertions:1262 pass,26 failures,1 error,3 skips.** Exact27 failing/erroring IDs match S03; no new failed case. Same132 regular files plus S01/S03 additions and nine AuditQuery cases; one new GEN-10 authorization test. |
+| Pure backend unit |252 tests /1193 assertions passed;30 existing PHPUnit notices |
+| Full frontend after UI changes |2000 passed /8 skipped /0 failures,2008 total |
+| Python |49 passed; existing negative-guard ResourceWarnings |
+| Smoke/build |Passed; existing React list-key and Vite >500kB warnings retained |
+| Whitespace/credentials |Working/staged diff checks; staged database-credential URL check and bounded private-key/AWS/PayMongo/APP_KEY scans passed. No actual env file staged. These checks do not certify all history or every possible secret type. |
+| Predefense after full restart |**0 failures /4 warnings** on the synthetic mail-only target |
+
+The initial expanded run was **1331 tests /15167 assertions /36 failures /5 errors /3 skips**. Its log is retained. Four previously separated migration/backfill cases were refused by restricted PostgreSQL privileges; they were not rerun with elevated rights. Six GEN-07 persistence failures require the intentionally absent proposal. Three local-capture failures were caused by the receiver not being started for that test target; the corrected run used its own explicit loopback receiver. One obsolete CORS assertion was corrected as described above. The final reviewed inventory is explicit and retained; no inherited Feedback/retired-route case was excluded or weakened. Fifteen retired automation endpoint failures and eleven conflicting Feedback failures plus one Feedback error remain unresolved; unsafe routes/authority were not restored.
+
+## Demonstration and recovery
+
+Owned container `dentalops-integration-20261117`; retained synthetic target `/private/contention-50cf2b13/target.json`, PostgreSQL43803, approved87-entry profile. Actual worker processing proved pending intent/job → one local SMTP capture → persisted `logged_only`, one attempt, no delivery confirmation. Same-key repeat suppressed duplicates. A deliberately stopped worker failed health; worker/scheduler restart recovered. Full supervisor/API/worker/scheduler/cluster stop and restart then preserved all four newly archived recipient records, verified through fresh real login/session reloads. Nothing was reseeded or repaired by hand.
+
+Final demo is **running** at `http://127.0.0.1:5198`, API loopback `http://127.0.0.1:8124`. The adapter and Vite are separately owned processes; see [explicit Windows restart/stop instructions](SYNTHETIC_RUNTIME_RUNBOOK.md#windows-resume-after-docker-has-stopped). Generated credentials remain in the private target directory; no password/token/cookie is exported. Only `mail:process-due` is scheduled. No claim of real inbox/provider delivery, payment-provider execution, or clinical/financial automation acceptance. The four warnings remain external checks, missing Guiguinto email, nine draft Assistant answers and the restricted mail-only schedule.
+
+Original and synthetic ledgers/hashes were reverified against `STABILIZATION_S01_SCHEMA_20261117.json`:87 selected/applied entries, all four holds unapplied, no conversation Dentist-grant table and no GEN-07 proposal columns. The protected original retained19 jobs; no historical backlog was drained. Fresh archive-only contention source/clones use the established84 profile, separately from integrated87; all their evidence is retained and their clusters stopped. No clinical identity/history, synthetic Cash settlement or Served = treatment START contract changed.
+
+Private evidence: `../dentalops-a04-evidence-20261117` (`backend-reviewed.log`, `backend-result.json`, initial `backend-consolidated.log`, `frontend-final.log`, `unit.log`, `python.log`, `notifications/results.json`, `notifications-browser.log`, `workforce-browser-final.log`, `workforce/*.png`, `contention-suite.log`, `runtime-acceptance.log`, `restart-readback.log`, `predefense-restarted.log`, `schema-final.json`). Focused notification stdout and24-width matrix results were also observed directly in the execution transcript; committed harnesses reproduce them.
+
+## Original QA and source gate
+
+Only **GEN-10** advances to locally Complete and integrated Pass: **26 Complete /31 Partial /11 Blocked;11 integrated Pass /57 Pending;68 total**. Original criterion/task wording and owners match the starting ledger. UI acceptance, actual persisted acceptance and provider acceptance remain distinct. Historical module M19 Notification Management / runtime notification M18 has an integrated tested notification core; external delivery remains qualified. M3 workforce retains its existing implemented bounded core; these UI changes do not resolve unapproved leave/coverage policy.
+
+Jaztin's `feature/jaztin-fullstack-qa-20261117`, reported `877bf180bea9ec4e38e3173f9ab374f11de40895`, is **not received**; that commit object is absent locally. No remote branch publication/fetch/integration was attempted. After owner-authorized publication: verify the exact remote SHA, obtain/review the three-commit range and its actual base, make a recoverable local candidate, inspect overlap with notification Patient shell changes, then integrate and rerun search>200/pagination reset/request-owned retry/Patient-dependent identity/protected PDF/clinical historical authorization regressions. Do not reconstruct it from the report or claim the SHA verified remotely.
+
+Next valuable batch: controlled receipt of that exact Clinical source, then original Staff duty/operational reporting criteria with complete persisted/browser evidence. Preserve Feedback-policy and grant/GEN-07 schema decisions. Remaining original QAs are not promoted by suite totals or visual improvements.

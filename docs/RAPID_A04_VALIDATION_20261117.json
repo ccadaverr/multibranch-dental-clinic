@@ -1,0 +1,333 @@
+{
+  "starting_head": "6fdb5cfabdfc49595e02012d06e6ee495dcba4b4",
+  "notification_commit": "d6a2fba6efd8f148611c6b6209760c43272981e0",
+  "workforce_commit": "0c341ccaab387aab6e7ea6c1210c6400822e0f8e",
+  "patch_sha256": "36322733886011b92a9ad5232a34bf5c11b89b4cb43a0d1118bffee2472d496d",
+  "backend": {
+    "tests": 1292,
+    "assertions": 14896,
+    "passing": 1262,
+    "failures": 26,
+    "errors": 1,
+    "skipped": 3,
+    "new_failure_identities": [],
+    "inherited_failure_and_error_identities": [
+      "Tests\\Feature\\Automation\\AutomationControlTest::test_csv_export_neutralizes_formula_injection",
+      "Tests\\Feature\\Automation\\AutomationControlTest::test_owner_can_trigger_manual_evaluation_and_audit_is_created",
+      "Tests\\Feature\\Automation\\AutomationControlTest::test_owner_can_view_automation_rules_and_snapshot",
+      "Tests\\Feature\\Automation\\AutomationControlTest::test_staff_and_dentist_and_patient_are_forbidden_from_automation",
+      "Tests\\Feature\\Automation\\AutomationControlTest::test_unauthenticated_cannot_access_automation_endpoints",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_audit_events_carry_no_event_body_and_the_csv_marks_evaluation_only",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_legacy_descriptions_are_qualified_inside_the_csv_cell_and_in_the_exception_projection",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_is_rate_limited",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_refuses_clinical_flags_and_every_foreign_field",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_refuses_unexpected_top_level_fields_too",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_validates_each_rule_observation",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_only_the_owner_may_dispatch_and_authorization_precedes_validation",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_repeated_manual_dispatches_are_independent_evaluations_with_no_idempotency_contract",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_the_api_marks_every_action_row_as_evaluation_only_and_keeps_historical_text_unchanged",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_the_manual_message_says_evaluated_not_executed_and_the_event_stores_no_email",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_a_patient_reads_only_their_own_feedback_newest_first_with_a_cursor_that_reveals_nothing_about_others",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_a_patient_submits_free_text_about_their_own_completed_visit_and_the_record_is_minimal_and_server_derived",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_m26_is_a_foundation_only_no_rating_category_status_reply_publication_marketing_or_other_module_side_effect",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_only_the_patients_own_completed_visits_are_eligible_and_every_other_case_is_one_indistinguishable_refusal",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_owner_can_review_feedback_with_filters",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_owner_can_review_patient_feedback_with_branch_and_dentist_filters",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_patient_can_submit_1_to_5_star_rating_and_low_ratings_auto_create_followup_task",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_submission_is_idempotent_a_new_key_is_a_separate_submission_and_no_uniqueness_is_invented",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_submission_is_rate_limited_per_account_and_explains_itself",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_submitted_feedback_is_immutable_and_nothing_can_erase_it",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_the_feature_is_patient_only_and_owner_staff_dentist_and_guests_are_all_refused_everywhere",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_the_text_is_bounded_free_data_and_every_authority_or_policy_field_is_refused"
+    ],
+    "extra_vs_s03": "one GEN-10 authorization test and nine AuditQuery tests"
+  },
+  "frontend": {
+    "passed": 2000,
+    "skipped": 8,
+    "failed": 0
+  },
+  "pure_unit": {
+    "tests": 252,
+    "assertions": 1193,
+    "passed": true,
+    "notices": 30
+  },
+  "python": {
+    "passed": 49,
+    "failed": 0
+  },
+  "focused_notifications": {
+    "frontend_tests": 31,
+    "backend_tests": 61,
+    "backend_assertions": 866,
+    "passed": true
+  },
+  "notification_presentation": {
+    "roles": [
+      "patient",
+      "staff",
+      "dentist",
+      "owner"
+    ],
+    "widths": [
+      375,
+      390,
+      430,
+      768,
+      1024,
+      1440
+    ],
+    "passed_combinations": 24,
+    "scope": "real components with synthetic API fixture"
+  },
+  "notification_persistence": {
+    "synthetic": true,
+    "results": [
+      {
+        "role": "patient",
+        "login": true,
+        "reloadSession": true,
+        "archiveRetry": true,
+        "persistedArchive": true,
+        "unreadSeparate": true,
+        "recipientIsolation": true,
+        "logoutRevoked": true
+      },
+      {
+        "role": "staff",
+        "login": true,
+        "reloadSession": true,
+        "archiveRetry": true,
+        "persistedArchive": true,
+        "unreadSeparate": true,
+        "recipientIsolation": true,
+        "logoutRevoked": true
+      },
+      {
+        "role": "dentist",
+        "login": true,
+        "reloadSession": true,
+        "archiveRetry": true,
+        "persistedArchive": true,
+        "unreadSeparate": true,
+        "recipientIsolation": true,
+        "logoutRevoked": true
+      },
+      {
+        "role": "owner",
+        "login": true,
+        "reloadSession": true,
+        "archiveRetry": true,
+        "persistedArchive": true,
+        "unreadSeparate": true,
+        "recipientIsolation": true,
+        "logoutRevoked": true
+      }
+    ]
+  },
+  "workforce": {
+    "backend_tests": 27,
+    "assertions": 300,
+    "frontend_tests": 16,
+    "passed": true,
+    "real_request_approval_publication_replay_readback": true,
+    "six_widths": true,
+    "existing_qa": "OWN-11"
+  },
+  "contention": {
+    "isolated_scenarios": 2,
+    "passed": true,
+    "fresh_clone_per_scenario": true,
+    "schema_entries": 84,
+    "initial_harness_failure_retained": true
+  },
+  "expanded_initial_backend": {
+    "tests": 1331,
+    "assertions": 15167,
+    "failures": 36,
+    "errors": 5,
+    "skips": 3,
+    "retained": true,
+    "interpretation": "See acceptance report; previously separated DDL/proposal cases, missing local test receiver and obsolete CORS test. Not the reviewed S03 cohort."
+  },
+  "predefense": {
+    "failures": 0,
+    "warnings": 4,
+    "scope": "owned synthetic mail-only runtime; no providers"
+  },
+  "runtime": {
+    "state": "running",
+    "target": "/private/contention-50cf2b13/target.json",
+    "port": 43803,
+    "frontend": "http://127.0.0.1:5198",
+    "api": "http://127.0.0.1:8124",
+    "full_restart_readback_all_four_roles": true,
+    "worker_scheduler_recovery": true,
+    "external_delivery": false
+  },
+  "schema": [
+    {
+      "target": "/private/integration/target.json",
+      "database": "dental_clinic_demo",
+      "applied": 87,
+      "hashes_match": true,
+      "held_applied": false,
+      "grants": false,
+      "gen07": false,
+      "protected_jobs": 19
+    },
+    {
+      "target": "/private/integration/target.json",
+      "database": "dental_clinic_test",
+      "applied": 87,
+      "hashes_match": true,
+      "held_applied": false,
+      "grants": false,
+      "gen07": false
+    },
+    {
+      "target": "/private/contention-c5632f7e/target.json",
+      "database": "dental_clinic_test",
+      "applied": 87,
+      "hashes_match": true,
+      "held_applied": false,
+      "grants": false,
+      "gen07": false
+    },
+    {
+      "target": "/private/contention-50cf2b13/target.json",
+      "database": "dental_clinic_demo",
+      "applied": 87,
+      "hashes_match": true,
+      "held_applied": false,
+      "grants": false,
+      "gen07": false
+    },
+    {
+      "target": "/private/contention-50cf2b13/target.json",
+      "database": "dental_clinic_test",
+      "applied": 87,
+      "hashes_match": true,
+      "held_applied": false,
+      "grants": false,
+      "gen07": false
+    }
+  ],
+  "qa": {
+    "local_complete": 26,
+    "partial": 31,
+    "blocked": 11,
+    "integrated_pass": 11,
+    "integrated_pending": 57,
+    "new_original_ids": [
+      "GEN-10"
+    ]
+  },
+  "jaztin_source": {
+    "branch": "feature/jaztin-fullstack-qa-20261117",
+    "reported_sha": "877bf180bea9ec4e38e3173f9ab374f11de40895",
+    "received": false,
+    "remote_verified": false,
+    "fetched": false
+  },
+  "smoke": "passed",
+  "build": "passed with existing warnings",
+  "publication": false,
+  "deployment": false,
+  "hash_encoding": "Git index bytes (canonical LF); self-hash excluded and recoverable from Git.",
+  "files": [
+    {
+      "path": "backend/app/Http/Controllers/NotificationController.php",
+      "sha256": "2f7c2e17062c01aa94147c795ec95c108863355aceeb5c3a838a9239efbc2517"
+    },
+    {
+      "path": "backend/tests/Feature/Audit/AuditQueryTest.php",
+      "sha256": "95a06fe6dcebc856352822a072153c8c6d6bdf05cb02d385579d30395f4e6649"
+    },
+    {
+      "path": "backend/tests/Feature/Notifications/NotificationHistoryTest.php",
+      "sha256": "cc132a4918169227f084a6bd76f6837d18b113cdcaecc8165744f66d9d40d562"
+    },
+    {
+      "path": "backend/tests/Support/local_operations_fixture.php",
+      "sha256": "d6d05aea9fa1703f398ccf86fb029602be79d1c11ade337c3d0425369a29ea7e"
+    },
+    {
+      "path": "docs/INTEGRATION_QA_LEDGER_20261117.json",
+      "sha256": "507a363c6db0cd7fd0967806e867eb4a39bffee30ce68fda3e4757ffcb1dbc4e"
+    },
+    {
+      "path": "docs/RAPID_A04_ACCEPTANCE_20261117.md",
+      "sha256": "3d628b908328fd1211f2db7c053578db781c4566c52ec21b61427566e4613019"
+    },
+    {
+      "path": "docs/SYNTHETIC_RUNTIME_RUNBOOK.md",
+      "sha256": "5580e622866c2698f9a0a7b0d0716439fcd5d7d8df9c03df17c917bc2dbd7e9a"
+    },
+    {
+      "path": "docs/contracts/NOTIFICATION_HISTORY_API_V1.md",
+      "sha256": "84de3c74573567e14d96b1d9427724b1c5bcb8df3004dbd39171e77dcb6a5332"
+    },
+    {
+      "path": "docs/handoff/SYSTEM_STATE.md",
+      "sha256": "c323fa6dd489c699a4b55bb96c99c7346d7fa28a3bb3f5a9b97ef09107b86de1"
+    },
+    {
+      "path": "scripts/local-runtime/README.md",
+      "sha256": "8d400c0c9d944133c26c79136c36a6252a611875a63999a8c6aca9acf4595e4b"
+    },
+    {
+      "path": "scripts/operations-contention-suite.py",
+      "sha256": "becbd26371836a8e7d437c1d6735c1f914f5450024f107be71b5a039f8d2e366"
+    },
+    {
+      "path": "scripts/validate-qa-reconciliation.py",
+      "sha256": "bf97e2b5eaaf120a99a3054340173ac294030b04c76e49dd69f41199de546d7e"
+    },
+    {
+      "path": "src/pages/StaffRosterDraftCollection.jsx",
+      "sha256": "dca1f93fc6117cda6512e16439980a0d428ed2009635c8aa061b871a342fa793"
+    },
+    {
+      "path": "src/pages/StaffRosterWorkflow.jsx",
+      "sha256": "b3cf9f7a413431b7e9b23a5913ab053ded75307b6c94e5e0a4b0978000c72ed3"
+    },
+    {
+      "path": "src/patient/Portal.jsx",
+      "sha256": "eb12bea7f4ecbca1f016365fc55e197150d3e560a1db3ea01592f03f2b61b1ea"
+    },
+    {
+      "path": "src/patient/portal.css",
+      "sha256": "8ef56e512eb433bae11adb225a76d08e732841847855b973c4f62b7cf2d13d2b"
+    },
+    {
+      "path": "src/staff-roster-operations.css",
+      "sha256": "1ba0e2735744178d56a79e7d84b2e8dee0022d83f783512a7704528e98c34595"
+    },
+    {
+      "path": "tests/a04-notifications-postgres.browser.mjs",
+      "sha256": "eb396b6113c6621bae109c14baf118d45193137cac42975a5a3ac41711445807"
+    },
+    {
+      "path": "tests/fixtures/notification-history.html",
+      "sha256": "b7325556d5f1e8163e1d3c4080db7c86c2b469e42447f8084cc0e92fd5c55e80"
+    },
+    {
+      "path": "tests/gen10-all-roles.browser.mjs",
+      "sha256": "d04cc608cc76d92b0f512bb34935eb13279f887e2c417676efa24b1e25f1f1be"
+    },
+    {
+      "path": "tests/notif02-patient-notifications.test.js",
+      "sha256": "638db1463f5b378fa2f394184e245abfefeebb5e28345b2286716958cd781ef3"
+    },
+    {
+      "path": "tests/staff-roster-publication.browser.mjs",
+      "sha256": "e964fbcc2766fc345a5eee68352a3049828315f66d1326d007aad3acf0cd72c3"
+    },
+    {
+      "path": "docs/RAPID_A04_VALIDATION_20261117.json",
+      "sha256": null
+    }
+  ]
+}

@@ -3,11 +3,11 @@
   "clinical": "407f0c6b74ce44a7d955d4b897e6100e2bd80a51",
   "integration_branch": "integration/dentalops-fullstack-20261117",
   "totals": {
-    "local_complete": 25,
-    "partial": 32,
+    "local_complete": 26,
+    "partial": 31,
     "blocked": 11,
-    "integrated_pass": 10,
-    "integrated_pending": 58
+    "integrated_pass": 11,
+    "integrated_pending": 57
   },
   "rows": [
     {
@@ -142,14 +142,14 @@
       "original_owner": "Celin",
       "exact_criterion_and_tasks": "Notifications grouped under date headers; each can be removed (archived); button looks consistent and outline-free.<br>Original tasks: Redesign the notifications button (badge count, no outline per GEN-03, clear hover state); Add a delete button per notification (uses archive logic from GEN-11, not hard delete); Segregate notifications by date (Today, Yesterday, Earlier / by date headers) so the list is not cluttered; (Joevan) Provide notifications endpoint grouped/sorted by date and a soft-delete endpoint; Add mark-as-read and \"clear all\" only if it does not add clutter `FINALS-QA-REVISIONS.md:453`",
       "responsible_domain": "Joevan Operations/Workforce; Jaztin reviews clinical boundary",
-      "source_evidence": "Partially complete. [A10](GEN10_A10_NOTIFICATION_ACCEPTANCE.md); `253cac0`",
-      "focused_test_evidence": "56 focused tests; actual Shell/NotificationPanel with fictional data at 1440/390; build; Merged presentation: stable newest-first sorting before latest eight, Manila groups, scoped layout and awaited read failure/identity checks. Browser-store commands only; no server persistence, cross-device read sync or full delivery acceptance. Archive/delete blocked by GEN-11. Joevan implementation/test evidence is provisional here until approved source delivery and independent inspection.",
-      "current_status": "Partial",
-      "remaining_requirements_and_next_action": "Inspect published Joevan notification grouping/archive endpoints and RBAC; jointly verify actual server lifecycle.",
-      "integrated_acceptance": "Pending",
-      "integration_evidence": "PENDING: full original criterion not accepted on the combined candidate. Both exact sources are now available; passing subsets do not close this row.",
-      "local_acceptance": "Unfinished: only cited subsets accepted; original tasks remain incomplete.",
-      "blockers": "Source-delivery gate resolved November17; criterion-specific verification remains required. Other policy/reproduction limits in this row remain."
+      "source_evidence": "GEN-10 patch SHA-256 36322733886011b92a9ad5232a34bf5c11b89b4cb43a0d1118bffee2472d496d; exact base47c90ddb2c7ee219894a6d2bd6824b2cc022da27, clean applicability at6fdb5cfabdfc49595e02012d06e6ee495dcba4b4. See RAPID_A04_ACCEPTANCE_20261117.md.",
+      "focused_test_evidence": "31 frontend notification tests;61 PostgreSQL notification/role/branch/messaging tests with866 assertions;24 real component role/width browser combinations; real four-role login/cookie reload/archive committed-response-loss retry/readback/isolation/logout on synthetic87; separate real PostgreSQL lock scenarios in fresh archive-only clones. See A04 report for consolidated results and exact boundaries.",
+      "current_status": "Complete",
+      "remaining_requirements_and_next_action": "Maintain the complete bounded notification criterion. External delivery and wider clinical archive/restore authority remain separate.",
+      "integrated_acceptance": "Pass",
+      "integration_evidence": "PASS on the combined A04 candidate: sorted recipient-bound dated endpoint; Manila groups; stable older pages; badge/resting/hover/keyboard controls; individual immutable archival; separate read/unread evidence; exact retry receipt; new-session persisted readback; foreign and missing IDs return non-disclosing404. Real login and logout verified for all four roles. No message/grant authorization change.",
+      "local_acceptance": "Complete original criterion verified locally and in the combined application; presentation and persisted acceptance recorded separately in A04 evidence.",
+      "blockers": "None for this bounded notification criterion. No claim of hosted/provider acceptance."
     },
     {
       "original_id": "GEN-11",

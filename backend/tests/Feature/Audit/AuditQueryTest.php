@@ -190,10 +190,11 @@ class AuditQueryTest extends TestCase
 
     public function test_the_export_truncation_headers_are_exposed_to_the_cross_origin_spa(): void
     {
-        $this->assertEqualsCanonicalizing(['X-Audit-Export-Limit', 'X-Audit-Export-Truncated'], config('cors.exposed_headers'));
+        $headers = ['X-Audit-Export-Limit', 'X-Audit-Export-Truncated', 'Content-Disposition', 'X-Invoice-Id', 'X-Patient-Id', 'X-Receipt-Id'];
+        $this->assertEqualsCanonicalizing($headers, config('cors.exposed_headers'));
         $origin = config('cors.allowed_origins')[0];
         $response = $this->withHeaders(['Origin' => $origin])->get('/api/audit-logs/export')->assertOk();
         $exposed = (string) $response->headers->get('Access-Control-Expose-Headers');
-        $this->assertStringContainsString('X-Audit-Export-Truncated', $exposed);
+        foreach ($headers as $header) $this->assertStringContainsString($header, $exposed);
     }
 }

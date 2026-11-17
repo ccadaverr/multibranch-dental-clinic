@@ -41,6 +41,32 @@ The supervisor permits at most three restarts per child, has one exclusive targe
 
 Existing non-synthetic profiles are now refused by `local-system.py worker/scheduler`; do not bypass this with generic Artisan backlog commands. Their historical jobs remain held. A successful local check still warns that providers and non-mail business automations were not accepted; do not describe it as deployment readiness.
 
+## Windows resume after Docker has stopped
+
+The API loopback adapter is a separate container process and does not survive a container restart. A04 verified the following explicit recovery on the existing owned integration container and synthetic target; no reprovisioning, reseeding or migration is needed. Run from the integration worktree. Keep these three services in separate terminals.
+
+1. Inspect `docker ps -a` and `docker inspect dentalops-integration-20261117 --format '{{json .HostConfig.PortBindings}}'`. The adapter must remain published only at `127.0.0.1:8124` to container8105. Start the container with `docker start dentalops-integration-20261117` if stopped. Inspect `docker exec dentalops-integration-20261117 ps -eo pid,args` before starting an adapter; an existing exact owned socat process needs no second launch. Refuse an unknown listener rather than terminating it.
+
+   ```powershell
+   docker exec dentalops-integration-20261117 socat TCP-LISTEN:8105,bind=0.0.0.0,reuseaddr,fork TCP:127.0.0.1:8104
+   ```
+
+2. Resume the retained synthetic target, which checks its marker/cluster/source hashes and reuses persisted records. This example is the S03/A04 target, not the protected original profile:
+
+   ```powershell
+   docker exec dentalops-integration-20261117 python3 scripts/synthetic-demo-runtime.py run --target /private/contention-50cf2b13/target.json
+   ```
+
+3. Start the matching frontend with the exact API and approved browser origin. A different Vite port may fail CORS/session bootstrap; changing the origin requires a reviewed target configuration. Use a private caller-owned directory outside Git for the Vite cache/env.
+
+   ```powershell
+   $env:VITE_API_BASE_URL='http://127.0.0.1:8124'
+   $env:__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS='host.docker.internal'
+   node scripts/local-ui.mjs <private-vite-runtime-dir> 5198
+   ```
+
+Then run the existing `check --target /private/contention-50cf2b13/target.json --frontend-probe-url http://host.docker.internal:5198` command through `docker exec`. A04 observed zero failures/four warnings, four real login/reload/logout sessions, receipt-confirmed notification archival and separate Staff roster approval/publication after this container restart. The synthetic mail-only schedule still excludes clinical/financial automations and external delivery. Stop the target using its guarded `stop` command, then Ctrl+C only the adapter/Vite terminals you own. Retain private credentials, storage and snapshots; never print the generated password or put it in this document.
+
 ## Acceptance and recovery
 
 ```powershell

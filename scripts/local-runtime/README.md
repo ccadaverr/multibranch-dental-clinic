@@ -34,6 +34,8 @@ Use explicit test files with the existing `test` action. For actual contention, 
 
 Browser prerequisites and acceptance:
 
+The committed Operations contention scenarios each require an empty fixture. Run both with `python3 scripts/operations-contention-suite.py --source /private/ops/target.json` against the empty archive-only test source. The wrapper verifies the source, creates a separate clone per scenario, then backs up and stops each clone even on failure. It never resets the source or reuses a committed fixture.
+
 ```text
 docker exec dentalops-joevan-ops-20261115 python3 scripts/local-operations-fixture.py /private/ops/target.json
 node tests/operations-workforce.browser.mjs <absolute-path-to-playwright/index.mjs>
