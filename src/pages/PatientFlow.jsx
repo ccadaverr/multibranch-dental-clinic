@@ -16,6 +16,7 @@ import { DEFAULT_COUNTRY, normalizePhoneNumber } from '../phone.js'
 import { RecordedArrivals } from './ArrivalRecovery.jsx'
 import { bookableBranches } from './Scheduling.jsx'
 import { schedulingActorKey, useRequestOwner } from '../appointment-ui.js'
+import { calledEncounterContext, commandGate } from '../encounter.js'
 
 import { addCalendarMonths, clinicDate } from '../clock.js'
 import { PatientQueuePage } from './PatientVisits.jsx'
@@ -420,11 +421,37 @@ function OperationalQueuePage({ role, activeBranch, store, setPage }) {
       toast(result.queued?`Arrival verified — queue number ${result.queueNumber}.`:'Arrival verified.','success')
     }finally{arrivalSending.current=false}
   }
-  const queueContext=JSON.stringify([role,activeBranch,schedulingActorKey(store),dentistFilter,statusFilter])
+  const queueContext=JSON.stringify([role,activeBranch,clinicDate(),schedulingActorKey(store),dentistFilter,statusFilter])
   const queueOwner=useRequestOwner(queueContext,store.getAuthGeneration),messageOwner=useRequestOwner(queueContext,store.getAuthGeneration)
   const latestQueueStore=useRef(store);latestQueueStore.current=store
   const busy=queueOwner.busy,messageBusy=messageOwner.busy
+  const callGate=useRef(commandGate(commandKey)),[callFeedback,setCallFeedback]=useState(null)
+  React.useLayoutEffect(()=>{callGate.current=commandGate(commandKey);setCallFeedback(null)},[queueContext])
+  const callUncertain=!!callFeedback?.uncertain
+  const callPatient=async entry=>{
+    const gate=callGate.current
+    if(gate.pending||gate.retry&&gate.retry.entry.id!==entry.id)return
+    const current=latestQueueStore.current.state.queue.find(row=>row.id===entry.id)
+    const same=row=>row&&['visitId','patientPublicId','branchId','dentistId','appointmentId','clinicDate'].every(key=>(row[key]??null)===(entry[key]??null))
+    if(!same(current)||!isTodayQueue(current)||!inScope(current,latestQueueStore.current.session,latestQueueStore.current.state)||
+      !gate.retry&&(current.revision!==entry.revision||!['Waiting','In Queue'].includes(current.status)))return setCallFeedback({ok:false,message:'This queue entry changed. Refresh before calling.'})
+    const ticket=queueOwner.begin();if(!ticket)return
+    const owns=()=>queueOwner.current(ticket)&&same(latestQueueStore.current.state.queue.find(row=>row.id===entry.id))
+    setCallFeedback(null)
+    try{
+      const result=await gate.run({entry:Object.freeze({...entry})},async attempt=>{
+        const result=await flow.queueCommand(attempt.entry,'call',attempt.keys.start,owns)
+        if(!owns())return {ok:false,kind:'stale_context'}
+        return result.ok&&!calledEncounterContext(result.row,attempt.entry)?
+          {ok:false,uncertain:true,message:'The call receipt did not match this Patient and Visit. Retry the same call to verify it.'}:result
+      })
+      if(!owns())return
+      setCallFeedback({...result,patientName:entry.patientName||patientName(entry.patientId,state.patients),
+        uncertain:!!gate.retry,message:result.ok?'Call recorded. The current queue has been refreshed.':result.message||'The call was not confirmed.'})
+    }finally{queueOwner.finish(ticket)}
+  }
   const run=async(entry,label,send)=>{
+    if(callGate.current.retry)return
     const ticket=queueOwner.begin();if(!ticket)return
     try{
       const result=await send(commandKey(),()=>queueOwner.current(ticket))
@@ -433,7 +460,7 @@ function OperationalQueuePage({ role, activeBranch, store, setPage }) {
     }catch{if(queueOwner.current(ticket))toast('The queue action could not be confirmed. Refresh the queue before retrying.','warning')}
     finally{queueOwner.finish(ticket)}
   }
-  const update=(entry,name,label)=>run(entry,label,(key,owns)=>flow.queueCommand(entry,name,key,owns))
+  const update=(entry,name,label)=>name==='call'?callPatient(entry):run(entry,label,(key,owns)=>flow.queueCommand(entry,name,key,owns))
   const openMessage=async entry=>{
     const ticket=messageOwner.begin();if(!ticket)return
     const owns=()=>messageOwner.current(ticket)&&latestQueueStore.current.state.queue.some(row=>row.id===entry.id&&
@@ -462,13 +489,17 @@ function OperationalQueuePage({ role, activeBranch, store, setPage }) {
   useVisibleRefresh(flow?.refresh,{active:role!=='patient'})
   if (role==='patient') return <PatientQueuePage store={store} setPage={setPage}/>
   return <>
-    <PageHeader title={role==='dentist'?'My Patient Queue':'Patient Queue'} text="Arrival order decides branch positions. Explicit Staff moves are recorded with a reason; Dentist queue numbers stay unchanged." aside={<RefreshButton onClick={()=>flow?.refresh()}/>}/>
-    <FilterBar ariaLabel={role==='dentist'?'My queue filters':'Queue filters'} onClear={(dentistFilter!=='All Dentists'||statusFilter!=='Active')?()=>{setDentistFilter('All Dentists');setStatusFilter('Active')}:null}>
+    <PageHeader title={role==='dentist'?'My Patient Queue':'Patient Queue'} text={role==='owner'?'Review branch arrival order and recorded queue changes.':'Call the next patient or open their branch conversation.'} aside={<RefreshButton onClick={()=>flow?.refresh()}/>}/>
+    <FilterBar ariaLabel={role==='dentist'?'My queue filters':'Queue filters'} onClear={!busy&&!callUncertain&&(dentistFilter!=='All Dentists'||statusFilter!=='Active')?()=>{setDentistFilter('All Dentists');setStatusFilter('Active')}:null}>
       <label>Branch <select value={activeBranch} disabled><option>{activeBranch}</option></select></label>
-      {role!=='dentist'&&<label>Dentist <select value={dentistFilter} onChange={e=>setDentistFilter(e.target.value)}><option>All Dentists</option>{state.dentists.filter(d=>role==='owner'||d.branchIds.includes(session.branchId)).map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></label>}
-      <label>Status <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option value="Active">Active</option><option value="All">All</option><option value="In Queue">In Queue</option><option value="In Treatment">In Treatment</option><option value="Done">Done</option></select></label>
+      {role!=='dentist'&&<label>Dentist <select disabled={busy||callUncertain} value={dentistFilter} onChange={e=>setDentistFilter(e.target.value)}><option>All Dentists</option>{state.dentists.filter(d=>role==='owner'||d.branchIds.includes(session.branchId)).map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></label>}
+      <label>Status <select disabled={busy||callUncertain} value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option value="Active">Active</option><option value="All">All</option><option value="In Queue">In Queue</option><option value="In Treatment">In Treatment</option><option value="Done">Done</option></select></label>
     </FilterBar>
     <AppointmentsLoadNotice store={store}/>
+    {callFeedback&&<div role={callFeedback.ok?'status':'alert'}><Notice tone={callFeedback.ok?'success':'warning'} title={callFeedback.patientName?`Queue call: ${callFeedback.patientName}`:'Queue call'}>
+      {callFeedback.message}
+      {callUncertain&&<Button disabled={busy} onClick={()=>callPatient(callGate.current.retry.entry)}>Retry same call</Button>}
+    </Notice></div>}
     <div ref={arrivalFeedback} tabIndex={-1} role={['unknown','refused'].includes(arrivalPhase)?'alert':'status'}>
       {arrivalPhase==='submitting'&&<p>Recording the reviewed arrival…</p>}
       {arrivalMessage&&<p>{arrivalMessage}</p>}
@@ -481,7 +512,7 @@ function OperationalQueuePage({ role, activeBranch, store, setPage }) {
     </div>
     {!demo&&<QueueStatusCounts store={store} activeBranch={role==='owner'?activeBranch:'All Branches'} vis={vis}/>}
     {operational&&!demo&&<SelfRegistered toast={toast} store={store} compact/>}
-    {role==='staff'&&<Notice tone="info">A patient in the queue has already checked in. Marking them as having left or cancelling their visit isn’t available yet — the clinic still needs to decide how an admitted visit is closed. A patient who never arrived is marked No-show from Appointments.</Notice>}
+    {role==='staff'&&<Notice tone="info">Visit closure isn’t available yet — the clinic still needs to decide how an admitted visit is closed. Mark patients who never arrived No-show from Appointments.</Notice>}
     <Card title="Live queue" subtitle="Branch arrival order, with any recorded Staff moves. Served means treatment has started." className="top-gap queue-live-card">
       <QueueTable rows={visible} onOpen={q=>setPage('patients',encounterContext(q))} nameOf={q=>q.patientName||patientName(q.patientId,state.patients)} columns={[
         {key:'queueNumber',label:'Queue',render:q=><div className="queue-order"><b className="queue-number"><span className="sr-only">Queue number </span>{q.queueNumber||'—'}</b><span className="queue-secondary">Branch position {q.branchPosition?`#${q.branchPosition}`:'—'} · Dentist position {q.position?`#${q.position}`:'—'}</span></div>},
@@ -492,18 +523,18 @@ function OperationalQueuePage({ role, activeBranch, store, setPage }) {
           <small className="queue-secondary queue-patient-meta">{q.patientCode&&<span>{q.patientCode}</span>}<span>{q.appointmentCode||(q.walkIn?'Walk-in visit':'Scheduled visit')}</span></small>
           {q.lateArrival&&<span className="fd-badge is-late">Late arrival · arrival order retained</span>}
         </div>},
-        {key:'careTeam',label:'Dentist / Branch',render:q=><div className="queue-care-team"><b>{dentistName(q.dentistId,state.dentists)}</b><span className="queue-secondary">{q.branch}</span></div>},
+        {key:'careTeam',label:'Dentist / Branch',render:q=><div className="queue-care-team"><b>{q.dentistName||dentistName(q.dentistId,state.dentists)}</b><span className="queue-secondary">{q.branch}</span></div>},
         {key:'checkedIn',label:'Checked in',render:q=>displayTime(q.checkedIn)},
         ...(demo?[{key:'wait',label:'Est. wait (demo)',render:q=>`${queueWaitEstimate(q,state.queue,state.appointments,state.treatments,state.dentists)} min` }]:[]),
         {key:'status',label:'Status',render:q=><div className="queue-status"><Status>{q.displayStatus||q.status}</Status></div>},
         {key:'actions',label:'Actions',render:q=><div className="row-actions queue-actions" onClick={e=>e.stopPropagation()}>
-          {['In Queue', 'Waiting'].includes(q.status)&&(operational||role==='dentist')&&<button type="button" className="icon-btn queue-call-btn" title="Call patient in queue" aria-label={`Call patient ${q.patientName||patientName(q.patientId,state.patients)} in queue`} disabled={!!busy} onClick={()=>update(q,'call','Patient called in queue.')}><Icon name="phone" size={16}/><span>Call</span></button>}
-          {['staff','dentist'].includes(role)&&<button type="button" className="icon-btn queue-message-btn" title="Open patient conversation" aria-label={`Open conversation with ${q.patientName||patientName(q.patientId,state.patients)}`} disabled={!!messageBusy} onClick={()=>openMessage(q)}><Icon name="message" size={16}/><span>Message</span></button>}
+          {['In Queue', 'Waiting'].includes(q.status)&&(operational||role==='dentist')&&<button type="button" className="icon-btn queue-call-btn" title="Call patient in queue" aria-label={`Call patient ${q.patientName||patientName(q.patientId,state.patients)} in queue`} disabled={!!busy||callUncertain} onClick={()=>update(q,'call','Patient called in queue.')}><Icon name="phone" size={18}/></button>}
+          {['staff','dentist'].includes(role)&&<button type="button" className="icon-btn queue-message-btn" title="Open patient conversation" aria-label={`Open conversation with ${q.patientName||patientName(q.patientId,state.patients)}`} disabled={!!messageBusy} onClick={()=>openMessage(q)}><Icon name="message" size={18}/></button>}
           {role==='dentist'&&(['In Queue', 'Waiting', 'Called', 'Treatment Ready'].includes(q.status)||q.status==='Served'||q.visitStatus==='In Treatment')&&<Button size="sm" onClick={()=>setPage('treatment',encounterContext(q))}>{q.treatmentId?'Continue Treatment':'Open Treatment'}</Button>}
 
           {operational&&<>
-            {q.server&&['In Queue','Waiting'].includes(q.status)&&<Button size="sm" variant="soft" disabled={!!busy} onClick={()=>setOrderEntry(q)}>Move</Button>}
-            {active(q)&&q.lateArrival&&<Button size="sm" variant="ghost" disabled={!!busy} onClick={()=>restore(q)}>Clear late flag</Button>}
+            {q.server&&['In Queue','Waiting'].includes(q.status)&&<Button size="sm" variant="soft" disabled={!!busy||callUncertain} onClick={()=>setOrderEntry(q)}>Move</Button>}
+            {active(q)&&q.lateArrival&&<Button size="sm" variant="ghost" disabled={!!busy||callUncertain} onClick={()=>restore(q)}>Clear late flag</Button>}
           </>}
         </div>}
 
