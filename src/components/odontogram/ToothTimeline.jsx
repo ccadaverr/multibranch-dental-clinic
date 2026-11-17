@@ -27,11 +27,11 @@ export function ToothTimeline({
   const history = (data?.history || []).filter(h => h.tooth === tooth)
   const currentEntries = (data?.current || []).filter(c => c.tooth === tooth)
   const allActiveSurfaces = Array.from(new Set(currentEntries.flatMap(c => c.surfaces || [])))
-  const current = currentEntries[0] || null
+  const currentIds = new Set(currentEntries.map(e=>e.id))
 
   // Dentist form state
   const [f, setF] = useState({
-    status: statuses[0] || '',
+    status: '',
     surfaces: [],
     note: '',
     recorded_on: today(),
@@ -83,9 +83,9 @@ export function ToothTimeline({
         if(edits.current!==revision){setNeedsReview(true);setErr('The finding was saved; your newer draft is retained. Review the saved chart before recording that draft.');return}
         if(Number.isSafeInteger(res.revision))observed.current=res.revision
         submittedSave.current=null
-        form.current = { ...form.current, surfaces: [], note: '' }
+        form.current = { ...form.current, status: '', surfaces: [], note: '' }
         cleanForm.current = draftKey(form.current)
-        setF(x => ({ ...x, surfaces: [], note: '' }))
+        setF(x => ({ ...x, status: '', surfaces: [], note: '' }))
         onDirtyChange?.(false)
       } else {setUncertain(!!res?.uncertain);setNeedsReview(!!res?.needsReview);setErr(res?.message || 'Failed to record entry.')}
     } catch {
@@ -113,12 +113,14 @@ export function ToothTimeline({
         <h4 className="od-tooth-name">{fullName}</h4>
       </div>
 
+      <section className="od-current-findings" aria-label="Current saved findings"><h5 className="od-section-title">Current saved findings</h5>{!currentEntries.length?<p>No finding has been recorded for this tooth.</p>:<ul>{currentEntries.map(e=><li key={e.id}><b>{e.status}</b><p>{!Array.isArray(e.surfaces)?'Surfaces unavailable':e.surfaces.length?'Active surfaces: '+e.surfaces.join(' · '):'Whole tooth'}</p><small>{day(e.recorded_on)}{e.dentist?' · '+e.dentist:''}</small>{e.branch&&<small>{e.branch.name}</small>}</li>)}</ul>}</section>
+      <h5 className="od-section-title">{canRecord?'Surfaces for the new finding':'Current saved surfaces'}</h5>
       {/* Surface diagram */}
       <div className="od-surface-section">
         <SurfaceDiagram
           surfaces={canRecord ? f.surfaces : allActiveSurfaces}
           onChange={canRecord ? (surfaces => changeForm({ surfaces })) : undefined}
-          readOnly={!canRecord}
+          readOnly={!canRecord||uncertain||needsReview}
           fdi={tooth}
         />
       </div>
@@ -134,6 +136,7 @@ export function ToothTimeline({
               value={f.status}
               onChange={e => changeForm({ status: e.target.value })}
             >
+              <option value="">Choose status…</option>
               {statuses.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </Field>
@@ -166,6 +169,7 @@ export function ToothTimeline({
             ))}
           </fieldset>
 
+          <p className="od-muted">{f.surfaces.length?'Applies to surfaces '+f.surfaces.join(' · '):'Whole-tooth entry replaces the current tooth state. Earlier entries stay in history.'}</p>
           <Field label="Date">
             <input
               type="date"
@@ -196,7 +200,7 @@ export function ToothTimeline({
 
       {/* History timeline */}
       <div className="od-history-section">
-        <h5 className="od-section-title">Timeline & History</h5>
+        <h5 className="od-section-title">{data?.history===null?'Saved current record':'Recorded history'}</h5>
         {history.length === 0 && currentEntries.length === 0 && (
           <p className="od-muted">Nothing recorded yet for this tooth.</p>
         )}
@@ -205,7 +209,7 @@ export function ToothTimeline({
             {history.map(item => (
               <div key={item.id} className="od-timeline-card">
                 <div className="od-card-top">
-                  <span className="od-card-date">{day(item.recorded_on)}</span>
+                  <span className="od-card-date">{day(item.recorded_on)}{currentIds.has(item.id)?' · Current entry':' · Earlier entry'}</span>
                   <span className="od-card-badge">{item.status}</span>
                 </div>
                 {item.surfaces && item.surfaces.length > 0 && (
@@ -231,7 +235,7 @@ export function ToothTimeline({
             {currentEntries.map(item => (
               <div key={item.id} className="od-timeline-card">
                 <div className="od-card-top">
-                  <span className="od-card-date">{day(item.recorded_on)}</span>
+                  <span className="od-card-date">{day(item.recorded_on)}{currentIds.has(item.id)?' · Current entry':' · Earlier entry'}</span>
                   <span className="od-card-badge">{item.status}</span>
                 </div>
                 {item.surfaces && item.surfaces.length > 0 && (

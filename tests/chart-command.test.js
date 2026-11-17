@@ -15,3 +15,7 @@ test('bounded waiting reports uncertainty, never cancellation of a server write'
 test('Patient chart requires the exact Patient and simplified projection, without Dentist notes or linked history',async()=>{const {patientChartMatches}=await import('../src/chart-command.js');const data={patient:{id:'own'},current:[{tooth:'16',status:'Caries'}],summary:[],history:null};assert.equal(patientChartMatches(data,'own'),true);assert.equal(patientChartMatches(data,'other'),false);assert.equal(patientChartMatches({...data,history:[]},'own'),false);assert.equal(patientChartMatches({...data,current:[{...data.current[0],note:'private'}]},'own'),false)})
 
 test('old keyed v1 journal snapshots remain verifiable read receipts but never enable new writes',()=>{const old={...success,data:{...chart,write_contract:{version:1,revision_scheme:'tooth_entry_count',idempotency:true}}};assert.equal(chartReady(old.data),false);assert.equal(chartReceiptMatches(old,patientId,payload,'d1'),true)})
+test('a contradictory chart projection cannot turn a valid receipt into adopted clinical data or a new retry intent',async()=>{
+ const sends=[],command=beginChartCommand({patientId,payload,dentistId:'d1',isCurrent:()=>true,key:'frozen-chart',send:async(id,body,key)=>{sends.push({id,body,key});return success},verifyChart:()=>false})
+ assert.equal((await command.submit()).uncertain,true);assert.equal((await command.submit()).uncertain,true);assert.deepEqual(sends[0],sends[1]);assert.equal(command.outcome,'unknown')
+})

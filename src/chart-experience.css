@@ -1,0 +1,43 @@
+/* Clinical chart content only. No shell, shared controls, numbering or SVG coordinate changes. */
+.chart-workspace,.clinical-odontogram { --chart-ink:#193747; --chart-muted:#536b78; --chart-edge:#dce5e9; --chart-accent:#176a79; color:var(--chart-ink); font-size:15px; line-height:1.55; }
+.chart-workspace .card { box-shadow:none; border:1px solid var(--chart-edge); border-radius:12px; }
+.chart-read-heading { display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:16px; }
+.chart-read-heading h3 { font-size:18px; font-weight:600; margin:0; }
+.chart-read-heading p { font-size:14px; color:var(--chart-muted); margin:4px 0 0; overflow-wrap:anywhere; }
+.chart-feedback { border-left:3px solid var(--chart-accent); padding:12px; background:#f3f7f8; overflow-wrap:anywhere; }
+.chart-context { position:sticky; top:calc(var(--chart-top-offset,82px) + 8px); z-index:12; background:white; border:1px solid var(--chart-edge); border-radius:10px; padding:16px 20px; margin:16px 0 24px; }
+.chart-context h2 { font-size:22px; font-weight:600; margin:2px 0 6px; overflow-wrap:anywhere; }
+.chart-context p { margin:4px 0; font-size:14px; overflow-wrap:anywhere; }
+.chart-context .chart-context-ids { font-size:13px; font-variant-numeric:tabular-nums; color:var(--chart-muted); }
+.clinical-odontogram .od-main-layout { grid-template-columns:minmax(0,1.25fr) minmax(320px,1fr); gap:20px; }
+.clinical-odontogram :is(.od-side-panel,.od-canvas-container) { border-color:var(--chart-edge); border-radius:10px; box-shadow:none; }
+.clinical-odontogram .od-side-panel { max-height:none; overflow:visible; padding:20px; }
+.clinical-odontogram .od-section-title { font-size:15px; text-transform:none; letter-spacing:0; font-weight:600; }
+.clinical-odontogram .od-record-form { padding:16px; gap:14px; background:#f6f9fa; border-color:var(--chart-edge); }
+.clinical-odontogram :is(.od-back-btn,.od-segmented-btn,.od-chip-btn) { min-height:44px; }
+.clinical-odontogram .od-segmented-btn { color:var(--chart-ink); }
+.clinical-odontogram .od-tooth-name { font-size:17px; font-weight:600; }
+.clinical-odontogram :is(.od-card-note,.od-card-dentist,.od-card-surfaces,.od-card-date,.od-muted,.od-key-help) { font-size:14px; line-height:1.55; }
+.clinical-odontogram .od-card-badge { font-size:13px; font-weight:600; white-space:normal; overflow-wrap:anywhere; }
+.clinical-odontogram .od-timeline-card { border-color:var(--chart-edge); padding:14px; }
+.clinical-odontogram .od-current-findings { margin:16px 0; padding:16px 0; border-block:1px solid var(--chart-edge); }
+.clinical-odontogram .od-current-findings ul { list-style:none; padding:0; margin:0; display:grid; gap:10px; }
+.clinical-odontogram .od-current-findings li { padding-left:12px; border-left:3px solid var(--chart-accent); overflow-wrap:anywhere; }
+.od-current-findings p { margin:5px 0; }.od-current-findings small { display:block; font-size:13px; color:var(--chart-muted); }
+.clinical-odontogram .od-record-form :is(input,textarea,select) { font:inherit; }
+.clinical-odontogram .tc-surfaces label { min-height:44px; min-width:44px; display:inline-flex; align-items:center; gap:6px; }
+.enc-chart-preview { border-block:1px solid #dce5e9; padding:12px 0; margin-block:16px; }
+.enc-chart-preview>summary { min-height:44px; cursor:pointer; font-weight:600; }
+.enc-chart-preview .od-main-layout { grid-template-columns:1fr; }
+.enc-chart-preview .od-canvas-container,.enc-chart-preview .od-side-panel { padding:12px; }
+.enc-chart-preview .chart-read-heading { align-items:start; }.enc-chart-preview .chart-read-heading h3 { font-size:16px; }
+.enc-chart-preview .od-segmented { flex-wrap:wrap; }.enc-chart-preview .od-segmented-btn { padding-inline:10px; }
+.chart-workspace .patient-picker-list { list-style:none; padding:0; margin:0; max-height:280px; overflow:auto; border:1px solid var(--chart-edge); border-radius:10px; }
+.chart-workspace .patient-picker-list button { width:100%; min-height:64px; padding:12px 16px; text-align:left; background:white; border:0; border-bottom:1px solid var(--chart-edge); display:flex; align-items:center; justify-content:space-between; gap:12px; font:inherit; color:inherit; cursor:pointer; }
+.chart-workspace .patient-picker-list button:focus-visible { outline:3px solid var(--chart-accent); outline-offset:-3px; }.patient-picker-list small { display:block; color:var(--chart-muted); font-size:13px; }
+@media(max-width:1150px){.clinical-odontogram .od-main-layout { grid-template-columns:1fr; }}
+@media(max-width:600px){.chart-context { top:var(--chart-top-offset,82px); padding:14px 16px; }.chart-context h2 { font-size:20px; }.clinical-odontogram .od-side-panel { padding:16px; }.clinical-odontogram .od-top-bar { align-items:stretch; }.clinical-odontogram .od-top-bar>.od-segmented { display:flex; width:100%; }.clinical-odontogram .od-segmented-btn { flex:1; padding-inline:8px; }.clinical-odontogram .od-record-form :is(input,textarea,select) { font-size:16px; }}
+.clinical-odontogram .od-diagram.is-enlarged { max-width:100%; overflow-x:auto; overscroll-behavior-x:contain; }
+.clinical-odontogram .od-diagram.is-enlarged .od-arch-svg { width:540px; min-width:540px; max-width:none; }
+.clinical-odontogram .od-diagram.is-enlarged .od-front-quadrants { min-width:540px; }
+@media(max-width:600px){.clinical-odontogram .od-zoom-control { display:inline-flex; align-self:start; margin-top:10px; }}
