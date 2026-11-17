@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Button, Field } from '../../components.jsx'
+import {ToothHistory} from './ToothHistory.jsx'
+import '../../history-experience.css'
 import { SurfaceDiagram } from './SurfaceDiagram.jsx'
 import { getToothFullName, toothLabel } from './toothShapes.js'
 
@@ -17,6 +19,7 @@ export function ToothTimeline({
   isCurrent = () => true,
   onDirtyChange,
   recordingPending = false,
+  onReviewEncounter,
 }) {
   const numbering = data?.settings?.numbering || 'fdi'
   const label = toothLabel(tooth, numbering)
@@ -27,7 +30,6 @@ export function ToothTimeline({
   const history = (data?.history || []).filter(h => h.tooth === tooth)
   const currentEntries = (data?.current || []).filter(c => c.tooth === tooth)
   const allActiveSurfaces = Array.from(new Set(currentEntries.flatMap(c => c.surfaces || [])))
-  const currentIds = new Set(currentEntries.map(e=>e.id))
 
   // Dentist form state
   const [f, setF] = useState({
@@ -198,62 +200,7 @@ export function ToothTimeline({
         </form>
       )}
 
-      {/* History timeline */}
-      <div className="od-history-section">
-        <h5 className="od-section-title">{data?.history===null?'Saved current record':'Recorded history'}</h5>
-        {history.length === 0 && currentEntries.length === 0 && (
-          <p className="od-muted">Nothing recorded yet for this tooth.</p>
-        )}
-        {history.length > 0 && (
-          <div className="od-timeline">
-            {history.map(item => (
-              <div key={item.id} className="od-timeline-card">
-                <div className="od-card-top">
-                  <span className="od-card-date">{day(item.recorded_on)}{currentIds.has(item.id)?' · Current entry':' · Earlier entry'}</span>
-                  <span className="od-card-badge">{item.status}</span>
-                </div>
-                {item.surfaces && item.surfaces.length > 0 && (
-                  <div className="od-card-surfaces">
-                    Surfaces: <b>{item.surfaces.join(' · ')}</b>
-                  </div>
-                )}
-                {item.dentist && (
-                  <div className="od-card-dentist">{item.dentist}</div>
-                )}
-                {item.branch&&<small className="block-muted">{item.branch.name}</small>}
-                {item.created_at&&<small className="block-muted">Recorded {new Date(item.created_at).toLocaleString('en-PH',{timeZone:'Asia/Manila'})}</small>}
-                {item.treatment_id&&<small className="block-muted" style={{overflowWrap:'anywhere'}}>Encounter {item.treatment_id} · Visit {item.visit_id}</small>}
-                {item.note && (
-                  <div className="od-card-note">{item.note}</div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-        {history.length === 0 && currentEntries.length > 0 && (
-          <div className="od-timeline">
-            {currentEntries.map(item => (
-              <div key={item.id} className="od-timeline-card">
-                <div className="od-card-top">
-                  <span className="od-card-date">{day(item.recorded_on)}{currentIds.has(item.id)?' · Current entry':' · Earlier entry'}</span>
-                  <span className="od-card-badge">{item.status}</span>
-                </div>
-                {item.surfaces && item.surfaces.length > 0 && (
-                  <div className="od-card-surfaces">
-                    Surfaces: <b>{item.surfaces.join(' · ')}</b>
-                  </div>
-                )}
-                {item.dentist && (
-                  <div className="od-card-dentist">{item.dentist}</div>
-                )}
-                {item.note && (
-                  <div className="od-card-note">{item.note}</div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      <ToothHistory history={data?.history===null?null:history} currentEntries={currentEntries} onReviewEncounter={onReviewEncounter}/>
     </div>
   )
 }

@@ -1,15 +1,19 @@
 import { useClinicalSession } from '../use-clinical-session.js'
 import { clinicalSessionKey, resolveEncounter } from '../encounter.js'
 import { ClinicalNavigation } from '../clinical-navigation.jsx'
-import React, { useEffect, useState } from 'react'
-import { Button, Card, ConfirmDialog, Field, Notice, PageHeader, RefreshButton, SearchInput } from '../components.jsx'
+import React, { lazy, Suspense, useEffect, useState } from 'react'
+import { Button, Card, ConfirmDialog, Field, Notice, PageHeader, RefreshButton, SearchInput, FilterBar } from '../components.jsx'
 import { patientChart, listVisits } from '../api-client.js'
 import { Odontogram, toothLabel } from '../components/odontogram/index.js'
 import {clinicalChartValid,readClinicalChart,readChartVisitPatients} from '../chart-read.js'
 import '../chart-experience.css'
+import {discoveryRange,shiftDiscoveryRange} from '../history-read.js'
+import '../history-experience.css'
 import {addDays} from '../clock.js'
 import {todayManila} from '../patient/format.js'
 import {beginChartCommand,chartMatches,chartReady} from '../chart-command.js'
+
+const InlineHistory=lazy(()=>import('./ClinicalHistory.jsx').then(m=>({default:m.ClinicalHistory})))
 
 export { toothLabel } from '../components/odontogram/index.js'
 
@@ -24,6 +28,8 @@ function ChartRecord({ patientId, canRecord, toast, store, recordContext = null,
   const live=React.useRef(true), recording=React.useRef(false)
   const actor=React.useRef({key:clinicalSessionKey(store?.session),auth:store?.getAuthGeneration?.()}),latest=React.useRef(store);latest.current=store
   const command=React.useRef(null),link=React.useRef(recordContext)
+  const [historyTarget,setHistoryTarget]=useState(null),historyButton=React.useRef(null),closeHistory=React.useRef(null)
+  useEffect(()=>{if(historyTarget){closeHistory.current?.focus();closeHistory.current?.scrollIntoView({block:'start'})}},[historyTarget])
   const [feedback,setFeedback]=useState(null),[reviewOpen,setReviewOpen]=useState(false)
   const dirty=React.useRef(false), editGeneration=React.useRef(0)
   const scope=React.useRef({canRecord,isCurrent})
@@ -118,11 +124,13 @@ function ChartRecord({ patientId, canRecord, toast, store, recordContext = null,
         onSelect={setPicked}
         canRecord={writable}
         onRecord={handleRecord}
+        onReviewEncounter={store?.session?.role==='dentist'?target=>{historyButton.current=document.activeElement;setHistoryTarget(target)}:undefined}
         branches={branches}
         activeBranchId={activeBranchId}
         recordingPending={recordingPending}
         onDirtyChange={reportDirty}
       />
+      {historyTarget&&<section className="chart-history-review" aria-label="Linked encounter review"><Button ref={closeHistory} variant="ghost" onClick={()=>{setHistoryTarget(null);historyButton.current?.focus()}}>Close encounter review</Button><p>Read-only completed encounter. Your finding draft stays in place.</p><Suspense fallback={<p role="status">Opening saved encounter…</p>}><InlineHistory store={store} patient={{id:patientId}} selectedId={historyTarget.id} expectedVisitId={historyTarget.visitId} expectedBranchId={historyTarget.branchId} selectedOnly allowChart={false}/></Suspense></section>}
       {feedback&&<p className="chart-feedback" role={feedback.ok?'status':'alert'}>{feedback.message}</p>}
       </>}
       <ConfirmDialog open={reviewOpen} title="Review the saved chart?" confirmLabel="Load saved chart" onCancel={()=>setReviewOpen(false)} onConfirm={()=>{command.current=null;setReviewOpen(false);dirty.current=false;onDirtyChange?.(false);setFeedback(null);setAttempt(a=>a+1)}}><p>This replaces the unsaved finding editor with saved history. A read does not prove an earlier pending command failed. No historical finding is changed or deleted.</p></ConfirmDialog>
@@ -132,23 +140,28 @@ function ChartRecord({ patientId, canRecord, toast, store, recordContext = null,
 
 /** Existing authorized Visit API; no Staff/Owner directory access or invented clinic-wide search. */
 export function SearchablePatientPicker({selectedPatient,onSelect,store,inputRef}){
+  const discoveryGeneration=React.useRef(0)
+  const initial=()=>({from:addDays(todayManila(),-30),to:todayManila()})
+  const [range,setRange]=useState(initial),[draft,setDraft]=useState(initial),[rangeError,setRangeError]=useState('')
+  const applyRange=next=>{const r=discoveryRange(next.from,next.to,todayManila());if(!r.ok){setRangeError(r.message);return}setRangeError('');discoveryGeneration.current++;setResult({loading:true,data:[],error:''});setDraft(next);setRange(next);setAttempt(a=>a+1)}
   const [query,setQuery]=useState(''),[result,setResult]=useState({loading:true,data:[],error:''}),[attempt,setAttempt]=useState(0)
+  const reload=()=>{discoveryGeneration.current++;setResult({loading:true,data:[],error:''});setAttempt(a=>a+1)}
   const key=clinicalSessionKey(store?.session),auth=store?.getAuthGeneration?.(),latest=React.useRef(store);latest.current=store
   useEffect(()=>{
-    let active=true
-    const owns=()=>active&&clinicalSessionKey(latest.current?.session)===key&&latest.current?.getAuthGeneration?.()===auth&&latest.current?.session?.role==='dentist'&&latest.current?.session?.active===true
+    let active=true;const generation=discoveryGeneration.current
+    const owns=()=>active&&generation===discoveryGeneration.current&&clinicalSessionKey(latest.current?.session)===key&&latest.current?.getAuthGeneration?.()===auth&&latest.current?.session?.role==='dentist'&&latest.current?.session?.active===true
     setResult({loading:true,data:[],error:''})
-    const today=todayManila()
-    readChartVisitPatients(listVisits,{dentistId:store.session?.dentistId,from:addDays(today,-30),to:today},owns).then(r=>{if(owns())setResult(r.ok?{loading:false,data:r.data,error:''}:{loading:false,data:[],error:r.message||'Your authorized visits could not be loaded. Try again.'})})
+    readChartVisitPatients(listVisits,{dentistId:store.session?.dentistId,from:range.from,to:range.to},owns).then(r=>{if(owns())setResult(r.ok?{loading:false,data:r.data,error:''}:{loading:false,data:[],error:r.message||'Your authorized visits could not be loaded. Try again.'})})
     return()=>{active=false}
-  },[key,auth,attempt])
+  },[key,auth,attempt,range.from,range.to])
   const shown=result.data.filter(p=>[p.name,p.code].join(' ').toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
   return <div className="searchable-patient-picker">
-    <div className="chart-read-heading"><div><h3>Find a Patient</h3><p>Your authorized visits from the past 30 days. Open older records from their encounter.</p></div><RefreshButton title="Reload authorized visits" ariaLabel="Reload authorized visits" loading={result.loading} onClick={()=>setAttempt(a=>a+1)}/></div>
+    <div className="chart-read-heading"><div><h3>Find a Patient</h3><p>Your authorized visits in the selected date range.</p></div><RefreshButton title="Reload authorized visits" ariaLabel="Reload authorized visits" loading={result.loading} onClick={reload}/></div>
+    {!selectedPatient&&<><FilterBar ariaLabel="Chart discovery filters" onClear={(query||range.from!==initial().from||range.to!==initial().to||draft.from!==range.from||draft.to!==range.to)?()=>{setQuery('');applyRange(initial())}:undefined}><form className="chart-discovery-range" onSubmit={event=>{event.preventDefault();applyRange(draft)}} aria-label="Chart Visit dates"><Field label="From"><input type="date" value={draft.from} max={todayManila()} onChange={e=>setDraft(d=>({...d,from:e.target.value}))}/></Field><Field label="To"><input type="date" value={draft.to} max={todayManila()} onChange={e=>setDraft(d=>({...d,to:e.target.value}))}/></Field><Button type="submit" variant="soft">Apply dates</Button></form></FilterBar><div className="row-actions"><Button variant="ghost" onClick={()=>applyRange(shiftDiscoveryRange(range,-1,todayManila()))}>Older period</Button><span>{range.from} – {range.to}</span><Button variant="ghost" disabled={range.to>=todayManila()} onClick={()=>applyRange(shiftDiscoveryRange(range,1,todayManila()))}>Newer period</Button></div>{rangeError&&<p role="alert">{rangeError}</p>}</>}
     <SearchInput ref={inputRef} value={query} onChange={setQuery} placeholder="Search by Patient name or code…" ariaLabel="Search chart Patients" onClear={query?()=>setQuery(''):undefined}/>
     {selectedPatient?<div className="chart-selected-patient"><p>{selectedPatient.name} · {selectedPatient.code||selectedPatient.patientCode||selectedPatient.id}</p><Button size="sm" variant="ghost" onClick={()=>onSelect(null)}>Change patient</Button></div>:<>
       {result.loading&&<p role="status">Loading authorized visits…</p>}
-      {result.error&&<Notice tone="warning">{result.error}<Button variant="ghost" onClick={()=>setAttempt(a=>a+1)}>Retry authorized visits</Button></Notice>}
+      {result.error&&<Notice tone="warning">{result.error}<Button variant="ghost" onClick={reload}>Retry authorized visits</Button></Notice>}
       {!result.loading&&!result.error&&!shown.length&&<p>{query?'No matching Patient in these visits.':'No authorized visits were returned for this period.'}</p>}
       {!result.loading&&!result.error&&!!shown.length&&<ul className="patient-picker-list">{shown.map(p=><li key={p.id}><button type="button" onClick={()=>onSelect(p)}><span><b>{p.name}</b><small>{p.code}</small></span><span>Open chart</span></button></li>)}</ul>}
     </>}

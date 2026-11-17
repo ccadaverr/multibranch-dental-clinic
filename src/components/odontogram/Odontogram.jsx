@@ -28,6 +28,7 @@ export function Odontogram({
   defaultView = 'top',
   recordingPending = false,
   onDirtyChange,
+  onReviewEncounter,
 }) {
   const [enlarged,setEnlarged]=useState(false)
   const [view, setView] = useState(defaultView) // 'top' | 'front'
@@ -361,6 +362,7 @@ export function Odontogram({
               onBack={() => requestSelection(null)}
               canRecord={canRecord}
               onRecord={onRecord}
+              onReviewEncounter={onReviewEncounter}
               branches={branches}
               activeBranchId={activeBranchId}
             />
