@@ -251,7 +251,7 @@ class DemoCheck extends Command
         $missing = $branches->filter(fn ($b) => ! $b->phone || in_array($b->phone, \Database\Seeders\RealBranchSeeder::PLACEHOLDER_PHONES, true) || ! is_array($b->weekly_hours) || ! $b->weekly_hours);
         $missing->isNotEmpty()
             ? $this->result('FAIL', 'Branch phone or opening hours missing or placeholder: '.$missing->pluck('name')->implode(', '), 'Enter the clinic\'s phone and hours in Administration → Branches, or run the RealBranchSeeder on the demo database.')
-            : $this->result('PASS', 'Every branch has a real phone and opening hours ('.$branches->count().')');
+            : $this->result('PASS', 'Every open branch has a configured phone and weekly opening hours ('.$branches->count().')');
         foreach ($branches->filter(fn ($b) => ! $b->email) as $b) $this->result('WARN', "{$b->name}: no email on file", 'Open item: ask the clinic for this branch\'s email (it is hidden wherever an email would show).');
     }
 

@@ -29,8 +29,34 @@ $identity = DB::selectOne('SELECT current_database() AS db, host(inet_server_add
 if ($identity->db !== 'dental_clinic_demo' || $identity->host !== $target['host'] || (int) $identity->port !== $target['port'] || $identity->marker !== $target['cluster_id']) {
     throw new RuntimeException('Actual local cluster identity mismatch.');
 }
-$result = DB::transaction(function () {
-    $b = Branch::firstOrCreate(['legacy_ref' => 'sprint02'], ['branch_code' => 'BRC-SP02', 'name' => 'Synthetic Sprint 02 — not clinic hours', 'city' => 'Synthetic', 'address' => 'Synthetic local acceptance only', 'open_time' => '00:00', 'close_time' => '23:59', 'status' => 'Open', 'capacity_threshold' => 80]);
+$contactsOnly = in_array('--contacts-only', $argv ?? [], true);
+if ($contactsOnly && (is_link($target['runtime'].'/synthetic-runtime')
+    || ! is_file($target['runtime'].'/synthetic-runtime')
+    || trim(file_get_contents($target['runtime'].'/synthetic-runtime')) !== $target['cluster_id'])) {
+    throw new RuntimeException('The contact update requires the owned synthetic rehearsal marker.');
+}
+
+$result = DB::transaction(function () use ($contactsOnly) {
+    $name = 'Synthetic Sprint 02 — not clinic hours';
+    $query = Branch::where('legacy_ref', 'sprint02')->lockForUpdate();
+    $b = $contactsOnly ? $query->firstOrFail() : $query->firstOrCreate(
+        ['legacy_ref' => 'sprint02'],
+        ['branch_code' => 'BRC-SP02', 'name' => $name, 'city' => 'Synthetic', 'address' => 'Synthetic local acceptance only', 'open_time' => '00:00', 'close_time' => '23:59', 'status' => 'Open', 'capacity_threshold' => 80],
+    );
+    if ($b->branch_code !== 'BRC-SP02' || $b->name !== $name || $b->address !== 'Synthetic local acceptance only') {
+        throw new RuntimeException('Refusing to change a branch outside the rehearsal fixture.');
+    }
+
+    $b->phone ??= '+1 202 555 0142'; // Reserved fictional number. This fixture cannot send messages.
+    if ($b->weekly_hours === null || $b->weekly_hours === []) {
+        $b->weekly_hours = collect(range(1, 7))->mapWithKeys(fn ($day) => [$day => $b->hoursOnDay($day)])->all();
+    }
+    if ($b->isDirty()) {
+        $b->save();
+    }
+    if ($contactsOnly) {
+        return ['branch' => $b->legacy_ref, 'syntheticContactsConfigured' => true];
+    }
     // Reopen only this named synthetic fixture when explicitly preparing another local journey.
     $b->update(['status' => 'Open']);
     $base = User::where('email', 'staff.reception@example.test')->firstOrFail();

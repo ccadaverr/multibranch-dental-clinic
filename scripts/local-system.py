@@ -146,8 +146,11 @@ def main():
     parser.add_argument('--test-mail-profile', choices=['target', 'suite'], default='target',
                         help='For explicit test action only: target keeps queued capture; suite uses PHPUnit array/sync defaults')
     parser.add_argument('action', choices=['status', 'start', 'stop', 'backup', 'migrate', 'seed', 'seed-demo', 'visit-fixture', 'test', 'clone-test', 'concurrency', 'billing-concurrency', 'prescription-concurrency', 'operations-contention', 'roster-draft-contention', 'roster-publication-contention', 'leave-authority-contention', 'leave-recovery-contention', 'arrival-concurrency', 'encounter-concurrency', 'profile-concurrency', 'chart-concurrency', 'dependent-concurrency', 'verify-schema', 'verify-guard', 'serve', 'ui', 'mailbox', 'worker', 'scheduler'])
+    parser.add_argument('--contacts-only', action='store_true', help='Fill missing contact fields on the owned synthetic Visit branch only.')
     parser.add_argument('tests', nargs='*')
     args = parser.parse_args()
+    if args.contacts_only and (args.action != 'visit-fixture' or args.profile != 'demo'):
+        raise ValueError('Contact repair is limited to the synthetic demo Visit fixture.')
     if args.test_mail_profile != 'target' and (args.action != 'test' or args.profile != 'test'):
         raise ValueError('Suite mail defaults are available only for explicit test action and test profile.')
     c, runtime = target(args.target)
@@ -198,10 +201,18 @@ def main():
         fixture_env = environment(c, runtime, 'demo')
         fixture_env['DENTALOPS_LOCAL_VISIT_FIXTURE'] = '1'
         fixture_env['DENTALOPS_LOCAL_TARGET'] = str(Path(args.target).resolve())
-        fixture = subprocess.check_output([c['php'], 'tests/Support/local_visit_fixture.php'],
+        command = [c['php'], 'tests/Support/local_visit_fixture.php']
+        if args.contacts_only:
+            command.append('--contacts-only')
+        fixture = subprocess.check_output(command,
                                          cwd=ROOT / 'backend', env=fixture_env, text=True)
         # Parse before publishing; no passwords, keys, tokens or financial outcomes are included.
         data = json.loads(fixture)
+        if args.contacts_only:
+            if data != {'branch': 'sprint02', 'syntheticContactsConfigured': True}:
+                raise ValueError('Synthetic contact readback did not match the fixture branch.')
+            print('Synthetic branch contact fields verified; Visit fixture evidence retained.')
+            return
         output = runtime / 'visit-fixture.json'
         output.write_text(json.dumps(data, indent=2))
         output.chmod(0o600)

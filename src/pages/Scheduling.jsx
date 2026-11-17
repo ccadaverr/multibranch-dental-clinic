@@ -261,6 +261,7 @@ function AppointmentManagement({ role, store, setPage, context }) {
   const [actionError,setActionError]=useState('')
   const openAction=(set,record)=>{owner.invalidate();setActionError('');set(record)}
   const branches=bookableBranches(state,session)
+  const branchNames = new Map(state.branches.map(branch => [branch.id, branch.name]))
   const visible=state.appointments.filter(a=>{
     if(!inScope(a,session,state))return false
     if(statusFilter!=='All'&&a.status!==statusFilter)return false
@@ -299,7 +300,7 @@ function AppointmentManagement({ role, store, setPage, context }) {
   // created; once the Patient has checked in, No-show is no longer possible.
   const markNoShow=()=>runAction('noShow',missed,setMissed,a=>store.appointmentFlow.noShow(a,commandKey()))
   return <>
-    <PageHeader kicker="Scheduling" title="Appointment management" text="Create, reschedule and cancel visits. Every change is validated and stored by the clinic server." aside={<div className="row-actions"><RefreshButton onClick={()=>store.appointmentFlow.refresh()}/><Button onClick={()=>openAction(setNewOpen,true)} icon="plusCalendar">New appointment</Button></div>}/>
+    <PageHeader kicker="Scheduling" title="Appointment management" text={role === 'staff' ? 'Find bookings, confirm arrivals and manage appointment changes.' : undefined} aside={<div className="row-actions"><RefreshButton onClick={()=>store.appointmentFlow.refresh()}/><Button onClick={()=>openAction(setNewOpen,true)} icon="plusCalendar">New appointment</Button></div>}/>
     <AppointmentsStatusNotice store={store}/>
     {owner.busy&&<p role="status">Saving appointment change…</p>}
     {actionError&&<p role="alert">{actionError}</p>}
@@ -313,6 +314,8 @@ function AppointmentManagement({ role, store, setPage, context }) {
       <select aria-label="Filter by appointment status" value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
         <option value="All">All statuses</option>
         <option value="Confirmed">Confirmed</option>
+        <option value="Checked In">Checked In</option>
+        <option value="In Treatment">In Treatment</option>
         <option value="Pending">Pending</option>
         <option value="Completed">Completed</option>
         <option value="Cancelled">Cancelled</option>
@@ -325,7 +328,11 @@ function AppointmentManagement({ role, store, setPage, context }) {
     </FilterBar>
     <Card title="Clinic appointments" subtitle="Appointments in your authorized branches, about three months back and ahead.">
       <Table rows={visible} empty="No appointments matching your filters in your authorized branches." columns={[
-        {key:'appointmentNo',label:'Appointment',render:a=><div><b>{a.appointmentNo}</b><small className="block-muted">{a.source}</small></div>},
+        {key:'appointmentNo',label:'Appointment',render:a=><div>
+          <b>{a.appointmentNo}</b>
+          <small className="block-muted">{a.source}</small>
+          {role === 'staff' && <small className="block-muted">{branchNames.get(a.branchId) || 'Branch unavailable'}</small>}
+        </div>},
         {key:'date',label:'Date & time',render:a=><div><b>{dateLabel(a.date)}</b><small className="block-muted">{displayTime(a.start)}–{displayTime(addMinutes(a.start,a.duration))}</small></div>},
         {key:'patient',label:'Patient',render:a=>a.patientName||patientName(a.patientId,state.patients)},
         {key:'service',label:'Service'},{key:'dentist',label:'Dentist',render:a=>a.dentistName||dentistName(a.dentistId,state.dentists)},
@@ -334,7 +341,7 @@ function AppointmentManagement({ role, store, setPage, context }) {
           {a.cancellationCategory && <small className="block-muted" style={{overflowWrap:'anywhere'}}>{a.cancellationCategory}{a.cancellationDetail && ` — ${a.cancellationDetail}`}</small>}
           <small className="block-muted">{a.bookingPaymentStatus==='paid'?`Deposit paid${a.bookingPaymentMethod?` (${a.bookingPaymentMethod})`:''}`:a.bookingPaymentStatus==='held'?'Held':a.bookingPaymentStatus==='refunded'?'Refunded':a.bookingPaymentStatus==='forfeited'?'Forfeited':'Unpaid'}</small>
         </div>},
-        {key:'actions',label:'Actions',render:a=><div className="row-actions">{checkInNavigationFor(store,a)&&<Button size="sm" variant="soft" onClick={()=>{const checkIn=checkInNavigationFor(store,a);if(checkIn)setPage('checkin',{mode:'scheduled',checkIn})}}>Check in</Button>}{role==='staff'&&appointmentRecordPatient(a,state,session)&&<Button size="sm" variant="soft" onClick={()=>{const patient=appointmentRecordPatient(a,state,session);if(patient)setPage('patients',{patientId:patient.id})}}>Open Patient Record</Button>}{canSchedule(store,a.branchId)&&['Confirmed','Pending'].includes(a.status)&&<><Button size="sm" variant="soft" onClick={()=>openAction(setReschedule,a)}>Reschedule</Button><Button size="sm" variant="ghost" disabled={owner.busy} onClick={()=>openAction(setCancelling,a)}>Cancel</Button>{a.date===clinicDate()&&<Button size="sm" variant="ghost" disabled={owner.busy} onClick={()=>openAction(setMissed,a)}>No-show</Button>}</>}</div>}
+        {key:'actions',label:'Actions',render:a=><div className="row-actions">{checkInNavigationFor(store,a)&&<Button variant="primary" onClick={()=>{const checkIn=checkInNavigationFor(store,a);if(checkIn)setPage('checkin',{mode:'scheduled',checkIn})}}>Check in</Button>}{role==='staff'&&appointmentRecordPatient(a,state,session)&&<Button size="sm" variant="soft" onClick={()=>{const patient=appointmentRecordPatient(a,state,session);if(patient)setPage('patients',{patientId:patient.id})}}>Open Patient Record</Button>}{canSchedule(store,a.branchId)&&['Confirmed','Pending'].includes(a.status)&&<><Button size="sm" variant="soft" onClick={()=>openAction(setReschedule,a)}>Reschedule</Button><Button size="sm" variant="ghost" disabled={owner.busy} onClick={()=>openAction(setCancelling,a)}>Cancel</Button>{a.date===clinicDate()&&<Button size="sm" variant="ghost" disabled={owner.busy} onClick={()=>openAction(setMissed,a)}>No-show</Button>}</>}</div>}
       ]}/>
     </Card>
     <Modal open={newOpen} title="Create appointment" subtitle="The clinic server validates the slot and assigns an eligible Dentist unless you choose one." wide onClose={()=>setNewOpen(false)}><AppointmentForm role={role} store={store} onSaved={()=>setNewOpen(false)}/></Modal>
