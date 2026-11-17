@@ -107,6 +107,8 @@ class PrescriptionSearchTest extends TestCase
         }
         $this->getJson('/api/prescriptions?page=2&per_page=20')->assertOk()->assertJsonCount(0, 'data')->assertJsonPath('meta.total', 1);
         $this->getJson('/api/prescriptions?page=1&q='.strtolower($rx['number']))->assertOk()->assertJsonPath('data.0.id', $rx['id']);
+        $this->getJson('/api/prescriptions?page=1&q='.rawurlencode($rx['dentist']))->assertOk()->assertJsonPath('data.0.id', $rx['id']);
+        $this->getJson('/api/prescriptions?page=1&q='.rawurlencode($rx['branch']))->assertOk()->assertJsonPath('data.0.id', $rx['id']);
     }
 
     public function test_branch_scope_revocation_applies_to_every_search_page_and_patient_reads_are_private(): void

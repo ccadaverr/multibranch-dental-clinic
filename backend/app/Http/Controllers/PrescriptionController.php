@@ -74,7 +74,7 @@ class PrescriptionController extends Controller
             $q->where(function ($q) use ($like, $user) {
                 $q->where('number', 'ilike', $like)
                     ->orWhereHas('branch', fn ($b) => $b->where('name', 'ilike', $like))
-                    ->orWhereHas('dentist.person', fn ($p) => $p->whereRaw("concat_ws(' ', first_name, last_name) ILIKE ?", [$like]));
+                    ->orWhereHas('dentist.person', fn ($p) => $p->whereRaw("concat('Dr. ', concat_ws(' ', first_name, last_name)) ILIKE ?", [$like]));
                 if ($user->role->value !== 'owner') {
                     $q->orWhereHas('patient.person', fn ($p) => $p->whereRaw("concat_ws(' ', first_name, last_name) ILIKE ?", [$like]));
                 }
