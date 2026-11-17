@@ -1,0 +1,205 @@
+{
+  "base_head": "295dc8bad18199a699f8fa310be790a7b513a0f7",
+  "implementation_head": "15dec2e0ddaca8a75b675da467bec1e45c0efae6",
+  "branch": "feature/jaztin-fullstack-qa-20261117",
+  "published_remote_checkpoint": "53b0e2e1cea0a1c4db1c498eb80b8fb3e81d77da",
+  "j03_j04_j05_pushed": false,
+  "scope": "Clinical-branch candidates; zero new whole-QA promotions or Windows integrated acceptance",
+  "qa_partial_advanced": [
+    "GEN-02",
+    "GEN-04",
+    "GEN-08",
+    "GEN-13"
+  ],
+  "qa_regression_only": [
+    "STF-03",
+    "STF-05",
+    "DEN-04",
+    "DEN-05"
+  ],
+  "excluded_self": "docs/JAZTIN_J05_MANIFEST_20261118.json",
+  "files": [
+    {
+      "path": "backend/tests/Feature/Treatments/HistoryDiscoveryPaginationTest.php",
+      "bytes": 3073,
+      "sha256": "b3c28b49e695fe7365f4c1b0d46b42b4d31519f2b70d240a3e6bbb952b238cc8",
+      "lf_sha256": "b3c28b49e695fe7365f4c1b0d46b42b4d31519f2b70d240a3e6bbb952b238cc8"
+    },
+    {
+      "path": "backend/tests/Support/j05_history_fixture.php",
+      "bytes": 4592,
+      "sha256": "f7108fccefcbe5993a2f8f3d48e54dea86c78da4022147ceeee37657dfba6674",
+      "lf_sha256": "f7108fccefcbe5993a2f8f3d48e54dea86c78da4022147ceeee37657dfba6674"
+    },
+    {
+      "path": "docs/JAZTIN_J05_SPRINT_20261118.md",
+      "bytes": 17334,
+      "sha256": "034ad80001082db794d16a4760369c2670e5202c52720838cb52c2de8bddb4b6",
+      "lf_sha256": "034ad80001082db794d16a4760369c2670e5202c52720838cb52c2de8bddb4b6"
+    },
+    {
+      "path": "src/components/odontogram/Odontogram.jsx",
+      "bytes": 16649,
+      "sha256": "718fcafdc8de643d44985098c4822efa55d82d45366995de23f8c5f0a2a2da4c",
+      "lf_sha256": "718fcafdc8de643d44985098c4822efa55d82d45366995de23f8c5f0a2a2da4c"
+    },
+    {
+      "path": "src/components/odontogram/ToothHistory.jsx",
+      "bytes": 2512,
+      "sha256": "35f7f34e3785015bdc5b835abdb3f8e362c03d8d1a203ff34da1386f328b94e3",
+      "lf_sha256": "35f7f34e3785015bdc5b835abdb3f8e362c03d8d1a203ff34da1386f328b94e3"
+    },
+    {
+      "path": "src/components/odontogram/ToothTimeline.jsx",
+      "bytes": 9577,
+      "sha256": "906c27d6c587a0b02f4e8fa02ac0956dd28de709648c80edeb2f1cd39debe530",
+      "lf_sha256": "906c27d6c587a0b02f4e8fa02ac0956dd28de709648c80edeb2f1cd39debe530"
+    },
+    {
+      "path": "src/history-experience.css",
+      "bytes": 3173,
+      "sha256": "fe681ef84b1104aed8dac55cf2b06e211e1b70c39807436ef3bc3764da23c7f7",
+      "lf_sha256": "fe681ef84b1104aed8dac55cf2b06e211e1b70c39807436ef3bc3764da23c7f7"
+    },
+    {
+      "path": "src/history-read.js",
+      "bytes": 2496,
+      "sha256": "82cf824375d9047ccc556bbb5020ed8cf43c7eba513e6e3d02979b626d869d06",
+      "lf_sha256": "82cf824375d9047ccc556bbb5020ed8cf43c7eba513e6e3d02979b626d869d06"
+    },
+    {
+      "path": "src/pages/ClinicalHistory.jsx",
+      "bytes": 7114,
+      "sha256": "b03712da19bc271e635319b49f3405a641c58560467112242e049d62dca6ec38",
+      "lf_sha256": "b03712da19bc271e635319b49f3405a641c58560467112242e049d62dca6ec38"
+    },
+    {
+      "path": "src/pages/DentalChart.jsx",
+      "bytes": 19795,
+      "sha256": "447eb9b2d6c62a6cb4cdff8e9bf16a3a5b320391260238962b8eac5fb429c908",
+      "lf_sha256": "447eb9b2d6c62a6cb4cdff8e9bf16a3a5b320391260238962b8eac5fb429c908"
+    },
+    {
+      "path": "src/pages/EncounterCare.jsx",
+      "bytes": 6118,
+      "sha256": "16f2cf39531c1372b344f346abac5e750e47d34d9738b80bb14938fa36860dc5",
+      "lf_sha256": "16f2cf39531c1372b344f346abac5e750e47d34d9738b80bb14938fa36860dc5"
+    },
+    {
+      "path": "tests/j04-clinical-workspace.browser.mjs",
+      "bytes": 17391,
+      "sha256": "7f7d928166d87f0acb4f0d2f1dc0e393920109e3df2dadd7a55d261a11163b62",
+      "lf_sha256": "7f7d928166d87f0acb4f0d2f1dc0e393920109e3df2dadd7a55d261a11163b62"
+    },
+    {
+      "path": "tests/j05-history-layout.browser.mjs",
+      "bytes": 4013,
+      "sha256": "abe34f82b68779b131a4facd80eedfd41c54de07361e3fa65da4a8d7f3cc4e73",
+      "lf_sha256": "abe34f82b68779b131a4facd80eedfd41c54de07361e3fa65da4a8d7f3cc4e73"
+    },
+    {
+      "path": "tests/j05-history-read.test.js",
+      "bytes": 3052,
+      "sha256": "40771e4dd5376ae5ecdba1fd5ce7ad737dfb4b58614ca6ba1bc75c7086c97cf5",
+      "lf_sha256": "40771e4dd5376ae5ecdba1fd5ce7ad737dfb4b58614ca6ba1bc75c7086c97cf5"
+    },
+    {
+      "path": "tests/j05-history-workspace.browser.mjs",
+      "bytes": 11811,
+      "sha256": "f8ec1e8a47ba2dc4effaca6bb4a1d411bf47c65968931a119f73ce80649e1637",
+      "lf_sha256": "f8ec1e8a47ba2dc4effaca6bb4a1d411bf47c65968931a119f73ce80649e1637"
+    }
+  ],
+  "private_evidence_hashes_only": [
+    {
+      "path": "/private/tmp/j05-focused-final.log",
+      "bytes": 6525,
+      "sha256": "017f83a63d878c32fd52d466bcfcaefa628aa5bdafe146c19a1ff931a1af7d87",
+      "lf_sha256": "017f83a63d878c32fd52d466bcfcaefa628aa5bdafe146c19a1ff931a1af7d87"
+    },
+    {
+      "path": "/private/tmp/j05-focused-pg.log",
+      "bytes": 349,
+      "sha256": "fde21689659d32329f608fd241035f83a898c9a0bd69ceba0c1f4940fe9810e0",
+      "lf_sha256": "fde21689659d32329f608fd241035f83a898c9a0bd69ceba0c1f4940fe9810e0"
+    },
+    {
+      "path": "/private/tmp/j05-frontend-final.log",
+      "bytes": 464421,
+      "sha256": "727a73b0fa1e44908ba7204a056eeb3e9d4169b3da090e0b2af01b5296d5d1e4",
+      "lf_sha256": "727a73b0fa1e44908ba7204a056eeb3e9d4169b3da090e0b2af01b5296d5d1e4"
+    },
+    {
+      "path": "/private/tmp/j05-backend-consolidated.log",
+      "bytes": 433,
+      "sha256": "eeafe1554957b38940b29705d881309f1efd922e81a92b556c0c0fdd37f73b8e",
+      "lf_sha256": "eeafe1554957b38940b29705d881309f1efd922e81a92b556c0c0fdd37f73b8e"
+    },
+    {
+      "path": "/private/tmp/j05-backend-unit.log",
+      "bytes": 99,
+      "sha256": "bc0826b63aa881798e9b53b1352dde24611582d743b0997637932f8bb6162be0",
+      "lf_sha256": "bc0826b63aa881798e9b53b1352dde24611582d743b0997637932f8bb6162be0"
+    },
+    {
+      "path": "/private/tmp/j05-j04-regression-final.log",
+      "bytes": 890,
+      "sha256": "38ec5ca0716188eff6f869c389a4830079b724d8d7bba6bdd53931dd18659b33",
+      "lf_sha256": "38ec5ca0716188eff6f869c389a4830079b724d8d7bba6bdd53931dd18659b33"
+    },
+    {
+      "path": "/private/tmp/j05-history-browser-accepted.log",
+      "bytes": 369,
+      "sha256": "15c4ae504e148008e4901538b258f0968322035960221e480bf72f651f86454b",
+      "lf_sha256": "15c4ae504e148008e4901538b258f0968322035960221e480bf72f651f86454b"
+    },
+    {
+      "path": "/private/tmp/j05-layout-final.log",
+      "bytes": 112,
+      "sha256": "5f16d62305cf7849d07d5288d6fe3982d49f6ec0704a1bb9c401b293f4d32ff4",
+      "lf_sha256": "5f16d62305cf7849d07d5288d6fe3982d49f6ec0704a1bb9c401b293f4d32ff4"
+    },
+    {
+      "path": "/private/tmp/j05-neighbor-browser.log",
+      "bytes": 283,
+      "sha256": "2886ce4161fb5fd491dcfd9b2876765aeb818b6bc76a788164250ee301b11d3b",
+      "lf_sha256": "2886ce4161fb5fd491dcfd9b2876765aeb818b6bc76a788164250ee301b11d3b"
+    },
+    {
+      "path": "/private/tmp/j05-smoke-final.log",
+      "bytes": 2893,
+      "sha256": "c3769ed471bcdf2c2d0a2e72342343d138d4c1dcc5860fda0440d406066b331e",
+      "lf_sha256": "c3769ed471bcdf2c2d0a2e72342343d138d4c1dcc5860fda0440d406066b331e"
+    },
+    {
+      "path": "/private/tmp/j05-build-final.log",
+      "bytes": 7013,
+      "sha256": "472bf9914b08f1052a381615962fc39367da19abd76c2c4d33a1987fa8e37ddc",
+      "lf_sha256": "472bf9914b08f1052a381615962fc39367da19abd76c2c4d33a1987fa8e37ddc"
+    },
+    {
+      "path": "/private/tmp/j05-predefense-final.log",
+      "bytes": 2339,
+      "sha256": "a9145ec97e83c2d4cca87b9db7b2ff608062aaa172b8684dede7d5f7e041e4cf",
+      "lf_sha256": "a9145ec97e83c2d4cca87b9db7b2ff608062aaa172b8684dede7d5f7e041e4cf"
+    },
+    {
+      "path": "/private/tmp/j05-pint-final.log",
+      "bytes": 33,
+      "sha256": "cd1a94fc2cf6a965b86e1a4809d6c7fb9148b1ee374e1010ed2ac96ff4876ec2",
+      "lf_sha256": "cd1a94fc2cf6a965b86e1a4809d6c7fb9148b1ee374e1010ed2ac96ff4876ec2"
+    },
+    {
+      "path": "/private/tmp/jaztin-j05-20261117/history-browser/j05-state.json",
+      "bytes": 2950,
+      "sha256": "01921cf4ae8ad6d79ee4e8a7d8d53e57b592ad13442eaf0486b466e7910e07d5",
+      "lf_sha256": "01921cf4ae8ad6d79ee4e8a7d8d53e57b592ad13442eaf0486b466e7910e07d5"
+    },
+    {
+      "path": "/private/tmp/jaztin-j05-20261117/history-browser/layout-results.json",
+      "bytes": 204,
+      "sha256": "6d7dbef2e9e4cf8352ba2c495bbe0187f7d5aa203b424af7ad87e58d6fdaa437",
+      "lf_sha256": "6d7dbef2e9e4cf8352ba2c495bbe0187f7d5aa203b424af7ad87e58d6fdaa437"
+    }
+  ]
+}
