@@ -13,10 +13,13 @@ export function ClinicalHistory({store,patient,selectedId=null,expectedVisitId=n
 }
 function History({store,patient,selectedId,expectedVisitId,expectedBranchId,allowChart,selectedOnly}){
  const [rows,setRows]=useState([]),[detail,setDetail]=useState(null),[error,setError]=useState(''),[detailError,setDetailError]=useState(''),[loading,setLoading]=useState(false),[reading,setReading]=useState(false),[page,setPage]=useState(1),[last,setLast]=useState(1),[attempt,setAttempt]=useState(0),[picked,setPicked]=useState(selectedId?{id:selectedId,visitId:expectedVisitId,branchId:expectedBranchId}:null),[chart,setChart]=useState(false)
- const detailHeading=useRef(null)
+ const detailHeading=useRef(null),rowButtons=useRef(new Map()),restoreRow=useRef(null)
  const live=useRef(false),latest=useRef(store),epoch=useRef(0);latest.current=store
  const owner=clinicalSessionKey(store.session),generation=store.getAuthGeneration?.()
  const owns=()=>live.current&&clinicalSessionKey(latest.current.session)===owner&&latest.current.getAuthGeneration?.()===generation
+ const choose=row=>{epoch.current++;setDetail(null);setDetailError('');setPicked({id:row.id,visitId:row.visit.id,branchId:row.branch.id,revision:row.revision})}
+ const back=()=>{epoch.current++;restoreRow.current=picked?.id;setPicked(null);setDetail(null);setDetailError('');setReading(false)}
+ React.useLayoutEffect(()=>{if(!picked&&restoreRow.current){rowButtons.current.get(restoreRow.current)?.focus();restoreRow.current=null}},[picked])
  useEffect(()=>{if(detail){detailHeading.current?.focus();detailHeading.current?.scrollIntoView({block:'start'})}},[detail?.id])
  useEffect(()=>{live.current=true;return()=>{live.current=false}},[])
  useEffect(()=>{
@@ -43,9 +46,10 @@ function History({store,patient,selectedId,expectedVisitId,expectedBranchId,allo
  return <div className="clinical-history-workspace"><Card title="Completed encounter history" subtitle="Authorized completed records across dates. Historical documentation is read-only." actions={<RefreshButton title="Reload clinical history" ariaLabel="Reload clinical history" loading={loading||reading} onClick={()=>setAttempt(a=>a+1)}/>}>
   {error&&<Notice tone="warning">{error}<Button onClick={()=>setAttempt(a=>a+1)}>Retry history</Button></Notice>}
   {loading&&<p role="status">Loading completed encounters…</p>}
-  {!selectedOnly&&!loading&&!error&&!rows.length&&<p>No authorized completed encounters were returned for this Patient.</p>}
-  {!selectedOnly&&rows.map(t=><article key={t.id} className="clinical-history" style={{overflowWrap:'anywhere'}}><div style={{minWidth:0}}><b>{t.clinic_date} · {t.branch.name}</b><p>{t.procedure_summary||'No procedure summary recorded'}</p><small>{t.dentist.name} · Revision {t.revision}</small><p>{t.appointment?'Appointment '+t.appointment.code:'Walk-in Visit'} · Encounter {t.id}</p></div><Button variant="soft" aria-label={`Review encounter ${t.clinic_date}, ${t.appointment?.code||'walk-in'}, reference ${t.id}`} onClick={()=>setPicked({id:t.id,visitId:t.visit.id,branchId:t.branch.id,revision:t.revision})}>Review encounter {t.clinic_date}</Button></article>)}
-  {!selectedOnly&&last>1&&<div className="row-actions"><Button disabled={page<=1||loading} onClick={()=>setPage(p=>p-1)}>Newer encounters</Button><span>Page {page} of {last}</span><Button disabled={page>=last||loading} onClick={()=>setPage(p=>p+1)}>Older encounters</Button></div>}
+  {!picked&&!selectedOnly&&!loading&&!error&&!rows.length&&<p>No authorized completed encounters were returned for this Patient.</p>}
+  {!selectedOnly&&picked&&<Button variant="ghost" onClick={back}>Back to encounter list</Button>}
+  {!selectedOnly&&!picked&&<><div className="history-choices" aria-label="Completed encounter choices">{rows.map(t=><Button key={t.id} ref={node=>{if(node)rowButtons.current.set(t.id,node);else rowButtons.current.delete(t.id)}} className="history-choice" variant="ghost" aria-label={`Review encounter ${t.clinic_date}, ${t.appointment?.code||'walk-in'}, reference ${t.id}`} onClick={()=>choose(t)}><span className="history-choice-date">{t.clinic_date} · {t.appointment?.code||'Walk-in'}</span><span className="history-choice-summary">{t.procedure_summary||'No procedure summary recorded'}</span><small>{t.branch.name} · {t.dentist.name}</small><small>Encounter {t.id} · Revision {t.revision}</small></Button>)}</div>
+  {last>1&&<nav className="row-actions history-pagination" aria-label="Encounter history pages"><Button disabled={page<=1||loading} onClick={()=>setPage(p=>p-1)}>Newer encounters</Button><span>Page {page} of {last}</span><Button disabled={page>=last||loading} onClick={()=>setPage(p=>p+1)}>Older encounters</Button></nav>}</>}
   {reading&&<p role="status">Verifying the selected historical encounter…</p>}
   {detailError&&<Notice tone="warning">{detailError}<Button onClick={()=>setAttempt(a=>a+1)}>Retry encounter</Button></Notice>}
   {detail&&<section aria-label="Historical encounter" style={{overflowWrap:'anywhere'}}>

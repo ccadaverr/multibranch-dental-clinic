@@ -17,7 +17,7 @@ export function ToothHistory({history,currentEntries,onReviewEncounter}){
      {item.created_at&&<p>Recorded {new Date(item.created_at).toLocaleString('en-PH',{timeZone:'Asia/Manila'})}</p>}
      {item.treatment_id&&<p>Encounter {item.treatment_id} · Visit {item.visit_id}</p>}
      {item.note&&<p className="od-card-note">{item.note}</p>}
-     {onReviewEncounter&&item.treatment_id&&item.visit_id&&<Button variant="soft" onClick={()=>onReviewEncounter({id:item.treatment_id,visitId:item.visit_id,branchId:item.branch?.id,entryId:item.id})}>Review linked encounter</Button>}
+     {onReviewEncounter&&item.treatment_id&&item.visit_id&&<Button variant="soft" onClick={event=>onReviewEncounter({id:item.treatment_id,visitId:item.visit_id,branchId:item.branch?.id,entryId:item.id},event.currentTarget)}>Review linked encounter</Button>}
     </div>
    </details>)}</div>
    {last>1&&<nav className="row-actions" aria-label="Tooth history pages"><Button variant="ghost" disabled={shown<=1} onClick={()=>setPage(p=>p-1)}>Newer findings</Button><span role="status">Page {shown} of {last}</span><Button variant="ghost" disabled={shown>=last} onClick={()=>setPage(p=>p+1)}>Older findings</Button></nav>}

@@ -28,7 +28,7 @@ function ChartRecord({ patientId, canRecord, toast, store, recordContext = null,
   const live=React.useRef(true), recording=React.useRef(false)
   const actor=React.useRef({key:clinicalSessionKey(store?.session),auth:store?.getAuthGeneration?.()}),latest=React.useRef(store);latest.current=store
   const command=React.useRef(null),link=React.useRef(recordContext)
-  const [historyTarget,setHistoryTarget]=useState(null),historyButton=React.useRef(null),closeHistory=React.useRef(null)
+  const [historyTarget,setHistoryTarget]=useState(null),historyButton=React.useRef(null),closeHistory=React.useRef(null),chartRoot=React.useRef(null)
   useEffect(()=>{if(historyTarget){closeHistory.current?.focus();closeHistory.current?.scrollIntoView({block:'start'})}},[historyTarget])
   const [feedback,setFeedback]=useState(null),[reviewOpen,setReviewOpen]=useState(false)
   const dirty=React.useRef(false), editGeneration=React.useRef(0)
@@ -112,7 +112,7 @@ function ChartRecord({ patientId, canRecord, toast, store, recordContext = null,
   }
 
   return (
-    <div className="tc-unified-chart clinical-odontogram">
+    <div ref={chartRoot} className="tc-unified-chart clinical-odontogram">
       <div className="chart-read-heading"><div><h3>Current dental chart{!canRecord?' · Read-only':''}</h3><p>{data?.patient?.name||'Patient '+patientId}</p></div><RefreshButton title="Review saved chart" ariaLabel="Review saved chart" loading={!data&&!error} disabled={recordingPending} onClick={()=>{if(dirty.current||command.current?.outcome==='unknown')setReviewOpen(true);else{command.current=null;setAttempt(a=>a+1)}}}/></div>
       {error&&<Notice tone="warning" title="Chart unavailable"><p>{error}</p><Button variant="ghost" onClick={()=>setAttempt(a=>a+1)}>Retry chart</Button></Notice>}
       {!data&&!error&&<p className="au-muted" role="status">Loading the chart…</p>}
@@ -124,13 +124,13 @@ function ChartRecord({ patientId, canRecord, toast, store, recordContext = null,
         onSelect={setPicked}
         canRecord={writable}
         onRecord={handleRecord}
-        onReviewEncounter={store?.session?.role==='dentist'?target=>{historyButton.current=document.activeElement;setHistoryTarget(target)}:undefined}
+        onReviewEncounter={store?.session?.role==='dentist'?(target,trigger)=>{historyButton.current=trigger||document.activeElement;setHistoryTarget(target)}:undefined}
         branches={branches}
         activeBranchId={activeBranchId}
         recordingPending={recordingPending}
         onDirtyChange={reportDirty}
       />
-      {historyTarget&&<section className="chart-history-review" aria-label="Linked encounter review"><Button ref={closeHistory} variant="ghost" onClick={()=>{setHistoryTarget(null);historyButton.current?.focus()}}>Close encounter review</Button><p>Read-only completed encounter. Your finding draft stays in place.</p><Suspense fallback={<p role="status">Opening saved encounter…</p>}><InlineHistory store={store} patient={{id:patientId}} selectedId={historyTarget.id} expectedVisitId={historyTarget.visitId} expectedBranchId={historyTarget.branchId} selectedOnly allowChart={false}/></Suspense></section>}
+      {historyTarget&&<section className="chart-history-review" aria-label="Linked encounter review"><Button ref={closeHistory} variant="ghost" onClick={()=>{setHistoryTarget(null);if(historyButton.current?.isConnected)historyButton.current.focus();else chartRoot.current?.querySelector('.od-tooth-chooser select')?.focus()}}>Close encounter review</Button><p>Read-only completed encounter. Your finding draft stays in place.</p><Suspense fallback={<p role="status">Opening saved encounter…</p>}><InlineHistory store={store} patient={{id:patientId}} selectedId={historyTarget.id} expectedVisitId={historyTarget.visitId} expectedBranchId={historyTarget.branchId} selectedOnly allowChart={false}/></Suspense></section>}
       {feedback&&<p className="chart-feedback" role={feedback.ok?'status':'alert'}>{feedback.message}</p>}
       </>}
       <ConfirmDialog open={reviewOpen} title="Review the saved chart?" confirmLabel="Load saved chart" onCancel={()=>setReviewOpen(false)} onConfirm={()=>{command.current=null;setReviewOpen(false);dirty.current=false;onDirtyChange?.(false);setFeedback(null);setAttempt(a=>a+1)}}><p>This replaces the unsaved finding editor with saved history. A read does not prove an earlier pending command failed. No historical finding is changed or deleted.</p></ConfirmDialog>
