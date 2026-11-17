@@ -117,7 +117,7 @@ test('dashboards and analytics: Staff show the server count (or unavailable), Ow
   assert.match(dash, /serverInquiries===null\?'…':serverInquiries==='unavailable'\?'Unavailable':serverInquiries/, 'loading, unavailable and the real count are distinct')
   assert.match(dash, /demoOpenInquiries=session\?\.serverUserId\?\[\]:state\.inquiries/, 'demo inquiries cannot reach a server session')
   assert.match(dash, /inquiryCountKnown/, 'the "everything is on track" claim waits for a known count')
-  assert.match(dash, /session\?\.serverUserId\?'Not available to Owner'/)
+  assert.match(dash, /\{!session\?\.serverUserId && <Card title="Patient communication"><MetricRow label="Open inquiries"/)
   const admin = read('src/pages/Admin.jsx')
   assert.match(admin, /value: 'Unavailable', note: 'No authoritative communication count exists yet/)
   assert.doesNotMatch(admin, /serverUserId \? 0 :/, 'no fabricated zero in a server session')

@@ -13,14 +13,16 @@ try {
     return route.fulfill({status:503,json:{message:'Synthetic report unavailable'}})
   })
   await page.route('**/api/me',route=>route.fulfill({json:{data:{id:'synthetic-owner',role:'owner',account_status:'Active'}}}))
-  await page.goto('http://127.0.0.1:5195/tests/fixtures/analytics-export-context.html')
-  const buttons=[page.getByRole('button',{name:'Export Report CSV',exact:true}),page.getByRole('button',{name:'Export Executive Analytics CSV',exact:true})]
-  for(const button of buttons)assert.equal(await button.isDisabled(),true)
+  await page.goto((process.argv[3] || 'http://127.0.0.1:5195') + '/tests/fixtures/analytics-export-context.html')
+  const button=page.getByRole('button',{name:'Export Report CSV',exact:true})
+  await button.waitFor()
+  assert.equal(await page.getByRole('button',{name:/^Export .*CSV$/}).count(),1)
+  assert.equal(await button.isDisabled(),true)
   assert.equal(exports.length,0)
   await page.evaluate(()=>window.analyticsContext.setBranch('Synthetic B2'))
-  await buttons[0].waitFor();await page.waitForFunction(()=>!document.querySelector('button[disabled]')?.textContent?.includes('Export Report CSV'))
+  await button.waitFor();await page.waitForFunction(()=>!document.querySelector('button[disabled]')?.textContent?.includes('Export Report CSV'))
   await page.getByRole('combobox',{name:'Report period',exact:true}).selectOption('This Week')
-  const [download]=await Promise.all([page.waitForEvent('download'),buttons[0].click()])
+  const [download]=await Promise.all([page.waitForEvent('download'),button.click()])
   assert.ok(download.suggestedFilename().startsWith('operational-analytics-'))
   await page.getByLabel('Export result',{exact:true}).getByText('Operational analytics CSV exported successfully.',{exact:true}).waitFor()
   assert.equal(exports.length,1);assert.equal(exports[0].searchParams.get('branch_id'),'b2');assert.equal(exports[0].searchParams.get('period'),'this week')
@@ -29,7 +31,7 @@ try {
     await new Promise(resolve=>release=resolve)
     try{await route.fulfill({contentType:'text/csv',body:'Branch,Value\nb2,0'})}catch{/* Cancelled transport. */}
   })
-  await buttons[0].focus();await page.keyboard.press('Enter')
+  await button.focus();await page.keyboard.press('Enter')
   const cancel=page.getByRole('button',{name:'Cancel analytics export',exact:true})
   await cancel.waitFor()
   await cancel.focus();await page.keyboard.press('Enter')
@@ -37,9 +39,9 @@ try {
   release()
   for(const session of [{serverUserId:'other',role:'staff',active:true},{serverUserId:'synthetic-owner',role:'owner',active:false},{role:'owner',active:true}]){
     await page.evaluate(session=>window.analyticsContext.setSession(session),session)
-    await page.waitForFunction(()=>[...document.querySelectorAll('button')].filter(b=>['Export Report CSV','Export Executive Analytics CSV'].includes(b.textContent.trim())).every(b=>b.disabled))
-    for(const button of buttons)assert.equal(await button.isDisabled(),true)
+    await page.waitForFunction(()=>[...document.querySelectorAll('button')].filter(b=>b.textContent.trim()==='Export Report CSV').every(b=>b.disabled))
+    assert.equal(await button.isDisabled(),true)
   }
   assert.equal(exports.length,1);assert.deepEqual(errors,[])
-  console.log(JSON.stringify({synthetic:true,unresolvedBranchNoDispatch:true,exactBranchPeriodCsv:true,bothControlsRoleGuarded:true,keyboardCancel:true}))
+  console.log(JSON.stringify({synthetic:true,unresolvedBranchNoDispatch:true,exactBranchPeriodCsv:true,singleControlRoleGuarded:true,keyboardCancel:true}))
 }finally{await browser.close()}

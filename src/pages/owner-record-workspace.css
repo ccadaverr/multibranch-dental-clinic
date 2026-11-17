@@ -100,3 +100,116 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
+
+.owner-dashboard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.owner-dashboard-actions .btn {
+  min-height: 44px;
+}
+
+.owner-dashboard-context {
+  margin: 0.25rem 0 1rem;
+}
+
+.stats-grid.owner-dashboard-metrics {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+  gap: 0.75rem;
+}
+
+.owner-dashboard-metrics .stat-card {
+  padding: 0.875rem 1rem;
+}
+
+.owner-dashboard-period {
+  max-width: 15rem;
+}
+
+.owner-report-toolbar .owner-report-export-hint {
+  margin: 0.5rem 0 0;
+}
+
+.owner-report-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+  gap: 0.875rem 1.25rem;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.owner-report-summary h3,
+.owner-report-summary p {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.owner-report-summary p {
+  color: var(--muted);
+}
+
+.owner-report-summary strong {
+  display: block;
+  margin-block: 0.25rem;
+  font-size: 1.25rem;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.owner-revenue > .owner-performance {
+  margin-top: 1.25rem;
+}
+
+.owner-archive-access {
+  margin: 0 0 0.75rem;
+}
+
+@media (max-width: 560px) {
+  .stats-grid.owner-dashboard-metrics {
+    grid-template-columns: 1fr;
+    gap: 0;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg, 0.875rem);
+    background: var(--surface);
+  }
+
+  .owner-dashboard-metrics .stat-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 0.75rem;
+    min-height: 0;
+    padding: 0.75rem 1rem;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .owner-dashboard-metrics .stat-card + .stat-card {
+    border-top: 1px solid var(--line);
+  }
+
+  .owner-dashboard-metrics .stat-label {
+    font-size: 0.875rem;
+    text-transform: none;
+  }
+
+  .owner-dashboard-metrics .stat-icon {
+    display: none;
+  }
+
+  .owner-dashboard-metrics .stat-value {
+    margin: 0;
+    font-size: 1.25rem;
+  }
+
+  .owner-dashboard-metrics .stat-hint {
+    grid-column: 1 / -1;
+    margin-top: 0.15rem;
+  }
+}

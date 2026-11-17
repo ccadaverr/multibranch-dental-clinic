@@ -144,7 +144,7 @@ test('dispatch: a clinic-server session always uses the server page; the demo is
   const fc = read('src/pages/FinanceCommunication.jsx')
   assert.match(fc, /if\(store\.session\?\.serverUserId\)return <ServerMessagesPage/)
   assert.match(fc, /function DemoMessagesPage/)
-  assert.match(read('src/pages/Dashboards.jsx'), /Active conversations" value=\{session\?\.serverUserId\?'Not available to Owner'/)
+  assert.match(read('src/pages/Dashboards.jsx'), /\{!session\?\.serverUserId && <Card title="Patient communication">[^\n]+label="Active conversations"/)
   const layout = read('src/layout.jsx')
   assert.match(layout, /loadConversationSummary\(\)\.then\(r=>\{if\(live\)setServerUnread\(r\.ok\?r\.unread:null\)\}\)/)
   assert.match(layout, /session\?\.serverUserId\?\(Number\.isInteger\(serverUnread\)\?serverUnread:0\):patientConversations/)

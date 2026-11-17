@@ -101,6 +101,7 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
     if (role === 'owner' && value.trim().toLowerCase() !== query.trim().toLowerCase()) setSearchTab('matches')
     setQuery(value)
   }
+  const archiveResults = useRef(null)
   const retryPending = useRef(false)
   const [retrying, setRetrying] = useState(false)
   const [retryFailed, setRetryFailed] = useState(false)
@@ -319,18 +320,21 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
   ]
   const financialStatus = ownerInvoices.pending ? <p role="status">Loading settled financial records…</p>
     : ownerInvoices.failed ? <Notice tone="warning" title="Settled financial records unavailable">
-      <Button variant="soft" onClick={ownerInvoices.retry}>Retry financial records</Button>
+      <Button variant="soft" onClick={() => {
+        archiveResults.current?.focus()
+        ownerInvoices.retry()
+      }}>Retry financial records</Button>
     </Notice> : null
 
   return (
     <div className={role === 'owner' ? 'archives-page owner-record-workspace' : 'archives-page'} aria-label="Archives and Historical Records">
-      <PageHeader
+      {role === 'owner' ? <PageHeader title="Archives & Records" text="Search read-only clinic records by branch."/> : <PageHeader
         kicker="Compliance & Record Retention"
         title="Archives & Historical Records Management"
         text="Role- and branch-scoped history of past or terminal appointments, prescriptions, and settled financial records."
-      />
+      />}
 
-      {role === 'owner' ? <Notice>Open records for read-only review. Restoration is unavailable.</Notice> : <Notice tone="info" title="History viewing and restoration availability">
+      {role === 'owner' ? <p className="muted-copy owner-archive-access">Read-only. Restoration is unavailable.</p> : <Notice tone="info" title="History viewing and restoration availability">
         <b>Viewing</b> inspects historical records read-only within your role and branch scope.
         <br/><span id="archive-restore-unavailable" tabIndex={0}>Retrieval / restoration is unavailable on this screen. Viewing a record does not restore it or flag it for active follow-up.</span><br/>
         <b>Permanent deletion</b> is not available on this screen.
@@ -378,6 +382,7 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
         onChange={ownerSearch ? setSearchTab : setBrowseTab}
       />
 
+      <div ref={archiveResults} role={role === 'owner' ? 'region' : undefined} aria-label={role === 'owner' ? 'Archive results' : undefined} tabIndex={role === 'owner' ? -1 : undefined}>
       {tab === 'matches' && (
         <Card title="Matching archive records" subtitle="Select a record type to export its results.">
           {financialStatus}
@@ -460,7 +465,7 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
             empty={<span role="status">{emptyMessage(state.prescriptions, 'Prescriptions')}</span>}
             columns={[
               { key: 'number', label: 'Rx Number', render: r => <b>{r.number}</b> },
-              { key: 'issued_at', label: 'Issued Date', render: r => r.issued_at || r.date || '—' },
+              { key: 'issued_at', label: 'Issued Date', render: r => role === 'owner' ? archiveDateDisplay(archiveDate(r)) : (r.issued_at || r.date || '—') },
               { key: 'patientName', label: 'Patient', render: r => r.patientName || (typeof r.patient === 'object' ? r.patient?.name : r.patient) || 'Patient' },
               { key: 'dentistName', label: 'Prescribing Doctor', render: r => r.dentistName || (typeof r.dentist === 'object' ? r.dentist?.name : r.dentist) || 'Dentist' },
               { key: 'branch', label: 'Branch', render: branchLabel },
@@ -487,9 +492,12 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
             caption="Settled invoices and receipts"
             empty={<span role="status">{emptyMessage(invoiceRows, 'Settled financial records')}</span>}
             columns={[
-              { key: 'invoiceNumber', label: 'Invoice #', render: r => <b>{r.invoiceNumber || r.invoice_number || r.id}</b> },
+              { key: 'invoiceNumber', label: 'Invoice', render: r => <div className="owner-record-cell">
+                <b>{r.invoiceNumber || r.invoice_number || r.id}</b>
+                {role === 'owner' && receiptReference(r) && <small>{receiptReference(r)}</small>}
+              </div> },
               { key: 'patientName', label: 'Patient', render: r => r.patientName || 'Patient' },
-              { key: 'date', label: 'Issued Date', render: r => r.issued_at || r.date || '—' },
+              { key: 'date', label: 'Issued Date', render: r => role === 'owner' ? archiveDateDisplay(archiveDate(r)) : (r.issued_at || r.date || '—') },
               { key: 'total', label: 'Gross Total', render: r => peso.format(r.gross_amount || r.total || 0) },
               { key: 'paid', label: 'Paid Amount', render: r => peso.format(r.paid_amount || r.total || 0) },
               { key: 'branch', label: 'Branch', render: branchLabel },
@@ -506,6 +514,8 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
           />}
         </Card>
       )}
+
+      </div>
 
       {viewRecord && (
         <Modal

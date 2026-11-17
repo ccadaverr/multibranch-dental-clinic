@@ -638,23 +638,23 @@ export function AnalyticsPage({ activeBranch, store }) {
   const schedulingNote = `Confirmed appointments dated ${dateLabel(loaded.from)} – ${dateLabel(loaded.to)} (the loaded scheduling window, not all-time; the period selector does not apply)${store.appointmentsTruncated?'. Partial: the appointment list limit was reached.':''}`
 
   const clientMetrics = [
-    { name: 'Scheduling', value: appts.filter(a => a.status === 'Confirmed').length, note: schedulingNote, module: 'M6' },
-    { name: 'Queue / patient flow', value: queue.filter(q => q.status === 'Served').length, note: 'Patients served from today’s queue (treatment started)', module: 'M9–M10' },
-    { name: 'HMO processing', value: hmo.filter(h => h.status === 'Approved').length, note: 'Approved provider outcomes', module: 'M12' },
+    { name: 'Scheduling', value: appts.filter(a => a.status === 'Confirmed').length, note: schedulingNote },
+    { name: 'Queue / patient flow', value: queue.filter(q => q.status === 'Served').length, note: 'Patients served from today’s queue (treatment started)' },
+    { name: 'HMO processing', value: hmo.filter(h => h.status === 'Approved').length, note: 'Approved provider outcomes' },
     store.session?.serverUserId
       // Unavailable is not zero: no authoritative inquiry or conversation count exists for the Owner (the M16 API is Staff-only and M17 is not yet server-backed), and M21 has not defined this report.
-      ? { name: 'Communication', value: 'Unavailable', note: 'No authoritative communication count exists yet (M16/M17 reporting is not defined)', module: 'M16–M17' }
-      : { name: 'Communication', value: state.inquiries.filter(i => i.status === 'Responded').length + state.conversations.filter(c => c.status === 'Closed').length, note: 'Responded/closed communication records', module: 'M16–M18' },
-    { name: 'Recorded revenue', value: peso.format(paid.reduce((s, i) => s + i.total, 0)), note: 'Paid transaction records', module: 'M11' },
+      ? { name: 'Communication', value: 'Unavailable', note: 'No authoritative communication count exists yet (M16/M17 reporting is not defined)' }
+      : { name: 'Communication', value: state.inquiries.filter(i => i.status === 'Responded').length + state.conversations.filter(c => c.status === 'Closed').length, note: 'Responded/closed communication records' },
+    { name: 'Recorded revenue', value: peso.format(paid.reduce((s, i) => s + i.total, 0)), note: 'Paid transaction records' },
   ]
 
   const rateText = v => (v === null || v === undefined ? 'No data' : `${v}%`)
   const metrics = serverSummary ? [
-    { name: 'Recorded revenue', value: reportPeso(serverSummary.financials.total_collected_php), note: `Paid invoices created in this period: ${serverSummary.financials.paid_invoices_count} • Gross invoiced: ${reportPeso(serverSummary.financials.total_gross_php)}`, module: 'M11' },
-    { name: 'Scheduling', value: serverSummary.scheduling.total_appointments, note: `Completion rate: ${rateText(serverSummary.scheduling.completion_rate_pct)} (${serverSummary.scheduling.completed} completed, ${serverSummary.scheduling.cancelled} cancelled)`, module: 'M6' },
-    { name: 'Queue / patient flow', value: serverSummary.patient_flow.total_visits, note: `${serverSummary.patient_flow.served_from_queue} served in this period • ${serverSummary.patient_flow.current_waiting} waiting now (today's queue)`, module: 'M9–M10' },
-    { name: 'HMO processing', value: serverSummary.hmo.approved, note: `${reportPeso(serverSummary.hmo.approved_amount_php)} approved coverage • ${serverSummary.hmo.pending} pending coordinator action`, module: 'M12' },
-    { name: 'Automation health', value: rateText(serverSummary.automation.health_rate_pct), note: `${serverSummary.automation.total_actions} rule evaluations recorded (${serverSummary.automation.failed} failed); nothing is executed by this module`, module: 'M23' },
+    { name: 'Recorded revenue', value: reportPeso(serverSummary.financials.total_collected_php), note: `Paid invoices created in this period: ${serverSummary.financials.paid_invoices_count} • Gross invoiced: ${reportPeso(serverSummary.financials.total_gross_php)}` },
+    { name: 'Scheduling', value: serverSummary.scheduling.total_appointments, note: `Completion rate: ${rateText(serverSummary.scheduling.completion_rate_pct)} (${serverSummary.scheduling.completed} completed, ${serverSummary.scheduling.cancelled} cancelled)` },
+    { name: 'Queue / patient flow', value: serverSummary.patient_flow.total_visits, note: `${serverSummary.patient_flow.served_from_queue} served in this period • ${serverSummary.patient_flow.current_waiting} waiting now (today's queue)` },
+    { name: 'HMO processing', value: serverSummary.hmo.approved, note: `${reportPeso(serverSummary.hmo.approved_amount_php)} approved coverage • ${serverSummary.hmo.pending} pending coordinator action` },
+    { name: 'Automation health', value: rateText(serverSummary.automation.health_rate_pct), note: `${serverSummary.automation.total_actions} rule evaluations recorded (${serverSummary.automation.failed} failed)` },
   ] : (isServerSession ? [] : clientMetrics)
 
   const exportRows = () => state.branches.filter(b => activeBranch === 'All Branches' || b === activeBranchRecord).map(b => {
@@ -676,13 +676,14 @@ export function AnalyticsPage({ activeBranch, store }) {
             <option>All Time</option>
             {isServerSession && <option>Custom dates</option>}
           </select></label>
-          <Button onClick={exportServerCsv} disabled={!canExport || exporting} variant="secondary">
+          <Button onClick={exportServerCsv} disabled={!canExport || exporting} icon="download">
             Export Report CSV
           </Button>
           <Button onClick={() => window.print()} disabled={isServerSession && !canExport} variant="soft">
             Print current view
           </Button>
         </div>
+        <p className="muted-copy owner-report-export-hint">CSV includes invoice activity and daily cash flow.</p>
       </div>}
     />
     {customDates && <div className="owner-report-date-range">
@@ -720,17 +721,17 @@ export function AnalyticsPage({ activeBranch, store }) {
       The executive summary could not be loaded. <Button variant="ghost" onClick={summarySection.retry}>Retry executive summary</Button>
     </Notice>}
     {!reportDenied && summarySection.status === 'loading' && <p className="muted-copy" role="status">Loading executive summary…</p>}
-    <div className="cards-3">
-      {metrics.map(m => (
-        <Card key={m.name} title={m.name}>
-          <div className="analytics-value">{m.value}</div>
-          <p className="muted-copy">{m.note}</p>
-          <span className="module-inline">{m.module}</span>
-        </Card>
-      ))}
-    </div>
-    <div className="grid-2 top-gap">
-      <Card title="Branch workload report" subtitle={serverSummary ? `Authoritative comparative data for ${serverSummary.period_label}` : (isServerSession ? undefined : 'Offline demo preview — example capacity values, not clinic data')}>
+    {metrics.length > 0 && <Card title="Report summary" subtitle={serverSummary?.period_label}>
+      <ul className="owner-report-summary">
+        {metrics.map(m => <li key={m.name}>
+          <h3>{m.name}</h3>
+          <strong className="analytics-value">{m.value}</strong>
+          <p>{m.note}</p>
+        </li>)}
+      </ul>
+    </Card>}
+    <div className={isServerSession ? "top-gap" : "grid-2 top-gap"}>
+      <Card title="Branch workload report" subtitle={serverSummary ? `${serverSummary.period_label}` : (isServerSession ? undefined : 'Offline demo preview — example capacity values, not clinic data')}>
         <div className="branch-bars">
           {!reportDenied && branchSection.status === 'loading' && <p className="muted-copy" role="status">Loading branch figures…</p>}
           {!reportDenied && !bothReportSectionsFailed && branchSection.status === 'error' && <Notice tone="warning">
@@ -763,18 +764,12 @@ export function AnalyticsPage({ activeBranch, store }) {
           })}
         </div>
       </Card>
-      <Card title="Report actions" subtitle="The CSV includes invoice activity and daily cash flow.">
+      {!isServerSession && <Card title="Demo exports">
         <div className="action-stack">
-          <Button onClick={exportServerCsv} disabled={!canExport || exporting}>Export Executive Analytics CSV</Button>
-          {!isServerSession && <>
-            <Button variant="ghost" onClick={() => makeCsv('branch-capacity.csv', exportRows())}>Export Demo Capacity CSV</Button>
-            <Button variant="ghost" onClick={() => makeCsv('hmo-report.csv', hmo.map(x => ({ Patient: patientName(x.patientId, state.patients), Provider: x.provider, Branch: x.branch, Status: x.status, PendingHours: pendingHours(x, state.clock), Reference: x.reference || '' })))}>Export Demo HMO CSV</Button>
-          </>}
-          <Notice tone="info">
-            Server analytics calculates metrics across PostgreSQL operational tables for the Manila timezone ({period}).
-          </Notice>
+          <Button variant="ghost" onClick={() => makeCsv('branch-capacity.csv', exportRows())}>Export Demo Capacity CSV</Button>
+          <Button variant="ghost" onClick={() => makeCsv('hmo-report.csv', hmo.map(x => ({ Patient: patientName(x.patientId, state.patients), Provider: x.provider, Branch: x.branch, Status: x.status, PendingHours: pendingHours(x, state.clock), Reference: x.reference || '' })))}>Export Demo HMO CSV</Button>
         </div>
-      </Card>
+      </Card>}
     </div>
     {!isServerSession && <Card title="Marketing Campaign Impact Tracking" subtitle="Offline example values — not clinic financial results" className="top-gap">
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '16px' }}>

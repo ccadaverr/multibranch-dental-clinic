@@ -26,7 +26,7 @@ export function RevenuePlot({ data, weekly = false }) {
   return <>
     <MoneySummary amounts={data.totals}/>
     {weekly ? <div className="owner-revenue-legend"><span><i className="legend-gross"/>Gross collections · bars</span><span><i className="legend-net"/>Net cash flow · line</span><small>Not profit · Asia/Manila</small></div>
-      : <p className="muted-copy">Gross collections by payment date, not profit. Exact refunds and net cash flow are included in each tooltip and table.</p>}
+      : <p className="muted-copy">Gross collections by payment date · Philippine pesos</p>}
     <svg viewBox="0 0 620 232" role="group" aria-label={label} className="owner-revenue-plot">
       <title>{label}</title>
       {ticks.map(({ cents, y }) => {
@@ -102,9 +102,8 @@ export function OwnerRevenueCharts({ branchId, branchName, period, dateFrom, dat
   const selectedWeek=dashboard?today:weekDate
   const validWeek = validDate(selectedWeek) && selectedWeek <= today
   return <section className="owner-revenue" aria-label={`Revenue analytics: ${branchName || 'All Branches'}`}>
-    {!dashboard&&<OwnerPerformanceOverview branchId={branchId} branchName={branchName} today={today}/>}
-    <p className="muted-copy">Daily revenue follows the report period.{showWeekly?' The weekly summary uses its own Monday–Saturday date selection.':''}</p>
-    <p className="muted-copy">Charts use payment and refund dates.{!dashboard?' Paid-invoice KPIs below use invoice creation dates and may differ.':''}</p>
+
+    {!dashboard && <p className="muted-copy owner-report-basis">Cash flow uses payment and refund dates. Invoice activity uses invoice creation dates.</p>}
     <div className={showWeekly?'owner-revenue-grid':''}>
       {validPeriod ? <RevenueReport key={JSON.stringify(['daily', branchId, period, dateFrom, dateTo, today])}
         params={{ period: period?.toLowerCase(), date_from: dateFrom, date_to: dateTo, branch_id: branchId }} today={today}/>
@@ -120,5 +119,6 @@ export function OwnerRevenueCharts({ branchId, branchName, period, dateFrom, dat
           : <Notice tone="warning">Choose a valid date no later than today.</Notice>}
       </div>}
     </div>
+    {!dashboard && <OwnerPerformanceOverview branchId={branchId} branchName={branchName} today={today}/>}
   </section>
 }

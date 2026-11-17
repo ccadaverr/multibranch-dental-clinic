@@ -16,6 +16,7 @@ import { fetchDailyRevenue, fetchWeeklyRevenueHistogram } from '../analytics-api
 import { DentistHome } from './DentistHome.jsx'
 import { StaffOnDuty } from './StaffOnDuty.jsx'
 import {OwnerRevenueCharts} from './OwnerRevenueCharts.jsx'
+import './owner-record-workspace.css'
 
 export function DashboardPage({ role, activeBranch, setPage, store }) {
   const { state }=store
@@ -764,6 +765,8 @@ export function WeeklyRevenueHistogram({
   )
 }
 
+const displayOwnerDate = new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium' })
+
 export function OwnerDashboard({ activeBranch, setPage, state, session, store }) {
   const [revenuePeriod,setRevenuePeriod]=React.useState('week')
   const matchingBranches=state.branches.filter(b=>b.name===activeBranch)
@@ -777,7 +780,8 @@ export function OwnerDashboard({ activeBranch, setPage, state, session, store })
   </>
   const qCounts=qvis.mode==='ready'?countQueue(state.queue,{branchId:state.branches.find(b=>b.name===activeBranch)?.id??null,date:clinicNow().date}):null
   const appointments=state.appointments.filter(a=>a.date===clinicDate()&&a.status!=='Cancelled'&&(activeBranch==='All Branches'||a.branch===activeBranch))
-  const pendingHmo=liveRecords(state.hmo).filter(h=>['Pending','Escalated'].includes(h.status)&&(activeBranch==='All Branches'||h.branch===activeBranch))
+  const scopedHmo = liveRecords(state.hmo).filter(h => activeBranch === 'All Branches' || h.branch === activeBranch)
+  const pendingHmo = scopedHmo.filter(h => h.status === 'Pending' || h.status === 'Escalated')
   // D5: revenue from legacy demo invoices (pre-cutover appointments) is excluded from live KPIs.
   const revenue=liveRecords(state.invoices).filter(i=>i.status==='Paid'&&(activeBranch==='All Branches'||i.branch===activeBranch)).reduce((s,i)=>s+i.total,0)
   const exceptions=[...(serverQueue?[]:branchData.filter(c=>c.overloaded)).map(c=>({title:`${c.branch} capacity exception`,detail:`${c.workload}% workload • ~${c.estimate} min wait`})),...pendingHmo.filter(h=>pendingHours(h,state.clock)>=12).map(h=>({title:'HMO follow-up threshold reached',detail:`${patientName(h.patientId,state.patients)} • ${h.provider} • ${pendingHours(h,state.clock).toFixed(1)}h pending`}))]
@@ -787,15 +791,19 @@ export function OwnerDashboard({ activeBranch, setPage, state, session, store })
   const isSaturday = isSaturdayManila(clinicDate())
 
   return <>
-    <PageHeader kicker="Owner overview" title="Executive dashboard" text="A focused view of clinic performance, exceptions and branch health." aside={<span className="context-chip"><Icon name="building" size={14}/>{activeBranch}</span>}/>
-    <div className="stats-grid">
-      <StatCard label="Appointments today" value={appointments.length} hint="Across visible branches" icon={<Icon name="calendar" size={18}/>}/>
+    <PageHeader title="Executive dashboard" aside={<div role="group" aria-label="Owner shortcuts" className="owner-dashboard-actions">
+      <Button onClick={() => setPage('analytics')}>Open analytics</Button>
+      <Button variant="soft" onClick={() => setPage('archives')}>Find archived records</Button>
+    </div>}/>
+    <p className="muted-copy owner-dashboard-context">{activeBranch} · {displayOwnerDate.format(new Date(clinicDate() + 'T12:00:00+08:00'))}</p>
+    <div className="stats-grid owner-dashboard-metrics">
+      <StatCard label="Appointments today" value={appointments.length} icon={<Icon name="calendar" size={18}/>}/>
       <StatCard label={serverQueue?'Awaiting treatment':'Waiting patients'} value={serverQueue?(qCounts?qCounts.awaiting:qvis.mode==='loading'?'…':'Unavailable'):branchData.reduce((s,c)=>s+c.waiting,0)} hint={serverQueue?(qCounts?'Waiting + Called + Treatment Ready':qvis.message):'Live patient flow'} tone="blue" icon={<Icon name="queue" size={18}/>}/>
       <StatCard label="HMO pending" value={pendingHmo.length} hint={`${pendingHmo.filter(h=>pendingHours(h,state.clock)>=12).length} beyond threshold`} tone="amber" icon={<Icon name="shield" size={18}/>}/>
       {!session?.serverUserId&&<StatCard label="Paid revenue" value={peso.format(revenue)} hint="Recorded demo transactions" tone="purple" icon={<Icon name="wallet" size={18}/>}/>}
     </div>
     <div className="top-gap">
-      <label className="field"><span>Revenue chart period</span><select aria-label="Revenue chart period" value={revenuePeriod} onChange={e=>setRevenuePeriod(e.target.value)}><option value="week">This Week</option><option value="month">This Month</option><option value="year">This Year</option></select></label>
+      <label className="field owner-dashboard-period"><span>Revenue chart period</span><select aria-label="Revenue chart period" value={revenuePeriod} onChange={e=>setRevenuePeriod(e.target.value)}><option value="week">This Week</option><option value="month">This Month</option><option value="year">This Year</option></select></label>
       <OwnerRevenueCharts key={JSON.stringify([session?.serverUserId,store?.getAuthGeneration?.()])} branchId={activeBranchId} branchName={activeBranch} period={revenuePeriod}
         serverSession={!!session?.serverUserId} validBranch={activeBranch==='All Branches'||!!activeBranchId} dashboard showWeekly={isSaturday}/>
     </div>
@@ -804,14 +812,14 @@ export function OwnerDashboard({ activeBranch, setPage, state, session, store })
         <div className="branch-chart">{branchData.map(c=><div className="branch-chart-row" key={c.branch}><div className="branch-chart-label"><b>{c.branch}</b><span>{c.activeDentists} dentists • {c.waiting} waiting</span></div><div className="branch-chart-bar"><span style={{width:`${Math.min(100,(c.workload/maxLoad)*100)}%`}}/></div><strong>{c.workload}%</strong></div>)}</div>
         <div className="chart-caption"><span><i className="healthy"/>Healthy</span><span>Updated from live queue and staffing data</span></div>
       </Card>}
-      <Card title="Priority exceptions" subtitle="Only the issues that may need a decision" actions={<Button size="sm" variant="ghost" onClick={()=>setPage('analytics')}>Open analytics</Button>}>
-        <div className="exception-list">{exceptions.length?exceptions.slice(0,5).map((x,i)=><div className="exception-row" key={i}><span><Icon name="activity" size={17}/></span><div><b>{x.title}</b><small>{x.detail}</small></div><Icon name="chevron" size={16}/></div>):<div className="executive-clear"><span><Icon name="shield" size={22}/></span><div><b>No critical exceptions</b><small>{serverQueue?'No capacity or waiting-time limits are configured, so none are evaluated.':'Visible branches are operating within configured thresholds.'}</small></div></div>}</div>
+      <Card title="Priority exceptions">
+        <div className="exception-list">{exceptions.length?exceptions.slice(0,5).map((x,i)=><div className="exception-row" key={i}><span><Icon name="activity" size={17}/></span><div><b>{x.title}</b><small>{x.detail}</small></div><Icon name="chevron" size={16}/></div>):<div className="executive-clear"><span><Icon name="shield" size={22}/></span><div><b>{serverQueue ? 'No HMO follow-ups flagged' : 'No exceptions flagged'}</b><small>{serverQueue ? 'Queue thresholds are not configured.' : 'Visible branches are within configured thresholds.'}</small></div></div>}</div>
       </Card>
     </div>
-    <div className="cards-3 top-gap">
-      <Card title="Scheduling health"><MetricRow label="Confirmed today" value={appointments.filter(a=>a.status==='Confirmed').length}/><MetricRow label="Pending confirmation" value={appointments.filter(a=>a.status==='Pending').length}/><button className="card-link" onClick={()=>setPage('analytics')}>See scheduling report <Icon name="arrow" size={14}/></button></Card>
-      <Card title="HMO health"><MetricRow label="Pending provider response" value={pendingHmo.length}/><MetricRow label="Approved cases" value={liveRecords(state.hmo).filter(h=>h.status==='Approved').length}/><button className="card-link" onClick={()=>setPage('hmo')}>Open HMO overview <Icon name="arrow" size={14}/></button></Card>
-      <Card title="Patient communication"><MetricRow label="Open inquiries" value={session?.serverUserId?'Not available to Owner':state.inquiries.filter(i=>i.status==='Open').length}/><MetricRow label="Active conversations" value={session?.serverUserId?'Not available to Owner':state.conversations.filter(c=>c.status==='Open').length}/><button className="card-link" onClick={()=>setPage('engagement')}>View engagement <Icon name="arrow" size={14}/></button></Card>
+    <div className={session?.serverUserId ? "grid-2 top-gap" : "cards-3 top-gap"}>
+      <Card title="Scheduling health"><MetricRow label="Confirmed today" value={appointments.filter(a=>a.status==='Confirmed').length}/><MetricRow label="Pending confirmation" value={appointments.filter(a=>a.status==='Pending').length}/></Card>
+      <Card title="HMO health"><MetricRow label="Pending provider response" value={pendingHmo.length}/><MetricRow label="Approved cases" value={scopedHmo.filter(h=>h.status==='Approved').length}/><button className="card-link" onClick={()=>setPage('hmo')}>Open HMO overview <Icon name="arrow" size={14}/></button></Card>
+      {!session?.serverUserId && <Card title="Patient communication"><MetricRow label="Open inquiries" value={state.inquiries.filter(i=>i.status==='Open').length}/><MetricRow label="Active conversations" value={state.conversations.filter(c=>c.status==='Open').length}/><button className="card-link" onClick={()=>setPage('engagement')}>View engagement <Icon name="arrow" size={14}/></button></Card>}
     </div>
   </>
 }
