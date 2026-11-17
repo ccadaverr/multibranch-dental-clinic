@@ -1,0 +1,184 @@
+{
+  "starting_head": "a3136a3a26c8be9995388e5d3833ce773cb3997d",
+  "tested_code_head": "2cab6e3b7a2a5c0e30e407f148fcb0f8f0c5c65f",
+  "commits": {
+    "B09": "419324529f2db0b981736cf5c1e7acf86cc5bc14",
+    "B10": "2c55ed8d5acb3720ae02499a4592f9111b1ee906",
+    "B11": "650b775308c21f7009637143a232a15073822e59",
+    "correction": "2cab6e3b7a2a5c0e30e407f148fcb0f8f0c5c65f"
+  },
+  "patch_sha256": {
+    "B09": "a0fd4e30899d4b9ec4e8c979085dab013d2e608cc0e5ea0ddb04b00d5adcdb23",
+    "B10": "64adaa522b5430afdc532a692e26cb3b119467462042e56cb243f9f1d6f6dab2",
+    "B11": "94369c65b714877c1732de3cbc0704b0a2233e3759cfb1c54867fca5c1138250"
+  },
+  "reapplied_prior_deltas": false,
+  "focused_postgresql": {
+    "B09": {
+      "tests": 27,
+      "assertions": 381
+    },
+    "B10": {
+      "tests": 28,
+      "assertions": 391
+    },
+    "B11": {
+      "tests": 29,
+      "assertions": 462
+    },
+    "combined_evidence": {
+      "tests": 1,
+      "assertions": 103
+    },
+    "dashboard_evidence": {
+      "tests": 1,
+      "assertions": 44
+    },
+    "groups_overlap": true
+  },
+  "frontend": {
+    "total": 2031,
+    "passed": 2023,
+    "failed": 0,
+    "skipped": 8
+  },
+  "backend": {
+    "tests": 1309,
+    "assertions": 15341,
+    "passing": 1279,
+    "failures": 26,
+    "errors": 1,
+    "skipped": 3,
+    "new_failure_identities": [],
+    "inherited_failure_and_error_identities": [
+      "Tests\\Feature\\Automation\\AutomationControlTest::test_csv_export_neutralizes_formula_injection",
+      "Tests\\Feature\\Automation\\AutomationControlTest::test_owner_can_trigger_manual_evaluation_and_audit_is_created",
+      "Tests\\Feature\\Automation\\AutomationControlTest::test_owner_can_view_automation_rules_and_snapshot",
+      "Tests\\Feature\\Automation\\AutomationControlTest::test_staff_and_dentist_and_patient_are_forbidden_from_automation",
+      "Tests\\Feature\\Automation\\AutomationControlTest::test_unauthenticated_cannot_access_automation_endpoints",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_audit_events_carry_no_event_body_and_the_csv_marks_evaluation_only",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_legacy_descriptions_are_qualified_inside_the_csv_cell_and_in_the_exception_projection",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_is_rate_limited",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_refuses_clinical_flags_and_every_foreign_field",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_refuses_unexpected_top_level_fields_too",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_validates_each_rule_observation",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_only_the_owner_may_dispatch_and_authorization_precedes_validation",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_repeated_manual_dispatches_are_independent_evaluations_with_no_idempotency_contract",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_the_api_marks_every_action_row_as_evaluation_only_and_keeps_historical_text_unchanged",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_the_manual_message_says_evaluated_not_executed_and_the_event_stores_no_email",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_a_patient_reads_only_their_own_feedback_newest_first_with_a_cursor_that_reveals_nothing_about_others",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_a_patient_submits_free_text_about_their_own_completed_visit_and_the_record_is_minimal_and_server_derived",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_m26_is_a_foundation_only_no_rating_category_status_reply_publication_marketing_or_other_module_side_effect",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_only_the_patients_own_completed_visits_are_eligible_and_every_other_case_is_one_indistinguishable_refusal",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_owner_can_review_feedback_with_filters",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_owner_can_review_patient_feedback_with_branch_and_dentist_filters",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_patient_can_submit_1_to_5_star_rating_and_low_ratings_auto_create_followup_task",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_submission_is_idempotent_a_new_key_is_a_separate_submission_and_no_uniqueness_is_invented",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_submission_is_rate_limited_per_account_and_explains_itself",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_submitted_feedback_is_immutable_and_nothing_can_erase_it",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_the_feature_is_patient_only_and_owner_staff_dentist_and_guests_are_all_refused_everywhere",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_the_text_is_bounded_free_data_and_every_authority_or_policy_field_is_refused"
+    ],
+    "extra_vs_s03": "A07 plus B09/B10/B11 cases in the reviewed Analytics cohorts"
+  },
+  "backend_unit": {
+    "tests": 252,
+    "assertions": 1193,
+    "notices": 30
+  },
+  "python_passed": 53,
+  "new_integrated_acceptance": [
+    "OWN-01"
+  ],
+  "qa_totals": {
+    "local_complete": 29,
+    "partial": 28,
+    "blocked": 11,
+    "integrated_pass": 15,
+    "integrated_pending": 53
+  },
+  "saturday_contract": "Existing A4 on-demand read projection; no scheduled immutable closing artifact",
+  "controlled_postgresql_fixture": {
+    "saturday_gross": "121.40",
+    "saturday_refunds": "5.02",
+    "saturday_net": "116.38",
+    "sunday_gross": "40.07",
+    "sunday_refunds": "3.04",
+    "sunday_net": "37.03"
+  },
+  "live_synthetic_finance": {
+    "invoice_date": "2026-11-17",
+    "payment_date": "2026-11-18",
+    "actual_report": {
+      "gross_collected_php": "1800.00",
+      "refunded_php": "0.00",
+      "net_cash_flow_php": "1800.00",
+      "payments_count": 1,
+      "refunds_count": 0
+    },
+    "separate_from_controlled_fixture": true,
+    "exact_receipt_replay": true,
+    "scoped_csv": true,
+    "protected_patient_pdf": true,
+    "restart_persistence": true
+  },
+  "accepted_demo": {
+    "frontend": "http://127.0.0.1:5198",
+    "predefense_failures": 0,
+    "predefense_warnings": 4,
+    "restarted_reset_or_migrated": false
+  },
+  "disposable_demo": {
+    "target": "/private/contention-83d4d563/target.json",
+    "frontend": "http://127.0.0.1:5209",
+    "predefense_failures": 1,
+    "predefense_warnings": 5,
+    "diagnostic_exception": "Explicitly synthetic branch lacks confirmed contact/hours; all service checks pass."
+  },
+  "schema": {
+    "approved_entries": 87,
+    "held_migrations_executed": 0,
+    "conversation_grant_schema": false,
+    "gen07_proposal_columns": false,
+    "protected_jobs_untouched": 19
+  },
+  "gen09_benchmark_owner": "Codex B; not duplicated or promoted",
+  "J03_J04_received": false,
+  "evidence_sha256": {
+    "b09-postgres.log": "942fad7e5d64534bec050e552b3ffa6d4296aec0250c91ad2a3008e0aba5ba35",
+    "b09-frontend.log": "f1074f9f177e9de61d9faa034246a8fde0c07c452862c46388fa0ecb354dca08",
+    "b09-browser.log": "b4ddf1ed3f95762682a3d74d4690cf87f0174d420f0d934ebe667488d9a2af36",
+    "b10-postgres.log": "efcb5f5eedf52e93f3b4e19a450c9dba8713701eea91f5cf2fa683a42c345f78",
+    "b10-frontend.log": "f7f98727bb57e64331b23c1a94fe5dd2a2557cacaa2ebc511a33840da13b7449",
+    "b10-browser.log": "799453adaf0b456204028d14746ad4d68c5226157028f3eb65e64ef3e7fa6db2",
+    "b11-postgres.log": "2eabfccdf641cd99c1e0e656f1fb23243712c31e4ade27ca51feafc1620b617e",
+    "b11-frontend.log": "5b0b13500977b9e6060f1da784db185b1c832b9147f19986f4bc32f38b0500c1",
+    "b11-browser.log": "f37a4102bc4a22e611009df4cd7c7d7419fafe62043a43c1157842d301621a95",
+    "owner-ambiguity-before.log": "aa991c572537a16339dcc149648ef70118fb9f86664c351a9fd51b40be8c28d5",
+    "owner-executive-final.log": "3a18100f49e9ff1c3880af2ba1e96ea7eeb829579477e0a6da5e8f7d2341f697",
+    "owner-focused-final.log": "0d341e434f33acc8b8de832a467e856d22896ec7ac602c6aa00a109505fde885",
+    "owner-captured-postgres.log": "2a923ddf21c3586ea87e3f69cba8725567b8080fd8a863bcd7d581cee7ebc599",
+    "own01-combined-postgres.log": "000477592fe54185e917eed25d06d8ca9a75ae47a4e68b7170551e3c151603d5",
+    "own01-persisted-browser-final.log": "b50c2300c4ff5c5d1b78914d1054f8c8c63fe5fe2cda2b9081dc45e0a999ef22",
+    "financial-browser.log": "fcd649ef390476fe8f1de61d9a2551841b44bec97f6452a16ed75a82033e0c10",
+    "documents-browser-final.log": "f47d76c283332f087cccbea411dde82066fdb2fbcb2dcdebaa3b671bbc11ddbe",
+    "clinical-prepare.log": "73365aba871cf0522b71148ecea8b9065ebf35018c93700877afded1401fea8b",
+    "patient-booking.log": "dddf82e4cff3b0d35f97dfc753acaafc75d5dcf382ac558a55f55debe8a89e75",
+    "prescriptions-browser.log": "a12af4ddd621f1b3519cfab0248cd708d24dff56d2b6ea29c6101912cb7fafc3",
+    "patient-care-browser.log": "d40e7c31a482c133c46c0355f25c90719d1bd212399b74225940b43e7a6bcb4e",
+    "stf17-browser.log": "5e063bf7ace7a8cc44b3bb59723f87440d67fac7c6e30c057a6cbf6f98f5bb1d",
+    "stf17-concurrent.log": "9098c2b8de864d9526c5dae81710f2737e71cbb7c74cb299566537ca1b59929e",
+    "roster-browser.log": "94fbce48cfebdb73df498d1f15d506a83c356c3e972ac7f5c8c010787fd6f24a",
+    "notifications-browser.log": "ff413f3816c74912f55e0886e3226efc89406482fd26d53547b11b4d221de6bd",
+    "restart-browser.log": "025ef563181355f0d2c39dd092d7ef7b6b690857739d731b799b86a1bdadd39e",
+    "frontend-final.log": "548876a0208abc0bfb258ecff7bcbeede6f1d8576dc47d7c38606f25b9932566",
+    "backend-reviewed.log": "1ca6bf47d2a568f592bed22658d1f78b7974911698f762599cc5dc6913539e2f",
+    "backend-unit-final.log": "3d3d0507233e340f1a3191079903777f04e3e6a4a5769763f39ce151d6a01a64",
+    "python-final.log": "86a9634947d809991270386c65178968a4e360daa0ea11a9997660d8be2153da",
+    "schema-final.log": "8c832eb810d6269d1a1e650466f8fac085250ea27de59336dc6e9000fbbf0bbc",
+    "smoke-final.log": "77efb7746fcfe69e1fd5a683a6ca397243186970dcc4c64e6dd1123e05677925",
+    "build-final.log": "00f89c6e733d1e67a0f7a46048c6952d68b5512dd15bce7d846befd452ea1a9c",
+    "predefense-main-final.log": "d709e8d34bc84e19311f448e2bbeca3388660d94024c5f286c76eb1b2bc5f8ad",
+    "predefense-isolated.log": "1369fc15d1b9f842bd4874a45dfd870c3bbd90d5ee92e88f059b8b3bcb1ddbf8"
+  }
+}

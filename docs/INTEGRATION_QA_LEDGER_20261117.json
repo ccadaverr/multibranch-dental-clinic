@@ -3,11 +3,11 @@
   "clinical": "407f0c6b74ce44a7d955d4b897e6100e2bd80a51",
   "integration_branch": "integration/dentalops-fullstack-20261117",
   "totals": {
-    "local_complete": 28,
-    "partial": 29,
+    "local_complete": 29,
+    "partial": 28,
     "blocked": 11,
-    "integrated_pass": 14,
-    "integrated_pending": 54
+    "integrated_pass": 15,
+    "integrated_pending": 53
   },
   "rows": [
     {
@@ -789,14 +789,14 @@
       "original_owner": "Richmon",
       "exact_criterion_and_tasks": "Both charts hoverable; values match billing data to the peso; histogram appears on Saturdays.<br>Original tasks: Line graph: daily revenue (recommended term; see Q2), hover tooltip shows exact date and amount; Histogram: weekly summary (per-day revenue Mon-Sat), generated on Saturday (last opening day), hover tooltip shows exact amount; Totals in tooltips must match billing records exactly; (Joevan) Aggregation endpoints for daily revenue and weekly summary; Saturday generation logic; Empty/loading/error states and responsive sizing `FINALS-QA-REVISIONS.md:923`",
       "responsible_domain": "Joevan Operations/Workforce; Jaztin reviews clinical boundary",
-      "source_evidence": "Implemented and verified. [A4](OWN01_A4_ACCEPTANCE.md), [A5](OWN01_A5_ACCEPTANCE.md); [848669b](https://github.com/ccadaverr/multibranch-dental-clinic/commit/848669b6bef655802389430f79d1698e9bbe3c0e)",
-      "focused_test_evidence": "A5 30 frontend, 6 PostgreSQL/96 assertions; 1440/390 rendered; Gross collections, refunds and net cash flow, not profit. Saturday on-demand summary, not scheduled immutable artifact. Joevan implementation/test evidence is provisional here until approved source delivery and independent inspection.",
-      "current_status": "Partial",
-      "remaining_requirements_and_next_action": "Inspect authoritative revenue definition/aggregation and Saturday histogram timing, exact billing totals, hover/error evidence.",
-      "integrated_acceptance": "Pending",
-      "integration_evidence": "PENDING: full original criterion not accepted on the combined candidate. Both exact sources are now available; passing subsets do not close this row.",
-      "local_acceptance": "Unfinished: only cited subsets accepted; original tasks remain incomplete.",
-      "blockers": "Source-delivery gate resolved November17; criterion-specific verification remains required. Other policy/reproduction limits in this row remain."
+      "source_evidence": "Retained A4/A5 on-demand Saturday contract (docs/OWN01_A4_ACCEPTANCE.md). B09 419324529f2db0b981736cf5c1e7acf86cc5bc14; B10 2c55ed8d5acb3720ae02499a4592f9111b1ee906; B11 650b775308c21f7009637143a232a15073822e59; dashboard scope correction 2cab6e3b7a2a5c0e30e407f148fcb0f8f0c5c65f. See RAPID_A08_ACCEPTANCE_20261118.md.",
+      "focused_test_evidence": "B11 affected PostgreSQL:29 tests/462 assertions passed. Additional combined evidence:1 test/103 assertions, independent persisted payment/refund sums plus API/CSV/branch agreement, captured for actual chart rendering. Existing Owner capture:1 test/44 assertions. Six-width hover, exact date/centavos, keyboard, negative refunds, loading/empty/error/retry, Saturday-only dashboard visibility and Sunday finalization pass. Real synthetic Cash/receipt and cross-midnight invoice/payment date readback, scoped CSV, three non-Owner denials and restart persistence pass.",
+      "current_status": "Complete",
+      "remaining_requirements_and_next_action": "Maintain original charts and read-only on-demand Saturday projection, with payment/refund-date cash flow distinct from invoice-creation metrics. Scheduled immutable artifacts and financial closing policy require a separate approved contract; they are not claimed.",
+      "integrated_acceptance": "Pass",
+      "integration_evidence": "PASS on combined B09-B11/J01-J02 source: both charts show exact persisted billing date/amount on hover and keyboard, six Monday-Saturday buckets, Saturday availability/in-progress state and Sunday finalization excluding Sunday cash. Independent PostgreSQL scenario reproduces Saturday net116.38 and Sunday net37.03; source data is never substituted into the presentation database. Live presentation instead verifies its actual1800.00 Cash delta, original November17 invoice date versus November18 payment date, exact scoped CSV, Patient receipt and persisted reload/restart. Ambiguous dashboard branch names are refused without financial reads. Existing A4 interpretation of generated on Saturday is on-demand, not a background/immutable closing artifact.",
+      "local_acceptance": "Complete original bounded chart, exact-value, scope, Saturday timing and state/recovery criterion independently accepted on the combined candidate.",
+      "blockers": "None for the original criterion under the documented A4 on-demand Saturday contract. No external provider, immutable closing artifact or broader accounting certification claimed."
     },
     {
       "original_id": "OWN-02",
