@@ -26,6 +26,7 @@ try {
   const requests = []
   const errors = []
   let failNext = false
+  let paginate = false
   page.on('pageerror', error => errors.push(error.message))
   await page.route('**/*', route => {
     const url = new URL(route.request().url())
@@ -45,9 +46,11 @@ try {
       (!q.has('branch_id') || row.branch.id === q.get('branch_id')) &&
       (!q.has('date_from') || row.day >= q.get('date_from')) &&
       (!q.has('date_to') || row.day <= q.get('date_to')))
-    return route.fulfill({ json: { data: matches.map(row => ({
+    const firstPage = paginate && !q.has('cursor')
+    const visibleRows = paginate ? (firstPage ? matches.slice(0, 1) : matches.slice(1)) : matches
+    return route.fulfill({ json: { data: visibleRows.map(row => ({
       ...row, category: 'administrative', severity: 'info', created_at: row.day + 'T08:00:00+08:00',
-    })), meta: { next_cursor: null } } })
+    })), meta: { next_cursor: firstPage ? matches[0]?.id ?? null : null } } })
   })
 
   const event = action => page.getByRole('row').filter({ has: page.getByText(action, { exact: true }) })
@@ -121,6 +124,26 @@ try {
       assert.equal(lastQuery().toString(), failedQuery)
       assert.equal(lastQuery().get('date_from'), today)
       assert.equal(lastQuery().get('date_to'), today)
+
+      paginate = true
+      await page.getByRole('button', { name: 'Last 7 days', exact: true }).press('Enter')
+      const load = page.getByRole('button', { name: 'Load older events', exact: true })
+      await load.waitFor()
+      failNext = true
+      await load.press('Enter')
+      const retry = page.getByRole('button', { name: 'Retry older events', exact: true })
+      await retry.waitFor()
+      assert(await retry.evaluate(el => el === document.activeElement))
+      assert.equal(await event('record.updated').count(), 1)
+      assert.equal(await event('record.created').count(), 0)
+      const cursorQuery = lastQuery().toString()
+      await retry.press('Enter')
+      await event('record.created').waitFor()
+      assert.equal(lastQuery().toString(), cursorQuery)
+      const pagination = page.getByRole('group', { name: 'Audit history pagination', exact: true })
+      await pagination.getByRole('status').filter({ hasText: 'End of the matching history.' }).waitFor()
+      assert(await pagination.evaluate(el => el === document.activeElement))
+      paginate = false
     }
     console.log(`${mode} ${width}px: record history ${recordActions} activations, date range ${dateActions} control interactions`)
   }

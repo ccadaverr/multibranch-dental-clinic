@@ -45,6 +45,7 @@ function AuditLifetime({ store }) {
   const [target, setTarget] = useState(null)
   const recordFilterStatus = useRef(null)
   const activityLog = useRef(null)
+  const historyPagination = useRef(null)
   const [loadedKey,setLoadedKey]=useState(null),[action,setAction]=useState('')
   const epoch=useRef(0),mounted=useRef(false),morePending=useRef(false),exportRequest=useRef(null),currentKey=useRef('')
   const auth=store.getAuthGeneration?.()
@@ -148,11 +149,15 @@ function AuditLifetime({ store }) {
     try {
       const page = await fetchAuditLogs({ ...filters(), per_page: 50, cursor: nextCursor })
       if(!owns(ticket))return
+      if (!page.nextCursor && historyPagination.current?.contains(document.activeElement)) {
+        historyPagination.current.focus()
+      }
       setLogs(previous => [...previous, ...page.rows.filter(row => !previous.some(p => p.id === row.id))])
       setNextCursor(page.nextCursor)
     } catch (err) {
       if (!owns(ticket)) return
       if (err?.kind === 'unauthenticated' || err?.kind === 'forbidden') {
+        if (historyPagination.current?.contains(document.activeElement)) activityLog.current?.focus()
         exportRequest.current?.abort()
         exportRequest.current = null
         setExporting(false)
@@ -407,15 +412,16 @@ function AuditLifetime({ store }) {
               ]}
             />
           )}
-          {viewStatus === 'ready' && nextCursor && !rangeInvalid && (
-            <div className="owner-report-recovery">
-              {moreError && <Notice tone="warning">Older events could not be loaded. The events already loaded are still available.</Notice>}
-              <Button variant="soft" onClick={loadMore} disabled={loadingMore} aria-busy={loadingMore}>
-                {loadingMore ? 'Loading older events…' : moreError ? 'Retry older events' : 'Load older events'}
-              </Button>
+          {viewStatus === 'ready' && !rangeInvalid && shownLogs.length > 0 && (
+            <div ref={historyPagination} role="group" aria-label="Audit history pagination" tabIndex={-1} className={nextCursor ? 'owner-report-recovery' : undefined}>
+              {nextCursor ? <>
+                {moreError && <Notice tone="warning">Older events could not be loaded. The events already loaded are still available.</Notice>}
+                <Button variant="soft" onClick={loadMore} aria-disabled={loadingMore} aria-busy={loadingMore}>
+                  {loadingMore ? 'Loading older events…' : moreError ? 'Retry older events' : 'Load older events'}
+                </Button>
+              </> : <p role="status" className="muted" style={{ textAlign: 'center', marginTop: '12px', fontSize: '11px' }}>End of the matching history.</p>}
             </div>
           )}
-          {viewStatus === 'ready' && !nextCursor && shownLogs.length > 0 && <p className="muted" style={{ textAlign: 'center', marginTop: '12px', fontSize: '11px' }}>End of the matching history.</p>}
         </Card>
       </div>
 
