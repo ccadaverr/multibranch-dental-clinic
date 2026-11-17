@@ -8,6 +8,7 @@ import { commandKey } from '../appointments-api.js'
 import { readPrescriptionPage } from '../prescription-list.js'
 import { runPrescriptionWrite } from '../prescription-command.js'
 import '../dentist-clinical.css'
+import '../clinical-care-experience.css'
 
 const firstError = r => (r.kind === 'validation' ? Object.values(r.errors || {})[0]?.[0] || r.message : r.message) || 'That did not work.'
 const day = d => d ? new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : ''
@@ -71,12 +72,13 @@ function PrescriptionsBody({ store, role, context, setPage }) {
   // Invalidate UI completions synchronously when selection changes. The server
   // command still finishes for its original prescription, even after unmount.
   const editorGeneration = useRef(0)
-  const editorLeave = useRef(null)
+  const editorLeave = useRef(null),compose=useRef(null)
   const generation = editorGeneration.current
   const applyDraft = id => {
     if(id===writing)return
     editorGeneration.current++
     setWriting(id)
+    if(id&&compose.current){compose.current.open=true;compose.current.querySelector('summary')?.focus();compose.current.scrollIntoView({block:'start'})}
   }
   const selectDraft = (id, closeDetail = false) => {
     if (id === writing) { if (closeDetail) setOpenId(null); return }
@@ -103,7 +105,7 @@ function PrescriptionsBody({ store, role, context, setPage }) {
   }, [scope])
   const dentist = role === 'dentist', owner = role === 'owner'
   const filteredRows = rows || []
-  return <div className="st-page dentist-prescriptions">
+  return <div className={`st-page dentist-prescriptions${dentist?' clinical-experience':''}`}>
     {context?.returnEncounter&&<Button variant="ghost" onClick={()=>setPage('treatment',context.returnEncounter)}>Return to encounter</Button>}
     {context?.visitId&&<Notice>Prescriptions for this encounter. A Draft has not been issued.</Notice>}
     <PageHeader kicker={owner ? 'Administration' : 'Clinical'} title="Prescriptions"
@@ -111,8 +113,8 @@ function PrescriptionsBody({ store, role, context, setPage }) {
         : dentist ? 'Write a prescription for a recent visit. Issuing locks it; a mistake is voided with a reason and a new one is issued. There is no drug list and no interaction check: you decide what to prescribe.'
           : 'Prescriptions issued at your branch, to view and print. Only a dentist writes or changes them.'}
       aside={<RefreshButton title="Reload prescriptions" ariaLabel="Reload prescriptions" loading={loading} onClick={load}/>}/>
-    {dentist && <WriteCard key={writing || 'new'} clinicalContext={store.session?.clinicalContext} getAuthGeneration={store.getAuthGeneration} context={context} toast={toast} onDone={id => { load(); setOpenId(id) }} editing={writing} onEdited={() => applyDraft(null)} leaveRef={editorLeave} isCurrent={() => editorGeneration.current===generation}/>}
-    {dentist && <LicenseCard toast={toast} clinicalContext={store.session?.clinicalContext} getAuthGeneration={store.getAuthGeneration}/>}
+    {dentist && <details ref={compose} className="rx-compose" open={!!context?.visitId||!!writing}><summary><span>Write a prescription<small>Saved drafts stay private until issued.</small></span></summary><WriteCard key={writing || 'new'} clinicalContext={store.session?.clinicalContext} getAuthGeneration={store.getAuthGeneration} context={context} toast={toast} onDone={id => { load(); setOpenId(id) }} editing={writing} onEdited={() => applyDraft(null)} leaveRef={editorLeave} isCurrent={() => editorGeneration.current===generation}/></details>}
+    {dentist && <details className="rx-compose rx-settings"><summary><span>Prescription settings<small>Your optional license number</small></span></summary><LicenseCard toast={toast} clinicalContext={store.session?.clinicalContext} getAuthGeneration={store.getAuthGeneration}/></details>}
     {error && <Notice tone="warning" title="Unavailable">{error}</Notice>}
     <Card title={owner ? 'Issued prescriptions' : 'Prescriptions'}>
       <FilterBar

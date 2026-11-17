@@ -7,6 +7,7 @@ import { ChunkBoundary, StartupLoading } from '../StartupLoading.jsx'
 import { AssistantLauncher } from './Assistant.jsx'
 import { initials } from './format.js'
 import { HomePage } from './pages/Home.jsx'
+import './care-experience.css'
 
 const BookPage = lazy(() => import('./pages/Book.jsx').then(m => ({ default: m.BookPage })))
 const VisitsPage = lazy(() => import('./pages/Visits.jsx').then(m => ({ default: m.VisitsPage })))
@@ -103,7 +104,7 @@ export function PatientPortal({ me, store, initialPage = 'home', initialContext 
     case 'prescriptions': content = <PrescriptionsPage toast={toast} session={store.session} getAuthGeneration={store.getAuthGeneration}/>; break
     case 'teeth': content = <TeethPage key={JSON.stringify([store.session?.serverUserId,store.session?.patientPublicId,store.getAuthGeneration?.()])} session={store.session} getAuthGeneration={store.getAuthGeneration}/>; break
     case 'security': content = <SecurityPage me={me} onSignedOut={onSignedOut}/>; break
-    default: content = <HomePage me={me} onNavigate={navigate}/>
+    default: content = <HomePage key={JSON.stringify([store.session?.serverUserId,store.session?.patientPublicId,store.getAuthGeneration?.()])} me={me} session={store.session} getAuthGeneration={store.getAuthGeneration} onNavigate={navigate}/>
   }
 
   return <div className="pp-shell">

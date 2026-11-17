@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict'
 import {readFileSync,writeFileSync,existsSync} from 'node:fs'
 import {browser,login,get,api,evidence,target,base} from './local-visit-support.mjs'
-const visit=JSON.parse(readFileSync(target.runtime+'/browser/journey.json','utf8')).visit
+const visit=JSON.parse(readFileSync(process.env.LOCAL_VISIT_JOURNAL||target.runtime+'/browser/journey.json','utf8')).visit
 assert.ok(visit?.id)
 const journal=evidence+'/search-acceptance.json',state=existsSync(journal)?JSON.parse(readFileSync(journal,'utf8')):{}
 state.widths=[];state.accepted=false
@@ -16,6 +16,8 @@ try {
   const dentist=await login('sprint02.dentist@example.test'),page=dentist.page
   await page.getByRole('button',{name:'Prescriptions',exact:true}).first().click()
   if(!state.issued){
+  const compose=page.locator('details.rx-compose').first()
+  if(!await compose.evaluate(el=>el.open))await compose.locator(':scope > summary').click()
   await page.getByRole('combobox',{name:/^Visit/}).selectOption(visit.id)
   await page.getByRole('combobox',{name:'Select medicine 1',exact:true}).selectOption('__other__')
   await page.getByRole('textbox',{name:'Specify medicine name',exact:true}).fill('Synthetic search acceptance medicine; not for clinical use')
