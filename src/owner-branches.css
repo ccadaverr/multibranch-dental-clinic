@@ -2,6 +2,9 @@
 .owner-branches .branch-overview-card :is(b, h3) { color: var(--ink); }
 .owner-branches .branch-code-badge { color: var(--brand-3); background: var(--brand-soft); }
 .owner-branches .branch-overview-card:focus-within { outline: 2px solid var(--brand); outline-offset: 2px; }
+/* Keep small action text readable through hover/selected states using the shared dark brand token. */
+.owner-branches .btn.primary,
+.owner-branches .btn.primary:is(:hover, :focus-visible, :active) { background: var(--brand-3); color: #fff; transition-property: box-shadow, transform; }
 .owner-branches .branch-coords-readout { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 8px; }
 .owner-branches .branch-coords-readout small { flex-basis: 100%; }
 .owner-branches .branch-map-canvas { isolation: isolate; }
