@@ -145,6 +145,8 @@ class DocumentStorageService
         }, 200, [
             'Content-Type' => $document->mime_type,
             'Content-Length' => (string) $document->file_size_bytes,
+            'X-Document-Id' => $document->public_id,
+            'X-Patient-Id' => $document->patient?->public_id ?? '',
             'Content-Disposition' => 'inline; filename="'.$safeName.'"',
             'X-Content-Type-Options' => 'nosniff',
             // Defence in depth for an inline PDF/image: no active content may run from this response.
@@ -172,6 +174,11 @@ class DocumentStorageService
         }
 
         return DB::transaction(function () use ($actor, $document, $reason) {
+            // Serialize retries against the canonical record; never overwrite the first retraction reason/audit.
+            $document = Document::whereKey($document->id)->lockForUpdate()->firstOrFail();
+            if ($document->status === 'Retracted') {
+                throw new DocumentException(422, 'already_retracted', 'This document has already been retracted.');
+            }
             $document->update([
                 'status' => 'Retracted',
                 'retracted_at' => CarbonImmutable::now('Asia/Manila'),

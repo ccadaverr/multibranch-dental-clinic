@@ -135,13 +135,22 @@ const DOWNLOAD_MESSAGES = {
   410: 'This document has been retracted and is no longer available for download.',
 }
 
-export async function downloadDocumentFile(id, filename) {
-  const baseUrl = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_BASE_URL) || 'http://localhost:8000'
+export async function downloadDocumentFile(id, filename, {patientId,checksum,mimeType,size,isCurrent=()=>true}={}) {
+  if(!isCurrent())throw new Error('This document view is no longer current.')
+  const baseUrl = api.apiBase()
   const url = `${baseUrl}/api/documents/${encodeURIComponent(id)}/download`
   let res
   try { res = await fetch(url, { credentials: 'include' }) } catch { throw new Error('Could not reach the clinic system. Check your connection and try again.') }
   if (!res.ok) throw new Error(DOWNLOAD_MESSAGES[res.status] || 'Could not download the document. Try again.')
+  if(!isCurrent())throw new Error('This document view is no longer current.')
+  if(patientId&&(res.headers.get('X-Document-Id')!==id||res.headers.get('X-Patient-Id')!==patientId||res.headers.get('Content-Type')?.split(';')[0]!==mimeType))throw new Error('The download did not confirm the selected document and Patient. No file was downloaded.')
   const blob = await res.blob()
+  if(checksum){
+    const hash=await crypto.subtle.digest('SHA-256',await blob.arrayBuffer())
+    const observed=[...new Uint8Array(hash)].map(b=>b.toString(16).padStart(2,'0')).join('')
+    if(observed!==checksum||blob.size!==size)throw new Error('The downloaded file did not match its record. No file was downloaded.')
+  }
+  if(!isCurrent())throw new Error('This document view is no longer current.')
   const blobUrl = window.URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = blobUrl

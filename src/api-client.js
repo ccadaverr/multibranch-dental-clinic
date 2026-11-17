@@ -538,17 +538,18 @@ export function myBillingReceipts(params) { return request(`/api/receipts/mine${
 
 // M14 Patient Forms, Documents & Consent Management
 export function listDocuments(params) { return request(`/api/documents${query(params)}`) }
-export function myDocuments() { return request('/api/documents/mine') }
+export function myDocuments(params) { return request(`/api/documents/mine${query(params)}`) }
 export function getDocument(id) { return request(`/api/documents/${encodeURIComponent(id)}`) }
-export function uploadDocument(formData, key) {
+export function uploadDocument(formData, key, beforeDispatch) {
   return request('/api/documents', {
     method: 'POST',
     body: formData,
     headers: key ? { 'Idempotency-Key': key } : {},
+    beforeDispatch,
   })
 }
-export function retractDocument(id, payload, key) {
-  return command(`/api/documents/${encodeURIComponent(id)}/retract`, payload, key)
+export function retractDocument(id, payload, key, beforeDispatch) {
+  return command(`/api/documents/${encodeURIComponent(id)}/retract`, payload, key, beforeDispatch)
 }
 export function listPatientConsents(patientId) {
   return request(`/api/patients/${encodeURIComponent(patientId)}/consents`)

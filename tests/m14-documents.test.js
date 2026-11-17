@@ -104,8 +104,8 @@ test('Clinical.jsx displays draft extraction advisory note without automatically
 test('PatientMePage includes patient documents and consents views', () => {
   assert.match(patientMe, /My Documents/)
   assert.match(patientMe, /Consents & Agreements/)
-  assert.match(patientMe, /fetchMyDocuments/)
-  assert.match(patientMe, /fetchMyConsents/)
+  assert.match(patientMe, /readPatientDocuments\(myDocuments,patientId,valid\)/)
+  assert.match(patientMe, /readPatientConsents\(myConsents,patientId,valid\)/)
   assert.match(patientMe, /downloadDocumentFile/)
   assert.match(patientMe, /retractDocument/)
   assert.match(patientMe, /<PageHead/)

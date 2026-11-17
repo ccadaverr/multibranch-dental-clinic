@@ -1,0 +1,39 @@
+/* Patient document content only; existing shell, shared controls and brand remain unchanged. */
+.patient-documents { font-size:15px; line-height:1.55; color:#193747; }
+.doc-owner { border-left:3px solid #176a79; padding:6px 16px; margin:20px 0 28px; }
+.doc-owner>span { display:block; color:#536b78; font-size:13px; }
+.doc-owner>strong { font-weight:500; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
+.doc-owner p { margin:6px 0 0; color:#536b78; font-size:14px; }
+.doc-section { margin:28px 0; }
+.doc-section-head { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:16px; }
+.doc-section h2 { font-size:20px; font-weight:600; margin:0; }
+.doc-section-head p { font-size:14px; color:#536b78; margin:5px 0 0; }
+.doc-library { display:grid; gap:12px; }
+.doc-record { border:1px solid #dce5e9; background:white; border-radius:10px; overflow-wrap:anywhere; }
+.doc-record>summary { min-height:76px; display:flex; align-items:center; justify-content:space-between; gap:16px; padding:18px; cursor:pointer; }
+.doc-record>summary>span:first-child { min-width:0; }
+.doc-record b { display:block; font-weight:600; }
+.doc-record small { display:block; color:#536b78; font-size:13px; margin-top:4px; }
+.doc-record>summary:focus-visible { outline:3px solid #176a79; outline-offset:2px; }
+.doc-record-body { padding:0 18px 18px; }
+.doc-record dl { border-top:1px solid #dce5e9; padding-top:16px; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+.doc-record dt { color:#536b78; font-size:13px; }
+.doc-record dd { margin:3px 0 0; font-variant-numeric:tabular-nums; }
+.doc-actions { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin-top:16px; }
+.doc-consent { padding:18px; }
+.doc-consent>header { display:flex; align-items:start; justify-content:space-between; gap:12px; }
+.doc-consent h3 { font-size:16px; font-weight:600; margin:0; }
+.doc-consent p { margin:10px 0; }
+.doc-consent details { border-top:1px solid #dce5e9; margin-top:16px; padding-top:12px; font-size:13px; color:#536b78; }
+.doc-consent details p { overflow-wrap:anywhere; }
+.doc-empty,.doc-result { padding:16px; border:1px solid #dce5e9; border-radius:10px; background:#f3f7f8; }
+.doc-upload-form { display:grid; gap:16px; }
+.doc-upload-form fieldset { border:0; padding:0; margin:0; display:grid; gap:16px; min-width:0; }
+.doc-upload-form input[type=file] { max-width:100%; }
+@media(max-width:600px) { .doc-section-head { align-items:start; flex-wrap:wrap; }.doc-record dl { grid-template-columns:1fr; }.doc-upload-form :is(input,select,textarea) { font-size:16px; }.doc-record>summary { padding:16px; }.doc-consent { padding:16px; } }
+.doc-record>summary::before { content:'›'; color:#176a79; font-size:24px; line-height:1; flex-shrink:0; }
+.doc-record[open]>summary::before { transform:rotate(90deg); }
+.doc-record>summary>span:first-of-type { flex:1; }
+.doc-record>summary>.status { flex-shrink:0; }
+.doc-record>summary>.status { white-space:nowrap; }
+.doc-owner>small { display:block; margin-top:5px; font-size:13px; color:#536b78; overflow-wrap:anywhere; }
