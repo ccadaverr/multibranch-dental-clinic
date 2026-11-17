@@ -3,11 +3,11 @@
   "clinical": "407f0c6b74ce44a7d955d4b897e6100e2bd80a51",
   "integration_branch": "integration/dentalops-fullstack-20261117",
   "totals": {
-    "local_complete": 26,
-    "partial": 31,
+    "local_complete": 27,
+    "partial": 30,
     "blocked": 11,
-    "integrated_pass": 11,
-    "integrated_pending": 57
+    "integrated_pass": 12,
+    "integrated_pending": 56
   },
   "rows": [
     {
@@ -128,14 +128,14 @@
       "original_owner": "Richmon",
       "exact_criterion_and_tasks": "Key flows (check-in, appointments, patient record, prescriptions) require measurably fewer clicks.<br>Original tasks: Map the most common user flows and count clicks for each; Reduce clicks (shortcuts, default selections, inline actions, fewer modals/steps); Record before/after click counts per flow `FINALS-QA-REVISIONS.md:821`",
       "responsible_domain": "Jaztin Clinical/Patient; Joevan shared-role partner",
-      "source_evidence": "src/pages/EncounterCare.jsx; ClinicalHistory.jsx; EncounterPrescriptions.jsx; PrescriptionController.php; [Batch08](JAZTIN_CLINICAL_BATCH08_20261116.md)",
-      "focused_test_evidence": "Batch 03 queue 2→1; Batch 05 appointment→receipt 2→1; Batch 06 one exact historical review, no invented baseline clicks. Batch08 adds exact encounter prescription review, Patient/Visit/branch validation and source-counted 2→1 detail navigation; browser evidence is in Batch08.",
+      "source_evidence": "src/pages/EncounterCare.jsx; ClinicalHistory.jsx; EncounterPrescriptions.jsx; PrescriptionController.php; [Batch08](JAZTIN_CLINICAL_BATCH08_20261116.md); B05 integrated 5c0aaafde47fe0147edb3e88da9d4f37a5b6e9e0 (AuditTrail.jsx and gen09-audit-efficiency.browser.mjs).; B05 integrated 5c0aaafde47fe0147edb3e88da9d4f37a5b6e9e0 (AuditTrail.jsx and gen09-audit-efficiency.browser.mjs).",
+      "focused_test_evidence": "Batch 03 queue 2→1; Batch 05 appointment→receipt 2→1; Batch 06 one exact historical review, no invented baseline clicks. Batch08 adds exact encounter prescription review, Patient/Visit/branch validation and source-counted 2→1 detail navigation; browser evidence is in Batch08. A05/B05 adds Owner exact-record history 2→1 activations and seven Manila dates 2→1 control interactions, qualified against the supplied baseline. Six-width fixture and actual Owner/three-role denial acceptance passed; this is supporting Owner scope, not the full four original journeys. A05/B05 adds Owner exact-record history 2→1 activations and seven Manila dates 2→1 control interactions, qualified against the supplied baseline. Six-width fixture and actual Owner/three-role denial acceptance passed; this is supporting Owner scope, not the full four original journeys.",
       "current_status": "Partial",
       "remaining_requirements_and_next_action": "Finish common-flow map for Check-In, appointment creation/management and Patient record; count comparable actions at integrated HEAD. Prescription review subset 2→1 does not close prescribing or whole GEN-09.",
       "integrated_acceptance": "Pending",
-      "integration_evidence": "PENDING: full original criterion not accepted on the combined candidate. Both exact sources are now available; passing subsets do not close this row.",
+      "integration_evidence": "PENDING for the full original GEN-09 criterion. B05 Owner audit record/date shortcuts are integrated and independently accepted as supporting subsets; Check-In, appointment creation/management, Patient history and complete prescribing comparisons still require a common integrated benchmark. Jaztin J01/J02 target53b0e2e is not delivered or remotely verified.",
       "local_acceptance": "Unfinished: only cited subsets accepted; original tasks remain incomplete.",
-      "blockers": "Full comparable common-flow map remains incomplete; no numeric target or measured time saving supplied."
+      "blockers": "The full comparable benchmark across the four original flows is unfinished. New J01/J02 source remains unavailable until publication/delivery."
     },
     {
       "original_id": "GEN-10",
@@ -297,14 +297,14 @@
       "original_owner": "Jaztin",
       "exact_criterion_and_tasks": "Operations shows correct on-duty status per doctor per branch.<br>Original tasks: Compute \"Doctor is on duty today\" from work schedules (account for leave and closed dates); Expose status in Operations; update daily `FINALS-QA-REVISIONS.md:1110`",
       "responsible_domain": "Joevan Operations/Workforce; Jaztin reviews clinical boundary",
-      "source_evidence": "Implemented but awaiting integrated acceptance. [B5 record](https://github.com/ccadaverr/multibranch-dental-clinic/blob/c43417c93cfabdcfbb2520fd8f3955e5a49999aa/docs/STF07_B5_ACCEPTANCE.md); [c43417c](https://github.com/ccadaverr/multibranch-dental-clinic/commit/c43417c93cfabdcfbb2520fd8f3955e5a49999aa)",
-      "focused_test_evidence": "B5: 4 duty tests/79 assertions; 7 schedules/77; 3 frontend; rendered 1440/390; Integrated code; merged-state runtime acceptance pending. Staff Operations only; profile fallback estimated; on-duty-today differs from working-now. Joevan implementation/test evidence is provisional here until approved source delivery and independent inspection.",
-      "current_status": "Partial",
-      "remaining_requirements_and_next_action": "Inspect published Joevan duty projection, branch/leave/closure rules and actual day transition tests.",
-      "integrated_acceptance": "Pending",
-      "integration_evidence": "PENDING: full original criterion not accepted on the combined candidate. Both exact sources are now available; passing subsets do not close this row.",
-      "local_acceptance": "Unfinished: only cited subsets accepted; original tasks remain incomplete.",
-      "blockers": "Source-delivery gate resolved November17; criterion-specific verification remains required. Other policy/reproduction limits in this row remain."
+      "source_evidence": "src/pages/StaffOnDuty.jsx; src/work-hours-duty.js; WorkScheduleController.php; OnDutyStatusTest.php; A05 Staff fix c7e99bc319a489b9d6c334c4776a377ba8ce7884. See RAPID_A05_ACCEPTANCE_20261117.md.",
+      "focused_test_evidence": "31 PostgreSQL duty/workforce tests /379 assertions passed, including weekly windows, breaks, closure/day-off/custom hours, full/partial approved leave, scope and Manila day transition.33 focused frontend tests passed. a05-duty.browser.mjs verifies automatic Manila-midnight refresh, duplicate-name refusal/recovery, six widths, error and permission clearing. Real Staff Operations duty badges match the persisted dated branch projection in a05-audit-postgres.browser.mjs.",
+      "current_status": "Complete",
+      "remaining_requirements_and_next_action": "Maintain this bounded Staff Operations duty criterion. Clinic-confirmed rosters and broader leave-policy/Owner personnel workflow decisions remain separate.",
+      "integrated_acceptance": "Pass",
+      "integration_evidence": "PASS on A05 combined source: Staff Operations shows exact scoped per-Dentist/per-branch dated duty from the scheduling service; backend scenarios prove closure/leave effects without exposing reasons, browser proves daily rollover and current real Staff readback. Duplicate branch names cannot combine distinct IDs. On-duty-today remains distinct from working-now; profile fallback stays labelled estimated. See A05 acceptance.",
+      "local_acceptance": "Complete original bounded criterion verified with PostgreSQL, real Staff session and controlled-clock browser acceptance on the combined candidate.",
+      "blockers": "None for the bounded Staff Operations duty criterion. No hosting, attendance or confirmed clinic-roster claim."
     },
     {
       "original_id": "STF-08",
