@@ -18,7 +18,10 @@ try{
  const dentist=await login('sprint02.dentist@example.test');page=dentist.page
  const original=(await get(page,'/api/treatments/'+prior.id)).body.data
  await page.getByRole('button',{name:'Patient Records',exact:true}).first().click();const select=code=>page.locator('.patient-list-scroll button').filter({hasText:code}).click();await select(prior.patient.code)
- await page.getByRole('button',{name:/^Clinical/}).click();const review=()=>page.getByRole('button',{name:'Review encounter '+original.clinic_date,exact:true});await review().waitFor();await review().focus();await page.keyboard.press('Enter')
+ await page.getByRole('button',{name:/^Clinical/}).click();const review=()=>page.getByRole('button',{name:'Review encounter '+original.clinic_date+', '+(original.appointment?.code||'walk-in')+', reference '+prior.id,exact:true});await review().waitFor()
+ const labels=await page.getByRole('button',{name:/^Review encounter \d{4}-/}).evaluateAll(buttons=>buttons.map(b=>b.getAttribute('aria-label')))
+ assert.equal(new Set(labels).size,labels.length,'Same-day history controls must have distinct exact encounter identities')
+ await review().focus();await page.keyboard.press('Enter')
  const detail=page.getByRole('region',{name:'Historical encounter',exact:true});await detail.getByText('Encounter '+prior.id+' · Visit '+prior.visit.id,{exact:true}).waitFor();assert.equal(await detail.locator('input,textarea').count(),0)
  await detail.getByText('Documentation revision history',{exact:true}).click();await detail.getByText('Revision 3',{exact:false}).first().waitFor();await detail.getByRole('button',{name:'Review current Patient chart',exact:true}).click();await detail.getByRole('button',{name:'Top view (Arch)',exact:true}).waitFor();assert.equal(await detail.getByRole('button',{name:'Record finding',exact:true}).count(),0)
  pass('Dentist Patient record → exact completed encounter → immutable revision history and separately labelled current chart in one review action')

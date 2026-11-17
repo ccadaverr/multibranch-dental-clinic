@@ -41,7 +41,7 @@ function History({store,patient,selectedId}){
   {error&&<Notice tone="warning">{error}<Button onClick={()=>setAttempt(a=>a+1)}>Retry history</Button></Notice>}
   {loading&&<p role="status">Loading completed encounters…</p>}
   {!loading&&!error&&!rows.length&&<p>No authorized completed encounters were returned for this Patient.</p>}
-  {rows.map(t=><article key={t.id} className="clinical-history"><div><b>{t.clinic_date} · {t.branch.name}</b><p>{t.procedure_summary||'No procedure summary recorded'}</p><small>{t.dentist.name} · Revision {t.revision}</small></div><Button variant="soft" onClick={()=>setPicked(t.id)}>Review encounter {t.clinic_date}</Button></article>)}
+  {rows.map(t=><article key={t.id} className="clinical-history" style={{overflowWrap:'anywhere'}}><div style={{minWidth:0}}><b>{t.clinic_date} · {t.branch.name}</b><p>{t.procedure_summary||'No procedure summary recorded'}</p><small>{t.dentist.name} · Revision {t.revision}</small><p>{t.appointment?'Appointment '+t.appointment.code:'Walk-in Visit'} · Encounter {t.id}</p></div><Button variant="soft" aria-label={`Review encounter ${t.clinic_date}, ${t.appointment?.code||'walk-in'}, reference ${t.id}`} onClick={()=>setPicked(t.id)}>Review encounter {t.clinic_date}</Button></article>)}
   {last>1&&<div className="row-actions"><Button disabled={page<=1||loading} onClick={()=>setPage(p=>p-1)}>Newer encounters</Button><span>Page {page} of {last}</span><Button disabled={page>=last||loading} onClick={()=>setPage(p=>p+1)}>Older encounters</Button></div>}
   {reading&&<p role="status">Verifying the selected historical encounter…</p>}
   {detailError&&<Notice tone="warning">{detailError}<Button onClick={()=>setAttempt(a=>a+1)}>Retry encounter</Button></Notice>}
