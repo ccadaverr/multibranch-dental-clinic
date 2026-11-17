@@ -1,0 +1,65 @@
+.owner-record-workspace,
+.owner-report-toolbar,
+.owner-report-controls {
+  min-width: 0;
+}
+
+.owner-record-cell {
+  display: grid;
+  gap: 0.25rem;
+  overflow-wrap: anywhere;
+}
+
+.owner-record-cell small {
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.owner-audit-counts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr));
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius, 0.75rem);
+  background: var(--surface);
+}
+
+.owner-audit-counts dt {
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.owner-audit-counts dd {
+  margin: 0.15rem 0 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.owner-record-workspace td .btn,
+.owner-report-controls .btn {
+  min-height: 44px;
+}
+
+.owner-report-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.5rem;
+}
+
+.owner-report-toolbar p {
+  margin: 0 0 0.35rem;
+  overflow-wrap: anywhere;
+}
+
+.owner-report-controls label {
+  display: grid;
+  gap: 0.25rem;
+  font-weight: 600;
+}
+
+.owner-report-controls select {
+  min-height: 44px;
+}

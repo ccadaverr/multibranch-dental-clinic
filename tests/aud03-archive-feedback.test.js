@@ -55,7 +55,8 @@ test('AUD-03: a failed refresh labels previously loaded rows and preserves read-
   assert.match(html, /SYN-APT/)
   assert.match(html, /caption class="sr-only">Historical appointments/)
   assert.match(html, /View details for SYN-APT/)
-  assert.match(html, /disabled[^>]*aria-describedby="archive-restore-unavailable"/)
+  assert.match(html, /Restoration is unavailable/)
+  assert.doesNotMatch(html, /Retrieve \/ Restore/)
 })
 test('AUD-03: retry is not advertised without a supported refresh function', () => {
   const store = fixture('error'); store.appointmentFlow = {}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import './owner-record-workspace.css'
 import { Brand } from '../Brand.jsx'
 import { Button, Card, Field, FilterBar, Modal, Notice, PageHeader, RefreshButton, Status, Table } from '../components.jsx'
 import { fetchAuditLogs, requestAuditLogsCsv } from '../audit-api.js'
@@ -12,6 +13,17 @@ export function AuditTrailPage({ store }) {
   const allowed=!!session?.serverUserId&&session.role==='owner'&&session.active&&canAccessPage(store.state,session,'audit')&&(!store.getAuthGeneration||auth!=null)
   if(!allowed)return <Notice title="Audit trail unavailable">An active Owner server session is required to inspect operational archive activity and audit history.</Notice>
   return <AuditLifetime key={JSON.stringify([session.serverUserId,session.userId,session.role,session.active,auth])} store={store}/>
+}
+
+const manilaAuditTime = new Intl.DateTimeFormat('en-PH', {
+  timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'medium',
+})
+
+function AuditTimestamp({ value }) {
+  const instant = new Date(value)
+  return value && Number.isFinite(instant.getTime())
+    ? <time dateTime={value}>{manilaAuditTime.format(instant)}</time>
+    : 'Time unavailable'
 }
 
 function AuditLifetime({ store }) {
@@ -303,27 +315,15 @@ function AuditLifetime({ store }) {
         </div>
       </Card>
 
-      {viewStatus === 'ready' && !rangeInvalid && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '20px' }}>
-        <div style={{ padding: '14px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)' }}>
-          <span style={{ fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: '700' }}>Events loaded</span>
-          <b style={{ display: 'block', fontSize: '20px', marginTop: '4px' }}>{shownLogs.length}</b>
-        </div>
-        <div style={{ padding: '14px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)' }}>
-          <span style={{ fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: '700' }}>Security & warnings (loaded)</span>
-          <b style={{ display: 'block', fontSize: '20px', marginTop: '4px', color: securityCount > 0 ? '#b91c1c' : 'inherit' }}>{securityCount}</b>
-        </div>
-        <div style={{ padding: '14px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)' }}>
-          <span style={{ fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: '700' }}>Financial (loaded)</span>
-          <b style={{ display: 'block', fontSize: '20px', marginTop: '4px' }}>{financialCount}</b>
-        </div>
-        <div style={{ padding: '14px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)' }}>
-          <span style={{ fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: '700' }}>Clinical (loaded)</span>
-          <b style={{ display: 'block', fontSize: '20px', marginTop: '4px' }}>{clinicalCount}</b>
-        </div>
-      </div>}
+      {viewStatus === 'ready' && !rangeInvalid && <dl className="owner-audit-counts" aria-label="Counts for loaded events">
+        <div><dt>Events loaded</dt><dd>{shownLogs.length}</dd></div>
+        <div><dt>Security &amp; warnings</dt><dd>{securityCount}</dd></div>
+        <div><dt>Financial</dt><dd>{financialCount}</dd></div>
+        <div><dt>Clinical</dt><dd>{clinicalCount}</dd></div>
+      </dl>}
 
       <div style={{ marginTop: '20px' }}>
-        <Card title="Activity Log" subtitle="Newest first, recorded by the clinic server. Entries cannot be edited or deleted from the application.">
+        <Card title="Activity Log" subtitle="Newest first · Manila time · Read only" className="owner-record-workspace">
           {rangeInvalid ? (
             <Notice tone="warning">Fix the date range to load audit records.</Notice>
           ) : viewStatus === 'loading' ? (
@@ -339,53 +339,34 @@ function AuditLifetime({ store }) {
                 {
                   key: 'createdAt',
                   label: 'Timestamp',
-                  render: l => (
-                    <div>
-                      <b>{l.createdAt ? new Date(l.createdAt).toLocaleDateString('en-PH',{timeZone:'Asia/Manila'}) : 'Date unavailable'}</b>
-                      <small style={{ display: 'block', color: 'var(--muted)', fontSize: '10px' }}>
-                        {l.createdAt ? new Date(l.createdAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone:'Asia/Manila' }) : '—'}
-                      </small>
-                    </div>
-                  ),
+                  render: l => <AuditTimestamp value={l.createdAt}/>,
                 },
                 {
                   key: 'severity',
-                  label: 'Severity',
-                  render: l => <Status tone={severityTone(l.severity)}>{l.severity}</Status>,
-                },
-                {
-                  key: 'category',
-                  label: 'Category',
-                  render: l => <span style={{ textTransform: 'capitalize', fontSize: '11px', fontWeight: '600' }}>{l.category}</span>,
+                  label: 'Severity and category',
+                  render: l => <div className="owner-record-cell">
+                    <span><Status tone={severityTone(l.severity)}>{l.severity}</Status></span>
+                    <small>{l.category}</small>
+                  </div>,
                 },
                 {
                   key: 'action',
-                  label: 'Action',
-                  render: l => <code style={{ fontSize: '11px', padding: '2px 4px', background: '#f1f5f9', borderRadius: '4px' }}>{l.action}</code>,
+                  label: 'Event and record',
+                  render: l => <div className="owner-record-cell">
+                    <b>{l.action}</b>
+                    {l.auditableType && <small>{l.auditableType} {l.auditableId}</small>}
+                  </div>,
                 },
                 {
                   key: 'actor',
-                  label: 'Actor',
+                  label: 'Actor and branch',
                   render: l => (
-                    <div>
+                    <div className="owner-record-cell">
                       <b>{l.actor?.name || 'Anonymous'}</b>
-                      <small style={{ display: 'block', color: 'var(--muted)', fontSize: '10px' }}>{l.actor?.role || 'anonymous'}</small>
+                      <small>{l.actor?.role || 'anonymous'}</small>
+                      <small>{l.branch?.name || 'No branch recorded'}</small>
                     </div>
                   ),
-                },
-                {
-                  key: 'branch',
-                  label: 'Branch',
-                  render: l => l.branch?.name || 'No branch recorded',
-                },
-                {
-                  key: 'target',
-                  label: 'Target',
-                  render: l => l.auditableType ? (
-                    <small style={{ fontSize: '10px' }}>
-                      <b>{l.auditableType}</b>: {l.auditableId || '—'}
-                    </small>
-                  ) : <span style={{ color: 'var(--muted)', fontSize: '11px' }}>—</span>,
                 },
                 {
                   key: 'actions',
@@ -435,8 +416,8 @@ function AuditLifetime({ store }) {
                 <span>{inspectLog.branch?.name || 'No branch recorded'}</span>
               </div>
               <div>
-                <small style={{ color: 'var(--muted)', display: 'block' }}>Timestamp</small>
-                <span>{inspectLog.createdAt}</span>
+                <small style={{ color: 'var(--muted)', display: 'block' }}>Timestamp (Manila)</small>
+                <AuditTimestamp value={inspectLog.createdAt}/>
               </div>
               <div>
                 <small style={{ color: 'var(--muted)', display: 'block' }}>Client IP</small>

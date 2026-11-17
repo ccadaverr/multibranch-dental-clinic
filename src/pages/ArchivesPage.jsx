@@ -4,12 +4,32 @@ import { makeCsv, peso } from '../logic.js'
 import { clinicDate } from '../clock.js'
 import { inScope } from '../contracts.js'
 import { canAccessPage, permitted } from '../safeguards.js'
+import './owner-record-workspace.css'
 
 const branchIdOf = item => {
   const nested = typeof item.branch === 'object' && item.branch !== null ? item.branch.id : null
   return nested && item.branchId && nested !== item.branchId ? null : nested || item.branchId || null
 }
 const patientIdOf = item => item.patientId || item.patientPublicId || item.patient?.id || null
+const receiptReference = record => record.receiptNumber || record.receipt?.number
+const archiveReference = (kind, record) => ({
+  visit: record.code,
+  prescription: record.number,
+  financial: record.invoiceNumber || record.invoice_number || receiptReference(record),
+}[kind] || record.id)
+const archiveType = { visit: 'Appointment', prescription: 'Prescription', financial: 'Invoice / receipt' }
+const archivePatient = record => record.patientName ||
+  (typeof record.patient === 'object' ? record.patient?.name : record.patient) || 'Patient'
+const archiveDate = record => record.issued_at || record.date
+const manilaIssuedDate = new Intl.DateTimeFormat('en-PH', {
+  timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short',
+})
+
+function archiveDateDisplay(value) {
+  if (!value || /^\d{4}-\d{2}-\d{2}$/.test(value)) return value || 'Date unavailable'
+  const instant = new Date(value)
+  return Number.isFinite(instant.getTime()) ? manilaIssuedDate.format(instant) : 'Date unavailable'
+}
 
 export function ArchivesPage({ store, role: propRole, activeBranch = 'All Branches' }) {
   const { state } = store
@@ -31,8 +51,15 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
   const live = useRef(false)
   const layoutEffect = typeof window === 'undefined' ? useEffect : React.useLayoutEffect
   layoutEffect(() => { live.current = true; return () => { live.current = false } }, [])
-  const [tab, setTab] = useState('visits')
+  const [browseTab, setBrowseTab] = useState('visits')
+  const [searchTab, setSearchTab] = useState('matches')
   const [query, setQuery] = useState('')
+  const ownerSearch = role === 'owner' && !!query.trim()
+  const tab = ownerSearch ? searchTab : browseTab
+  const updateQuery = value => {
+    if (!value.trim()) setSearchTab('matches')
+    setQuery(value)
+  }
   const retryPending = useRef(false)
   const [retrying, setRetrying] = useState(false)
   const [retryFailed, setRetryFailed] = useState(false)
@@ -116,10 +143,10 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
       return isPastOrDone && branchAndRoleFilter(a)
     })
     if (!query.trim()) return list
-    const q = query.toLowerCase()
+    const q = (role === 'owner' ? query.trim() : query).toLowerCase()
     return list.filter(a =>
       (a.patientName || '').toLowerCase().includes(q) ||
-      (a.serviceName || a.service?.name || a.service || '').toLowerCase().includes(q) ||
+      (a.serviceName || a.service?.name || (typeof a.service === 'string' ? a.service : '')).toLowerCase().includes(q) ||
       (a.dentistName || a.dentist?.name || '').toLowerCase().includes(q) ||
       (a.code || '').toLowerCase().includes(q)
     )
@@ -129,7 +156,7 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
   const archivedPrescriptions = useMemo(() => {
     const list = (state.prescriptions || []).filter(branchAndRoleFilter)
     if (!query.trim()) return list
-    const q = query.toLowerCase()
+    const q = (role === 'owner' ? query.trim() : query).toLowerCase()
     return list.filter(p =>
       (p.number || '').toLowerCase().includes(q) ||
       (p.patientName || '').toLowerCase().includes(q) ||
@@ -146,11 +173,11 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
       return isSettled && branchAndRoleFilter(i)
     })
     if (!query.trim()) return list
-    const q = query.toLowerCase()
+    const q = (role === 'owner' ? query.trim() : query).toLowerCase()
     return list.filter(i =>
       (i.invoiceNumber || i.invoice_number || '').toLowerCase().includes(q) ||
       (i.patientName || '').toLowerCase().includes(q) ||
-      (i.receiptNumber || i.receipt?.number || '').toLowerCase().includes(q)
+      (receiptReference(i) || '').toLowerCase().includes(q)
     )
   }, [state.invoices, effectiveBranch, query, canViewFinancials, role, branches])
 
@@ -164,7 +191,7 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
     (patientIdOf(record) ? patientIdOf(record) === recordSelection.patientId : !recordSelection.patientId && record === recordSelection.record))
   const viewRecord = currentRecord ? { kind: recordSelection.kind, record: currentRecord } : null
   useEffect(() => { if (recordSelection && !currentRecord) setViewRecord(null) }, [recordSelection, currentRecord])
-  const recordsForTab = tab === 'visits' ? archivedVisits : tab === 'prescriptions' ? archivedPrescriptions : canViewFinancials ? archivedInvoices : []
+  const recordsForTab = tab === 'visits' ? archivedVisits : tab === 'prescriptions' ? archivedPrescriptions : tab === 'financials' ? archivedInvoices : []
   const emptyMessage = (collection, label) => !Array.isArray(collection) ? `${label} are unavailable in this view.`
     : query.trim() || collection.length > 0 ? `No matching ${label.toLowerCase()} in the current scope.`
       : `No ${label.toLowerCase()} are available in this archive view.`
@@ -176,6 +203,12 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
       targetId: targetId || 'archive',
       detail,
     })
+  }
+
+  const logArchiveView = (kind, record) => {
+    const reference = role !== 'owner' && kind === 'financial' ? (record.invoiceNumber || record.id) : archiveReference(kind, record)
+    const description = kind === 'financial' ? 'financial record' : kind === 'visit' ? 'visit' : 'prescription'
+    logArchiveAudit('archive.viewed', reference, `Viewed archived ${description} ${reference}`)
   }
 
   const handleExportCsv = () => {
@@ -227,25 +260,31 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
     }
   }
 
+  const searchMatches = ownerSearch ? [
+    ...archivedVisits.map(record => ({ kind: 'visit', record })),
+    ...archivedPrescriptions.map(record => ({ kind: 'prescription', record })),
+    ...archivedInvoices.map(record => ({ kind: 'financial', record })),
+  ].map(match => ({ ...match, id: `${match.kind}:${match.record.id}:${branchIdOf(match.record)}` })) : []
   const availableTabs = [
+    ...(ownerSearch ? [{ key: 'matches', label: `All matches (${searchMatches.length})` }] : []),
     { key: 'visits', label: `Historical Appointments (${archivedVisits.length})` },
     { key: 'prescriptions', label: `Prescriptions (${archivedPrescriptions.length})` },
     ...(canViewFinancials ? [{ key: 'financials', label: `Settled Invoices & Receipts (${archivedInvoices.length})` }] : []),
   ]
 
   return (
-    <div className="archives-page" aria-label="Archives and Historical Records">
+    <div className={role === 'owner' ? 'archives-page owner-record-workspace' : 'archives-page'} aria-label="Archives and Historical Records">
       <PageHeader
         kicker="Compliance & Record Retention"
         title="Archives & Historical Records Management"
         text="Role- and branch-scoped history of past or terminal appointments, prescriptions, and settled financial records."
       />
 
-      <Notice tone="info" title="History viewing and restoration availability">
+      {role === 'owner' ? <Notice>Open records for read-only review. Restoration is unavailable.</Notice> : <Notice tone="info" title="History viewing and restoration availability">
         <b>Viewing</b> inspects historical records read-only within your role and branch scope.
         <br/><span id="archive-restore-unavailable" tabIndex={0}>Retrieval / restoration is unavailable on this screen. Viewing a record does not restore it or flag it for active follow-up.</span><br/>
         <b>Permanent deletion</b> is not available on this screen.
-      </Notice>
+      </Notice>}
 
       {!enabled || noStaffScope ? <Notice tone="warning" title={noStaffScope && enabled ? 'No authorized archive branches' : 'Archive access unavailable'}>
         {noStaffScope && enabled ? 'This account has no authorized branches for archive viewing or export.' : 'These records are unavailable to the current account.'}
@@ -253,9 +292,12 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
 
       <FilterBar
         search={query}
-        onSearchChange={setQuery}
-        searchPlaceholder="Search by patient, code, number, dentist…"
-        onClear={(query || effectiveBranch !== defaultBranch) ? () => { setQuery(''); setSelectedBranch(defaultBranch) } : null}
+        onSearchChange={updateQuery}
+        searchPlaceholder={role === 'owner' ? 'Patient, appointment, prescription or receipt reference…' : 'Search by patient, code, number, dentist…'}
+        onClear={(query || effectiveBranch !== defaultBranch) ? () => {
+          updateQuery('')
+          setSelectedBranch(defaultBranch)
+        } : null}
       >
         <select
           className="filter-select"
@@ -270,9 +312,9 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
             <option key={branch.id} value={branch.id}>{displayBranch(branch)}</option>
           ))}
         </select>
-        <Button size="sm" variant="secondary" icon="download" disabled={!recordsForTab.length} onClick={handleExportCsv}>
+        {tab !== 'matches' && <Button size="sm" variant="secondary" icon="download" disabled={!recordsForTab.length} onClick={handleExportCsv}>
           {tab === 'visits' && store.appointmentsTruncated ? 'Export loaded appointments CSV' : 'Export Archive CSV'}
-        </Button>
+        </Button>}
       </FilterBar>
 
       {branchUnavailable && <Notice tone="warning" title="Archive branch unavailable">
@@ -283,8 +325,42 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
       <Tabs
         tabs={availableTabs}
         active={tab}
-        onChange={setTab}
+        onChange={ownerSearch ? setSearchTab : setBrowseTab}
       />
+
+      {tab === 'matches' && (
+        <Card title="Matching archive records" subtitle="Select a record type to export its results.">
+          {store.appointmentsTruncated && <Notice>Search covers the loaded appointments. Older matches may exist.</Notice>}
+          {appointmentsLoading && <p role="status">Refreshing historical appointments… {archivedVisits.length > 0 && 'Showing loaded records.'}</p>}
+          {appointmentsFailed && <Notice tone="warning">Appointment history could not be refreshed.
+            {store.appointmentFlow?.refresh && <Button variant="ghost" onClick={retryAppointments}>Retry historical appointments</Button>}
+          </Notice>}
+          <Table
+            rows={searchMatches}
+            caption="Matching archive records"
+            empty={<span role="status">{appointmentsLoading ? 'Waiting for appointment results.' :
+              appointmentsFailed ? 'No matches in the available records.' : 'No matching archive records in this branch scope.'}</span>}
+            columns={[
+              { key: 'reference', label: 'Record', render: ({ kind, record }) => <div className="owner-record-cell">
+                <b>{archiveReference(kind, record)}</b>
+                <small>{archiveType[kind]}{record.status && ` · ${record.status}`}</small>
+                {kind === 'financial' && receiptReference(record) && receiptReference(record) !== archiveReference(kind, record) &&
+                  <small>{receiptReference(record)}</small>}
+              </div> },
+              { key: 'patient', label: 'Patient and branch', render: ({ record }) => <div className="owner-record-cell">
+                <b>{archivePatient(record)}</b><small>{branchLabel(record)}</small>
+              </div> },
+              { key: 'date', label: 'Date (Manila)', render: ({ record }) => archiveDateDisplay(archiveDate(record)) },
+              { key: 'actions', label: 'Details', render: match => <Button variant="soft"
+                aria-label={`View details for ${archiveReference(match.kind, match.record)}`}
+                onClick={() => {
+                  logArchiveView(match.kind, match.record)
+                  setViewRecord(match)
+                }}>View details</Button> },
+            ]}
+          />
+        </Card>
+      )}
 
       {tab === 'visits' && (
         <Card title="Historical Appointments" subtitle="Past or terminal appointments; inclusion here does not confirm completed care.">
@@ -314,10 +390,10 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
               { key: 'actions', label: 'Actions', render: r => (
                 <div className="row-actions">
                   <Button size="sm" variant="soft" icon="file" title="View details" aria-label={`View details for ${r.code || r.id}`} onClick={() => {
-                    logArchiveAudit('archive.viewed', r.code || r.id, `Viewed archived visit ${r.code || r.id}`)
+                    logArchiveView('visit', r)
                     setViewRecord({ kind: 'visit', record: r })
                   }}>View details</Button>
-                  <Button size="sm" variant="soft" disabled aria-describedby="archive-restore-unavailable">Retrieve / Restore (unavailable)</Button>
+                  {role !== 'owner' && <Button size="sm" variant="soft" disabled aria-describedby="archive-restore-unavailable">Retrieve / Restore (unavailable)</Button>}
                 </div>
               ) },
             ]}
@@ -342,7 +418,7 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
               { key: 'actions', label: 'Actions', render: r => (
                 <div className="row-actions">
                   <Button size="sm" variant="soft" icon="file" title="View details" aria-label={`View details for ${r.number || r.id}`} onClick={() => {
-                    logArchiveAudit('archive.viewed', r.number || r.id, `Viewed archived prescription ${r.number || r.id}`)
+                    logArchiveView('prescription', r)
                     setViewRecord({ kind: 'prescription', record: r })
                   }}>View details</Button>
                 </div>
@@ -369,7 +445,7 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
               { key: 'actions', label: 'Actions', render: r => (
                 <div className="row-actions">
                   <Button size="sm" variant="soft" icon="file" title="View details" aria-label={`View details for ${r.invoiceNumber || r.id}`} onClick={() => {
-                    logArchiveAudit('archive.viewed', r.invoiceNumber || r.id, `Viewed archived financial record ${r.invoiceNumber || r.id}`)
+                    logArchiveView('financial', r)
                     setViewRecord({ kind: 'financial', record: r })
                   }}>View details</Button>
                 </div>
@@ -387,11 +463,15 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
           onClose={() => setViewRecord(null)}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <p><b>Record Type:</b> {viewRecord.kind.toUpperCase()}</p>
-            <p><b>Reference:</b> <code>{viewRecord.record.code || viewRecord.record.number || viewRecord.record.invoiceNumber || viewRecord.record.id}</code></p>
-            <p><b>Patient:</b> {viewRecord.record.patientName || viewRecord.record.patient?.name || 'Patient'}</p>
+            <p><b>Record Type:</b> {role === 'owner' ? archiveType[viewRecord.kind] : viewRecord.kind.toUpperCase()}</p>
+            <p><b>Reference:</b> <code>{role === 'owner' ? archiveReference(viewRecord.kind, viewRecord.record) :
+              (viewRecord.record.code || viewRecord.record.number || viewRecord.record.invoiceNumber || viewRecord.record.id)}</code></p>
+            {role === 'owner' && viewRecord.kind === 'financial' && receiptReference(viewRecord.record) &&
+              <p><b>Receipt:</b> <code>{receiptReference(viewRecord.record)}</code></p>}
+            <p><b>Patient:</b> {role === 'owner' ? archivePatient(viewRecord.record) :
+              (viewRecord.record.patientName || viewRecord.record.patient?.name || 'Patient')}</p>
             <p><b>Branch:</b> {branchLabel(viewRecord.record)}</p>
-            <p><b>Date:</b> {viewRecord.record.date || viewRecord.record.issued_at || '—'}</p>
+            <p><b>Date:</b> {role === 'owner' ? archiveDateDisplay(archiveDate(viewRecord.record)) : (viewRecord.record.date || viewRecord.record.issued_at || '—')}</p>
             <p><b>Status:</b> {viewRecord.record.status || 'Archived'}</p>
           </div>
           <div className="row-actions" style={{ marginTop: '16px' }}>

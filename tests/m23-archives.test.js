@@ -604,8 +604,10 @@ test('ARC-01: read-only viewing and existing role restrictions remain in place',
   const page = readFileSync('src/pages/ArchivesPage.jsx', 'utf8')
   for (const kind of ['visit', 'prescription', 'financial']) {
     assert.ok(page.includes(`setViewRecord({ kind: '${kind}', record: r })`))
+    assert.ok(page.includes(`logArchiveView('${kind}', r)`))
   }
-  assert.equal((page.match(/logArchiveAudit\('archive\.viewed'/g) || []).length, 3)
+  assert.match(page, /logArchiveView\(match\.kind, match\.record\)/)
+  assert.equal((page.match(/logArchiveAudit\('archive\.viewed'/g) || []).length, 1)
   assert.match(page, /title="Archived Record Details \(Read-Only\)"/)
   assert.match(page, /const canViewFinancials = role !== 'dentist'/)
   assert.match(page, /if \(!inStaffBranch\) return false/)

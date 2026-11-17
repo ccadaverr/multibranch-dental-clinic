@@ -27,7 +27,8 @@ test('M21 page sends a public branch reference and never an internal number', ()
   assert.match(analyticsPage, /activeBranchRecord\?\.publicId \|\| activeBranchRecord\?\.id/)
   assert.ok(!analyticsPage.includes('b.branch_id'), 'analytics rows are keyed by public_id, never an internal branch_id')
   assert.match(analyticsPage, /key=\{b\.public_id \|\| b\.id\}/)
-  assert.match(analyticsPage, /fetchBranchPerformance\(\{ period: p, branch_id: activeBranchId \}\)/)
+  assert.match(analyticsPage, /const filters = \{ period: p, branch_id: activeBranchId \}/)
+  assert.match(analyticsPage, /fetchExecutiveSummary\(filters\),\s+fetchBranchPerformance\(filters\)/)
 })
 
 test('M21 server session never falls back to local demo metrics and shows an explicit unavailable state', () => {

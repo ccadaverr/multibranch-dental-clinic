@@ -24,6 +24,7 @@ import { OwnerRevenueCharts } from './OwnerRevenueCharts.jsx'
 import { schedulingActorKey, useRequestOwner } from '../appointment-ui.js'
 import { canAccessPage } from '../safeguards.js'
 import { BRANCH_CODE_OPTIONS, isAllowedBranchCode } from '../branch-codes.js'
+import './owner-record-workspace.css'
 
 export const ALLOWED_BRANCH_CODES = BRANCH_CODE_OPTIONS
 
@@ -544,8 +545,11 @@ export function AnalyticsPage({ activeBranch, store }) {
     if (activeBranch !== 'All Branches' && !activeBranchId) { setLoadError(true); setLoading(false); return }
     try {
       const p = period.toLowerCase()
-      const summary = await fetchExecutiveSummary({ period: p, branch_id: activeBranchId })
-      const branches = await fetchBranchPerformance({ period: p, branch_id: activeBranchId })
+      const filters = { period: p, branch_id: activeBranchId }
+      const [summary, branches] = await Promise.all([
+        fetchExecutiveSummary(filters),
+        fetchBranchPerformance(filters),
+      ])
       if (request !== loadRequest.current) return
       setServerSummary(summary)
       setServerBranches(branches)
@@ -639,21 +643,23 @@ export function AnalyticsPage({ activeBranch, store }) {
   return <>
     <PageHeader
       title="Operational Reporting & Analytics"
-      text="Cross-cutting executive intelligence for revenue, queue, scheduling, capacity, HMO, and automation performance. Filtered by branch and authoritative business period."
-      aside={<div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-        <select className="compact-select" aria-label="Report period" value={period} onChange={e => setPeriod(e.target.value)}>
-          <option>Today</option>
-          <option>This Week</option>
-          <option>This Month</option>
-          <option>This Year</option>
-          <option>All Time</option>
-        </select>
-        <Button onClick={exportServerCsv} disabled={!canExport || exporting} variant="secondary">
-          Export Report CSV
-        </Button>
-        <Button onClick={() => window.print()} variant="soft" icon="download">
-          Export Analytics PDF
-        </Button>
+      aside={<div className="owner-report-toolbar">
+        <p className="muted-copy">{activeBranch === 'All Branches' || activeBranchId ? activeBranch : 'Branch unavailable'} · Manila time</p>
+        <div className="owner-report-controls">
+          <label>Report period<select className="compact-select" value={period} onChange={e => setPeriod(e.target.value)}>
+            <option>Today</option>
+            <option>This Week</option>
+            <option>This Month</option>
+            <option>This Year</option>
+            <option>All Time</option>
+          </select></label>
+          <Button onClick={exportServerCsv} disabled={!canExport || exporting} variant="secondary">
+            Export Report CSV
+          </Button>
+          <Button onClick={() => window.print()} variant="soft" icon="download">
+            Export Analytics PDF
+          </Button>
+        </div>
       </div>}
     />
     {exportNotice && <p role="status">{exportNotice}</p>}

@@ -29,13 +29,17 @@ const initial = {
 const actor = (role, scopes = ['a']) => ({ userId: role, serverUserId: `server-${role}`, role, active: true, branchId: 'a', branchScopes: scopes, dentistId: 'dentist' })
 function Fixture() {
   const [state, setState] = useState(initial), [session, setSession] = useState(actor('staff')), [activeBranch, setActiveBranch] = useState('All Branches')
+  const [appointmentsStatus, setAppointmentsStatus] = useState()
   fixture.setSession = patch => flushSync(() => setSession(previous => ({ ...previous, ...patch })))
   fixture.logout = () => flushSync(() => setSession(null))
   fixture.setActor = (role, scopes) => flushSync(() => setSession(actor(role, scopes)))
   fixture.patchState = patch => flushSync(() => setState(previous => ({ ...previous, ...patch })))
   fixture.setBranch = value => flushSync(() => setActiveBranch(value))
+  fixture.setAppointmentsStatus = value => flushSync(() => setAppointmentsStatus(value))
   fixture.state = state
-  const store = { state, session, actions: { logAudit: event => fixture.audits.push(event) }, toast: (...args) => fixture.feedback.push(args) }
+  const store = { state, session, appointmentsStatus,
+    appointmentFlow: { refresh: async () => { setAppointmentsStatus('ready'); return { ok: true } } },
+    actions: { logAudit: event => fixture.audits.push(event) }, toast: (...args) => fixture.feedback.push(args) }
   return React.createElement(ArchivesPage, { store, role: session?.role, activeBranch })
 }
 createRoot(document.getElementById('root')).render(React.createElement(Fixture))
