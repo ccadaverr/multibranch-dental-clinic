@@ -766,9 +766,15 @@ export function WeeklyRevenueHistogram({
 
 export function OwnerDashboard({ activeBranch, setPage, state, session, store }) {
   const [revenuePeriod,setRevenuePeriod]=React.useState('week')
+  const matchingBranches=state.branches.filter(b=>b.name===activeBranch)
+  const activeBranchRecord=matchingBranches.length===1?matchingBranches[0]:null
   const branchData=state.branches.filter(b=>activeBranch==='All Branches'||b.name===activeBranch).map(b=>branchCapacity(b.name,state))
   const qvis=useQueueVisibility(store)
   const serverQueue=qvis.mode!=='demo'
+  if(activeBranch!=='All Branches'&&!activeBranchRecord)return <>
+    <PageHeader kicker="Owner overview" title="Executive dashboard"/>
+    <Notice tone="warning">Select an available branch to view this dashboard.</Notice>
+  </>
   const qCounts=qvis.mode==='ready'?countQueue(state.queue,{branchId:state.branches.find(b=>b.name===activeBranch)?.id??null,date:clinicNow().date}):null
   const appointments=state.appointments.filter(a=>a.date===clinicDate()&&a.status!=='Cancelled'&&(activeBranch==='All Branches'||a.branch===activeBranch))
   const pendingHmo=liveRecords(state.hmo).filter(h=>['Pending','Escalated'].includes(h.status)&&(activeBranch==='All Branches'||h.branch===activeBranch))
@@ -777,7 +783,6 @@ export function OwnerDashboard({ activeBranch, setPage, state, session, store })
   const exceptions=[...(serverQueue?[]:branchData.filter(c=>c.overloaded)).map(c=>({title:`${c.branch} capacity exception`,detail:`${c.workload}% workload • ~${c.estimate} min wait`})),...pendingHmo.filter(h=>pendingHours(h,state.clock)>=12).map(h=>({title:'HMO follow-up threshold reached',detail:`${patientName(h.patientId,state.patients)} • ${h.provider} • ${pendingHours(h,state.clock).toFixed(1)}h pending`}))]
   const maxLoad=Math.max(100,...branchData.map(x=>x.workload))
 
-  const activeBranchRecord = state.branches.find(b => b.name === activeBranch)
   const activeBranchId = activeBranch === 'All Branches' ? null : (activeBranchRecord?.publicId || activeBranchRecord?.id || null)
   const isSaturday = isSaturdayManila(clinicDate())
 

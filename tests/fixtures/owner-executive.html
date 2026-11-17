@@ -9,9 +9,10 @@ import '/src/polish.css'
 const evidence=window.ownerEvidence
 setClockSource(()=>new Date(evidence.date+'T12:00:00+08:00'))
 function Fixture(){
- const [branch,setBranch]=useState('All Branches'),[day,setDay]=useState(evidence.date),[actor,setActor]=useState(1)
- window.executive={setBranch,setDate:date=>{setClockSource(()=>new Date(date+'T12:00:00+08:00'));setDay(date)},setActor}
- const state={branches:evidence.branches,appointments:[],queue:[],hmo:[],invoices:[],inquiries:[],conversations:[],patients:[],dentists:[],clock:day+'T12:00:00+08:00'}
+ const [branch,setBranch]=useState('All Branches'),[day,setDay]=useState(evidence.date),[actor,setActor]=useState(1),[ambiguous,setAmbiguous]=useState(false)
+ window.executive={setBranch,setAmbiguous:value=>{setAmbiguous(value);setBranch(value?evidence.branches[0].name:'All Branches')},setDate:date=>{setClockSource(()=>new Date(date+'T12:00:00+08:00'));setDay(date)},setActor}
+ const branches=ambiguous?[...evidence.branches,{...evidence.branches[0],id:'b3',publicId:'01j00000000000000000000b03'}]:evidence.branches
+ const state={branches,appointments:[],queue:[],hmo:[],invoices:[],inquiries:[],conversations:[],patients:[],dentists:[],clock:day+'T12:00:00+08:00'}
  const session={role:'owner',serverUserId:'synthetic-owner-'+actor}
  return React.createElement(OwnerDashboard,{activeBranch:branch,state,session,store:{state,session,getAuthGeneration:()=>actor},setPage:()=>{}})
 }

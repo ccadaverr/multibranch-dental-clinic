@@ -2,10 +2,11 @@
 import {execFileSync} from 'node:child_process'
 import {pathToFileURL} from 'node:url'
 import {exactPeso} from '../src/owner-revenue-data.js'
-const container='dentalops-joevan-ops-20261115',target='/private/leave-batch5/target.json'
+const container=process.env.LOCAL_SYSTEM_CONTAINER||'dentalops-joevan-ops-20261115',target=process.env.LOCAL_SYSTEM_TARGET||'/private/leave-batch5/target.json'
 const run=(...args)=>execFileSync('docker',['exec',container,...args],{encoding:'utf8'})
 const status=JSON.parse(run('python3','scripts/local-system.py','--target',target,'--profile','test','status'));assert.equal(status.classification,'owned isolated development')
-const evidence=JSON.parse(run('cat','/private/leave-batch5/owner-dashboard-evidence.json'))
+const manifest=JSON.parse(run('cat',target))
+const evidence=JSON.parse(run('cat',manifest.runtime+'/owner-dashboard-evidence.json'))
 const {chromium}=await import(pathToFileURL(process.argv[2]).href),browser=await chromium.launch({channel:'chrome',headless:true})
 try{
  const c=await browser.newContext({viewport:{width:1440,height:1000}})
@@ -24,9 +25,14 @@ try{
   const data=weekly?evidence.reports[scope].weekly:evidence.reports[scope].daily[url.searchParams.get('period')||'week']
   return route.fulfill({status:200,json:{data}})
  })
- await p.goto('http://127.0.0.1:5195/tests/fixtures/owner-executive.html')
+ await p.goto((process.env.LOCAL_SYSTEM_BASE||'http://127.0.0.1:5195')+'/tests/fixtures/owner-executive.html')
  const charts=p.getByRole('region',{name:/Revenue analytics:/}),daily=charts.locator('.card').filter({has:p.getByRole('heading',{name:'Daily revenue',exact:true})}),weekly=charts.locator('.card').filter({has:p.getByRole('heading',{name:'Monday–Saturday revenue summary',exact:true})})
  await daily.locator('svg.owner-revenue-plot').waitFor();await weekly.locator('svg.owner-revenue-plot').waitFor()
+ const beforeAmbiguity=requests.length
+ await p.evaluate(()=>window.executive.setAmbiguous(true))
+ await p.getByText('Select an available branch to view this dashboard.',{exact:true}).waitFor()
+ assert.equal(requests.length,beforeAmbiguity,'Ambiguous branch names must not send a financial read for the first match')
+ await p.evaluate(()=>window.executive.setAmbiguous(false));await daily.locator('svg.owner-revenue-plot').waitFor()
  assert.equal(await p.getByText('Recorded demo transactions',{exact:true}).count(),0)
  for(const card of [daily,weekly]){
   await card.getByRole('button',{name:/2026-09-28\. Gross collections/}).locator('.owner-revenue-hit').first().hover()

@@ -1,0 +1,18 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Persisted synthetic financial evidence</title></head><body><div id="root"></div><script type="module">
+import React,{useState} from 'react'
+import {createRoot} from 'react-dom/client'
+import {OwnerRevenueCharts} from '/src/pages/OwnerRevenueCharts.jsx'
+import {setClockSource} from '/src/clock.js'
+import '/src/styles.css'
+import '/src/foundation.css'
+import '/src/polish.css'
+const e=window.ownerEvidence
+function Fixture(){
+ const [day,setDay]=useState(e.saturday),[branch,setBranch]=useState('all')
+ setClockSource(()=>new Date(day+'T12:00:00+08:00'))
+ window.reports={setDay,setBranch}
+ const b=e.branches.find(b=>b.id===branch)
+ return React.createElement('main',{className:'content'},React.createElement(OwnerRevenueCharts,{key:day+branch,branchId:b?.publicId||null,branchName:b?.name||'All Branches',serverSession:true,dashboard:true,showWeekly:true,dateFrom:day===e.saturday?'2026-10-26':day,dateTo:day}))
+}
+createRoot(document.getElementById('root')).render(React.createElement(Fixture))
+</script></body></html>
