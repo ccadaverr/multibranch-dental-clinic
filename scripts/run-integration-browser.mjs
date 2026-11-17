@@ -12,7 +12,7 @@ const status=JSON.parse(run('python3','scripts/local-system.py','--target',manif
 assert.equal(status.classification,'owned isolated development');assert.equal(status.appliedMigrations,87);assert.equal(status.held.length,4)
 const actual=JSON.parse(run('cat',manifest));assert.equal(actual.root,'/workspace');assert.equal(actual.runtime,'/private/integration');assert.equal(actual.reviewed_proposal,undefined)
 const lane=process.argv[2]||'visit'
-const files={visit:'local-visit.browser.mjs',prescription:'local-prescription.browser.mjs',operations:'integration-operations.browser.mjs',workforce:'staff-roster-publication.browser.mjs',receipts:'local-receipt-navigation.browser.mjs',history:'local-clinical-history.browser.mjs',queue:'stabilization-queue.browser.mjs',qa:'stabilization-original-qa.browser.mjs',ownerqa:'stabilization-owner-qa.browser.mjs'}
+const files={visit:'local-visit.browser.mjs',prescription:'local-prescription.browser.mjs',operations:'integration-operations.browser.mjs',workforce:'staff-roster-publication.browser.mjs',receipts:'local-receipt-navigation.browser.mjs',history:'local-clinical-history.browser.mjs',queue:'stabilization-queue.browser.mjs',qa:'stabilization-original-qa.browser.mjs',ownerqa:'stabilization-owner-qa.browser.mjs',gen12:'s02-gen12-populated.browser.mjs'}
 assert(files[lane],'Choose a listed integration acceptance lane; no arbitrary script execution')
 const root=resolve(process.env.INTEGRATION_BROWSER_EVIDENCE||join(tmpdir(),'dentalops-integration-browser-20261117'))
 mkdirSync(root,{recursive:true,mode:0o700});const evidence=join(root,lane);mkdirSync(evidence,{recursive:true,mode:0o700})

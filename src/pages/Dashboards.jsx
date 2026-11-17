@@ -61,7 +61,7 @@ function StaffDashboard({ activeBranch, setPage, state, session, store }) {
     </div>
     <StaffOnDuty session={session} activeBranch={activeBranch} getAuthGeneration={store.getAuthGeneration}/>
     <div className="ops-grid">
-      <Card title="Today’s patient flow" subtitle="Upcoming arrivals and current statuses" actions={<button className="text-link" onClick={()=>setPage('appointments')}>View all appointments</button>}>
+      <Card title="Today’s patient flow" subtitle="Upcoming arrivals and current statuses" actions={<Button size="sm" variant="ghost" onClick={()=>setPage('appointments')}>View all appointments</Button>}>
         <div className="schedule-board elevated">{todays.slice(0,6).map(a=><div key={a.id} className="schedule-chip"><div className="schedule-time-pill">{displayTime(a.start)}</div><div><strong>{patientName(a.patientId,state.patients)}</strong><small>{a.service} • {dentistName(a.dentistId,state.dentists)}</small></div><Status>{a.status}</Status></div>)}</div>
       </Card>
       <Card title="Needs attention" subtitle="Exceptions before routine work">
@@ -73,7 +73,7 @@ function StaffDashboard({ activeBranch, setPage, state, session, store }) {
         </div>
       </Card>
     </div>
-    {serverQueue?<div className="top-gap"><QueueByBranch store={store} activeBranch={activeBranch} vis={qvis} title="Live queue" actions={<button className="text-link" onClick={()=>setPage('queue')}>Open queue</button>}/></div>:<Card title="Capacity snapshot" subtitle="Live view of available chair-side capacity" className="top-gap"><div className="capacity-row-grid">{state.branches.filter(b=>activeBranch==='All Branches'||b.name===activeBranch).map(b=>{const c=branchCapacity(b.name,state);return <div key={b.id} className="capacity-tile"><div className="capacity-tile-head"><div><b>{b.name}</b><small>{b.city}</small></div><span className={c.overloaded?'risk':'healthy'}>{c.overloaded?'Attention':'Healthy'}</span></div><div className="capacity-main"><strong>{c.workload}%</strong><span>workload</span></div><Progress value={c.workload} threshold={c.threshold}/><div className="capacity-meta"><span>{c.activeDentists} dentists</span><span>{c.waiting} waiting</span><span>~{c.estimate} min</span></div></div>})}</div></Card>}
+    {serverQueue?<div className="top-gap"><QueueByBranch store={store} activeBranch={activeBranch} vis={qvis} title="Live queue" actions={<Button size="sm" variant="ghost" onClick={()=>setPage('queue')}>Open queue</Button>}/></div>:<Card title="Capacity snapshot" subtitle="Live view of available chair-side capacity" className="top-gap"><div className="capacity-row-grid">{state.branches.filter(b=>activeBranch==='All Branches'||b.name===activeBranch).map(b=>{const c=branchCapacity(b.name,state);return <div key={b.id} className="capacity-tile"><div className="capacity-tile-head"><div><b>{b.name}</b><small>{b.city}</small></div><span className={c.overloaded?'risk':'healthy'}>{c.overloaded?'Attention':'Healthy'}</span></div><div className="capacity-main"><strong>{c.workload}%</strong><span>workload</span></div><Progress value={c.workload} threshold={c.threshold}/><div className="capacity-meta"><span>{c.activeDentists} dentists</span><span>{c.waiting} waiting</span><span>~{c.estimate} min</span></div></div>})}</div></Card>}
   </>
 }
 
@@ -795,11 +795,11 @@ export function OwnerDashboard({ activeBranch, setPage, state, session, store })
         serverSession={!!session?.serverUserId} validBranch={activeBranch==='All Branches'||!!activeBranchId} dashboard showWeekly={isSaturday}/>
     </div>
     <div className="owner-dashboard-grid top-gap">
-      {serverQueue?<QueueByBranch store={store} activeBranch={activeBranch} vis={qvis} actions={<button className="text-link" onClick={()=>setPage('capacity')}>Branch details</button>}/>:<Card title="Branch workload" subtitle="Compare patient flow and staffing at a glance" actions={<button className="text-link" onClick={()=>setPage('capacity')}>Capacity details</button>}>
+      {serverQueue?<QueueByBranch store={store} activeBranch={activeBranch} vis={qvis} actions={<Button size="sm" variant="ghost" onClick={()=>setPage('capacity')}>Branch details</Button>}/>:<Card title="Branch workload" subtitle="Compare patient flow and staffing at a glance" actions={<Button size="sm" variant="ghost" onClick={()=>setPage('capacity')}>Capacity details</Button>}>
         <div className="branch-chart">{branchData.map(c=><div className="branch-chart-row" key={c.branch}><div className="branch-chart-label"><b>{c.branch}</b><span>{c.activeDentists} dentists • {c.waiting} waiting</span></div><div className="branch-chart-bar"><span style={{width:`${Math.min(100,(c.workload/maxLoad)*100)}%`}}/></div><strong>{c.workload}%</strong></div>)}</div>
         <div className="chart-caption"><span><i className="healthy"/>Healthy</span><span>Updated from live queue and staffing data</span></div>
       </Card>}
-      <Card title="Priority exceptions" subtitle="Only the issues that may need a decision" actions={<button className="text-link" onClick={()=>setPage('analytics')}>Open analytics</button>}>
+      <Card title="Priority exceptions" subtitle="Only the issues that may need a decision" actions={<Button size="sm" variant="ghost" onClick={()=>setPage('analytics')}>Open analytics</Button>}>
         <div className="exception-list">{exceptions.length?exceptions.slice(0,5).map((x,i)=><div className="exception-row" key={i}><span><Icon name="activity" size={17}/></span><div><b>{x.title}</b><small>{x.detail}</small></div><Icon name="chevron" size={16}/></div>):<div className="executive-clear"><span><Icon name="shield" size={22}/></span><div><b>No critical exceptions</b><small>{serverQueue?'No capacity or waiting-time limits are configured, so none are evaluated.':'Visible branches are operating within configured thresholds.'}</small></div></div>}</div>
       </Card>
     </div>

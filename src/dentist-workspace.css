@@ -80,8 +80,8 @@
 .den-calendar-panel { background: white; border: 1px solid var(--den-line); border-radius: var(--den-radius); padding: 16px 12px; min-width: 0; }
 .den-month-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 4px 12px; }
 .den-month-heading h2 { font-size: 18px; margin: 0; font-weight: 650; }
-.den-month-heading > div { display: flex; }
-.den-month-heading button { width: 44px; display: grid; place-items: center; background: transparent; border: 0; border-radius: 8px; color: var(--den-ink); }
+.den-month-heading > div { display: flex; gap: var(--space-1); }
+.den-month-heading button { width: var(--control-height); min-height: var(--control-height); display: grid; place-items: center; background: transparent; border: 0; border-radius: 8px; color: var(--den-ink); }
 .den-month-weekdays, .den-month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0; }
 .den-month-weekdays { color: var(--den-muted); font-size: 12px; text-align: center; padding-bottom: 8px; font-weight: 650; }
 .den-month-grid button { position: relative; display: grid; place-items: center; border: 1px solid transparent; border-radius: 9px; background: transparent; color: var(--den-ink); height: 46px; padding: 4px 0 8px; font-size: 14px; font-variant-numeric: tabular-nums; }
@@ -105,7 +105,14 @@
 .den-week { display: flex; gap: 4px; margin-bottom: 24px; border-top: 1px solid var(--den-line); border-bottom: 1px solid var(--den-line); padding: 10px 0; }
 .den-week > div { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); flex: 1; min-width: 0; gap: 2px; }
 .den-week button { display: grid; place-items: center; background: transparent; border: 0; color: var(--den-ink); padding: 6px 2px; border-radius: 9px; }
-.den-week > button { width: 28px; flex: 0 0 28px; }
+.den-week > button {
+  width: var(--control-compact-height);
+  min-height: var(--control-height);
+  flex: 0 0 var(--control-compact-height);
+}
+@media (pointer: coarse), (max-width: 640px) {
+  .den-week > button { width: var(--control-height); flex-basis: var(--control-height); }
+}
 .den-week button small { font-size: 12px; line-height: 1.5; }
 .den-week button b { font-size: 15px; }
 .den-week button[aria-pressed="true"] { background: var(--den-accent-soft); box-shadow: inset 0 0 0 1px var(--den-accent); }
@@ -151,7 +158,6 @@
   .den-day-controls .btn { padding-left: 8px; padding-right: 8px; }
   .den-day-heading h2 { font-size: 20px; }
   .den-week { gap: 0; }
-  .den-week > button { width: 24px; flex-basis: 24px; }
   .den-current-footer .btn { width: 100%; }
 }
 @media (prefers-reduced-motion: reduce) {

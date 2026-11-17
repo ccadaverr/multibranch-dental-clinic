@@ -1,0 +1,7 @@
+# GEN-12 integrated checkpoint
+
+Applied the seven-file patch from base0cf24b1 onto clean S019018a09 after verifying patch9504dbc5ce7bb11e864c56c8fa11765756eb005087335088072e7a46b066b28f, all before/after canonical hashes and no S01/GEN-07 path overlap. No business callback, authorization or clinical lifecycle change. The global control styles are a compatibility surface for later GEN-10; notification-specific implementation was not edited.
+
+Independent current-source results:39 focused frontend tests PASS; full frontend1997 PASS/8 skips;59 relevant87-profile PostgreSQL tests/732 assertions PASS; smoke/build PASS (existing bundle-size warning retained). Supplied shared/four-role fixture54 measurement groups/zero failures across six widths. Added real authenticated populated Staff/Dentist queue and queue-move-dialog checks at375/390/430/768/1024/1440, including Escape focus, with no queue/clinical mutation. Private evidence is under `../dentalops-s02-evidence-20261117`.
+
+GEN-12 remains **Partial/Pending whole integrated acceptance**: this qualifies shared controls and additional populated queue states, not every clinical/administrative modal or all combinations of density/zoom. No original QA wording or the nine prior integrated passes changed. Existing87-migration profiles were used without migration execution; holds and grant schema remain untouched. No publication/deployment or historical-job processing.

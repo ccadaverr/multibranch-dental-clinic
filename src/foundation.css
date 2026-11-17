@@ -57,6 +57,8 @@
   --focus-color: #145da0;
   --focus-ring: 3px solid var(--focus-color);
   --control-height: 44px;
+  --control-compact-height: 32px;
+  --control-large-height: 48px;
   --sidebar: 252px;
   --content-max: none;
   --page-gutter: clamp(1rem, 2.5vw, 2rem);
@@ -157,6 +159,7 @@ button:disabled { opacity: .65; }
 .card { border-radius: var(--radius-lg); padding: var(--space-5); box-shadow: var(--shadow-xs); }
 .role-patient .card { padding: var(--space-6); }
 .card-head { gap: var(--space-4); flex-wrap: wrap; }
+.card-actions { min-width: 0; max-width: 100%; }
 .card-head h2 { font-size: var(--font-lg); font-weight: var(--weight-strong); color: var(--ink); margin: 0; line-height: 1.35; }
 .card-head p, .stat-hint { font-size: var(--font-sm); }
 .card-actions { max-width: 100%; flex: 0 1 auto; }
@@ -165,16 +168,29 @@ button:disabled { opacity: .65; }
 .stat-label { font-size: var(--font-xs); letter-spacing: .03em; }
 .stat-value { font-size: 1.875rem; }
 .btn { min-height: var(--control-height); height: auto; padding: var(--space-2) var(--space-4); font-size: var(--font-md); font-weight: var(--weight-strong); line-height: 1.4; border-radius: var(--radius); white-space: normal; max-width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); }
-.btn.sm { min-height: 32px; padding: 4px 10px; font-size: 0.8125rem; border-radius: var(--radius-sm); }
+.btn > span { min-width: 0; overflow-wrap: anywhere; }
+.btn > .icon { flex: none; }
+.btn.sm { min-height: var(--control-compact-height); padding: 4px 10px; font-size: 0.8125rem; border-radius: var(--radius-sm); }
 .btn.md { min-height: var(--control-height); padding: var(--space-2) var(--space-4); font-size: var(--font-md); }
-.btn.lg { min-height: 44px; padding: 10px 18px; font-size: 1rem; border-radius: var(--radius-lg); }
+.btn.lg { min-height: var(--control-large-height); padding: 10px 18px; font-size: 1rem; border-radius: var(--radius-lg); }
 .btn.primary { box-shadow: none; }
 .btn.primary:hover { transform: none; }
 .btn.soft { border-color: var(--line); }
 .btn.soft:hover { background: var(--surface-3); }
 .btn.ghost { color: var(--text); } .btn.danger { background: var(--red-soft); color: var(--red); border-color: #f3d6d8; } .btn.danger:hover:not(:disabled) { background: #fbe2e5; color: #8c202e; border-color: #e4b5bc; }
 .btn { transition: transform var(--motion-instant) var(--motion-ease), box-shadow var(--motion-normal) var(--motion-ease), background var(--motion-normal) var(--motion-ease), border-color var(--motion-normal) var(--motion-ease); }
-.btn:disabled { opacity: .6; cursor: not-allowed; }
+.btn:is(.primary, .soft, .ghost, .danger):disabled {
+  opacity: 1;
+  color: var(--muted);
+  background: var(--surface-3);
+  border-color: var(--line-strong);
+  box-shadow: none;
+  transform: none;
+  cursor: not-allowed;
+}
+@media (pointer: coarse), (max-width: 640px) {
+  .btn, .btn.sm { min-width: var(--control-height); min-height: var(--control-height); }
+}
 @media (prefers-reduced-motion: no-preference) {
   .btn:active:not(:disabled) { transform: translateY(1px); }
   .btn.primary:active:not(:disabled) { box-shadow: 0 2px 6px rgba(8,124,115,.14); }
@@ -358,13 +374,19 @@ dialog.notification-dialog { margin: var(--space-3) var(--space-3) auto auto; wi
   border-color: var(--brand);
 }
 .refresh-btn.refresh-btn-sm {
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
+  width: var(--control-compact-height);
+  height: var(--control-compact-height);
+  min-width: var(--control-compact-height);
 }
-.refresh-btn.is-spinning .icon,
-.refresh-btn.is-spinning svg {
-  animation: spin-anim 0.75s linear infinite;
+@media (pointer: coarse), (max-width: 640px) {
+  .refresh-btn.refresh-btn-sm {
+    width: var(--control-height);
+    height: var(--control-height);
+    min-width: var(--control-height);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .refresh-btn.is-spinning .icon { animation: spin-anim 0.75s linear infinite; }
 }
 
 /* Select with Other pattern */
@@ -529,7 +551,6 @@ dialog.notification-dialog { margin: var(--space-3) var(--space-3) auto auto; wi
   .page-kicker { font-size: 9px; margin-bottom: 2px; }
   .page-header h1 { font-size: 1.15rem; line-height: 1.2; }
   .page-header-right { width: 100%; gap: 6px; }
-  .page-header-right .btn { height: 32px; padding: 0 10px; font-size: 11px; }
   .form-actions { justify-content: flex-start; }
   input:not([type=checkbox]):not([type=radio]), select, textarea, .field input:not([type=checkbox]):not([type=radio]), .field select, .field textarea { font-size: 1rem; }
   .table-wrap { overflow: visible; border: 0; background: transparent; }
