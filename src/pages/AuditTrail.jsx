@@ -44,6 +44,7 @@ function AuditLifetime({ store }) {
   const [selection, setInspectLog] = useState(null)
   const [target, setTarget] = useState(null)
   const recordFilterStatus = useRef(null)
+  const activityLog = useRef(null)
   const [loadedKey,setLoadedKey]=useState(null),[action,setAction]=useState('')
   const epoch=useRef(0),mounted=useRef(false),morePending=useRef(false),exportRequest=useRef(null),currentKey=useRef('')
   const auth=store.getAuthGeneration?.()
@@ -85,6 +86,11 @@ function AuditLifetime({ store }) {
     epoch.current++
     setStatus('loading')
     setAttempt(current => current + 1)
+  }
+
+  const retryAuditRead = () => {
+    activityLog.current?.focus()
+    refresh()
   }
 
   const filterToRecord = ({ auditableType, auditableId }) => {
@@ -337,14 +343,14 @@ function AuditLifetime({ store }) {
         <div><dt>Clinical</dt><dd>{clinicalCount}</dd></div>
       </dl>}
 
-      <div style={{ marginTop: '20px' }}>
+      <div ref={activityLog} role="region" aria-label="Activity Log" tabIndex={-1} style={{ marginTop: '20px' }}>
         <Card title="Activity Log" subtitle="Newest first · Manila time · Read only" className="owner-record-workspace">
           {rangeInvalid ? (
             <Notice tone="warning">Fix the date range to load audit records.</Notice>
           ) : viewStatus === 'loading' ? (
             <Notice>Loading audit records...</Notice>
           ) : viewStatus === 'error' ? (
-            <Notice tone="warning" title="Audit trail unavailable">{loadError} <Button size="sm" variant="ghost" onClick={refresh}>Retry</Button></Notice>
+            <Notice tone="warning" title="Audit trail unavailable">{loadError} <Button size="sm" variant="ghost" onClick={retryAuditRead}>Retry</Button></Notice>
           ) : shownLogs.length === 0 ? (
             <Notice tone="info">No audit records match the current filter criteria.</Notice>
           ) : (
