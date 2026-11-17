@@ -17,7 +17,9 @@ function harness(request=async()=>({blob:'synthetic',filename:'scope.csv'})) {
   let auth=1
   const bindings={AbortController,Error,canExport:true,exportKey:'original',exportAuth:1,exportContext,exportMounted,exportPending,period:'This Week',activeBranch:'Branch B',activeBranchId:'b2',store:{session:{serverUserId:'owner'},getAuthGeneration:()=>auth},requestAnalyticsCsv:request,saveClinicCsv:r=>downloads.push(r),me:async()=>({ok:true,data:{id:'owner',role:'owner',account_status:'Active'}}),toast:(...args)=>events.push(args),setExporting:v=>busy.push(v),setExportNotice:v=>notices.push(v)}
   Object.assign(bindings, { reportDeniedRef: { current: false }, reportPeriod: 'this week', dateFrom: undefined, dateTo: undefined })
-  return {events,downloads,busy,notices,bindings,exportContext,exportMounted,exportPending,revoke:()=>auth++,run:()=>variableValue(file,'exportServerCsv',bindings,scope)(),cancel:()=>variableValue(file,'cancelAnalyticsExport',bindings,scope)()}
+  const retryable = []
+  bindings.setExportRetryable = value => retryable.push(value)
+  return {events,downloads,busy,notices,retryable,bindings,exportContext,exportMounted,exportPending,revoke:()=>auth++,run:()=>variableValue(file,'exportServerCsv',bindings,scope)(),cancel:()=>variableValue(file,'cancelAnalyticsExport',bindings,scope)()}
 }
 test('CSV requires a live Owner and an explicit all-branch or resolved branch context',()=>{
   assert.equal(allowed(),true)
@@ -31,6 +33,7 @@ test('invalid context dispatches nothing; duplicate intent dispatches once and u
   h.bindings.canExport=false;await h.run();assert.equal(calls,0)
   h.bindings.canExport=true;const pending=h.run();await h.run();assert.equal(calls,1)
   assert.equal(params.branch_id,'b2');assert.equal(params.period,'this week')
+  assert.equal(params.include_daily,1)
   release();await pending;assert.equal(h.events.length,1);assert.equal(h.exportPending.current,null);assert.equal(h.downloads.length,1)
 })
 test('branch/account/period/auth/unmount invalidation refuses a delayed payload and suppresses success',async()=>{
@@ -52,6 +55,14 @@ test('explicit All Branches is serialized; an absent named branch never becomes 
   let params;const h=harness(async p=>{params=p;return {filename:'all.csv'}})
   h.bindings.activeBranch='All Branches';h.bindings.activeBranchId=null;await h.run();assert.equal(params.branch_id,'all')
   h.bindings.activeBranch='Missing branch';h.bindings.canExport=false;params=null;await h.run();assert.equal(params,null)
+})
+test('download recovery offers retry for transient failures and stops for authorization or validation failures', async () => {
+  for (const [status, expected] of [[503, true], [429, true], [undefined, true], [403, false], [422, false]]) {
+    const h = harness(async () => { throw Object.assign(new Error('Synthetic failure'), { status }) })
+    await h.run()
+    assert.equal(h.retryable.at(-1), expected)
+    assert.equal(h.downloads.length, 0)
+  }
 })
 test('cancelled late request cannot clear or download a replacement with the same selection',async()=>{
   const held=[];const h=harness((p,{signal})=>new Promise(resolve=>held.push({resolve,signal})))

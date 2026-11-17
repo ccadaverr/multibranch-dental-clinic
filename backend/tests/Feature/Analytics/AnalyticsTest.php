@@ -183,6 +183,40 @@ class AnalyticsTest extends TestCase
         }
     }
 
+    public function test_operational_csv_can_include_the_scoped_daily_cash_chart_data(): void
+    {
+        $previousDay = CarbonImmutable::parse('2026-09-27T12:00:00Z');
+        $firstInstant = CarbonImmutable::parse('2026-09-27T16:00:00Z'); // Midnight in Manila.
+        $nextDay = CarbonImmutable::parse('2026-09-28T16:00:00Z');
+        [$invoice, $payment] = $this->recordSettledPayment('b1', '1250.51', $previousDay, $firstInstant);
+        $this->recordInvoiceRefund($invoice, $payment, '70.12', $nextDay->subSecond(), 'Synthetic refund');
+        $this->recordSettledPayment('b1', '9.99', $firstInstant, $nextDay);
+        $this->recordSettledPayment('b2', '4321.00', $firstInstant, $firstInstant);
+
+        $this->actingAsUser('owner');
+        $branch = $this->b['b1']->public_id;
+        $query = '?branch_id='.$branch.'&date_from=2026-09-28&date_to=2026-09-28';
+        $daily = $this->getJson('/api/analytics/daily-revenue'.$query)->assertOk()
+            ->assertJsonPath('data.branch.public_id', $branch)
+            ->assertJsonCount(1, 'data.days')
+            ->assertJsonPath('data.days.0.net_cash_flow_php', '1180.39')->json('data.days.0');
+        $csv = $this->get('/api/analytics/export'.$query.'&include_daily=1')->assertOk()->streamedContent();
+        $this->assertStringContainsString('"Total Revenue Collected",9.99', $csv);
+        $this->assertStringContainsString('DAILY CASH FLOW', $csv);
+        $this->assertStringContainsString('From,2026-09-28,Through,2026-09-28', $csv);
+        $this->assertStringContainsString(implode(',', [$daily['date'], $daily['gross_collected_php'], $daily['refunded_php'], $daily['net_cash_flow_php']]), $csv);
+        $this->assertStringContainsString('Total,1250.51,70.12,1180.39', $csv);
+        $this->assertStringNotContainsString('4321.00', $csv);
+        $legacy = $this->get('/api/analytics/export'.$query)->assertOk()->streamedContent();
+        $this->assertStringNotContainsString('DAILY CASH FLOW', $legacy);
+        $this->getJson('/api/analytics/export'.$query.'&include_daily=unknown')->assertUnprocessable();
+
+        foreach (['staffB1', 'dentist1', 'patientA'] as $actor) {
+            $this->actingAsUser($actor);
+            $this->getJson('/api/analytics/export'.$query.'&include_daily=1')->assertForbidden();
+        }
+    }
+
     public function test_custom_report_reads_and_csv_keep_the_same_manila_dates_branch_and_centavos(): void
     {
         foreach ([

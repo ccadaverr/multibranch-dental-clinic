@@ -535,6 +535,7 @@ export function AnalyticsPage({ activeBranch, store }) {
   const exportContext = useRef(exportKey), exportMounted = useRef(false), exportPending = useRef(null)
   const [exporting, setExporting] = useState(false)
   const [exportNotice, setExportNotice] = useState('')
+  const [exportRetryable, setExportRetryable] = useState(false)
   exportContext.current = exportKey
   const getAuthGeneration = store.getAuthGeneration
   const isCurrentReport = React.useCallback(() =>
@@ -569,6 +570,7 @@ export function AnalyticsPage({ activeBranch, store }) {
     exportMounted.current = true
     setExporting(false)
     setExportNotice('')
+    setExportRetryable(false)
     return () => {
       exportMounted.current = false
       const pending = exportPending.current
@@ -584,11 +586,13 @@ export function AnalyticsPage({ activeBranch, store }) {
       exportContext.current === ticket.key && ticket.auth === store.getAuthGeneration?.()
     exportPending.current = ticket
     setExporting(true)
+    setExportRetryable(false)
     setExportNotice('Preparing analytics CSV…')
     try {
       const result = await requestAnalyticsCsv({
         period: reportPeriod, date_from: dateFrom, date_to: dateTo,
         branch_id: activeBranch === 'All Branches' ? 'all' : activeBranchId,
+        include_daily: 1,
       }, { signal: ticket.controller.signal })
       if (!owns()) return
       const identity = await me({ signal: ticket.controller.signal })
@@ -603,6 +607,7 @@ export function AnalyticsPage({ activeBranch, store }) {
       if (owns()) {
         const message = err?.name === 'AbortError' || err?.name === 'TimeoutError'
           ? 'Analytics export stopped. No file was downloaded. Try again.' : err.message || 'Could not export server CSV.'
+        setExportRetryable(!err?.status || err.status === 429 || err.status >= 500)
         setExportNotice(message)
         toast(message, 'warning')
       }
@@ -690,7 +695,10 @@ export function AnalyticsPage({ activeBranch, store }) {
         {!validDraft ? 'Enter two dates in order.' : rangeDirty ? 'Apply dates to update the report and enable exports.' : ''}
       </p>
     </div>}
-    {exportNotice && <p role="status">{exportNotice}</p>}
+    {exportNotice && <div className="owner-report-download-status">
+      <p role="status">{exportNotice}</p>
+      {exportRetryable && canExport && <Button variant="soft" onClick={exportServerCsv}>Retry report CSV</Button>}
+    </div>}
     {exporting && <Button variant="ghost" onClick={cancelAnalyticsExport}>Cancel analytics export</Button>}
     {reportDenied || (isServerSession && !ownerSession) ? <Notice tone="warning">
       Report access is unavailable. Sign in with an active Owner account.
@@ -750,7 +758,7 @@ export function AnalyticsPage({ activeBranch, store }) {
           })}
         </div>
       </Card>
-      <Card title="Report actions" subtitle="Executive exports & reconciliation">
+      <Card title="Report actions" subtitle="The CSV includes invoice activity and daily cash flow.">
         <div className="action-stack">
           <Button onClick={exportServerCsv} disabled={!canExport || exporting}>Export Executive Analytics CSV</Button>
           <Button variant="soft" onClick={() => window.print()} disabled={isServerSession && !canExport}>Export Analytics PDF with Logo</Button>

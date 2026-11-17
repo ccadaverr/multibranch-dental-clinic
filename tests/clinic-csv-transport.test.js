@@ -54,6 +54,11 @@ test('audit preserves exact identity, literal all, dates and bound metadata', as
   assert.deepEqual({ filename, truncated, limit }, { filename: 'report.csv', truncated: true, limit: 5000 })
 })
 
+test('analytics rejects a successful response with an empty CSV body', async () => {
+  globalThis.fetch = async () => new Response('', { headers: { 'Content-Type': 'text/csv' } })
+  await assert.rejects(() => requestAnalyticsCsv(ownerScope), /report file was empty/i)
+})
+
 test('filename metadata supports encoded names and falls back for unsafe or absent metadata', async () => {
   globalThis.fetch = async () => csv({ 'Content-Disposition': "attachment; filename*=UTF-8''audit%20caf%C3%A9.csv" })
   assert.equal((await requestAuditLogsCsv()).filename, 'audit caf\u00e9.csv')

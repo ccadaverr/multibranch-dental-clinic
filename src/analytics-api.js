@@ -37,11 +37,13 @@ export async function requestAnalyticsCsv(params, { signal } = {}) {
   if (typeof branchId !== 'string' || !branchId || branchId !== branchId.trim() || !validPeriod) {
     throw new Error('Choose a report branch and valid dates or period before exporting.')
   }
-  return requestClinicCsv('/api/analytics/export', params, {
+  const result = await requestClinicCsv('/api/analytics/export', params, {
     signal,
     fallbackFilename: `operational-analytics-${clinicDate()}.csv`,
     failureMessage: 'Failed to export analytics report.',
   })
+  if (result.blob.size === 0) throw new Error('The report file was empty. Try again.')
+  return result
 }
 
 // Compatibility for the existing AnalyticsPage consumer. The new requester requires explicit scope.

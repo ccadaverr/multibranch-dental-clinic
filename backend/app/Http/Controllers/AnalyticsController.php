@@ -87,8 +87,14 @@ class AnalyticsController extends Controller
     {
         $this->authorizeOwner($request);
 
-        $summary = $this->analyticsService->getExecutiveSummary($request->period(), $request->branch(), $request->dateFrom(), $request->dateTo());
-        $branches = $this->analyticsService->getBranchPerformance($request->period(), $request->dateFrom(), $request->dateTo(), $request->branch());
+        $request->validate(['include_daily' => ['sometimes', 'boolean']]);
+        $period = $request->period();
+        $branch = $request->branch();
+        $from = $request->dateFrom();
+        $to = $request->dateTo();
+        $summary = $this->analyticsService->getExecutiveSummary($period, $branch, $from, $to);
+        $branches = $this->analyticsService->getBranchPerformance($period, $from, $to, $branch);
+        $daily = $request->boolean('include_daily') ? $this->analyticsService->getDailyRevenueTrend($period, $branch, $from, $to) : null;
 
         $filename = 'operational-analytics-' . CarbonImmutable::now('Asia/Manila')->format('Ymd-His') . '.csv';
 
@@ -98,7 +104,7 @@ class AnalyticsController extends Controller
             'Cache-Control' => 'no-store, no-cache',
         ];
 
-        return response()->stream(function () use ($summary, $branches) {
+        return response()->stream(function () use ($summary, $branches, $daily) {
             $handle = fopen('php://output', 'w');
 
             // BOM for UTF-8
@@ -165,6 +171,19 @@ class AnalyticsController extends Controller
                     $b['capacity_threshold'] ?? 'Not configured',
                     $b['estimated_wait_minutes'] ?? 'Not configured',
                 ]);
+            }
+
+            if ($daily !== null) {
+                fputcsv($handle, []);
+                fputcsv($handle, ['DAILY CASH FLOW']);
+                fputcsv($handle, ['Date basis', 'Payments recorded and refunds made (Asia/Manila)']);
+                fputcsv($handle, ['From', $daily['date_from'], 'Through', $daily['date_to']]);
+                fputcsv($handle, ['Date', 'Gross Collections (PHP)', 'Refunds (PHP)', 'Net Cash Flow (PHP)']);
+                foreach ($daily['days'] as $day) {
+                    fputcsv($handle, [$day['date'], $day['gross_collected_php'], $day['refunded_php'], $day['net_cash_flow_php']]);
+                }
+                $total = $daily['totals'];
+                fputcsv($handle, ['Total', $total['gross_collected_php'], $total['refunded_php'], $total['net_cash_flow_php']]);
             }
 
             fclose($handle);
