@@ -80,6 +80,7 @@ class Scope02StaffDirectoryVisibilityTest extends TestCase
             'name' => $this->u['staffB2']->person->fullName(), 'title' => 'Receptionist',
             'branchId' => 'b2', 'branch' => 'Branch B2',
             'shiftStart' => $profile->shift_start, 'shiftEnd' => $profile->shift_end, 'available' => false,
+            'revision' => \App\Services\Scheduling\StaffShiftRevision::for($profile),
         ]], $this->directory('staffB2'));
     }
 

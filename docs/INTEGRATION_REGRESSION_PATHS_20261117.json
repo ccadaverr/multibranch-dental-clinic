@@ -6,7 +6,6 @@
     "tests/Feature/Analytics/OwnerDashboardEvidenceTest.php",
     "tests/Feature/Appointments/AppointmentAuthorizationTest.php",
     "tests/Feature/Appointments/AppointmentBookingTest.php",
-    "tests/Feature/Appointments/AppointmentCutoverSupportTest.php",
     "tests/Feature/Appointments/AppointmentEmailTest.php",
     "tests/Feature/Appointments/AppointmentLifecycleTest.php",
     "tests/Feature/Appointments/AppointmentReadPrivacyTest.php",
@@ -15,7 +14,6 @@
     "tests/Feature/Appointments/BranchHoursTest.php",
     "tests/Feature/Appointments/PatientBookingContractTest.php",
     "tests/Feature/Appointments/PatientPortalApiTest.php",
-    "tests/Feature/Appointments/PatientPublicIdMigrationTest.php",
     "tests/Feature/Archives/ArchivesIsolationTest.php",
     "tests/Feature/Assistant/AssistantKnowledgeTest.php",
     "tests/Feature/Assistant/AssistantTest.php",
@@ -57,7 +55,6 @@
     "tests/Feature/Hmo/HmoTest.php",
     "tests/Feature/Identity/DemoStaffProfileSeederTest.php",
     "tests/Feature/Identity/EmployeeInvitationTest.php",
-    "tests/Feature/Identity/IdentityBridgeTest.php",
     "tests/Feature/Identity/Scope02StaffDirectoryVisibilityTest.php",
     "tests/Feature/Identity/Scope04StaffScopeAtomicityTest.php",
     "tests/Feature/Identity/Scope05StaffScopeAuditTest.php",
@@ -133,7 +130,6 @@
     "tests/Feature/Visits/ArrivalRecoveryTest.php",
     "tests/Feature/Visits/ClinicalArrivalOrderingTest.php",
     "tests/Feature/Visits/Stf12WalkInAcceptanceTest.php",
-    "tests/Feature/Visits/VisitBackfillTest.php",
     "tests/Feature/Visits/VisitReadPrivacyTest.php",
     "tests/Feature/Visits/VisitTest.php"
   ],
@@ -285,6 +281,22 @@
     {
       "path": "backend/tests/Feature/Visits/ConcurrentCheckInTest.php",
       "reason": "dedicated disposable contention lane; schema mutation/reset requires separate review"
+    },
+    {
+      "path": "backend/tests/Feature/Appointments/AppointmentCutoverSupportTest.php",
+      "reason": "Legacy rollback/backfill schema mutation; restricted-role refusal observed; no migration execution authorized"
+    },
+    {
+      "path": "backend/tests/Feature/Appointments/PatientPublicIdMigrationTest.php",
+      "reason": "Legacy rollback/backfill schema mutation; restricted-role refusal observed; no migration execution authorized"
+    },
+    {
+      "path": "backend/tests/Feature/Identity/IdentityBridgeTest.php",
+      "reason": "Legacy rollback/backfill schema mutation; restricted-role refusal observed; no migration execution authorized"
+    },
+    {
+      "path": "backend/tests/Feature/Visits/VisitBackfillTest.php",
+      "reason": "Legacy rollback/backfill schema mutation; restricted-role refusal observed; no migration execution authorized"
     }
   ]
 }

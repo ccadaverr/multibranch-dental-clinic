@@ -126,7 +126,8 @@ final class SelectedFollowupRecoveryTest extends TestCase
         $own = $this->getJson('/api/appointments/'.$id)->assertOk()->assertJsonPath('data.id', $id);
         self::assertStringNotContainsString('Synthetic private follow-up', $own->getContent());
         $this->actingAsUser('patientB');
-        $denied = $this->getJson('/api/appointments/'.$id)->assertForbidden();
+        $denied = $this->getJson('/api/appointments/'.$id)->assertNotFound();
+        self::assertSame($denied->json(), $this->getJson('/api/appointments/'.str_repeat('0', 26))->assertNotFound()->json());
         self::assertStringNotContainsString($this->p['A']->public_id, $denied->getContent());
     }
 

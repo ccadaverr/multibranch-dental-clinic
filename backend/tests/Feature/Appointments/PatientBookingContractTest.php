@@ -9,7 +9,7 @@ use Tests\TestCase;
 
 class PatientBookingContractTest extends TestCase
 {
-    use RefreshDatabase, SchedulingFixture;
+    use RefreshDatabase, SchedulingFixture, \Tests\Support\ObservedLeaveCommands;
 
     protected function setUp(): void
     {
@@ -32,10 +32,10 @@ class PatientBookingContractTest extends TestCase
     public function test_patient_auto_assignment_revalidates_approved_leave_and_work_hours_at_submission(): void
     {
         $this->actingAsUser('dentist1');
-        $leave = $this->postJson('/api/leave', ['type' => 'vacation', 'start_date' => '2026-09-30', 'end_date' => '2026-09-30'])
+        $leave = $this->postLeave('/api/leave', ['type' => 'vacation', 'start_date' => '2026-09-30', 'end_date' => '2026-09-30'])
             ->assertCreated()->json('data.id');
         $this->actingAsUser('owner');
-        $this->postJson("/api/leave/{$leave}/decide", ['decision' => 'approve'])->assertOk();
+        $this->postLeave("/api/leave/{$leave}/decide", ['decision' => 'approve'])->assertOk();
         $this->putJson('/api/work-schedules/d2/weekly', ['branch_ref' => 'b1', 'weekday' => 3, 'start_time' => '13:00', 'end_time' => '17:00'])->assertOk();
 
         $this->actingAsUser('patientA');

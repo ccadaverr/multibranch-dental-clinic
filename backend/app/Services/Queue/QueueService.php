@@ -204,10 +204,11 @@ final class QueueService
     }
 
     /**
-     * Server-computed positions for the given Dentist queues: only Waiting / Called / Treatment Ready hold a place.
-     * Patients already Called or Treatment Ready keep their front position and are never silently pushed behind Waiting
-     * patients; Waiting entries are ordered by priority (Urgent, Priority, Normal), then on-time before late arrivals
-     * (R2-07), then the Visit's exact arrival time, then the unique queue number.
+     * Server-computed arrival FIFO positions within each Dentist queue at its branch.
+     * In Queue / Waiting / Called / Treatment Ready retain a waiting position; exact Visit arrival time is first,
+     * with the queue's unique number as the stable equal-time tie-breaker. Scheduled classification, priority
+     * and late flags do not automatically move an arrival ahead. Served leaves this projection at treatment START.
+     * This existing projection partitions by Dentist queue; branch-wide cross-Dentist ordering is not established here.
      *
      * @param  list<int>  $dentistQueueIds
      * @return array<int,int> queue_entries.id => position

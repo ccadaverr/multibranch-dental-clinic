@@ -1,0 +1,471 @@
+﻿{
+  "source_application_checkpoint": "96b55aca7d6ba03e57724980dd247b1225a1aecd",
+  "target": "dentalops-integration-20261117:/private/integration/target.json",
+  "host": "127.0.0.1",
+  "port": 55527,
+  "profiles": [
+    "dental_clinic_demo",
+    "dental_clinic_test"
+  ],
+  "applied_per_profile": 87,
+  "grant_schema_installed": false,
+  "selected_count": 87,
+  "held_count": 4,
+  "files": [
+    {
+      "path": "backend/database/migrations/0000_01_01_000000_create_persons_table.php",
+      "sha256": "77eb9e00d8c1429bd29593076afaf4431f169dc0a202c892a76b9195070f2966",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/0001_01_01_000000_create_users_table.php",
+      "sha256": "e608a38e64f8c2207e1af1cf2a7cf72feaeb5c71bed16ff21dd7f296be045f4b",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/0001_01_01_000001_create_cache_table.php",
+      "sha256": "fbb4665e5a977e71df4e74ec75b3c06ca4f17ad0de7138fe9786639189978e77",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/0001_01_01_000002_create_jobs_table.php",
+      "sha256": "df4910687180313a14a3f96a8bddd808ae145ed1b107cd772caf865c0dc2b746",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_09_24_000200_create_patients_table.php",
+      "sha256": "f247ff35a72a7a800c3f471fd7690607974cb89e77e37dc21dce2f2e8aa828b3",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_09_24_045331_create_personal_access_tokens_table.php",
+      "sha256": "c81ecde85ea5072188c468dcaf79776728b6eb8f684d63fc0d88a4908484ca75",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_09_25_000100_create_branches_table.php",
+      "sha256": "a022f1532a4cd91f530214c5e4e4e311cbfe3ec7caea8224f5834a50aa6db43c",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_09_25_000200_create_services_table.php",
+      "sha256": "9a6703c9944b94dbf78d197ab75ab1dac6dd9d9bbb9fb5c9b56d74088e00d6c9",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_09_25_000300_create_branch_services_table.php",
+      "sha256": "634cbf595b101923b4709370ae2ac461ce92f213422f361da751023092ac9393",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_09_25_000400_create_staff_profiles_table.php",
+      "sha256": "9ce29ff42a7435406be5ac7fd18b1d7a918a5e93e099b73d529e3c333be529de",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_09_25_000500_create_dentist_profiles_table.php",
+      "sha256": "2ef65467ffd9df86dd0bff92786f03679025bf4cd993b02ca81fa924e6f23092",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_09_25_000600_create_dentist_branches_table.php",
+      "sha256": "a5822da3276cf70aa1ca354c29ebab7ab77d58e5f823727035f0509975b1ce86",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_09_25_000700_create_dentist_service_assignments_table.php",
+      "sha256": "b46e48a03419228fc5a5b4fab8fb33254a12c9bcf520af0cf03270e5e86dff52",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_09_25_120000_add_title_to_staff_profiles_table.php",
+      "sha256": "72c3a3493883ece28f76bc2cac4035f130591839e063e09411544ff3ea7b3a77",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_09_25_130000_remove_middle_name_from_persons_table.php",
+      "sha256": "1ac92a1cdd9f1cf2c7d5c96bfd431f4b6f446216efda9cb1a1e2d02a32edf759",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_09_25_140000_add_deleted_at_to_users_table.php",
+      "sha256": "1eeaa51e7fc59d7fac1d6d319833d10466e95dd75cefa16983f3e94add8d9a4e",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_09_28_000050_add_public_id_to_patients_table.php",
+      "sha256": "979534866a492c1c0e7e36ed4115633a7f007df415afbb7ddc228e887a26ee25",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_09_28_000100_create_user_branch_scopes_table.php",
+      "sha256": "b4f43c3f22374511dcc913616aef3e7857085709a30830bb08ccb94177076459",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_09_28_000200_create_appointments_table.php",
+      "sha256": "0dc46b216400a84d7c626aa759afd6adb420e46780dbc67a3af78d77bf03f625",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_09_28_000300_create_appointment_history_table.php",
+      "sha256": "ca583baa3ecc1038e8b711246345658666477a924b88e07e3ac2a12170f665dd",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_09_28_000400_create_appointment_command_keys_table.php",
+      "sha256": "1ece99d64a2f848c71620d76bf01062239f7010cea6e0ab0972830d947703d87",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_09_29_000100_add_public_id_to_users_table.php",
+      "sha256": "85fc50b99d7862840961c45e3b67c9f710e08157cbaac1ebf34447a542631c2c",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_09_29_000200_add_appointment_code_to_appointments_table.php",
+      "sha256": "b4eafc49d886d3c224d30975c2231ff9caea78cec65265ad1c2f508fdec91ebf",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_09_30_000100_create_email_verification_otps_table.php",
+      "sha256": "c9667c4cb32556a0825a55c3ba231044ae4e000d0f7e759f094f85dca65fc1a5",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_09_30_000100_create_visits_table.php",
+      "sha256": "a8bbd958c40db37badeb84857b2f2a7f1547a00ca4409122d91bee40f69d4ee3",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_09_30_000200_backfill_visits_from_appointments.php",
+      "sha256": "3b53e15cfb13ffa47f11aa1a7c940023e825dc3ed00a8d26a49d1cb016e5853f",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_01_000100_create_queue_tables.php",
+      "sha256": "b4a89bd043a41ef2419d8f6f95877041910d7edcdae65271b814d7646411672a",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_01_000200_backfill_queue_entries_from_visits.php",
+      "sha256": "d2708b9aaa4e52bfd98da99d020cd675927cd2f0345305d539120fbae96ea5a2",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_02_000100_create_treatment_tables.php",
+      "sha256": "cdfe46907b0aead9b83170fcc7912158c983d1cdfb61dcbc0dbab4edba08ac85",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_03_000100_create_service_prices_table.php",
+      "sha256": "ac86fd9531986a199f0fb8bf87230689193db59f49464c7e74cc5951fdf724c5",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_04_000100_create_hmo_tables.php",
+      "sha256": "30fb63919f61a9ce71fc11d527d7a45ef2cc1bf86b497627e8cfc1d7f23abf60",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_05_000100_create_billing_tables.php",
+      "sha256": "5cd617359996285d9b74c9f517b927eeb47bad5cd330521648165e4f7948c87f",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_06_000100_create_document_tables.php",
+      "sha256": "af5b637881486eabef8962eaefd711775ec0f73faab44211dcd4d0f7021f7ebe",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_07_000100_create_audit_logs_table.php",
+      "sha256": "8a9faae66b0bf50c4edd3060aa22cdbae077466a10d9ac5da8b1ffa1760a2f00",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_08_000100_create_automation_tables.php",
+      "sha256": "ef7292f16939208e9b1137a2b23e9068a1df9f5012317b53b58e42d1a860f47f",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_09_000100_add_auth_version_to_users.php",
+      "sha256": "0d26e09de31355fa9aec29ee79a1af01ea4b81235084a37f4ef26f1e15ee4a7c",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_10_000100_add_branch_public_identity.php",
+      "sha256": "bb2a0becadd367c32e464835f5e2ec1f585fca01d58fac2ca50d9b5510fb21b8",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_11_000100_add_patient_record_fields.php",
+      "sha256": "43467959acf46101d0aacf92524e1fd53d352de1ca38c2c595c372dbf3243a26",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_12_000100_harden_document_integrity.php",
+      "sha256": "28b2ad287e5eea53a82e8abcad45f59cdef11aea294c060079fb0a900ba32979",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_13_000100_enforce_audit_log_append_only.php",
+      "sha256": "bc63e9fbe6c715b5b41aaa23b7aa9a92291568ed7b1d7cf461914680cc53c704",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_14_000100_harden_m11_payment_integrity.php",
+      "sha256": "e6bfebc8ff1205306c8de5adc3844b867d5941a5403f2276b8beffd3b0962c92",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_15_000100_create_inquiry_tables.php",
+      "sha256": "80ae1e96f66cb91719aec30d89b4b74140eef224f6bacf99fbab11831583a17f",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_16_000100_create_messaging_tables.php",
+      "sha256": "9e9ab794c7522b5cc71236ac5eb3e36b4cc26156f686ad4f9503ba4ac9aaed67",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_17_000100_create_patient_feedback_table.php",
+      "sha256": "52c47633e5dbc193c0c9edd3fb3623b185ab0336befa38cc889ceaaa4f958ceb",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_18_000100_create_mail_dispatch_tables.php",
+      "sha256": "f01853a4ecfb71fd5c37dcc1e49fecbd2ae725ff79b6f8f03cd0163a4b00f55f",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_19_000100_add_purpose_to_email_verification_otps.php",
+      "sha256": "167c8c165940d686451886b3ad5fca5ade069545ef21aaf5212d9399914c2690",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_20_000100_m17_routing_and_encryption.php",
+      "sha256": "0201570f63a1b54775d88bb1f83d19732deac704c6695f99a75565e644110ae8",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_21_000100_add_bir_fields_to_branches.php",
+      "sha256": "900541df8e028bb80e602de36f35d2c725eef397c68f6b1b662bed5b02d4b718",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_22_000100_billing_address_and_checkout_fingerprint.php",
+      "sha256": "91cd48cd3aef9a3644943ef5ddd6c0a885f49c95b23569078c7faf48de2ea0e6",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_23_000100_create_clinic_settings_table.php",
+      "sha256": "ac29f9bb81c5a15e24131986eb87b9ad5445926db0e9b0c0873b167a89a12179",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_24_000100_patient_portal_foundations.php",
+      "sha256": "edadcb83e6c0fd766208df468c6c6ace62114cb285b49115a82adc3bdb19bced",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_24_000200_create_assistant_usage_table.php",
+      "sha256": "bf6728282159985680e53163d7eb6b992714c31f3390c7c1df05888aff4a52ae",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_25_000100_create_assistant_answers_table.php",
+      "sha256": "79937faf1c6af2b07b88bee1812ffaeae21d9ab25526e14519e5322f50cee2d6",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_25_000200_add_email_to_branches.php",
+      "sha256": "52565cdb2227239662a586d92391ff38c1549135cbe928fc54d3dad497bf79c1",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_26_000100_add_weekly_hours_to_branches.php",
+      "sha256": "b9568b35c1abf5883782650d49d4d1e0e57a49fb776e005899e0921b23555e7f",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_27_000100_create_automation_settings_and_deliveries.php",
+      "sha256": "997ec03f7998ce47d9fc8d2cf0aabbf11ebd6e1a8a6662dbaba00d737712c6ec",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_27_000200_create_no_show_flags_table.php",
+      "sha256": "b16e8d266aef25ecb18f271558f30ef4eb554443ea5f2381779aa6ddd2bcf9cb",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_27_000300_create_waitlist_entries_table.php",
+      "sha256": "0069bcf4ee14b8a26fd46e0f9d3a53c84f631b22d13e20aec3284c7b9411f22d",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_27_000400_add_automation_notification_kinds.php",
+      "sha256": "8e16e0074772bdbda481b55f15f0ea7eaaedb7882aa9cdd74c664bd855a6ffd8",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_28_000100_create_message_templates_table.php",
+      "sha256": "2db4122bf70b669deed4153246101c01809edb6977ac6fd28010141fdc46b121",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_28_000200_create_arrival_and_freed_slot_tables.php",
+      "sha256": "866bfc487f47ed946f38d063baee0a4a4706176ea7fe787834e98b6d2d64151e",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_28_000300_create_branch_closures_table.php",
+      "sha256": "d7a1f8cbcd366c0489e1d96630f54dd065476e9ff59904b1e4ae12db5de2bd25",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_28_000400_add_online_booking_mode_to_services.php",
+      "sha256": "2a5f4063a07482b1f95bd419c7faf0209134a2f554ee9ac9cbb5f6f059b8d5b9",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_28_000500_create_accepted_hmos_and_patient_hmo_fields.php",
+      "sha256": "4828213f52180a16ebcc2f3c8f893c48e41cde92c6dd9d2a0f077b8d71fdf85f",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_29_000100_add_suppressed_mail_status.php",
+      "sha256": "f88bf0e2784f8607ea2b90fbbc93d6ce512e118f08a2b1e56ec6d3dc842045e9",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_29_000200_create_intake_tables.php",
+      "sha256": "56c431274889badc019544eb285aff4b6b8635074b2350943ab779892614eb1a",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_29_000300_harden_account_claims.php",
+      "sha256": "eb0e6c4288c493d9a1a289525fab4f098c477fc07c5f4d8091249b9fbe300a27",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_30_000100_create_work_schedules.php",
+      "sha256": "07b284adf2544e4e163f7b10ae5ca1ab51e8d7e6005bbfeb9209efb9861af6d1",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_30_000200_create_leave_requests.php",
+      "sha256": "81bae4d2a788ec4f1e1922e487ce14d490efc4ba10a143b0499bf13a90570d1b",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_30_000300_create_patient_handovers.php",
+      "sha256": "06bebcf9b9397f46a7c0fb58262a963adfeab3a7b2af388f3868abc83c2ea339",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_31_000100_create_prescriptions.php",
+      "sha256": "fb11c7d4fa9d9952bffdc0f6d93d12415a82656ccd006de6b58f361f213a409c",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_31_000200_create_followup_tasks.php",
+      "sha256": "926ff70b101022aedff7621180f30584da1b54145bbabc504fad1325cecca843",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_10_31_000300_create_dental_charts.php",
+      "sha256": "6aa8a1fc100fecb212921aeeaab0d643f403ec3b98ad6b02611e294b71c6eb8a",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_11_01_000100_add_booking_payment_to_appointments.php",
+      "sha256": "c59a42c29e00f409649e5197290082fe8238f7a786e6299f12604bc8c33c7430",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_11_02_000100_add_discounts_and_feedback_review.php",
+      "sha256": "7da1bb32f031fa0a49ff60d4d62d87d3433df091c8cc25892e39d88704c7e0c1",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_11_10_000100_remove_patient_feedback_table.php",
+      "sha256": "3c8af7cb8126866af3d67107bdd792960b5389922c762a09f6c08781db5b6df9",
+      "selected": false
+    },
+    {
+      "path": "backend/database/migrations/2026_11_15_000100_add_archive_columns_to_core_tables.php",
+      "sha256": "d13fe2ad9f0d5fd8d2365c74503934eece5ce8874c3b19bb27d321383705811b",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_11_15_000200_create_invoice_refunds_table.php",
+      "sha256": "55a1e9238eadb9dec6387ea674e99f858c4ab9fdb47a88438ca7a85b553a3874",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_11_15_000300_expand_patient_consents_check.php",
+      "sha256": "9d3df023b44880e143f66bebc7fbc688372c337ae520c01c27f9829a091c3e26",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_11_15_000400_backfill_tooth_chart_branch.php",
+      "sha256": "36f0fa951bc7c612f87ba47e40307729e96e8d222d6fcc019dd7acb2dd249181",
+      "selected": false
+    },
+    {
+      "path": "backend/database/migrations/2026_11_15_000500_add_critical_foreign_key_and_analytics_indexes.php",
+      "sha256": "921a1dcfdfd321569ebcff08dcd72a069e32fb50bddc9c360af3ca795809711f",
+      "selected": false
+    },
+    {
+      "path": "backend/database/migrations/2026_11_16_000100_create_loyalty_and_referrals_tables.php",
+      "sha256": "8ea8b63384092f63c611d1bcf72c341b1cfdf6d09db99b7523e05a18777c350c",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_11_16_000200_remove_kiosk_channel_from_intake_submissions.php",
+      "sha256": "dcd8b01776ce721e2fe6679edab76fee62332330aae1ab7fbc05049d254b4005",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_11_16_000300_add_other_details_to_patients_table.php",
+      "sha256": "7070b1b4ca725052cb9dd679475857934ec8251473cc7575c06467e0d6819367",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_11_16_000400_add_relationship_other_to_patient_guardians_table.php",
+      "sha256": "42f948cccd9eb3adae53942c2167e41455ed3ad123d525c0507719d429fa940c",
+      "selected": true
+    },
+    {
+      "path": "backend/database/migrations/2026_11_16_000500_update_queue_statuses_and_remove_urgent_priority.php",
+      "sha256": "16b5eaddf6a725791fb74ef9a0d04b25187ba0e006fa885b7cd452df6feaed40",
+      "selected": false
+    },
+    {
+      "path": "backend/database/compatibility/2026_11_17_000100_preserve_queue_state_vocabulary.php",
+      "sha256": "6832b840e5a1f81cd90617c2341d4c6796a193625814f954a25ecd9268ca5983",
+      "selected": true
+    },
+    {
+      "path": "backend/database/operations/2026_11_18_000100_create_notification_archives.php",
+      "sha256": "8f4213a0bcf8773c886135268b35ba77525ebd21246826359b6e11738b204f8b",
+      "selected": true
+    },
+    {
+      "path": "backend/database/operations/2026_11_19_000100_create_staff_roster_drafts.php",
+      "sha256": "b58babfd1629afcf21742d5773b19439dec5d8c39b2d4c04550ecca4cd412764",
+      "selected": true
+    },
+    {
+      "path": "backend/database/operations/2026_11_20_000100_add_leave_command_recovery.php",
+      "sha256": "dfedcb0b221032483ecaf152438825d52773950502a2d2a05a8d7e806ae633b0",
+      "selected": true
+    },
+    {
+      "path": "backend/database/operations/2026_11_21_000100_publish_staff_rosters.php",
+      "sha256": "438ed83b4882e8c389322fc214c7adb50300b6db70b62308a9114a336e594b9f",
+      "selected": true
+    }
+  ]
+}

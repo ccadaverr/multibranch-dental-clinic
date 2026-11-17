@@ -40,11 +40,14 @@ try {
  await page.reload();const visit=await get(page,'/api/visits/'+state.visit.id);assert.equal(visit.body.data.appointment.id,state.appointment.id);assert.equal(visit.body.data.patient.id,fixture.patientId);assert.ok(visit.body.data.queue.id)
  console.log('PASS actual Staff ID intake, mandatory confirmation, Check-In and exact Visit/queue readback')
  const dentist=await login('sprint02.dentist@example.test');page=dentist.page
- await page.getByRole('button',{name:'My Queue',exact:true}).click()
+ await page.getByRole('button',{name:'My Queue',exact:true}).first().click()
  if(!state.treatment){
   const q=page.locator('article.enc-queue-row').filter({hasText:fixture.patientCode}).first();await q.waitFor()
-  if(await q.getByRole('button',{name:'Call patient',exact:true}).count()) await response(page,'/api/queue/'+state.visit.queue.id+'/call',()=>q.getByRole('button',{name:'Call patient',exact:true}).click())
-  await q.getByRole('button',{name:'Open encounter',exact:true}).click()
+  const call=q.getByRole('button',{name:'Call and open encounter',exact:true})
+  if(await call.count()) await response(page,'/api/queue/'+state.visit.queue.id+'/call',()=>call.click())
+  else await q.getByRole('button',{name:'Review encounter',exact:true}).click()
+  const beforeStart=await get(page,'/api/visits/'+state.visit.id)
+  assert.equal(beforeStart.body.data.status,'Checked In');assert.equal(beforeStart.body.data.queue.status,'Called')
   await page.getByRole('button',{name:'Add performed procedure',exact:true}).click()
   await page.getByRole('combobox',{name:'Procedure 1',exact:true}).selectOption(fixture.service)
   await page.getByRole('textbox',{name:'Chief complaint',exact:true}).fill('Synthetic demo: routine examination requested')
@@ -56,7 +59,7 @@ try {
  }
  if(state.treatment.status!=='Completed'){
    // Reload and reopen the authoritative in-progress record before finalizing.
-   await page.reload();await page.getByRole('button',{name:'My Queue',exact:true}).click();await page.getByRole('button',{name:'Continue treatment',exact:true}).first().click()
+   await page.reload();await page.getByRole('button',{name:'My Queue',exact:true}).first().click();await page.getByRole('button',{name:'Continue treatment',exact:true}).first().click()
    await page.getByRole('textbox',{name:'Chief complaint',exact:true}).waitFor();assert.match(await page.getByRole('textbox',{name:'Chief complaint',exact:true}).inputValue(),/Synthetic demo/)
    await page.getByRole('button',{name:'Complete Treatment',exact:true}).click();state.treatment=await response(page,'/api/treatments/'+state.treatment.id+'/complete',()=>page.getByRole('dialog').getByRole('button',{name:'Complete Treatment',exact:true}).click());save()
  }
