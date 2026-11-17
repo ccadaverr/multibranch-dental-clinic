@@ -536,6 +536,7 @@ export function AnalyticsPage({ activeBranch, store }) {
   const [exporting, setExporting] = useState(false)
   const [exportNotice, setExportNotice] = useState('')
   const [exportRetryable, setExportRetryable] = useState(false)
+  const [exportFilename, setExportFilename] = useState('')
   exportContext.current = exportKey
   const getAuthGeneration = store.getAuthGeneration
   const isCurrentReport = React.useCallback(() =>
@@ -571,6 +572,7 @@ export function AnalyticsPage({ activeBranch, store }) {
     setExporting(false)
     setExportNotice('')
     setExportRetryable(false)
+    setExportFilename('')
     return () => {
       exportMounted.current = false
       const pending = exportPending.current
@@ -587,6 +589,7 @@ export function AnalyticsPage({ activeBranch, store }) {
     exportPending.current = ticket
     setExporting(true)
     setExportRetryable(false)
+    setExportFilename('')
     setExportNotice('Preparing analytics CSV…')
     try {
       const result = await requestAnalyticsCsv({
@@ -602,6 +605,7 @@ export function AnalyticsPage({ activeBranch, store }) {
       }
       saveClinicCsv(result)
       setExportNotice('Analytics CSV downloaded.')
+      setExportFilename(result.filename)
       toast('Operational analytics CSV exported successfully.', 'success')
     } catch (err) {
       if (owns()) {
@@ -675,8 +679,8 @@ export function AnalyticsPage({ activeBranch, store }) {
           <Button onClick={exportServerCsv} disabled={!canExport || exporting} variant="secondary">
             Export Report CSV
           </Button>
-          <Button onClick={() => window.print()} disabled={isServerSession && !canExport} variant="soft" icon="download">
-            Export Analytics PDF
+          <Button onClick={() => window.print()} disabled={isServerSession && !canExport} variant="soft">
+            Print current view
           </Button>
         </div>
       </div>}
@@ -697,6 +701,7 @@ export function AnalyticsPage({ activeBranch, store }) {
     </div>}
     {exportNotice && <div className="owner-report-download-status">
       <p role="status">{exportNotice}</p>
+      {exportFilename && <span className="muted-copy owner-report-download-filename">{exportFilename}</span>}
       {exportRetryable && canExport && <Button variant="soft" onClick={exportServerCsv}>Retry report CSV</Button>}
     </div>}
     {exporting && <Button variant="ghost" onClick={cancelAnalyticsExport}>Cancel analytics export</Button>}
@@ -761,7 +766,6 @@ export function AnalyticsPage({ activeBranch, store }) {
       <Card title="Report actions" subtitle="The CSV includes invoice activity and daily cash flow.">
         <div className="action-stack">
           <Button onClick={exportServerCsv} disabled={!canExport || exporting}>Export Executive Analytics CSV</Button>
-          <Button variant="soft" onClick={() => window.print()} disabled={isServerSession && !canExport}>Export Analytics PDF with Logo</Button>
           {!isServerSession && <>
             <Button variant="ghost" onClick={() => makeCsv('branch-capacity.csv', exportRows())}>Export Demo Capacity CSV</Button>
             <Button variant="ghost" onClick={() => makeCsv('hmo-report.csv', hmo.map(x => ({ Patient: patientName(x.patientId, state.patients), Provider: x.provider, Branch: x.branch, Status: x.status, PendingHours: pendingHours(x, state.clock), Reference: x.reference || '' })))}>Export Demo HMO CSV</Button>

@@ -95,3 +95,8 @@
   margin: 0;
   overflow-wrap: anywhere;
 }
+
+.owner-report-download-filename {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

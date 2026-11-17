@@ -171,6 +171,44 @@ class AnalyticsTest extends TestCase
         $this->assertStringNotContainsString('",=cmd', $content);
     }
 
+    public function test_csv_keeps_one_manila_day_across_midnight_and_identifies_its_scope_safely(): void
+    {
+        $beforeMidnight = CarbonImmutable::parse('2026-11-17T23:59:59+08:00');
+        $afterMidnight = $beforeMidnight->addSecond();
+        $this->recordSettledPayment('b1', '125.51', $beforeMidnight, $beforeMidnight);
+        $this->recordSettledPayment('b1', '987.65', $afterMidnight, $afterMidnight);
+        $branch = $this->b['b1'];
+        DB::table('branches')->where('id', $branch->id)->update(['name' => "\t=1+1", 'city' => " \t=2+2"]);
+
+        // Keep the real PostgreSQL aggregation and move the clock only after the summary has finished.
+        $service = $this->analyticsService;
+        $this->partialMock(AnalyticsService::class, function ($mock) use ($service, $afterMidnight): void {
+            $mock->shouldReceive('getExecutiveSummary')->once()->andReturnUsing(function (...$scope) use ($service, $afterMidnight) {
+                $result = $service->getExecutiveSummary(...$scope);
+                CarbonImmutable::setTestNow($afterMidnight);
+
+                return $result;
+            });
+        });
+
+        $this->actingAsUser('owner');
+        CarbonImmutable::setTestNow($beforeMidnight);
+        try {
+            $response = $this->get('/api/analytics/export?period=today&include_daily=1&branch_id='.$branch->public_id)
+                ->assertOk()
+                ->assertHeader('Content-Disposition', 'attachment; filename="operational-analytics-brc-b1-2026-11-17-20261118-000000.csv"');
+            $csv = $response->streamedContent();
+            $this->assertStringContainsString('Today (Nov 17, 2026)', $csv);
+            $this->assertStringContainsString('From,2026-11-17,Through,2026-11-17', $csv);
+            $this->assertStringContainsString('Total,125.51,0.00,125.51', $csv);
+            $this->assertStringContainsString("'	=1+1", $csv);
+            $this->assertStringContainsString("' \t=2+2", $csv);
+            $this->assertStringNotContainsString('987.65', $csv);
+        } finally {
+            CarbonImmutable::setTestNow();
+        }
+    }
+
     public function test_revenue_series_and_weekly_histogram_require_owner_authentication(): void
     {
         $this->getJson('/api/analytics/daily-revenue')->assertStatus(401);

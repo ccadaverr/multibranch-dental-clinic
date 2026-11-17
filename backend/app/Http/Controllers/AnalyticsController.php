@@ -9,6 +9,7 @@ use App\Support\ClinicClock;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -90,13 +91,20 @@ class AnalyticsController extends Controller
         $request->validate(['include_daily' => ['sometimes', 'boolean']]);
         $period = $request->period();
         $branch = $request->branch();
-        $from = $request->dateFrom();
-        $to = $request->dateTo();
+        $scope = $this->analyticsService->parsePeriod($period, $request->dateFrom(), $request->dateTo());
+        // Resolve relative periods once so every section uses the same dates across Manila midnight.
+        $from = $scope['from']?->toDateString();
+        $to = $scope['to']?->toDateString();
         $summary = $this->analyticsService->getExecutiveSummary($period, $branch, $from, $to);
         $branches = $this->analyticsService->getBranchPerformance($period, $from, $to, $branch);
         $daily = $request->boolean('include_daily') ? $this->analyticsService->getDailyRevenueTrend($period, $branch, $from, $to) : null;
 
-        $filename = 'operational-analytics-' . CarbonImmutable::now('Asia/Manila')->format('Ymd-His') . '.csv';
+        $branchLabel = $branch === null ? 'all-branches' : (
+            Str::limit(Str::slug($branch->branch_code ?: $branch->name), 48, '') ?: 'branch-'.strtolower($branch->public_id)
+        );
+        $rangeLabel = $from === null ? 'all-time' : ($from === $to ? $from : "{$from}_to_{$to}");
+        $filename = "operational-analytics-{$branchLabel}-{$rangeLabel}-"
+            .CarbonImmutable::now(ClinicClock::TIMEZONE)->format('Ymd-His').'.csv';
 
         $headers = [
             'Content-Type' => 'text/csv; charset=UTF-8',
@@ -104,7 +112,7 @@ class AnalyticsController extends Controller
             'Cache-Control' => 'no-store, no-cache',
         ];
 
-        return response()->stream(function () use ($summary, $branches, $daily) {
+        return response()->stream(function () use ($summary, $branches, $daily, $scope) {
             $handle = fopen('php://output', 'w');
 
             // BOM for UTF-8
@@ -114,8 +122,7 @@ class AnalyticsController extends Controller
                 if ($value === null || $value === '') {
                     return '';
                 }
-                $first = $value[0] ?? '';
-                if (in_array($first, ['=', '+', '-', '@'], true)) {
+                if (preg_match('/^(?:[\t\r\n]|[\p{Z}\s]*[=+\-@])/u', $value)) {
                     return "'" . $value;
                 }
                 return $value;
@@ -126,7 +133,7 @@ class AnalyticsController extends Controller
 
             // Section 1: Executive KPI Summary
             fputcsv($handle, ['EXECUTIVE OPERATIONAL SUMMARY']);
-            fputcsv($handle, ['Reporting Period', $sanitize($summary['period_label'])]);
+            fputcsv($handle, ['Reporting Period', $sanitize($scope['label'])]);
             fputcsv($handle, ['Branch Scope', $sanitize($summary['branch']['name'] ?? 'All Branches')]);
             fputcsv($handle, []);
             fputcsv($handle, ['Metric Category', 'Metric Name', 'Value (PHP / Count)']);

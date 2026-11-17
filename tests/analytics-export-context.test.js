@@ -19,7 +19,9 @@ function harness(request=async()=>({blob:'synthetic',filename:'scope.csv'})) {
   Object.assign(bindings, { reportDeniedRef: { current: false }, reportPeriod: 'this week', dateFrom: undefined, dateTo: undefined })
   const retryable = []
   bindings.setExportRetryable = value => retryable.push(value)
-  return {events,downloads,busy,notices,retryable,bindings,exportContext,exportMounted,exportPending,revoke:()=>auth++,run:()=>variableValue(file,'exportServerCsv',bindings,scope)(),cancel:()=>variableValue(file,'cancelAnalyticsExport',bindings,scope)()}
+  const filenames = []
+  bindings.setExportFilename = value => filenames.push(value)
+  return {events,downloads,busy,notices,retryable,filenames,bindings,exportContext,exportMounted,exportPending,revoke:()=>auth++,run:()=>variableValue(file,'exportServerCsv',bindings,scope)(),cancel:()=>variableValue(file,'cancelAnalyticsExport',bindings,scope)()}
 }
 test('CSV requires a live Owner and an explicit all-branch or resolved branch context',()=>{
   assert.equal(allowed(),true)
@@ -35,6 +37,7 @@ test('invalid context dispatches nothing; duplicate intent dispatches once and u
   assert.equal(params.branch_id,'b2');assert.equal(params.period,'this week')
   assert.equal(params.include_daily,1)
   release();await pending;assert.equal(h.events.length,1);assert.equal(h.exportPending.current,null);assert.equal(h.downloads.length,1)
+  assert.deepEqual(h.filenames, ['', 'scope.csv'])
 })
 test('branch/account/period/auth/unmount invalidation refuses a delayed payload and suppresses success',async()=>{
   for(const invalidate of [h=>h.exportContext.current='changed branch/account/period',h=>h.revoke(),h=>h.exportMounted.current=false,h=>h.bindings.reportDeniedRef.current=true]){
