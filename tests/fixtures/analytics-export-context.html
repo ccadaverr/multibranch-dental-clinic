@@ -7,7 +7,7 @@ import {AnalyticsPage} from '/src/pages/Admin.jsx'
 import {AuditTrailPage} from '/src/pages/AuditTrail.jsx'
 import '/src/styles.css'
 import '/src/foundation.css'
-const state={branches:[{id:'b1',name:'Synthetic B1'},{id:'b2',name:'Synthetic B2'}],users:[{id:'owner-local',personId:'owner-person',roleName:'Owner / Admin',accountStatus:'Active',permissions:['all']}],persons:[{id:'owner-person'}],appointments:[],queue:[],hmo:[],invoices:[],inquiries:[],conversations:[],dentists:[],patients:[]}
+const state={branches:[{id:'b1',name:'Synthetic B1'},{id:'b2',name:'Synthetic B2'},{id:'duplicate-1',name:'Synthetic duplicate'},{id:'duplicate-2',name:'Synthetic duplicate'}],users:[{id:'owner-local',personId:'owner-person',roleName:'Owner / Admin',accountStatus:'Active',permissions:['all']}],persons:[{id:'owner-person'}],appointments:[],queue:[],hmo:[],invoices:[],inquiries:[],conversations:[],dentists:[],patients:[]}
 let auth=1
 const getAuthGeneration=()=>auth
 function Fixture(){

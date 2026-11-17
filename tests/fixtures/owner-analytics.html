@@ -18,7 +18,7 @@ function Fixture() {
   const state = {branches,appointments:[],queue:[],hmo:[],invoices:[],inquiries:[],conversations:[],dentists:[],patients:[]}
   return React.createElement(React.Fragment,null,
     React.createElement('label',null,'Acceptance branch',React.createElement('select',{ 'aria-label':'Acceptance branch',value:branch,onChange:e=>setBranch(e.target.value) }, ...['All Branches',...branches.map(b=>b.name),'Unavailable branch'].map(name=>React.createElement('option',{key:name},name)))),
-    React.createElement(AnalyticsPage,{activeBranch:branch,store:{state,session:{serverUserId:'synthetic-owner'},toast:()=>{}}}))
+    React.createElement(AnalyticsPage,{activeBranch:branch,store:{state,session:{serverUserId:'synthetic-owner',role:'owner',active:true},toast:()=>{}}}))
 }
 createRoot(document.getElementById('root')).render(React.createElement(Fixture))
 </script></body></html>

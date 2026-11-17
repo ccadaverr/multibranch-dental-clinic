@@ -22,20 +22,24 @@ import { readFileSync } from 'node:fs'
 
 const adminSource = readFileSync(new URL('../src/pages/Admin.jsx', import.meta.url), 'utf8')
 const analyticsPage = adminSource.slice(adminSource.indexOf('export function AnalyticsPage'), adminSource.indexOf('export function UsersPage'))
+const reportSection = readFileSync(new URL('../src/pages/use-owner-report-section.js', import.meta.url), 'utf8')
 
 test('M21 page sends a public branch reference and never an internal number', () => {
   assert.match(analyticsPage, /activeBranchRecord\?\.publicId \|\| activeBranchRecord\?\.id/)
   assert.ok(!analyticsPage.includes('b.branch_id'), 'analytics rows are keyed by public_id, never an internal branch_id')
   assert.match(analyticsPage, /key=\{b\.public_id \|\| b\.id\}/)
-  assert.match(analyticsPage, /const filters = \{ period: p, branch_id: activeBranchId \}/)
-  assert.match(analyticsPage, /fetchExecutiveSummary\(filters\),\s+fetchBranchPerformance\(filters\)/)
+  assert.match(analyticsPage, /matchingBranches.length === 1/)
+  assert.match(analyticsPage, /branchId: activeBranchId/)
+  assert.match(analyticsPage, /useOwnerReportSection\(fetchExecutiveSummary, reportScope\)/)
+  assert.match(analyticsPage, /useOwnerReportSection\(fetchBranchPerformance, reportScope\)/)
+  assert.match(reportSection, /fetchSection\(\{ period, branch_id: branchId \}\)/)
 })
 
 test('M21 server session never falls back to local demo metrics and shows an explicit unavailable state', () => {
   assert.match(analyticsPage, /isServerSession \? \[\] : clientMetrics/)
-  assert.match(analyticsPage, /setServerSummary\(null\)/)
-  assert.match(analyticsPage, /Analytics are unavailable right now/)
-  assert.match(analyticsPage, /Try again/)
+  assert.match(reportSection, /result\?\.context === context && result.attempt === attempt/)
+  assert.match(analyticsPage, /Retry executive summary/)
+  assert.match(analyticsPage, /Retry branch figures/)
 })
 
 test('M21 shows "No data" for null rates and an unconfigured wait estimate, never a fabricated 100%', () => {

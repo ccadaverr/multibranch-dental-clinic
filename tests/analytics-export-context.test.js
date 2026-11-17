@@ -2,19 +2,26 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {variableValue} from './support/source-behavior.js'
 const file='src/pages/Admin.jsx',scope='AnalyticsPage'
-const allowed=overrides=>variableValue(file,'canExport',{
-  isServerSession:true,store:{session:{role:'owner',active:true},getAuthGeneration:()=>1},exportAuth:1,activeBranch:'Branch B',activeBranchId:'b2',...overrides,
-},scope)
+const allowed = overrides => {
+  const inputs = {
+    isServerSession: true, store: { session: { role: 'owner', active: true }, getAuthGeneration: () => 1 },
+    exportAuth: 1, activeBranch: 'Branch B', activeBranchId: 'b2', reportDenied: false, ...overrides,
+  }
+  const ownerSession = variableValue(file, 'ownerSession', inputs, scope)
+  const validBranch = variableValue(file, 'validBranch', inputs, scope)
+  return variableValue(file, 'canExport', { reportScope: { enabled: ownerSession && validBranch }, reportDenied: inputs.reportDenied }, scope)
+}
 function harness(request=async()=>({blob:'synthetic',filename:'scope.csv'})) {
   const events=[],downloads=[],notices=[],busy=[],exportContext={current:'original'},exportMounted={current:true},exportPending={current:null}
   let auth=1
   const bindings={AbortController,Error,canExport:true,exportKey:'original',exportAuth:1,exportContext,exportMounted,exportPending,period:'This Week',activeBranch:'Branch B',activeBranchId:'b2',store:{session:{serverUserId:'owner'},getAuthGeneration:()=>auth},requestAnalyticsCsv:request,saveClinicCsv:r=>downloads.push(r),me:async()=>({ok:true,data:{id:'owner',role:'owner',account_status:'Active'}}),toast:(...args)=>events.push(args),setExporting:v=>busy.push(v),setExportNotice:v=>notices.push(v)}
+  bindings.reportDeniedRef = { current: false }
   return {events,downloads,busy,notices,bindings,exportContext,exportMounted,exportPending,revoke:()=>auth++,run:()=>variableValue(file,'exportServerCsv',bindings,scope)(),cancel:()=>variableValue(file,'cancelAnalyticsExport',bindings,scope)()}
 }
 test('CSV requires a live Owner and an explicit all-branch or resolved branch context',()=>{
   assert.equal(allowed(),true)
   assert.equal(allowed({activeBranch:'All Branches',activeBranchId:null}),true)
-  for(const overrides of [{activeBranchId:null},{isServerSession:false},{exportAuth:null},{store:{session:{role:'staff',active:true}}},{store:{session:{role:'owner',active:false}}}])assert.equal(allowed(overrides),false)
+  for(const overrides of [{activeBranchId:null},{isServerSession:false},{exportAuth:null},{reportDenied:true},{store:{session:{role:'staff',active:true}}},{store:{session:{role:'owner',active:false}}}])assert.equal(allowed(overrides),false)
 })
 test('invalid context dispatches nothing; duplicate intent dispatches once and uses chosen branch and period',async()=>{
   let release,calls=0,params
@@ -25,7 +32,7 @@ test('invalid context dispatches nothing; duplicate intent dispatches once and u
   release();await pending;assert.equal(h.events.length,1);assert.equal(h.exportPending.current,null);assert.equal(h.downloads.length,1)
 })
 test('branch/account/period/auth/unmount invalidation refuses a delayed payload and suppresses success',async()=>{
-  for(const invalidate of [h=>h.exportContext.current='changed branch/account/period',h=>h.revoke(),h=>h.exportMounted.current=false]){
+  for(const invalidate of [h=>h.exportContext.current='changed branch/account/period',h=>h.revoke(),h=>h.exportMounted.current=false,h=>h.bindings.reportDeniedRef.current=true]){
     let release
     const h=harness(async()=>{await new Promise(r=>release=r);return {filename:'scope.csv'}})
     const pending=h.run();invalidate(h);release();await pending

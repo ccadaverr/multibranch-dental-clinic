@@ -25,6 +25,7 @@ import { schedulingActorKey, useRequestOwner } from '../appointment-ui.js'
 import { canAccessPage } from '../safeguards.js'
 import { BRANCH_CODE_OPTIONS, isAllowedBranchCode } from '../branch-codes.js'
 import './owner-record-workspace.css'
+import { useOwnerReportSection } from './use-owner-report-section.js'
 
 export const ALLOWED_BRANCH_CODES = BRANCH_CODE_OPTIONS
 
@@ -498,24 +499,41 @@ export function TeamPage({ store }) {
 export function AnalyticsPage({ activeBranch, store }) {
   const { state, toast } = store
   const [period, setPeriod] = useState('Today')
-  const [serverSummary, setServerSummary] = useState(null)
-  const [serverBranches, setServerBranches] = useState(null)
-  const [loading, setLoading] = useState(false)
-  const [loadError, setLoadError] = useState(false)
-  const loadRequest = useRef(0)
   const isServerSession = !!store.session?.serverUserId
 
-  const activeBranchRecord = state.branches.find(b => b.name === activeBranch)
+  const matchingBranches = state.branches.filter(b => b.name === activeBranch)
+  const activeBranchRecord = matchingBranches.length === 1 ? matchingBranches[0] : null
   // The server resolves a public ULID (preferred) or the transitional legacy reference; never an internal number.
   const activeBranchId = activeBranch === 'All Branches' ? null : (activeBranchRecord?.publicId || activeBranchRecord?.id || null)
   const exportAuth = store.getAuthGeneration?.()
-  const canExport = isServerSession && store.session?.role === 'owner' && store.session?.active === true &&
-    (!store.getAuthGeneration || exportAuth != null) && (activeBranch === 'All Branches' || !!activeBranchId)
+  const validBranch = activeBranch === 'All Branches' || !!activeBranchId
+  const ownerSession = isServerSession && store.session?.role === 'owner' && store.session?.active === true &&
+    (!store.getAuthGeneration || exportAuth != null)
   const exportKey = JSON.stringify([store.session?.serverUserId, store.session?.role, store.session?.active, exportAuth, activeBranch, activeBranchId, period])
   const exportContext = useRef(exportKey), exportMounted = useRef(false), exportPending = useRef(null)
   const [exporting, setExporting] = useState(false)
   const [exportNotice, setExportNotice] = useState('')
   exportContext.current = exportKey
+  const getAuthGeneration = store.getAuthGeneration
+  const isCurrentReport = React.useCallback(() =>
+    exportContext.current === exportKey && exportAuth === getAuthGeneration?.(),
+  [exportKey, exportAuth, getAuthGeneration])
+  const reportScope = {
+    enabled: ownerSession && validBranch,
+    context: exportKey,
+    period: period.toLowerCase(),
+    branchId: activeBranchId,
+    isCurrent: isCurrentReport,
+  }
+  const summarySection = useOwnerReportSection(fetchExecutiveSummary, reportScope)
+  const branchSection = useOwnerReportSection(fetchBranchPerformance, reportScope)
+  const reportDenied = summarySection.status === 'denied' || branchSection.status === 'denied'
+  const bothReportSectionsFailed = summarySection.status === 'error' && branchSection.status === 'error'
+  const serverSummary = reportDenied ? null : summarySection.data
+  const serverBranches = reportDenied ? null : branchSection.data
+  const canExport = reportScope.enabled && !reportDenied
+  const reportDeniedRef = useRef(reportDenied)
+  reportDeniedRef.current = reportDenied
   const cancelAnalyticsExport = () => {
     const pending = exportPending.current
     if (!pending) return
@@ -535,42 +553,10 @@ export function AnalyticsPage({ activeBranch, store }) {
     }
   }, [exportKey])
 
-  const loadData = async () => {
-    const request = ++loadRequest.current
-    setLoading(true)
-    setLoadError(false)
-    // Never keep figures for a previous branch/period on screen while a new request is in flight or after it fails.
-    setServerSummary(null)
-    setServerBranches(null)
-    if (activeBranch !== 'All Branches' && !activeBranchId) { setLoadError(true); setLoading(false); return }
-    try {
-      const p = period.toLowerCase()
-      const filters = { period: p, branch_id: activeBranchId }
-      const [summary, branches] = await Promise.all([
-        fetchExecutiveSummary(filters),
-        fetchBranchPerformance(filters),
-      ])
-      if (request !== loadRequest.current) return
-      setServerSummary(summary)
-      setServerBranches(branches)
-    } catch {
-      if (request !== loadRequest.current) return
-      // A clinic-server session shows an explicit unavailable state; only the offline demo falls back to local data.
-      if (isServerSession) setLoadError(true)
-    } finally {
-      if (request === loadRequest.current) setLoading(false)
-    }
-  }
-
-  React.useEffect(() => {
-    loadData()
-    return () => { ++loadRequest.current }
-  }, [period, activeBranch, activeBranchId, isServerSession])
-
   const exportServerCsv = async () => {
     if (!canExport || !exportMounted.current || exportPending.current) return
     const ticket = { key: exportKey, auth: exportAuth, actor: store.session.serverUserId, controller: new AbortController() }
-    const owns = () => exportMounted.current && exportPending.current === ticket && !ticket.controller.signal.aborted &&
+    const owns = () => exportMounted.current && !reportDeniedRef.current && exportPending.current === ticket && !ticket.controller.signal.aborted &&
       exportContext.current === ticket.key && ticket.auth === store.getAuthGeneration?.()
     exportPending.current = ticket
     setExporting(true)
@@ -635,7 +621,7 @@ export function AnalyticsPage({ activeBranch, store }) {
     { name: 'Automation health', value: rateText(serverSummary.automation.health_rate_pct), note: `${serverSummary.automation.total_actions} rule evaluations recorded (${serverSummary.automation.failed} failed); nothing is executed by this module`, module: 'M23' },
   ] : (isServerSession ? [] : clientMetrics)
 
-  const exportRows = state.branches.map(b => {
+  const exportRows = () => state.branches.filter(b => activeBranch === 'All Branches' || b === activeBranchRecord).map(b => {
     const c = branchCapacity(b.name, state)
     return { Branch: b.name, Workload: c.workload, Waiting: c.waiting, Booked: c.booked, EstimatedWait: c.estimate, Threshold: c.threshold }
   })
@@ -656,7 +642,7 @@ export function AnalyticsPage({ activeBranch, store }) {
           <Button onClick={exportServerCsv} disabled={!canExport || exporting} variant="secondary">
             Export Report CSV
           </Button>
-          <Button onClick={() => window.print()} variant="soft" icon="download">
+          <Button onClick={() => window.print()} disabled={isServerSession && !canExport} variant="soft" icon="download">
             Export Analytics PDF
           </Button>
         </div>
@@ -664,11 +650,20 @@ export function AnalyticsPage({ activeBranch, store }) {
     />
     {exportNotice && <p role="status">{exportNotice}</p>}
     {exporting && <Button variant="ghost" onClick={cancelAnalyticsExport}>Cancel analytics export</Button>}
-    <OwnerRevenueCharts branchId={activeBranchId} branchName={activeBranch} period={period} serverSession={isServerSession} validBranch={activeBranch === 'All Branches' || !!activeBranchId}/>
-    {isServerSession && loadError && <Notice tone="warning">
-      Analytics are unavailable right now, so no figures are shown. <Button variant="ghost" onClick={loadData}>Try again</Button>
+    {reportDenied || (isServerSession && !ownerSession) ? <Notice tone="warning">
+      Report access is unavailable. Sign in with an active Owner account.
+    </Notice> : <OwnerRevenueCharts
+      key={JSON.stringify([store.session?.serverUserId, exportAuth])}
+      branchId={activeBranchId} branchName={activeBranch} period={period} serverSession={isServerSession} validBranch={validBranch}/>}
+    {bothReportSectionsFailed ? <Notice tone="warning">
+      The report figures could not be loaded. <Button variant="ghost" onClick={() => {
+        summarySection.retry()
+        branchSection.retry()
+      }}>Retry report figures</Button>
+    </Notice> : !reportDenied && summarySection.status === 'error' && <Notice tone="warning">
+      The executive summary could not be loaded. <Button variant="ghost" onClick={summarySection.retry}>Retry executive summary</Button>
     </Notice>}
-    {isServerSession && loading && !serverSummary && !loadError && <p className="muted-copy" role="status">Loading analytics…</p>}
+    {!reportDenied && summarySection.status === 'loading' && <p className="muted-copy" role="status">Loading executive summary…</p>}
     <div className="cards-3">
       {metrics.map(m => (
         <Card key={m.name} title={m.name}>
@@ -681,7 +676,11 @@ export function AnalyticsPage({ activeBranch, store }) {
     <div className="grid-2 top-gap">
       <Card title="Branch workload report" subtitle={serverSummary ? `Authoritative comparative data for ${serverSummary.period_label}` : (isServerSession ? undefined : 'Offline demo preview — example capacity values, not clinic data')}>
         <div className="branch-bars">
-          {isServerSession && !serverBranches && <p className="muted-copy">{loading ? 'Loading branch figures…' : 'Branch figures are unavailable.'}</p>}
+          {!reportDenied && branchSection.status === 'loading' && <p className="muted-copy" role="status">Loading branch figures…</p>}
+          {!reportDenied && !bothReportSectionsFailed && branchSection.status === 'error' && <Notice tone="warning">
+            Branch figures could not be loaded. <Button variant="ghost" onClick={branchSection.retry}>Retry branch figures</Button>
+          </Notice>}
+          {serverBranches?.length === 0 && <p className="muted-copy" role="status">No branches match this report scope.</p>}
           {(serverBranches || (isServerSession ? [] : state.branches.filter(b => activeBranch === 'All Branches' || b.name === activeBranch))).map(b => {
             const isServer = b.active_queue !== undefined
             // A clinic-server branch has no approved capacity (the stored 80/80/75 thresholds are unconfirmed demo configuration and a queue
@@ -711,9 +710,11 @@ export function AnalyticsPage({ activeBranch, store }) {
       <Card title="Report actions" subtitle="Executive exports & reconciliation">
         <div className="action-stack">
           <Button onClick={exportServerCsv} disabled={!canExport || exporting}>Export Executive Analytics CSV</Button>
-          <Button variant="soft" onClick={() => window.print()}>Export Analytics PDF with Logo</Button>
-          <Button variant="ghost" onClick={() => makeCsv('branch-capacity.csv', exportRows)}>Export Local Capacity CSV</Button>
-          <Button variant="ghost" onClick={() => makeCsv('hmo-report.csv', hmo.map(x => ({ Patient: patientName(x.patientId, state.patients), Provider: x.provider, Branch: x.branch, Status: x.status, PendingHours: pendingHours(x, state.clock), Reference: x.reference || '' })))}>Export HMO CSV</Button>
+          <Button variant="soft" onClick={() => window.print()} disabled={isServerSession && !canExport}>Export Analytics PDF with Logo</Button>
+          {!isServerSession && <>
+            <Button variant="ghost" onClick={() => makeCsv('branch-capacity.csv', exportRows())}>Export Demo Capacity CSV</Button>
+            <Button variant="ghost" onClick={() => makeCsv('hmo-report.csv', hmo.map(x => ({ Patient: patientName(x.patientId, state.patients), Provider: x.provider, Branch: x.branch, Status: x.status, PendingHours: pendingHours(x, state.clock), Reference: x.reference || '' })))}>Export Demo HMO CSV</Button>
+          </>}
           <Notice tone="info">
             Server analytics calculates metrics across PostgreSQL operational tables for the Manila timezone ({period}).
           </Notice>

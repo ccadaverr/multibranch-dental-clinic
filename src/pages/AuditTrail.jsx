@@ -33,6 +33,7 @@ function AuditLifetime({ store }) {
   const [loadError, setLoadError] = useState('')
   const [nextCursor, setNextCursor] = useState(null)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [moreError, setMoreError] = useState(false)
   const [attempt, setAttempt] = useState(0)
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('all')
@@ -81,6 +82,7 @@ function AuditLifetime({ store }) {
   }, [filterKey, attempt, auth])
 
   const refresh = () => {
+    epoch.current++
     setStatus('loading')
     setAttempt(current => current + 1)
   }
@@ -104,7 +106,7 @@ function AuditLifetime({ store }) {
   // never an empty list and never browser-held or demo activity.
   useEffect(() => {
     const ticket={epoch:++epoch.current,key:filterKey,auth}
-    morePending.current=false;setLoadingMore(false);setInspectLog(null)
+    morePending.current=false;setLoadingMore(false);setMoreError(false);setInspectLog(null)
     if (rangeInvalid) return undefined
     let live = true
     setStatus('loading')
@@ -132,17 +134,30 @@ function AuditLifetime({ store }) {
   }, [filterKey, attempt])
 
   const loadMore = async () => {
-    if (!nextCursor || loadingMore || morePending.current || loadedKey!==filterKey || rangeInvalid) return
+    if (!nextCursor || loadingMore || morePending.current || loadedKey!==filterKey || viewStatus !== 'ready' || rangeInvalid) return
     morePending.current=true
     const ticket={epoch:epoch.current,key:filterKey,auth}
     setLoadingMore(true)
+    setMoreError(false)
     try {
       const page = await fetchAuditLogs({ ...filters(), per_page: 50, cursor: nextCursor })
       if(!owns(ticket))return
       setLogs(previous => [...previous, ...page.rows.filter(row => !previous.some(p => p.id === row.id))])
       setNextCursor(page.nextCursor)
     } catch (err) {
-      if(owns(ticket))toast(err.message || 'More audit records could not be loaded.', 'warning')
+      if (!owns(ticket)) return
+      if (err?.kind === 'unauthenticated' || err?.kind === 'forbidden') {
+        exportRequest.current?.abort()
+        exportRequest.current = null
+        setExporting(false)
+        setLogs([])
+        setNextCursor(null)
+        setInspectLog(null)
+        setLoadError('Audit access could not be verified. Sign in with an active Owner account.')
+        setStatus('error')
+      } else {
+        setMoreError(true)
+      }
     } finally {
       if(owns(ticket)){morePending.current=false;setLoadingMore(false)}
     }
@@ -387,8 +402,11 @@ function AuditLifetime({ store }) {
             />
           )}
           {viewStatus === 'ready' && nextCursor && !rangeInvalid && (
-            <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'center' }}>
-              <Button variant="soft" onClick={loadMore} disabled={loadingMore}>{loadingMore ? 'Loading…' : 'Load older events'}</Button>
+            <div className="owner-report-recovery">
+              {moreError && <Notice tone="warning">Older events could not be loaded. The events already loaded are still available.</Notice>}
+              <Button variant="soft" onClick={loadMore} disabled={loadingMore} aria-busy={loadingMore}>
+                {loadingMore ? 'Loading older events…' : moreError ? 'Retry older events' : 'Load older events'}
+              </Button>
             </div>
           )}
           {viewStatus === 'ready' && !nextCursor && shownLogs.length > 0 && <p className="muted" style={{ textAlign: 'center', marginTop: '12px', fontSize: '11px' }}>End of the matching history.</p>}
