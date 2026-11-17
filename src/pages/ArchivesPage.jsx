@@ -60,7 +60,7 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
   const ownerSearch = role === 'owner' && !!query.trim()
   const tab = ownerSearch ? searchTab : browseTab
   const updateQuery = value => {
-    if (!value.trim()) setSearchTab('matches')
+    if (role === 'owner' && value.trim().toLowerCase() !== query.trim().toLowerCase()) setSearchTab('matches')
     setQuery(value)
   }
   const retryPending = useRef(false)
