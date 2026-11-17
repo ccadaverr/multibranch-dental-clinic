@@ -1,0 +1,106 @@
+{
+  "starting_head": "c02d922601ce3374e9849a2b00aa3ef523ca23db",
+  "runtime_commit": "770600df332b83d8069d8ed141cf728c69738114",
+  "owner_commit": "47c90ddb2c7ee219894a6d2bd6824b2cc022da27",
+  "backend": {
+    "tests": 1282,
+    "assertions": 14763,
+    "failures": 26,
+    "errors": 1,
+    "skips": 3,
+    "passing": 1252,
+    "new_failure_identities": [],
+    "inherited_failure_and_error_identities": [
+      "Tests\\Feature\\Automation\\AutomationControlTest::test_csv_export_neutralizes_formula_injection",
+      "Tests\\Feature\\Automation\\AutomationControlTest::test_owner_can_trigger_manual_evaluation_and_audit_is_created",
+      "Tests\\Feature\\Automation\\AutomationControlTest::test_owner_can_view_automation_rules_and_snapshot",
+      "Tests\\Feature\\Automation\\AutomationControlTest::test_staff_and_dentist_and_patient_are_forbidden_from_automation",
+      "Tests\\Feature\\Automation\\AutomationControlTest::test_unauthenticated_cannot_access_automation_endpoints",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_audit_events_carry_no_event_body_and_the_csv_marks_evaluation_only",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_legacy_descriptions_are_qualified_inside_the_csv_cell_and_in_the_exception_projection",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_is_rate_limited",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_refuses_clinical_flags_and_every_foreign_field",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_refuses_unexpected_top_level_fields_too",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_validates_each_rule_observation",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_only_the_owner_may_dispatch_and_authorization_precedes_validation",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_repeated_manual_dispatches_are_independent_evaluations_with_no_idempotency_contract",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_the_api_marks_every_action_row_as_evaluation_only_and_keeps_historical_text_unchanged",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_the_manual_message_says_evaluated_not_executed_and_the_event_stores_no_email",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_a_patient_reads_only_their_own_feedback_newest_first_with_a_cursor_that_reveals_nothing_about_others",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_a_patient_submits_free_text_about_their_own_completed_visit_and_the_record_is_minimal_and_server_derived",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_m26_is_a_foundation_only_no_rating_category_status_reply_publication_marketing_or_other_module_side_effect",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_only_the_patients_own_completed_visits_are_eligible_and_every_other_case_is_one_indistinguishable_refusal",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_owner_can_review_feedback_with_filters",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_owner_can_review_patient_feedback_with_branch_and_dentist_filters",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_patient_can_submit_1_to_5_star_rating_and_low_ratings_auto_create_followup_task",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_submission_is_idempotent_a_new_key_is_a_separate_submission_and_no_uniqueness_is_invented",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_submission_is_rate_limited_per_account_and_explains_itself",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_submitted_feedback_is_immutable_and_nothing_can_erase_it",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_the_feature_is_patient_only_and_owner_staff_dentist_and_guests_are_all_refused_everywhere",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_the_text_is_bounded_free_data_and_every_authority_or_policy_field_is_refused"
+    ]
+  },
+  "frontend": {
+    "passed": 1999,
+    "skipped": 8,
+    "failed": 0
+  },
+  "python": {
+    "passed": 49,
+    "failed": 0
+  },
+  "focused_runtime_mail": {
+    "tests": 13,
+    "assertions": 65,
+    "passed": true
+  },
+  "predefense": {
+    "protected_original": {
+      "fail": 5,
+      "warn": 6,
+      "jobs_untouched": 19
+    },
+    "new_synthetic_while_running": {
+      "fail": 0,
+      "warn": 4,
+      "scope": "mail schedule only; external services not accepted"
+    }
+  },
+  "runtime": {
+    "target": "/private/contention-50cf2b13/target.json",
+    "postgres_port": 43803,
+    "demo": "dental_clinic_demo",
+    "test": "dental_clinic_test",
+    "schema_entries": 87,
+    "migrations_executed": 0,
+    "held_executed": false,
+    "grant_installed": false,
+    "gen07_schema_installed": false,
+    "final_state": "stopped",
+    "original_api_restored": true,
+    "capture": "127.0.0.1:1027; no relay",
+    "worker_restart": true,
+    "scheduler_restart": true,
+    "full_restart_persistence": true,
+    "shutdown_verified": true,
+    "backup_restore_verified_separately": true
+  },
+  "qa": {
+    "local_complete": 25,
+    "partial": 32,
+    "blocked": 11,
+    "integrated_pass": 10,
+    "integrated_pending": 58,
+    "new_ids": [
+      "OWN-04"
+    ]
+  },
+  "publication": false,
+  "pure_unit": {
+    "tests": 252,
+    "assertions": 1193,
+    "passed": true,
+    "phpunit_notices": 30,
+    "profile": "vendor autoload only; pure mocks, no real database connection"
+  }
+}

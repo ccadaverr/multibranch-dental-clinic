@@ -1,0 +1,76 @@
+{
+  "base": "c02d922601ce3374e9849a2b00aa3ef523ca23db",
+  "runtime_commit": "770600df332b83d8069d8ed141cf728c69738114",
+  "owner_commit": "47c90ddb2c7ee219894a6d2bd6824b2cc022da27",
+  "hash_encoding": "Canonical LF file bytes, matching Git source blobs; self-hash excluded and recoverable from Git.",
+  "files": [
+    {
+      "path": "backend/app/Console/Commands/DemoCheck.php",
+      "sha256": "0465385a9d7d68e6c7f35118141502f57aa903b489b4d97d45826d9ab06a7101"
+    },
+    {
+      "path": "backend/app/Support/SyntheticRuntime.php",
+      "sha256": "a17c0823e441a256196ae6ca6701905dd0abb1879e20011b7d1225dfa6204547"
+    },
+    {
+      "path": "backend/routes/console.php",
+      "sha256": "de279693a0737a66cf214dcdc6ce8b10a90b06b216b8645b9b2af6f47f6dc9f8"
+    },
+    {
+      "path": "backend/tests/Feature/Runtime/SyntheticRuntimeBoundaryTest.php",
+      "sha256": "3a5cefd4f8d02dd2c309ca5914ab80a47938546022c7b60fab8c6c76edc8bc22"
+    },
+    {
+      "path": "backend/tests/Support/synthetic_runtime_probe.php",
+      "sha256": "e02eae26d965a26a3c975e0ba2bda83888c974a40f115bed08cb657f4dbac4c2"
+    },
+    {
+      "path": "docs/INTEGRATION_QA_LEDGER_20261117.json",
+      "sha256": "68adeefafb040906c17613fec1899a2f15afa2c1d7804472e5bc024c7415f389"
+    },
+    {
+      "path": "docs/STABILIZATION_S03_ACCEPTANCE_20261117.md",
+      "sha256": "5ff1a28b9b4eb2869381c9a8a94e497652dac50426135845992c12743a6068b9"
+    },
+    {
+      "path": "docs/STABILIZATION_S03_MANIFEST_20261117.json",
+      "sha256": null
+    },
+    {
+      "path": "docs/STABILIZATION_S03_VALIDATION_20261117.json",
+      "sha256": "2292bb8e944729180e79cbf822e778e0c852d1767dd46be9e14b90998725cbc2"
+    },
+    {
+      "path": "docs/SYNTHETIC_RUNTIME_RUNBOOK.md",
+      "sha256": "220782e26159f69c125bb859efb8492c9883476373934d6864e1a63858822053"
+    },
+    {
+      "path": "docs/handoff/SYSTEM_STATE.md",
+      "sha256": "c00a77180db4b108a619359776e165bc344e574031ebccbcbca3fbe061c07d72"
+    },
+    {
+      "path": "scripts/local-system.py",
+      "sha256": "a50dc25134ed8be0216708fc8df956c22f1b1e973e6eac661f030a3bce208b2c"
+    },
+    {
+      "path": "scripts/synthetic-demo-acceptance.py",
+      "sha256": "03b25ba5afb603283e7c569dc55891ce46ef5080b94818a6488fc0175e8ce208"
+    },
+    {
+      "path": "scripts/synthetic-demo-runtime.py",
+      "sha256": "1c217d750985a52d4c4275fc49ddf4f174f6a4b18cbf8419b0ccc58970dd12c9"
+    },
+    {
+      "path": "scripts/tests/test_synthetic_demo_runtime.py",
+      "sha256": "d200b00373e7d7835cd99efd9cb6b163ec765b26bc6fbae577f7a2c832bb9405"
+    },
+    {
+      "path": "src/owner-branches.css",
+      "sha256": "2d457c321573bc0b0ab6174d85bc591b997c34776603e35c4da15077f45edf57"
+    },
+    {
+      "path": "tests/s03-owner-branches.browser.mjs",
+      "sha256": "1a4d44251afdc270b21168dfe10438ac6014981390165f6c29dda6a96af413f0"
+    }
+  ]
+}

@@ -6,8 +6,8 @@
     "local_complete": 25,
     "partial": 32,
     "blocked": 11,
-    "integrated_pass": 9,
-    "integrated_pending": 59
+    "integrated_pass": 10,
+    "integrated_pending": 58
   },
   "rows": [
     {
@@ -832,13 +832,13 @@
       "exact_criterion_and_tasks": "Branches screen is colorful, readable, and consistent.<br>Original tasks: Branches UI: add colors per design tokens (cards, headers, statuses, actions) `FINALS-QA-REVISIONS.md:951`",
       "responsible_domain": "Joevan Operations/Workforce; Jaztin reviews clinical boundary",
       "source_evidence": "Implemented and verified. [A3](OWNER_BRANCH_A3_ACCEPTANCE.md); [08ec129](https://github.com/ccadaverr/multibranch-dental-clinic/commit/08ec129668cef58c32ce82ae8dfc98e254f40eda)",
-      "focused_test_evidence": "Dated historical acceptance only; 35 frontend; 6 final branch API tests/49 assertions; 1440/390 rendered; Update-only management; OSM tiles blocked during fixture test; not branch creation/live map availability. Joevan implementation/test evidence is provisional here until approved source delivery and independent inspection.",
+      "focused_test_evidence": "Dated historical acceptance only; 35 frontend; 6 final branch API tests/49 assertions; 1440/390 rendered; Update-only management; OSM tiles blocked during fixture test; not branch creation/live map availability. Joevan implementation/test evidence is provisional here until approved source delivery and independent inspection. S03 actual full-stack browser acceptance plus consolidated frontend/backend checks; see STABILIZATION_S03_ACCEPTANCE_20261117.md.",
       "current_status": "Complete",
-      "remaining_requirements_and_next_action": "Retain historical accepted branch-token/status presentation on integrated source.",
-      "integrated_acceptance": "Pending",
-      "integration_evidence": "PENDING: full original criterion not accepted on the combined candidate. Both exact sources are now available; passing subsets do not close this row.",
+      "remaining_requirements_and_next_action": "Original criterion integrated acceptance passed; retain responsive/readability and authorization regression coverage.",
+      "integrated_acceptance": "Pass",
+      "integration_evidence": "S03: actual seeded PostgreSQL Branches UI and matching canonical identities; cards/headers/status/actions at375/390/430/768/1024/1440; keyboard selection and focus, min4.5:1 measured text contrast, no horizontal page overflow; Owner publication503 retains draft then real retry/reload/readback; Staff/Dentist/Patient writes denied403. tests/s03-owner-branches.browser.mjs; source-scoped primary action contrast corrected in owner-branches.css. Complete original OWN-04 verified, not whole-system accessibility certification.",
       "local_acceptance": "Provisional bounded local/historical acceptance; integrated acceptance pending.",
-      "blockers": "Source-delivery gate resolved November17; criterion-specific verification remains required. Other policy/reproduction limits in this row remain."
+      "blockers": "None for this exact original criterion."
     },
     {
       "original_id": "OWN-05",
@@ -1006,5 +1006,13 @@
     ],
     "proposal_installed": false,
     "note": "Evidence additions only; original wording/status totals and nine integrated passes unchanged."
+  },
+  "stabilization_s03": {
+    "starting_head": "c02d922601ce3374e9849a2b00aa3ef523ca23db",
+    "new_integrated_ids": [
+      "OWN-04"
+    ],
+    "local_status_changes": [],
+    "note": "Runtime reliability work is not counted as a new original QA. GEN-07/GEN-12 Partial, GEN-10 unpromoted."
   }
 }
