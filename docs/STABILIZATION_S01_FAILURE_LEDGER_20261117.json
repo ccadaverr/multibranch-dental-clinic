@@ -1,0 +1,1009 @@
+{
+  "starting_head": "0cf24b1f6a1d78d087d238d9573eeb5e02e9d8fc",
+  "starting_tests": 1260,
+  "starting_failures": 37,
+  "starting_errors": 1,
+  "starting_skips": 3,
+  "source_log": "dentalops-integration-20261117:/private/integration/logs/backend-final-reviewed.log",
+  "cases": [
+    {
+      "test": "Tests\\Feature\\Feedback\\FeedbackTest::test_submitted_feedback_is_immutable_and_nothing_can_erase_it",
+      "file": "backend/tests/Feature/Feedback/FeedbackTest.php",
+      "method": "test_submitted_feedback_is_immutable_and_nothing_can_erase_it",
+      "original_failure_detail": "Illuminate\\Database\\Eloquent\\ModelNotFoundException: No query results for model [App\\Models\\PatientFeedback].",
+      "group": "feedback-unavailable-policy",
+      "severity": "Medium",
+      "related_original_qa_ids": [
+        "GEN-11"
+      ],
+      "source_paths": [
+        "backend/routes/api.php",
+        "backend/app/Http/Controllers/FeedbackController.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Feedback availability/requirements conflict; some requested Owner/automation access contradicts current privacy/scope. No access broadened and no table dropped.",
+      "root_cause_status": "Preserved source has unavailable feedback endpoints. This suite combines incompatible Patient-only free-text and Owner/rating/automatic-follow-up contracts. The removal migration is held, so retained storage is not proof of a supported API.",
+      "ending_status": "Retained:11 failing cases and1 missing-record error in final1271 cohort",
+      "expected_behavior": "submitted feedback is immutable and nothing can erase it. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Illuminate\\Database\\Eloquent\\ModelNotFoundException: No query results for model [App\\Models\\PatientFeedback].",
+      "route_literals_in_case": []
+    },
+    {
+      "test": "Tests\\Feature\\Assistant\\AssistantTest::test_only_a_signed_in_patient_may_use_the_assistant",
+      "file": "backend/tests/Feature/Assistant/AssistantTest.php",
+      "method": "test_only_a_signed_in_patient_may_use_the_assistant",
+      "original_failure_detail": "Failed asserting that two strings are identical.\n--- Expected\n+++ Actual\n@@ @@\n-'answered'\n+'knowledge_answered'",
+      "group": "assistant-knowledge-profile",
+      "severity": "Low",
+      "related_original_qa_ids": [],
+      "source_paths": [
+        "backend/config/assistant.php",
+        "backend/app/Services/Assistant/AssistantService.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Provider-specific answers/actions were not exercised in knowledge mode; no live provider or clinical action enabled.",
+      "root_cause_status": "Mocked-provider tests inherited the runtime knowledge-only profile; explicit test-only auto mode and stray-HTTP prevention restore their intended fake-provider contract. Runtime stays knowledge-only.",
+      "ending_status": "Passed focused60 and final1271 cohort",
+      "expected_behavior": "only a signed in patient may use the assistant. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Failed asserting that two strings are identical.\n--- Expected\n+++ Actual\n@@ @@\n-'answered'\n+'knowledge_answered'",
+      "route_literals_in_case": [
+        "/api/assistant/messages"
+      ]
+    },
+    {
+      "test": "Tests\\Feature\\Assistant\\AssistantTest::test_tools_return_only_the_signed_in_patients_own_records_whatever_the_model_asks",
+      "file": "backend/tests/Feature/Assistant/AssistantTest.php",
+      "method": "test_tools_return_only_the_signed_in_patients_own_records_whatever_the_model_asks",
+      "original_failure_detail": "Failed asserting that two strings are identical.\n--- Expected\n+++ Actual\n@@ @@\n-'answered'\n+'knowledge_answered'",
+      "group": "assistant-knowledge-profile",
+      "severity": "Low",
+      "related_original_qa_ids": [],
+      "source_paths": [
+        "backend/config/assistant.php",
+        "backend/app/Services/Assistant/AssistantService.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Provider-specific answers/actions were not exercised in knowledge mode; no live provider or clinical action enabled.",
+      "root_cause_status": "Mocked-provider tests inherited the runtime knowledge-only profile; explicit test-only auto mode and stray-HTTP prevention restore their intended fake-provider contract. Runtime stays knowledge-only.",
+      "ending_status": "Passed focused60 and final1271 cohort",
+      "expected_behavior": "tools return only the signed in patients own records whatever the model asks. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Failed asserting that two strings are identical.\n--- Expected\n+++ Actual\n@@ @@\n-'answered'\n+'knowledge_answered'",
+      "route_literals_in_case": []
+    },
+    {
+      "test": "Tests\\Feature\\Assistant\\AssistantTest::test_actions_are_buttons_only_and_nothing_is_booked",
+      "file": "backend/tests/Feature/Assistant/AssistantTest.php",
+      "method": "test_actions_are_buttons_only_and_nothing_is_booked",
+      "original_failure_detail": "Failed asserting that two arrays are identical.\n--- Expected\n+++ Actual\n@@ @@\n Array &0 [\n     0 => Array &1 [\n         'type' => 'open_booking',\n-        'label' => 'Book Service svc2',\n-        'service' => 'svc2',\n+        'label' => 'Book an appointment',\n     ],\n ]\n\n/workspace/backend/tests/Feature/Assistant/AssistantTest.php:136",
+      "group": "assistant-knowledge-profile",
+      "severity": "Low",
+      "related_original_qa_ids": [],
+      "source_paths": [
+        "backend/config/assistant.php",
+        "backend/app/Services/Assistant/AssistantService.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Provider-specific answers/actions were not exercised in knowledge mode; no live provider or clinical action enabled.",
+      "root_cause_status": "Mocked-provider tests inherited the runtime knowledge-only profile; explicit test-only auto mode and stray-HTTP prevention restore their intended fake-provider contract. Runtime stays knowledge-only.",
+      "ending_status": "Passed focused60 and final1271 cohort",
+      "expected_behavior": "actions are buttons only and nothing is booked. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Failed asserting that two arrays are identical.\n--- Expected\n+++ Actual\n@@ @@\n Array &0 [\n     0 => Array &1 [\n         'type' => 'open_booking',\n-        'label' => 'Book Service svc2',\n-        'service' => 'svc2',\n+        'label' => 'Book an appointment',\n     ],\n ]\n\n/workspace/backend/tests/Feature/Assistant/AssistantTest.php:136",
+      "route_literals_in_case": []
+    },
+    {
+      "test": "Tests\\Feature\\Assistant\\AssistantTest::test_an_invented_price_or_an_action_claim_is_never_kept",
+      "file": "backend/tests/Feature/Assistant/AssistantTest.php",
+      "method": "test_an_invented_price_or_an_action_claim_is_never_kept",
+      "original_failure_detail": "Failed asserting that two strings are identical.\n--- Expected\n+++ Actual\n@@ @@\n-'output_blocked'\n+'knowledge_answered'\n\n/workspace/backend/tests/Feature/Assistant/AssistantTest.php:144",
+      "group": "assistant-knowledge-profile",
+      "severity": "Low",
+      "related_original_qa_ids": [],
+      "source_paths": [
+        "backend/config/assistant.php",
+        "backend/app/Services/Assistant/AssistantService.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Provider-specific answers/actions were not exercised in knowledge mode; no live provider or clinical action enabled.",
+      "root_cause_status": "Mocked-provider tests inherited the runtime knowledge-only profile; explicit test-only auto mode and stray-HTTP prevention restore their intended fake-provider contract. Runtime stays knowledge-only.",
+      "ending_status": "Passed focused60 and final1271 cohort",
+      "expected_behavior": "an invented price or an action claim is never kept. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Failed asserting that two strings are identical.\n--- Expected\n+++ Actual\n@@ @@\n-'output_blocked'\n+'knowledge_answered'\n\n/workspace/backend/tests/Feature/Assistant/AssistantTest.php:144",
+      "route_literals_in_case": []
+    },
+    {
+      "test": "Tests\\Feature\\Assistant\\AssistantTest::test_a_provider_failure_falls_back_to_knowledge_mode_without_retrying",
+      "file": "backend/tests/Feature/Assistant/AssistantTest.php",
+      "method": "test_a_provider_failure_falls_back_to_knowledge_mode_without_retrying",
+      "original_failure_detail": "Failed asserting that actual size 0 matches expected size 1.",
+      "group": "assistant-knowledge-profile",
+      "severity": "Low",
+      "related_original_qa_ids": [],
+      "source_paths": [
+        "backend/config/assistant.php",
+        "backend/app/Services/Assistant/AssistantService.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Provider-specific answers/actions were not exercised in knowledge mode; no live provider or clinical action enabled.",
+      "root_cause_status": "Mocked-provider tests inherited the runtime knowledge-only profile; explicit test-only auto mode and stray-HTTP prevention restore their intended fake-provider contract. Runtime stays knowledge-only.",
+      "ending_status": "Passed focused60 and final1271 cohort",
+      "expected_behavior": "a provider failure falls back to knowledge mode without retrying. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Failed asserting that actual size 0 matches expected size 1.",
+      "route_literals_in_case": []
+    },
+    {
+      "test": "Tests\\Feature\\Assistant\\AssistantTest::test_the_key_goes_only_to_the_official_origin_and_no_question_answer_or_key_is_logged_or_stored",
+      "file": "backend/tests/Feature/Assistant/AssistantTest.php",
+      "method": "test_the_key_goes_only_to_the_official_origin_and_no_question_answer_or_key_is_logged_or_stored",
+      "original_failure_detail": "An expected request was not recorded.\nFailed asserting that false is true.",
+      "group": "assistant-knowledge-profile",
+      "severity": "Low",
+      "related_original_qa_ids": [],
+      "source_paths": [
+        "backend/config/assistant.php",
+        "backend/app/Services/Assistant/AssistantService.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Provider-specific answers/actions were not exercised in knowledge mode; no live provider or clinical action enabled.",
+      "root_cause_status": "Mocked-provider tests inherited the runtime knowledge-only profile; explicit test-only auto mode and stray-HTTP prevention restore their intended fake-provider contract. Runtime stays knowledge-only.",
+      "ending_status": "Passed focused60 and final1271 cohort",
+      "expected_behavior": "the key goes only to the official origin and no question answer or key is logged or stored. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "An expected request was not recorded.\nFailed asserting that false is true.",
+      "route_literals_in_case": []
+    },
+    {
+      "test": "Tests\\Feature\\Assistant\\AssistantTest::test_the_stream_endpoint_sends_text_as_it_is_written_then_the_final_result",
+      "file": "backend/tests/Feature/Assistant/AssistantTest.php",
+      "method": "test_the_stream_endpoint_sends_text_as_it_is_written_then_the_final_result",
+      "original_failure_detail": "Failed asserting that 'event: meta\\n\ndata: {\"mode\":\"knowledge\"}\\n\n\\n\nevent: replace\\n\ndata: {\"text\":\"We offer — General Dentistry: Service svc1, Service svc2. Prices are confirmed by the clinic; you receive the invoice after your visit.\"}\\n\n\\n\nevent: done\\n\ndata: {\"answer\":\"We offer — General Dentistry: Service svc1, Service svc2. Prices are confirmed by the clinic; you receive the invoice after your visit.\",\"outcome\":\"knowledge_answered\",\"actions\":[{\"type\":\"open_booking\",\"label\":\"Book an appointment\"}],\"handoff\":false,\"suggestions\":[],\"mode\":\"knowledge\"}\\n\n\\n\n' [UTF-8](length: 530) contains \"event: meta\ndata: {\"mode\":\"ai\"}\" [ASCII](length: 31).\n\n/workspace/backend/tests/Feature/Assistant/AssistantTest.php:187",
+      "group": "assistant-knowledge-profile",
+      "severity": "Low",
+      "related_original_qa_ids": [],
+      "source_paths": [
+        "backend/config/assistant.php",
+        "backend/app/Services/Assistant/AssistantService.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Provider-specific answers/actions were not exercised in knowledge mode; no live provider or clinical action enabled.",
+      "root_cause_status": "Mocked-provider tests inherited the runtime knowledge-only profile; explicit test-only auto mode and stray-HTTP prevention restore their intended fake-provider contract. Runtime stays knowledge-only.",
+      "ending_status": "Passed focused60 and final1271 cohort",
+      "expected_behavior": "the stream endpoint sends text as it is written then the final result. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Failed asserting that 'event: meta\\n\ndata: {\"mode\":\"knowledge\"}\\n\n\\n\nevent: replace\\n\ndata: {\"text\":\"We offer — General Dentistry: Service svc1, Service svc2. Prices are confirmed by the clinic; you receive the invoice after your visit.\"}\\n\n\\n\nevent: done\\n\ndata: {\"answer\":\"We offer — General Dentistry: Service svc1, Service svc2. Prices are confirmed by the clinic; you receive the invoice after your visit.\",\"outcome\":\"knowledge_answered\",\"actions\":[{\"type\":\"open_booking\",\"label\":\"Book an appointment\"}],\"handoff\":false,\"suggestions\":[],\"mode\":\"knowledge\"}\\n\n\\n\n' [UTF-8](length: 530) contains \"event: meta\ndata: {\"mode\":\"ai\"}\" [ASCII](length: 31).\n\n/workspace/backend/tests/Feature/Assistant/AssistantTest.php:187",
+      "route_literals_in_case": [
+        "/api/assistant/stream"
+      ]
+    },
+    {
+      "test": "Tests\\Feature\\Assistant\\GeminiAuthorizationTest::test_existing_account_throttle_prevents_upstream_calls",
+      "file": "backend/tests/Feature/Assistant/GeminiAuthorizationTest.php",
+      "method": "test_existing_account_throttle_prevents_upstream_calls",
+      "original_failure_detail": "Expected response status code [422] but received 429.\nFailed asserting that 429 is identical to 422.",
+      "group": "assistant-throttle",
+      "severity": "Low",
+      "related_original_qa_ids": [],
+      "source_paths": [
+        "backend/app/Providers/AppServiceProvider.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Test isolation defect; production limiter was not weakened. New regression failed red on DatabaseStore and passes on isolated ArrayStore.",
+      "root_cause_status": "AppServiceProvider captured DatabaseStore before the test changed cache.default. Its fixed mock account42 inherited quota; the isolated ArrayStore replacement preserves the real named limiter and its throttle assertions.",
+      "ending_status": "Passed focused60 and final1271 cohort",
+      "expected_behavior": "existing account throttle prevents upstream calls. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Expected response status code [422] but received 429.\nFailed asserting that 429 is identical to 422.",
+      "route_literals_in_case": [
+        "/api/gemini/chat",
+        "/api/gemini/stream"
+      ]
+    },
+    {
+      "test": "Tests\\Feature\\Audit\\AuditHardeningTest::test_the_database_refuses_to_update_or_delete_an_audit_row_by_any_path",
+      "file": "backend/tests/Feature/Audit/AuditHardeningTest.php",
+      "method": "test_the_database_refuses_to_update_or_delete_an_audit_row_by_any_path",
+      "original_failure_detail": "Failed asserting that 'SQLSTATE[42501]: Insufficient privilege: 7 ERROR:  permission denied for table audit_logs (Connection: pgsql, Host: 127.0.0.1, Port: 55527, Database: dental_clinic_test, SQL: TRUNCATE audit_logs)' [ASCII](length: 195) contains \"append-only\" [ASCII](length: 11).\n\n/workspace/backend/tests/Feature/Audit/AuditHardeningTest.php:66",
+      "group": "audit-acl-versus-trigger-wording",
+      "severity": "Low",
+      "related_original_qa_ids": [
+        "GEN-11"
+      ],
+      "source_paths": [
+        "backend/app/Services/Audit/AuditService.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Stronger database protection was misclassified as a failure by a trigger-wording-only assertion. No privilege granted.",
+      "root_cause_status": "Restricted application ACL denies TRUNCATE with SQLSTATE42501 before the append-only trigger. Assert the absent TRUNCATE privilege while retaining immutable row/readback assertions.",
+      "ending_status": "Passed focused60 and final1271 cohort",
+      "expected_behavior": "the database refuses to update or delete an audit row by any path. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Failed asserting that 'SQLSTATE[42501]: Insufficient privilege: 7 ERROR:  permission denied for table audit_logs (Connection: pgsql, Host: 127.0.0.1, Port: 55527, Database: dental_clinic_test, SQL: TRUNCATE audit_logs)' [ASCII](length: 195) contains \"append-only\" [ASCII](length: 11).\n\n/workspace/backend/tests/Feature/Audit/AuditHardeningTest.php:66",
+      "route_literals_in_case": []
+    },
+    {
+      "test": "Tests\\Feature\\Automation\\AutomationControlTest::test_unauthenticated_cannot_access_automation_endpoints",
+      "file": "backend/tests/Feature/Automation/AutomationControlTest.php",
+      "method": "test_unauthenticated_cannot_access_automation_endpoints",
+      "original_failure_detail": "Expected response status code [401] but received 404.\nFailed asserting that 404 is identical to 401.",
+      "group": "retired-automation-monitor",
+      "severity": "Low",
+      "related_original_qa_ids": [],
+      "source_paths": [
+        "backend/routes/api.php",
+        "backend/app/Services/Automation/WorkflowAutomationService.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Unsupported monitoring/evaluation surface; no live generic executor restored. Evaluate supported plural /api/automations and analytics equivalents in a separately scoped compatibility reconciliation.",
+      "root_cause_status": "Tests call intentionally retired singular /api/automation/{snapshot,rules,actions,dispatch,export-csv}; route inventory confirms404 on both source checkpoints and integration. Substantive assertions remain unchanged.",
+      "ending_status": "Retained failing:15 cases in final1271 cohort",
+      "expected_behavior": "unauthenticated cannot access automation endpoints. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Expected response status code [401] but received 404.\nFailed asserting that 404 is identical to 401.",
+      "route_literals_in_case": [
+        "/api/automation/actions",
+        "/api/automation/dispatch",
+        "/api/automation/rules",
+        "/api/automation/snapshot"
+      ],
+      "route_contract_note": "Helper dispatch uses POST /api/automation/dispatch; all singular monitor routes intentionally absent."
+    },
+    {
+      "test": "Tests\\Feature\\Automation\\AutomationControlTest::test_staff_and_dentist_and_patient_are_forbidden_from_automation",
+      "file": "backend/tests/Feature/Automation/AutomationControlTest.php",
+      "method": "test_staff_and_dentist_and_patient_are_forbidden_from_automation",
+      "original_failure_detail": "Expected response status code [403] but received 404.\nFailed asserting that 404 is identical to 403.",
+      "group": "retired-automation-monitor",
+      "severity": "Low",
+      "related_original_qa_ids": [],
+      "source_paths": [
+        "backend/routes/api.php",
+        "backend/app/Services/Automation/WorkflowAutomationService.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Unsupported monitoring/evaluation surface; no live generic executor restored. Evaluate supported plural /api/automations and analytics equivalents in a separately scoped compatibility reconciliation.",
+      "root_cause_status": "Tests call intentionally retired singular /api/automation/{snapshot,rules,actions,dispatch,export-csv}; route inventory confirms404 on both source checkpoints and integration. Substantive assertions remain unchanged.",
+      "ending_status": "Retained failing:15 cases in final1271 cohort",
+      "expected_behavior": "staff and dentist and patient are forbidden from automation. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Expected response status code [403] but received 404.\nFailed asserting that 404 is identical to 403.",
+      "route_literals_in_case": [
+        "/api/automation/snapshot"
+      ],
+      "route_contract_note": "Helper dispatch uses POST /api/automation/dispatch; all singular monitor routes intentionally absent."
+    },
+    {
+      "test": "Tests\\Feature\\Automation\\AutomationControlTest::test_owner_can_view_automation_rules_and_snapshot",
+      "file": "backend/tests/Feature/Automation/AutomationControlTest.php",
+      "method": "test_owner_can_view_automation_rules_and_snapshot",
+      "original_failure_detail": "Expected response status code [200] but received 404.\nFailed asserting that 404 is identical to 200.",
+      "group": "retired-automation-monitor",
+      "severity": "Low",
+      "related_original_qa_ids": [],
+      "source_paths": [
+        "backend/routes/api.php",
+        "backend/app/Services/Automation/WorkflowAutomationService.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Unsupported monitoring/evaluation surface; no live generic executor restored. Evaluate supported plural /api/automations and analytics equivalents in a separately scoped compatibility reconciliation.",
+      "root_cause_status": "Tests call intentionally retired singular /api/automation/{snapshot,rules,actions,dispatch,export-csv}; route inventory confirms404 on both source checkpoints and integration. Substantive assertions remain unchanged.",
+      "ending_status": "Retained failing:15 cases in final1271 cohort",
+      "expected_behavior": "owner can view automation rules and snapshot. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Expected response status code [200] but received 404.\nFailed asserting that 404 is identical to 200.",
+      "route_literals_in_case": [
+        "/api/automation/rules",
+        "/api/automation/snapshot"
+      ],
+      "route_contract_note": "Helper dispatch uses POST /api/automation/dispatch; all singular monitor routes intentionally absent."
+    },
+    {
+      "test": "Tests\\Feature\\Automation\\AutomationControlTest::test_owner_can_trigger_manual_evaluation_and_audit_is_created",
+      "file": "backend/tests/Feature/Automation/AutomationControlTest.php",
+      "method": "test_owner_can_trigger_manual_evaluation_and_audit_is_created",
+      "original_failure_detail": "Expected response status code [201] but received 404.\nFailed asserting that 404 is identical to 201.",
+      "group": "retired-automation-monitor",
+      "severity": "Low",
+      "related_original_qa_ids": [],
+      "source_paths": [
+        "backend/routes/api.php",
+        "backend/app/Services/Automation/WorkflowAutomationService.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Unsupported monitoring/evaluation surface; no live generic executor restored. Evaluate supported plural /api/automations and analytics equivalents in a separately scoped compatibility reconciliation.",
+      "root_cause_status": "Tests call intentionally retired singular /api/automation/{snapshot,rules,actions,dispatch,export-csv}; route inventory confirms404 on both source checkpoints and integration. Substantive assertions remain unchanged.",
+      "ending_status": "Retained failing:15 cases in final1271 cohort",
+      "expected_behavior": "owner can trigger manual evaluation and audit is created. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Expected response status code [201] but received 404.\nFailed asserting that 404 is identical to 201.",
+      "route_literals_in_case": [
+        "/api/automation/dispatch"
+      ],
+      "route_contract_note": "Helper dispatch uses POST /api/automation/dispatch; all singular monitor routes intentionally absent."
+    },
+    {
+      "test": "Tests\\Feature\\Automation\\AutomationControlTest::test_csv_export_neutralizes_formula_injection",
+      "file": "backend/tests/Feature/Automation/AutomationControlTest.php",
+      "method": "test_csv_export_neutralizes_formula_injection",
+      "original_failure_detail": "Expected response status code [200] but received 404.\nFailed asserting that 404 is identical to 200.",
+      "group": "retired-automation-monitor",
+      "severity": "Low",
+      "related_original_qa_ids": [],
+      "source_paths": [
+        "backend/routes/api.php",
+        "backend/app/Services/Automation/WorkflowAutomationService.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Unsupported monitoring/evaluation surface; no live generic executor restored. Evaluate supported plural /api/automations and analytics equivalents in a separately scoped compatibility reconciliation.",
+      "root_cause_status": "Tests call intentionally retired singular /api/automation/{snapshot,rules,actions,dispatch,export-csv}; route inventory confirms404 on both source checkpoints and integration. Substantive assertions remain unchanged.",
+      "ending_status": "Retained failing:15 cases in final1271 cohort",
+      "expected_behavior": "csv export neutralizes formula injection. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Expected response status code [200] but received 404.\nFailed asserting that 404 is identical to 200.",
+      "route_literals_in_case": [
+        "/api/automation/export-csv"
+      ],
+      "route_contract_note": "Helper dispatch uses POST /api/automation/dispatch; all singular monitor routes intentionally absent."
+    },
+    {
+      "test": "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_the_api_marks_every_action_row_as_evaluation_only_and_keeps_historical_text_unchanged",
+      "file": "backend/tests/Feature/Automation/AutomationTruthfulnessTest.php",
+      "method": "test_the_api_marks_every_action_row_as_evaluation_only_and_keeps_historical_text_unchanged",
+      "original_failure_detail": "Expected response status code [200] but received 404.\nFailed asserting that 404 is identical to 200.",
+      "group": "retired-automation-monitor",
+      "severity": "Low",
+      "related_original_qa_ids": [],
+      "source_paths": [
+        "backend/routes/api.php",
+        "backend/app/Services/Automation/WorkflowAutomationService.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Unsupported monitoring/evaluation surface; no live generic executor restored. Evaluate supported plural /api/automations and analytics equivalents in a separately scoped compatibility reconciliation.",
+      "root_cause_status": "Tests call intentionally retired singular /api/automation/{snapshot,rules,actions,dispatch,export-csv}; route inventory confirms404 on both source checkpoints and integration. Substantive assertions remain unchanged.",
+      "ending_status": "Retained failing:15 cases in final1271 cohort",
+      "expected_behavior": "the api marks every action row as evaluation only and keeps historical text unchanged. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Expected response status code [200] but received 404.\nFailed asserting that 404 is identical to 200.",
+      "route_literals_in_case": [
+        "/api/automation/actions?per_page=100",
+        "/api/automation/snapshot"
+      ],
+      "route_contract_note": "Helper dispatch uses POST /api/automation/dispatch; all singular monitor routes intentionally absent."
+    },
+    {
+      "test": "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_refuses_clinical_flags_and_every_foreign_field",
+      "file": "backend/tests/Feature/Automation/AutomationTruthfulnessTest.php",
+      "method": "test_manual_dispatch_refuses_clinical_flags_and_every_foreign_field",
+      "original_failure_detail": "Expected response status code [422] but received 404.\nFailed asserting that 404 is identical to 422.",
+      "group": "retired-automation-monitor",
+      "severity": "Low",
+      "related_original_qa_ids": [],
+      "source_paths": [
+        "backend/routes/api.php",
+        "backend/app/Services/Automation/WorkflowAutomationService.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Unsupported monitoring/evaluation surface; no live generic executor restored. Evaluate supported plural /api/automations and analytics equivalents in a separately scoped compatibility reconciliation.",
+      "root_cause_status": "Tests call intentionally retired singular /api/automation/{snapshot,rules,actions,dispatch,export-csv}; route inventory confirms404 on both source checkpoints and integration. Substantive assertions remain unchanged.",
+      "ending_status": "Retained failing:15 cases in final1271 cohort",
+      "expected_behavior": "manual dispatch refuses clinical flags and every foreign field. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Expected response status code [422] but received 404.\nFailed asserting that 404 is identical to 422.",
+      "route_literals_in_case": [],
+      "route_contract_note": "Helper dispatch uses POST /api/automation/dispatch; all singular monitor routes intentionally absent."
+    },
+    {
+      "test": "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_validates_each_rule_observation",
+      "file": "backend/tests/Feature/Automation/AutomationTruthfulnessTest.php",
+      "method": "test_manual_dispatch_validates_each_rule_observation",
+      "original_failure_detail": "Expected response status code [422] but received 404.\nFailed asserting that 404 is identical to 422.",
+      "group": "retired-automation-monitor",
+      "severity": "Low",
+      "related_original_qa_ids": [],
+      "source_paths": [
+        "backend/routes/api.php",
+        "backend/app/Services/Automation/WorkflowAutomationService.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Unsupported monitoring/evaluation surface; no live generic executor restored. Evaluate supported plural /api/automations and analytics equivalents in a separately scoped compatibility reconciliation.",
+      "root_cause_status": "Tests call intentionally retired singular /api/automation/{snapshot,rules,actions,dispatch,export-csv}; route inventory confirms404 on both source checkpoints and integration. Substantive assertions remain unchanged.",
+      "ending_status": "Retained failing:15 cases in final1271 cohort",
+      "expected_behavior": "manual dispatch validates each rule observation. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Expected response status code [422] but received 404.\nFailed asserting that 404 is identical to 422.",
+      "route_literals_in_case": [
+        "/api/automation/dispatch"
+      ],
+      "route_contract_note": "Helper dispatch uses POST /api/automation/dispatch; all singular monitor routes intentionally absent."
+    },
+    {
+      "test": "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_the_manual_message_says_evaluated_not_executed_and_the_event_stores_no_email",
+      "file": "backend/tests/Feature/Automation/AutomationTruthfulnessTest.php",
+      "method": "test_the_manual_message_says_evaluated_not_executed_and_the_event_stores_no_email",
+      "original_failure_detail": "Expected response status code [201] but received 404.\nFailed asserting that 404 is identical to 201.",
+      "group": "retired-automation-monitor",
+      "severity": "Low",
+      "related_original_qa_ids": [],
+      "source_paths": [
+        "backend/routes/api.php",
+        "backend/app/Services/Automation/WorkflowAutomationService.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Unsupported monitoring/evaluation surface; no live generic executor restored. Evaluate supported plural /api/automations and analytics equivalents in a separately scoped compatibility reconciliation.",
+      "root_cause_status": "Tests call intentionally retired singular /api/automation/{snapshot,rules,actions,dispatch,export-csv}; route inventory confirms404 on both source checkpoints and integration. Substantive assertions remain unchanged.",
+      "ending_status": "Retained failing:15 cases in final1271 cohort",
+      "expected_behavior": "the manual message says evaluated not executed and the event stores no email. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Expected response status code [201] but received 404.\nFailed asserting that 404 is identical to 201.",
+      "route_literals_in_case": [],
+      "route_contract_note": "Helper dispatch uses POST /api/automation/dispatch; all singular monitor routes intentionally absent."
+    },
+    {
+      "test": "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_only_the_owner_may_dispatch_and_authorization_precedes_validation",
+      "file": "backend/tests/Feature/Automation/AutomationTruthfulnessTest.php",
+      "method": "test_only_the_owner_may_dispatch_and_authorization_precedes_validation",
+      "original_failure_detail": "Expected response status code [403] but received 404.\nFailed asserting that 404 is identical to 403.",
+      "group": "retired-automation-monitor",
+      "severity": "Low",
+      "related_original_qa_ids": [],
+      "source_paths": [
+        "backend/routes/api.php",
+        "backend/app/Services/Automation/WorkflowAutomationService.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Unsupported monitoring/evaluation surface; no live generic executor restored. Evaluate supported plural /api/automations and analytics equivalents in a separately scoped compatibility reconciliation.",
+      "root_cause_status": "Tests call intentionally retired singular /api/automation/{snapshot,rules,actions,dispatch,export-csv}; route inventory confirms404 on both source checkpoints and integration. Substantive assertions remain unchanged.",
+      "ending_status": "Retained failing:15 cases in final1271 cohort",
+      "expected_behavior": "only the owner may dispatch and authorization precedes validation. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Expected response status code [403] but received 404.\nFailed asserting that 404 is identical to 403.",
+      "route_literals_in_case": [
+        "/api/automation/snapshot?branch_id=12"
+      ],
+      "route_contract_note": "Helper dispatch uses POST /api/automation/dispatch; all singular monitor routes intentionally absent."
+    },
+    {
+      "test": "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_is_rate_limited",
+      "file": "backend/tests/Feature/Automation/AutomationTruthfulnessTest.php",
+      "method": "test_manual_dispatch_is_rate_limited",
+      "original_failure_detail": "Expected response status code [429] but received 404.\nFailed asserting that 404 is identical to 429.",
+      "group": "retired-automation-monitor",
+      "severity": "Low",
+      "related_original_qa_ids": [],
+      "source_paths": [
+        "backend/routes/api.php",
+        "backend/app/Services/Automation/WorkflowAutomationService.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Unsupported monitoring/evaluation surface; no live generic executor restored. Evaluate supported plural /api/automations and analytics equivalents in a separately scoped compatibility reconciliation.",
+      "root_cause_status": "Tests call intentionally retired singular /api/automation/{snapshot,rules,actions,dispatch,export-csv}; route inventory confirms404 on both source checkpoints and integration. Substantive assertions remain unchanged.",
+      "ending_status": "Retained failing:15 cases in final1271 cohort",
+      "expected_behavior": "manual dispatch is rate limited. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Expected response status code [429] but received 404.\nFailed asserting that 404 is identical to 429.",
+      "route_literals_in_case": [],
+      "route_contract_note": "Helper dispatch uses POST /api/automation/dispatch; all singular monitor routes intentionally absent."
+    },
+    {
+      "test": "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_audit_events_carry_no_event_body_and_the_csv_marks_evaluation_only",
+      "file": "backend/tests/Feature/Automation/AutomationTruthfulnessTest.php",
+      "method": "test_audit_events_carry_no_event_body_and_the_csv_marks_evaluation_only",
+      "original_failure_detail": "Expected response status code [200] but received 404.\nFailed asserting that 404 is identical to 200.",
+      "group": "retired-automation-monitor",
+      "severity": "Low",
+      "related_original_qa_ids": [],
+      "source_paths": [
+        "backend/routes/api.php",
+        "backend/app/Services/Automation/WorkflowAutomationService.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Unsupported monitoring/evaluation surface; no live generic executor restored. Evaluate supported plural /api/automations and analytics equivalents in a separately scoped compatibility reconciliation.",
+      "root_cause_status": "Tests call intentionally retired singular /api/automation/{snapshot,rules,actions,dispatch,export-csv}; route inventory confirms404 on both source checkpoints and integration. Substantive assertions remain unchanged.",
+      "ending_status": "Retained failing:15 cases in final1271 cohort",
+      "expected_behavior": "audit events carry no event body and the csv marks evaluation only. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Expected response status code [200] but received 404.\nFailed asserting that 404 is identical to 200.",
+      "route_literals_in_case": [
+        "/api/automation/export-csv"
+      ],
+      "route_contract_note": "Helper dispatch uses POST /api/automation/dispatch; all singular monitor routes intentionally absent."
+    },
+    {
+      "test": "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_legacy_descriptions_are_qualified_inside_the_csv_cell_and_in_the_exception_projection",
+      "file": "backend/tests/Feature/Automation/AutomationTruthfulnessTest.php",
+      "method": "test_legacy_descriptions_are_qualified_inside_the_csv_cell_and_in_the_exception_projection",
+      "original_failure_detail": "Expected response status code [200] but received 404.\nFailed asserting that 404 is identical to 200.",
+      "group": "retired-automation-monitor",
+      "severity": "Low",
+      "related_original_qa_ids": [],
+      "source_paths": [
+        "backend/routes/api.php",
+        "backend/app/Services/Automation/WorkflowAutomationService.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Unsupported monitoring/evaluation surface; no live generic executor restored. Evaluate supported plural /api/automations and analytics equivalents in a separately scoped compatibility reconciliation.",
+      "root_cause_status": "Tests call intentionally retired singular /api/automation/{snapshot,rules,actions,dispatch,export-csv}; route inventory confirms404 on both source checkpoints and integration. Substantive assertions remain unchanged.",
+      "ending_status": "Retained failing:15 cases in final1271 cohort",
+      "expected_behavior": "legacy descriptions are qualified inside the csv cell and in the exception projection. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Expected response status code [200] but received 404.\nFailed asserting that 404 is identical to 200.",
+      "route_literals_in_case": [
+        "/api/automation/export-csv",
+        "/api/automation/snapshot"
+      ],
+      "route_contract_note": "Helper dispatch uses POST /api/automation/dispatch; all singular monitor routes intentionally absent."
+    },
+    {
+      "test": "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_repeated_manual_dispatches_are_independent_evaluations_with_no_idempotency_contract",
+      "file": "backend/tests/Feature/Automation/AutomationTruthfulnessTest.php",
+      "method": "test_repeated_manual_dispatches_are_independent_evaluations_with_no_idempotency_contract",
+      "original_failure_detail": "Expected response status code [201] but received 404.\nFailed asserting that 404 is identical to 201.",
+      "group": "retired-automation-monitor",
+      "severity": "Low",
+      "related_original_qa_ids": [],
+      "source_paths": [
+        "backend/routes/api.php",
+        "backend/app/Services/Automation/WorkflowAutomationService.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Unsupported monitoring/evaluation surface; no live generic executor restored. Evaluate supported plural /api/automations and analytics equivalents in a separately scoped compatibility reconciliation.",
+      "root_cause_status": "Tests call intentionally retired singular /api/automation/{snapshot,rules,actions,dispatch,export-csv}; route inventory confirms404 on both source checkpoints and integration. Substantive assertions remain unchanged.",
+      "ending_status": "Retained failing:15 cases in final1271 cohort",
+      "expected_behavior": "repeated manual dispatches are independent evaluations with no idempotency contract. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Expected response status code [201] but received 404.\nFailed asserting that 404 is identical to 201.",
+      "route_literals_in_case": [
+        "/api/automation/dispatch"
+      ],
+      "route_contract_note": "Helper dispatch uses POST /api/automation/dispatch; all singular monitor routes intentionally absent."
+    },
+    {
+      "test": "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_refuses_unexpected_top_level_fields_too",
+      "file": "backend/tests/Feature/Automation/AutomationTruthfulnessTest.php",
+      "method": "test_manual_dispatch_refuses_unexpected_top_level_fields_too",
+      "original_failure_detail": "Expected response status code [422] but received 404.\nFailed asserting that 404 is identical to 422.",
+      "group": "retired-automation-monitor",
+      "severity": "Low",
+      "related_original_qa_ids": [],
+      "source_paths": [
+        "backend/routes/api.php",
+        "backend/app/Services/Automation/WorkflowAutomationService.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Unsupported monitoring/evaluation surface; no live generic executor restored. Evaluate supported plural /api/automations and analytics equivalents in a separately scoped compatibility reconciliation.",
+      "root_cause_status": "Tests call intentionally retired singular /api/automation/{snapshot,rules,actions,dispatch,export-csv}; route inventory confirms404 on both source checkpoints and integration. Substantive assertions remain unchanged.",
+      "ending_status": "Retained failing:15 cases in final1271 cohort",
+      "expected_behavior": "manual dispatch refuses unexpected top level fields too. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Expected response status code [422] but received 404.\nFailed asserting that 404 is identical to 422.",
+      "route_literals_in_case": [
+        "/api/automation/dispatch"
+      ],
+      "route_contract_note": "Helper dispatch uses POST /api/automation/dispatch; all singular monitor routes intentionally absent."
+    },
+    {
+      "test": "Tests\\Feature\\Automations\\InterviewRoundTwoTest::test_the_5_10_and_15_minute_late_steps",
+      "file": "backend/tests/Feature/Automations/InterviewRoundTwoTest.php",
+      "method": "test_the_5_10_and_15_minute_late_steps",
+      "original_failure_detail": "Failed asserting that two arrays are identical.\n--- Expected\n+++ Actual\n@@ @@\n Array &0 [\n-    0 => 1,\n-    1 => 2,\n+    0 => 2,\n+    1 => 1,\n ]\n\n/workspace/backend/tests/Feature/Automations/InterviewRoundTwoTest.php:214",
+      "group": "approved-fifo-vs-old-late-rule",
+      "severity": "Low",
+      "related_original_qa_ids": [
+        "STF-15",
+        "OWN-13"
+      ],
+      "source_paths": [
+        "backend/app/Services/Queue/QueueService.php",
+        "backend/app/Services/Visits/VisitService.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Old expected order contradicted current approved policy. New API/DB/browser tests prove actual default FIFO, move, stale denial and retained history.",
+      "root_cause_status": "Historical R2-07 assertion demoted an earlier late arrival. Owner-approved arrival FIFO supersedes it. The original late/reminder/no-show assertions remain; explicit movement is now separately audited and tested.",
+      "ending_status": "Passed focused38 and final1271 cohort",
+      "expected_behavior": "the 5 10 and 15 minute late steps. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Failed asserting that two arrays are identical.\n--- Expected\n+++ Actual\n@@ @@\n Array &0 [\n-    0 => 1,\n-    1 => 2,\n+    0 => 2,\n+    1 => 1,\n ]\n\n/workspace/backend/tests/Feature/Automations/InterviewRoundTwoTest.php:214",
+      "route_literals_in_case": [
+        "/api/appointments/{$a->public_id}/on-my-way",
+        "/api/front-desk/appointments/{$b->public_id}/undo-no-show",
+        "/api/front-desk/today",
+        "/api/queue/{$entryA->public_id}/late-order",
+        "/api/visits/check-in"
+      ]
+    },
+    {
+      "test": "Tests\\Feature\\Feedback\\FeedbackTest::test_the_feature_is_patient_only_and_owner_staff_dentist_and_guests_are_all_refused_everywhere",
+      "file": "backend/tests/Feature/Feedback/FeedbackTest.php",
+      "method": "test_the_feature_is_patient_only_and_owner_staff_dentist_and_guests_are_all_refused_everywhere",
+      "original_failure_detail": "Expected response status code [201] but received 404.\nFailed asserting that 404 is identical to 201.",
+      "group": "feedback-unavailable-policy",
+      "severity": "Medium",
+      "related_original_qa_ids": [
+        "GEN-11"
+      ],
+      "source_paths": [
+        "backend/routes/api.php",
+        "backend/app/Http/Controllers/FeedbackController.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Feedback availability/requirements conflict; some requested Owner/automation access contradicts current privacy/scope. No access broadened and no table dropped.",
+      "root_cause_status": "Preserved source has unavailable feedback endpoints. This suite combines incompatible Patient-only free-text and Owner/rating/automatic-follow-up contracts. The removal migration is held, so retained storage is not proof of a supported API.",
+      "ending_status": "Retained:11 failing cases and1 missing-record error in final1271 cohort",
+      "expected_behavior": "the feature is patient only and owner staff dentist and guests are all refused everywhere. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Expected response status code [201] but received 404.\nFailed asserting that 404 is identical to 201.",
+      "route_literals_in_case": [
+        "/api/feedback",
+        "/api/feedback/eligible-visits",
+        "/api/feedback/mine",
+        "/api/feedback/review",
+        "/api/feedback/{$id}"
+      ]
+    },
+    {
+      "test": "Tests\\Feature\\Feedback\\FeedbackTest::test_owner_can_review_feedback_with_filters",
+      "file": "backend/tests/Feature/Feedback/FeedbackTest.php",
+      "method": "test_owner_can_review_feedback_with_filters",
+      "original_failure_detail": "Expected response status code [200] but received 404.\nFailed asserting that 404 is identical to 200.",
+      "group": "feedback-unavailable-policy",
+      "severity": "Medium",
+      "related_original_qa_ids": [
+        "GEN-11"
+      ],
+      "source_paths": [
+        "backend/routes/api.php",
+        "backend/app/Http/Controllers/FeedbackController.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Feedback availability/requirements conflict; some requested Owner/automation access contradicts current privacy/scope. No access broadened and no table dropped.",
+      "root_cause_status": "Preserved source has unavailable feedback endpoints. This suite combines incompatible Patient-only free-text and Owner/rating/automatic-follow-up contracts. The removal migration is held, so retained storage is not proof of a supported API.",
+      "ending_status": "Retained:11 failing cases and1 missing-record error in final1271 cohort",
+      "expected_behavior": "owner can review feedback with filters. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Expected response status code [200] but received 404.\nFailed asserting that 404 is identical to 200.",
+      "route_literals_in_case": [
+        "/api/feedback",
+        "/api/feedback/review"
+      ]
+    },
+    {
+      "test": "Tests\\Feature\\Feedback\\FeedbackTest::test_a_patient_submits_free_text_about_their_own_completed_visit_and_the_record_is_minimal_and_server_derived",
+      "file": "backend/tests/Feature/Feedback/FeedbackTest.php",
+      "method": "test_a_patient_submits_free_text_about_their_own_completed_visit_and_the_record_is_minimal_and_server_derived",
+      "original_failure_detail": "Expected response status code [201] but received 404.\nFailed asserting that 404 is identical to 201.",
+      "group": "feedback-unavailable-policy",
+      "severity": "Medium",
+      "related_original_qa_ids": [
+        "GEN-11"
+      ],
+      "source_paths": [
+        "backend/routes/api.php",
+        "backend/app/Http/Controllers/FeedbackController.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Feedback availability/requirements conflict; some requested Owner/automation access contradicts current privacy/scope. No access broadened and no table dropped.",
+      "root_cause_status": "Preserved source has unavailable feedback endpoints. This suite combines incompatible Patient-only free-text and Owner/rating/automatic-follow-up contracts. The removal migration is held, so retained storage is not proof of a supported API.",
+      "ending_status": "Retained:11 failing cases and1 missing-record error in final1271 cohort",
+      "expected_behavior": "a patient submits free text about their own completed visit and the record is minimal and server derived. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Expected response status code [201] but received 404.\nFailed asserting that 404 is identical to 201.",
+      "route_literals_in_case": []
+    },
+    {
+      "test": "Tests\\Feature\\Feedback\\FeedbackTest::test_only_the_patients_own_completed_visits_are_eligible_and_every_other_case_is_one_indistinguishable_refusal",
+      "file": "backend/tests/Feature/Feedback/FeedbackTest.php",
+      "method": "test_only_the_patients_own_completed_visits_are_eligible_and_every_other_case_is_one_indistinguishable_refusal",
+      "original_failure_detail": "Expected response status code [422] but received 404.\nFailed asserting that 404 is identical to 422.",
+      "group": "feedback-unavailable-policy",
+      "severity": "Medium",
+      "related_original_qa_ids": [
+        "GEN-11"
+      ],
+      "source_paths": [
+        "backend/routes/api.php",
+        "backend/app/Http/Controllers/FeedbackController.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Feedback availability/requirements conflict; some requested Owner/automation access contradicts current privacy/scope. No access broadened and no table dropped.",
+      "root_cause_status": "Preserved source has unavailable feedback endpoints. This suite combines incompatible Patient-only free-text and Owner/rating/automatic-follow-up contracts. The removal migration is held, so retained storage is not proof of a supported API.",
+      "ending_status": "Retained:11 failing cases and1 missing-record error in final1271 cohort",
+      "expected_behavior": "only the patients own completed visits are eligible and every other case is one indistinguishable refusal. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Expected response status code [422] but received 404.\nFailed asserting that 404 is identical to 422.",
+      "route_literals_in_case": [
+        "/api/feedback/eligible-visits"
+      ]
+    },
+    {
+      "test": "Tests\\Feature\\Feedback\\FeedbackTest::test_the_text_is_bounded_free_data_and_every_authority_or_policy_field_is_refused",
+      "file": "backend/tests/Feature/Feedback/FeedbackTest.php",
+      "method": "test_the_text_is_bounded_free_data_and_every_authority_or_policy_field_is_refused",
+      "original_failure_detail": "null\nFailed asserting that 404 is identical to 422.\n\n/workspace/backend/tests/Feature/Feedback/FeedbackTest.php:166",
+      "group": "feedback-unavailable-policy",
+      "severity": "Medium",
+      "related_original_qa_ids": [
+        "GEN-11"
+      ],
+      "source_paths": [
+        "backend/routes/api.php",
+        "backend/app/Http/Controllers/FeedbackController.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Feedback availability/requirements conflict; some requested Owner/automation access contradicts current privacy/scope. No access broadened and no table dropped.",
+      "root_cause_status": "Preserved source has unavailable feedback endpoints. This suite combines incompatible Patient-only free-text and Owner/rating/automatic-follow-up contracts. The removal migration is held, so retained storage is not proof of a supported API.",
+      "ending_status": "Retained:11 failing cases and1 missing-record error in final1271 cohort",
+      "expected_behavior": "the text is bounded free data and every authority or policy field is refused. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "null\nFailed asserting that 404 is identical to 422.\n\n/workspace/backend/tests/Feature/Feedback/FeedbackTest.php:166",
+      "route_literals_in_case": [
+        "/api/feedback/mine"
+      ]
+    },
+    {
+      "test": "Tests\\Feature\\Feedback\\FeedbackTest::test_submission_is_idempotent_a_new_key_is_a_separate_submission_and_no_uniqueness_is_invented",
+      "file": "backend/tests/Feature/Feedback/FeedbackTest.php",
+      "method": "test_submission_is_idempotent_a_new_key_is_a_separate_submission_and_no_uniqueness_is_invented",
+      "original_failure_detail": "Expected response status code [201] but received 404.\nFailed asserting that 404 is identical to 201.",
+      "group": "feedback-unavailable-policy",
+      "severity": "Medium",
+      "related_original_qa_ids": [
+        "GEN-11"
+      ],
+      "source_paths": [
+        "backend/routes/api.php",
+        "backend/app/Http/Controllers/FeedbackController.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Feedback availability/requirements conflict; some requested Owner/automation access contradicts current privacy/scope. No access broadened and no table dropped.",
+      "root_cause_status": "Preserved source has unavailable feedback endpoints. This suite combines incompatible Patient-only free-text and Owner/rating/automatic-follow-up contracts. The removal migration is held, so retained storage is not proof of a supported API.",
+      "ending_status": "Retained:11 failing cases and1 missing-record error in final1271 cohort",
+      "expected_behavior": "submission is idempotent a new key is a separate submission and no uniqueness is invented. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Expected response status code [201] but received 404.\nFailed asserting that 404 is identical to 201.",
+      "route_literals_in_case": []
+    },
+    {
+      "test": "Tests\\Feature\\Feedback\\FeedbackTest::test_a_patient_reads_only_their_own_feedback_newest_first_with_a_cursor_that_reveals_nothing_about_others",
+      "file": "backend/tests/Feature/Feedback/FeedbackTest.php",
+      "method": "test_a_patient_reads_only_their_own_feedback_newest_first_with_a_cursor_that_reveals_nothing_about_others",
+      "original_failure_detail": "Expected response status code [200] but received 404.\nFailed asserting that 404 is identical to 200.",
+      "group": "feedback-unavailable-policy",
+      "severity": "Medium",
+      "related_original_qa_ids": [
+        "GEN-11"
+      ],
+      "source_paths": [
+        "backend/routes/api.php",
+        "backend/app/Http/Controllers/FeedbackController.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Feedback availability/requirements conflict; some requested Owner/automation access contradicts current privacy/scope. No access broadened and no table dropped.",
+      "root_cause_status": "Preserved source has unavailable feedback endpoints. This suite combines incompatible Patient-only free-text and Owner/rating/automatic-follow-up contracts. The removal migration is held, so retained storage is not proof of a supported API.",
+      "ending_status": "Retained:11 failing cases and1 missing-record error in final1271 cohort",
+      "expected_behavior": "a patient reads only their own feedback newest first with a cursor that reveals nothing about others. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Expected response status code [200] but received 404.\nFailed asserting that 404 is identical to 200.",
+      "route_literals_in_case": [
+        "/api/feedback/mine",
+        "/api/feedback/mine?",
+        "/api/feedback/mine?cursor=01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        "/api/feedback/mine?cursor={$foreign}",
+        "/api/feedback/mine?per_page=100",
+        "/api/feedback/mine?per_page=2",
+        "/api/feedback/mine?per_page=2&cursor=",
+        "/api/feedback?per_page=100"
+      ]
+    },
+    {
+      "test": "Tests\\Feature\\Feedback\\FeedbackTest::test_m26_is_a_foundation_only_no_rating_category_status_reply_publication_marketing_or_other_module_side_effect",
+      "file": "backend/tests/Feature/Feedback/FeedbackTest.php",
+      "method": "test_m26_is_a_foundation_only_no_rating_category_status_reply_publication_marketing_or_other_module_side_effect",
+      "original_failure_detail": "Expected response status code [201] but received 404.\nFailed asserting that 404 is identical to 201.",
+      "group": "feedback-unavailable-policy",
+      "severity": "Medium",
+      "related_original_qa_ids": [
+        "GEN-11"
+      ],
+      "source_paths": [
+        "backend/routes/api.php",
+        "backend/app/Http/Controllers/FeedbackController.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Feedback availability/requirements conflict; some requested Owner/automation access contradicts current privacy/scope. No access broadened and no table dropped.",
+      "root_cause_status": "Preserved source has unavailable feedback endpoints. This suite combines incompatible Patient-only free-text and Owner/rating/automatic-follow-up contracts. The removal migration is held, so retained storage is not proof of a supported API.",
+      "ending_status": "Retained:11 failing cases and1 missing-record error in final1271 cohort",
+      "expected_behavior": "m26 is a foundation only no rating category status reply publication marketing or other module side effect. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Expected response status code [201] but received 404.\nFailed asserting that 404 is identical to 201.",
+      "route_literals_in_case": []
+    },
+    {
+      "test": "Tests\\Feature\\Feedback\\FeedbackTest::test_submission_is_rate_limited_per_account_and_explains_itself",
+      "file": "backend/tests/Feature/Feedback/FeedbackTest.php",
+      "method": "test_submission_is_rate_limited_per_account_and_explains_itself",
+      "original_failure_detail": "Expected response status code [201] but received 404.\nFailed asserting that 404 is identical to 201.",
+      "group": "feedback-unavailable-policy",
+      "severity": "Medium",
+      "related_original_qa_ids": [
+        "GEN-11"
+      ],
+      "source_paths": [
+        "backend/routes/api.php",
+        "backend/app/Http/Controllers/FeedbackController.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Feedback availability/requirements conflict; some requested Owner/automation access contradicts current privacy/scope. No access broadened and no table dropped.",
+      "root_cause_status": "Preserved source has unavailable feedback endpoints. This suite combines incompatible Patient-only free-text and Owner/rating/automatic-follow-up contracts. The removal migration is held, so retained storage is not proof of a supported API.",
+      "ending_status": "Retained:11 failing cases and1 missing-record error in final1271 cohort",
+      "expected_behavior": "submission is rate limited per account and explains itself. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Expected response status code [201] but received 404.\nFailed asserting that 404 is identical to 201.",
+      "route_literals_in_case": []
+    },
+    {
+      "test": "Tests\\Feature\\Feedback\\FeedbackTest::test_patient_can_submit_1_to_5_star_rating_and_low_ratings_auto_create_followup_task",
+      "file": "backend/tests/Feature/Feedback/FeedbackTest.php",
+      "method": "test_patient_can_submit_1_to_5_star_rating_and_low_ratings_auto_create_followup_task",
+      "original_failure_detail": "Expected response status code [201] but received 404.\nFailed asserting that 404 is identical to 201.",
+      "group": "feedback-unavailable-policy",
+      "severity": "Medium",
+      "related_original_qa_ids": [
+        "GEN-11"
+      ],
+      "source_paths": [
+        "backend/routes/api.php",
+        "backend/app/Http/Controllers/FeedbackController.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Feedback availability/requirements conflict; some requested Owner/automation access contradicts current privacy/scope. No access broadened and no table dropped.",
+      "root_cause_status": "Preserved source has unavailable feedback endpoints. This suite combines incompatible Patient-only free-text and Owner/rating/automatic-follow-up contracts. The removal migration is held, so retained storage is not proof of a supported API.",
+      "ending_status": "Retained:11 failing cases and1 missing-record error in final1271 cohort",
+      "expected_behavior": "patient can submit 1 to 5 star rating and low ratings auto create followup task. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Expected response status code [201] but received 404.\nFailed asserting that 404 is identical to 201.",
+      "route_literals_in_case": []
+    },
+    {
+      "test": "Tests\\Feature\\Feedback\\FeedbackTest::test_owner_can_review_patient_feedback_with_branch_and_dentist_filters",
+      "file": "backend/tests/Feature/Feedback/FeedbackTest.php",
+      "method": "test_owner_can_review_patient_feedback_with_branch_and_dentist_filters",
+      "original_failure_detail": "Expected response status code [200] but received 404.\nFailed asserting that 404 is identical to 200.",
+      "group": "feedback-unavailable-policy",
+      "severity": "Medium",
+      "related_original_qa_ids": [
+        "GEN-11"
+      ],
+      "source_paths": [
+        "backend/routes/api.php",
+        "backend/app/Http/Controllers/FeedbackController.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Feedback availability/requirements conflict; some requested Owner/automation access contradicts current privacy/scope. No access broadened and no table dropped.",
+      "root_cause_status": "Preserved source has unavailable feedback endpoints. This suite combines incompatible Patient-only free-text and Owner/rating/automatic-follow-up contracts. The removal migration is held, so retained storage is not proof of a supported API.",
+      "ending_status": "Retained:11 failing cases and1 missing-record error in final1271 cohort",
+      "expected_behavior": "owner can review patient feedback with branch and dentist filters. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Expected response status code [200] but received 404.\nFailed asserting that 404 is identical to 200.",
+      "route_literals_in_case": [
+        "/api/feedback/review",
+        "/api/feedback/review?branch_id=",
+        "/api/feedback/review?rating=1"
+      ]
+    },
+    {
+      "test": "Tests\\Feature\\Queue\\QueueTest::test_backfill_uses_server_visits_only_is_idempotent_and_cannot_erase_history",
+      "file": "backend/tests/Feature/Queue/QueueTest.php",
+      "method": "test_backfill_uses_server_visits_only_is_idempotent_and_cannot_erase_history",
+      "original_failure_detail": "Failed asserting that two strings are identical.\n--- Expected\n+++ Actual\n@@ @@\n-'2026-09-28T09:20:00+08:00'\n+'2026-09-28T17:20:00+08:00'\n\n/workspace/backend/tests/Feature/Queue/QueueTest.php:447\n\nERRORS!\nTests: 1260, Assertions: 14435, Errors: 1, Failures: 37, Skipped: 3.\nLocal operation refused or failed; inspect the local logs. No other target was selected.",
+      "group": "queue-history-timestamp",
+      "severity": "Low",
+      "related_original_qa_ids": [
+        "STF-15",
+        "OWN-13"
+      ],
+      "source_paths": [
+        "backend/app/Services/Queue/QueueBackfill.php",
+        "backend/app/Models/VisitHistory.php"
+      ],
+      "environment": "Integration87, restricted application role; test-mail-profile suite; ASSISTANT_MODE=knowledge; real synthetic PostgreSQL55527",
+      "expected_vs_actual": "See expected_behavior, actual_behavior and unchanged original_failure_detail; authoritative policy reconciliation is explicit in root_cause_status.",
+      "baseline_source_result": "This exact case independently reproduced on BOTH Operations9409b59 (new87 schema target port55528) and Clinical407f0c6 (new83 schema target port55529). See SOURCE_COMPARISON JSON; not integration-only.",
+      "impact": "Fixture inserted09:20 without offset as UTC, then expected09:20Manila. Source backfill correctly copied that stored instant.",
+      "root_cause_status": "Raw Query Builder fixture bypassed offset-aware model dateFormat. Explicit ISO offset preserves the intended instant. Midnight model/raw/history/backfill readback proves production behavior without rewriting saved timestamps.",
+      "ending_status": "Passed focused60/38 and final1271 cohort",
+      "expected_behavior": "backfill uses server visits only is idempotent and cannot erase history. Exact failed assertion/expected value is retained in original_failure_detail.",
+      "actual_behavior": "Failed asserting that two strings are identical.\n--- Expected\n+++ Actual\n@@ @@\n-'2026-09-28T09:20:00+08:00'\n+'2026-09-28T17:20:00+08:00'\n\n/workspace/backend/tests/Feature/Queue/QueueTest.php:447\n\nERRORS!\nTests: 1260, Assertions: 14435, Errors: 1, Failures: 37, Skipped: 3.\nLocal operation refused or failed; inspect the local logs. No other target was selected.",
+      "route_literals_in_case": []
+    }
+  ],
+  "ending_cohort": {
+    "tests": 1271,
+    "assertions": 14619,
+    "failures": 26,
+    "errors": 1,
+    "skips": 3,
+    "passing": 1241,
+    "log": "dentalops-integration-20261117:/private/integration/logs/s01-backend-stable.log",
+    "original_failed_cases_corrected": 11,
+    "retained_original_failed_or_error_cases": 27,
+    "new_product_failures_in_final_cohort": 0
+  },
+  "additional_discoveries": [
+    {
+      "case": "Three local-capture cases in first expanded run",
+      "root": "Loopback capture service stopped at run start; corrected prerequisite.",
+      "classification": "Environment",
+      "evidence": "First expanded1268 run29fail/1error; focused19/305 after restart and stable1271 run contain no capture failures."
+    },
+    {
+      "case": "PrescriptionContentionTest final account_revoked scenario",
+      "root": "Independent scenarios consumed the same real30/min quota and got429 before reaching the intended lock.",
+      "classification": "Fixture",
+      "correction": "Shared synthetic parent/worker clock advances one minute per scenario. Production throttle unchanged; new direct30/31 quota and next-minute recovery test passes.",
+      "evidence": "Fresh clone4126d4dc:1test498assertions PASS; first two failed clone logs retained."
+    },
+    {
+      "case": "DependentCreationRecoveryTest::test_original_creation_receipt_and_current_ownership_are_not_name_matching",
+      "root": "PatientB had random factory DOB; a minor reached adult guardian validation422 before expected ownership404.",
+      "classification": "Nondeterministic fixture",
+      "correction": "Both ownership actors explicitly adult; separate minor known/unknown receipt parity/no-write test.",
+      "evidence": "Focused7/50 and final1271 cohort pass."
+    },
+    {
+      "case": "Same-day clinical history browser selection",
+      "root": "Two legitimate completed encounters on the same date had indistinguishable date-only review names.",
+      "classification": "Real existing UI identity ambiguity",
+      "correction": "Visible appointment/encounter reference and unique accessible encounter label; select exact public encounter identity, never first match.",
+      "evidence": "Full history browser lane PASS: same-day selection, immutable readback, wrong-Patient denial, delayed selection and six widths.",
+      "origin": "Existing starting integration component, introduced during prior integration history work; not a source-branch backend failure claim."
+    },
+    {
+      "case": "Pure Unit execution profile",
+      "root": "Blanket directory invocation refused by explicit-path runner; attaching real-target bootstrap to mocked scratch identities then caused54failures/4errors.",
+      "classification": "Execution profile",
+      "correction": "Reviewed16 pure PHPUnit classes run with autoload only, mocked databases and no real connection. Coarse migration guard remains unchanged.",
+      "evidence": "252tests/1193assertions PASS;30PHPUnit notices retained."
+    }
+  ]
+}

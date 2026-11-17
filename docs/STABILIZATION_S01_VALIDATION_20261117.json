@@ -1,0 +1,272 @@
+{
+  "starting_head": "0cf24b1f6a1d78d087d238d9573eeb5e02e9d8fc",
+  "sources": {
+    "operations": "9409b59e769de29ec0e58ab238b11d40fee29b45",
+    "clinical": "407f0c6b74ce44a7d955d4b897e6100e2bd80a51",
+    "baseline": "a0725e645df6f8266c2bc4bebacc9d62dd18e7c1"
+  },
+  "backend": {
+    "tests": 1271,
+    "assertions": 14619,
+    "failures": 26,
+    "errors": 1,
+    "skips": 3,
+    "passing": 1241,
+    "log": "dentalops-integration-20261117:/private/integration/logs/s01-backend-stable.log",
+    "original_failed_cases_corrected": 11,
+    "retained_original_failed_or_error_cases": 27,
+    "new_product_failures_in_final_cohort": 0
+  },
+  "retained_case_ids": [
+    "Tests\\Feature\\Feedback\\FeedbackTest::test_submitted_feedback_is_immutable_and_nothing_can_erase_it",
+    "Tests\\Feature\\Automation\\AutomationControlTest::test_unauthenticated_cannot_access_automation_endpoints",
+    "Tests\\Feature\\Automation\\AutomationControlTest::test_staff_and_dentist_and_patient_are_forbidden_from_automation",
+    "Tests\\Feature\\Automation\\AutomationControlTest::test_owner_can_view_automation_rules_and_snapshot",
+    "Tests\\Feature\\Automation\\AutomationControlTest::test_owner_can_trigger_manual_evaluation_and_audit_is_created",
+    "Tests\\Feature\\Automation\\AutomationControlTest::test_csv_export_neutralizes_formula_injection",
+    "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_the_api_marks_every_action_row_as_evaluation_only_and_keeps_historical_text_unchanged",
+    "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_refuses_clinical_flags_and_every_foreign_field",
+    "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_validates_each_rule_observation",
+    "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_the_manual_message_says_evaluated_not_executed_and_the_event_stores_no_email",
+    "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_only_the_owner_may_dispatch_and_authorization_precedes_validation",
+    "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_is_rate_limited",
+    "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_audit_events_carry_no_event_body_and_the_csv_marks_evaluation_only",
+    "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_legacy_descriptions_are_qualified_inside_the_csv_cell_and_in_the_exception_projection",
+    "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_repeated_manual_dispatches_are_independent_evaluations_with_no_idempotency_contract",
+    "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_refuses_unexpected_top_level_fields_too",
+    "Tests\\Feature\\Feedback\\FeedbackTest::test_the_feature_is_patient_only_and_owner_staff_dentist_and_guests_are_all_refused_everywhere",
+    "Tests\\Feature\\Feedback\\FeedbackTest::test_owner_can_review_feedback_with_filters",
+    "Tests\\Feature\\Feedback\\FeedbackTest::test_a_patient_submits_free_text_about_their_own_completed_visit_and_the_record_is_minimal_and_server_derived",
+    "Tests\\Feature\\Feedback\\FeedbackTest::test_only_the_patients_own_completed_visits_are_eligible_and_every_other_case_is_one_indistinguishable_refusal",
+    "Tests\\Feature\\Feedback\\FeedbackTest::test_the_text_is_bounded_free_data_and_every_authority_or_policy_field_is_refused",
+    "Tests\\Feature\\Feedback\\FeedbackTest::test_submission_is_idempotent_a_new_key_is_a_separate_submission_and_no_uniqueness_is_invented",
+    "Tests\\Feature\\Feedback\\FeedbackTest::test_a_patient_reads_only_their_own_feedback_newest_first_with_a_cursor_that_reveals_nothing_about_others",
+    "Tests\\Feature\\Feedback\\FeedbackTest::test_m26_is_a_foundation_only_no_rating_category_status_reply_publication_marketing_or_other_module_side_effect",
+    "Tests\\Feature\\Feedback\\FeedbackTest::test_submission_is_rate_limited_per_account_and_explains_itself",
+    "Tests\\Feature\\Feedback\\FeedbackTest::test_patient_can_submit_1_to_5_star_rating_and_low_ratings_auto_create_followup_task",
+    "Tests\\Feature\\Feedback\\FeedbackTest::test_owner_can_review_patient_feedback_with_branch_and_dentist_filters"
+  ],
+  "frontend": {
+    "tests": 2005,
+    "passed": 1997,
+    "failed": 0,
+    "skipped": 8
+  },
+  "unit": {
+    "tests": 252,
+    "assertions": 1193,
+    "failures": 0,
+    "errors": 0,
+    "phpunit_notices": 30,
+    "profile": "Pure PHPUnit mocks, vendor autoload only, no real database connection"
+  },
+  "python": {
+    "tests": 45,
+    "passed": 45
+  },
+  "smoke": "PASS",
+  "build": "PASS; existing >500kB chunk warning retained",
+  "browser": [
+    {
+      "lane": "queue",
+      "status": 0,
+      "evidence": "C:\\Users\\Joevan Delos Santos\\Downloads\\proj\\dentalops-s01-evidence-20261117\\browser\\queue",
+      "source": "stabilization-queue.browser.mjs"
+    },
+    {
+      "lane": "qa",
+      "status": 0,
+      "evidence": "C:\\Users\\Joevan Delos Santos\\Downloads\\proj\\dentalops-s01-evidence-20261117\\browser\\qa",
+      "source": "stabilization-original-qa.browser.mjs"
+    },
+    {
+      "lane": "ownerqa",
+      "status": 0,
+      "evidence": "C:\\Users\\Joevan Delos Santos\\Downloads\\proj\\dentalops-s01-evidence-20261117\\browser\\ownerqa",
+      "source": "stabilization-owner-qa.browser.mjs"
+    },
+    {
+      "lane": "visit",
+      "status": 0,
+      "evidence": "C:\\Users\\Joevan Delos Santos\\Downloads\\proj\\dentalops-s01-evidence-20261117\\browser\\visit",
+      "source": "local-visit.browser.mjs"
+    },
+    {
+      "lane": "operations",
+      "status": 0,
+      "evidence": "C:\\Users\\Joevan Delos Santos\\Downloads\\proj\\dentalops-s01-evidence-20261117\\browser\\operations",
+      "source": "integration-operations.browser.mjs"
+    },
+    {
+      "lane": "workforce",
+      "status": 0,
+      "evidence": "C:\\Users\\Joevan Delos Santos\\Downloads\\proj\\dentalops-s01-evidence-20261117\\browser\\workforce",
+      "source": "staff-roster-publication.browser.mjs"
+    },
+    {
+      "lane": "prescription",
+      "status": 0,
+      "evidence": "C:\\Users\\Joevan Delos Santos\\Downloads\\proj\\dentalops-s01-evidence-20261117\\browser\\prescription",
+      "source": "local-prescription.browser.mjs"
+    },
+    {
+      "lane": "receipts",
+      "status": 0,
+      "evidence": "C:\\Users\\Joevan Delos Santos\\Downloads\\proj\\dentalops-s01-evidence-20261117\\browser\\receipts",
+      "source": "local-receipt-navigation.browser.mjs"
+    },
+    {
+      "lane": "history",
+      "status": 0,
+      "evidence": "C:\\Users\\Joevan Delos Santos\\Downloads\\proj\\dentalops-s01-evidence-20261117\\browser\\history",
+      "source": "local-clinical-history.browser.mjs"
+    }
+  ],
+  "runtime_lab": {
+    "source": "/private/integration/target.json",
+    "lab": "/private/contention-833e2cdf/target.json",
+    "restore": "/private/contention-0ed4a267/target.json",
+    "schema_migrations_executed": 0,
+    "worker_failure_retry": true,
+    "interrupted_before_transport_ack": true,
+    "fresh_claim_not_stolen": true,
+    "stale_claim_recovered": true,
+    "postgresql_processors_observed_waiting_on_lock": 2,
+    "terminal_duplicate_suppressed": true,
+    "local_captures": 1,
+    "external_delivery_confirmed": false,
+    "private_document_hashes": {
+      "documents/01m7kw30xsm1dysd0vh3gd1z07/01m7kw31fvssas1zbh6scgd669.pdf": "da070908275915109d916892bcbe13181f97302a00bed2907a27a381fec5f9dd"
+    },
+    "restored_access_and_key_verified": true,
+    "scheduler_scope": "Source mail:process-due frequency only; clinical automations not executed",
+    "limitation": "At-least-once transport; a crash after SMTP acceptance can legitimately duplicate delivery."
+  },
+  "contention": {
+    "initial_nine": "Eight PASS; prescription quota fixture failure retained in private logs",
+    "prescription_final": {
+      "target": "/private/contention-4126d4dc/target.json",
+      "tests": 1,
+      "assertions": 498,
+      "result": "PASS"
+    },
+    "arrival_plus_branch_fifo_and_competing_moves": {
+      "target": "/private/contention-777ab230/target.json",
+      "tests": 1,
+      "assertions": 383,
+      "result": "PASS; both independent workers observed waiting on actual PostgreSQL locks; competing moves return200/409 with one audit/history event"
+    },
+    "remaining_lanes": [
+      "branch",
+      "inquiry",
+      "roster",
+      "leave",
+      "encounter",
+      "chart",
+      "cash"
+    ],
+    "all_nine_final_results": "PASS across retained focused final runs; not claimed a single fresh9/9 invocation"
+  },
+  "predefense": {
+    "failures": 5,
+    "warnings": 6,
+    "mode": "scripts/predefense-check.sh --local-only",
+    "lines": [
+      "FAIL  Queue worker is DOWN: emails are not sent",
+      "FAIL  No scheduler",
+      "WARN  External email delivery, payment provider and tunnel acceptance were not executed (local-only mode).",
+      "FAIL  No unpaid invoice to pay",
+      "FAIL  Branch phone or opening hours missing or placeholder: Synthetic Sprint 02 — not clinic hours",
+      "WARN  Roxas Dental Clinic Guiguinto: no email on file",
+      "WARN  Synthetic Sprint 02 — not clinic hours: no email on file",
+      "WARN  Assistant answers: none active",
+      "WARN  13 job(s) waiting in the queue",
+      "WARN  13 email(s) waiting to be sent",
+      "FAIL  13 email(s) stuck in the outbox for more than 10 minutes",
+      "Result: 5 FAIL, 6 WARN"
+    ]
+  },
+  "skipped_cases": [
+    "PreservationMigrationTest: explicit verify-schema lane only",
+    "LeaveRecoveryCapabilityTest: requires a retained85 profile without leave recovery",
+    "StaffRosterDraftCapabilityTest: requires a retained profile without drafts"
+  ],
+  "not_executed": "Unsafe legacy reset/rollback/backfill classes remain separately inventoried in INTEGRATION_REGRESSION_PATHS_20261117.json. No grant-profile migration/lifecycle cutover or full clinical scheduler run.",
+  "qa_totals": {
+    "local_complete": 25,
+    "partial": 32,
+    "blocked": 11,
+    "integrated_pass": 9,
+    "integrated_pending": 59
+  },
+  "source_sha256_lf": {
+    "backend/app/Http/Controllers/QueueController.php": "847eac63656858cf7826d24e5c0f703f167e4026903a2f4749b62cfbb12a1570",
+    "backend/app/Http/Resources/QueueEntryResource.php": "4883ece07aa9307987a39da0c47d3ebbb1a86c5dd604d57d8d8c5defe553cf19",
+    "backend/app/Services/Automations/NoShowDetection.php": "9d916fc83cf3e5d8360b1ebc87b92318871b08f6181b843212c9e5cf86efb672",
+    "backend/app/Services/Queue/QueueOrder.php": "8eb5ee714b64821d1bde6ceefe48b6c583792081fc0b415ba647d0c83d46ea45",
+    "backend/app/Services/Queue/QueueService.php": "0a457f435deb68a92911e0a80f173b06c00c54c3879e093ae4b5921bae47da12",
+    "backend/app/Services/Visits/VisitService.php": "c3d6e3f375ca916b39c0023ddea988f59f45a31ec32a2f87787142de78471949",
+    "backend/routes/api.php": "f061f7ee0bdcadb0054dba31ed5c9c30392bd1073a05936d1a58f28d3ae9f994",
+    "backend/tests/Feature/Assistant/AssistantTest.php": "9f09912dceac635185fe70056df113dbc39f1966f098702c36513744c2590d18",
+    "backend/tests/Feature/Assistant/GeminiAuthorizationTest.php": "92ad60077a2e6d835f46b966c7b7fbe42a0c519d1f4b2b6c0242e7abb4c942ea",
+    "backend/tests/Feature/Audit/AuditHardeningTest.php": "12bbde31aec59d63f5faceafe8aa144faa01dc79bf5f4154e434728c072165a7",
+    "backend/tests/Feature/Automations/InterviewRoundTwoTest.php": "2d2dcf1eb292cff17b8e6c8f73d55da30f31b33d2fcbe2e34cfd7562dcb382eb",
+    "backend/tests/Feature/Intake/DependentCreationRecoveryTest.php": "457f6d6ac6c6a25fd06b55ea2ef18458d7a9f08f8119061c9d70cec691fb0d22",
+    "backend/tests/Feature/Prescriptions/PrescriptionContentionTest.php": "4f807cce014e5359e7f93a62f537633964ee03f1800173f0d7c69668775f9a06",
+    "backend/tests/Feature/Prescriptions/PrescriptionTest.php": "628bbb1126dbf5bb254d64917718b91dc6887e3d9b99dce8fa6f025e9a7cd76e",
+    "backend/tests/Feature/Queue/QueueFifoAcceptanceTest.php": "b82c35f836f510ba872e16236c440a0b3b8a9aa2f338286122664624995f44cb",
+    "backend/tests/Feature/Queue/QueueTest.php": "d4337dfc9d5cad57419dd66ca005fac82b87cb4700f352d7986fe50746aaf53d",
+    "backend/tests/Feature/Queue/QueueTimestampSemanticsTest.php": "153151f8740c2fc6b2b2a38dcc8aae35c2995249a292deb9249065e7ba8634d6",
+    "backend/tests/Feature/Visits/ArrivalContentionTest.php": "a121fb852a0760eac338509b8312d6191da5e0f059c11a9d6784a646fdd6970b",
+    "backend/tests/Support/arrival_worker.php": "c7d4c1fec8d7b0b4686da402c0fa5adee76910324699e66d3cb0ce7e9bbd065e",
+    "backend/tests/Support/prescription_worker.php": "6d03233392b783ae77ca546166d43ca9a861025cf9260c41f6d13fcd5187d712",
+    "scripts/run-integration-browser.mjs": "ea249f40ef9fc5ec41c2fe557a20e58bfe34c8c2fffb3ecce037fee13a48d726",
+    "src/api-client.js": "2346a9ec2003e56302e6ed9c2a81a1c8ef40b31aeef7949c6cee32a534c95384",
+    "src/appointment-flow.js": "9db86d2719d918a959078e4a1d9a460d25a9e942dae732f3178d3ebe5af57760",
+    "src/pages/Admin.jsx": "95ddbe1eef308cb4e1ca12081d0b294f042e8bc3ce3ec1703967012124111572",
+    "src/pages/ClinicalHistory.jsx": "e67e3ab0d170e31d49da794fcb1fdea560d4ecfbd2290b78b202b4f7f831d536",
+    "src/pages/PatientFlow.jsx": "73afb65f74519e8b9ebf3bbdde2a9570bd1b529b8ada5b5a46ea52a386e235f2",
+    "src/pages/QueueOrderDialog.jsx": "863844efb1136675d3a51c9b3a0ff62c900cc69e5a88831d9f3493bfe87279e2",
+    "src/queue-api.js": "9dffa83ba5055553f3bf9571d3cb029ddb4902825bc660239846eaa70ac80592",
+    "tests/local-clinical-history.browser.mjs": "0aa138ea27c337be1ede7fb81327186700c36c2e40b17bb9243ff712e8979c36",
+    "tests/queue-branch-order.test.js": "5473ff6ef77fef79d7da03f2b578a30e70539912447e31678c8a77d2ed37ee3b",
+    "tests/stabilization-original-qa.browser.mjs": "c143cc9e118f494f09ce535e3798d74cdac62b00006783634231f6ca0394468e",
+    "tests/stabilization-owner-qa.browser.mjs": "e8e16cbac8e7d09516dc2da1c0d88ff536d332ea66a36e32fc0e8596e51563f2",
+    "tests/stabilization-queue.browser.mjs": "a06376f9c4af91afb0cd313ff4d03a44f014c56a6151709ff1eb663041c5f68d",
+    "tests/ui-foundation.test.js": "34f699ceea123b3f7fe1fa7246a3780e45858669db7bc8d36011dd131e9f004e"
+  },
+  "evidence_note": "Initial Temp browser artifacts were unavailable at a later check. All nine lanes were rerun successfully and preserved in the ACL-restricted durable sibling directory. Generated support credentials remain private and outside Git. Tested dirty source is linked by normalized file hashes; report/commits do not claim the starting SHA alone contains these changes.",
+  "product_test_checkpoint": "540f932bc873ed61ff08968438d6d138ed19f726",
+  "original_bundle": {
+    "path": "../dentalops-local-backups/joevan-source-20261116-round9-9409b59.bundle",
+    "sha256": "eb06e1e7f642ee7a7136eadf3e0b82408b9ae9992c2c810ebc20f819758756f7",
+    "verified_complete_history": true,
+    "unchanged": true
+  },
+  "syntax": {
+    "changed_php_files": 20,
+    "result": "PASS",
+    "changed_js_mjs": "node --check PASS",
+    "jsx": "Vite build PASS",
+    "branding_assets": "both unchanged",
+    "credential_scan": "0 findings; private generated credentials outside Git"
+  },
+  "local_commits": [
+    [
+      "c795c66af9820704dcfc94165fd92689472fb1c0",
+      "test: isolate inherited regression fixtures and preserve real quotas"
+    ],
+    [
+      "6b60b3a15d705e45959a557cac47cf21ca017d92",
+      "fix(queue): preserve branch FIFO with audited and revocation-safe moves"
+    ],
+    [
+      "3f66390ca3ce9b7bf7948472dfb43713886b4633",
+      "fix(history): distinguish completed encounters on the same clinic date"
+    ],
+    [
+      "540f932bc873ed61ff08968438d6d138ed19f726",
+      "fix(owner): page service selections in a complete responsive two-by-two grid"
+    ]
+  ]
+}

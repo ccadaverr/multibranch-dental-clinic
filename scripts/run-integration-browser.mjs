@@ -4,6 +4,7 @@ import {execFileSync,spawnSync} from 'node:child_process'
 import {mkdirSync,readFileSync,writeFileSync} from 'node:fs'
 import {resolve,join} from 'node:path'
 import {tmpdir} from 'node:os'
+import {createHash} from 'node:crypto'
 import {pathToFileURL} from 'node:url'
 const container='dentalops-integration-20261117',manifest='/private/integration/target.json'
 const run=(...args)=>execFileSync('docker',['exec',container,...args],{encoding:'utf8'})
@@ -11,7 +12,7 @@ const status=JSON.parse(run('python3','scripts/local-system.py','--target',manif
 assert.equal(status.classification,'owned isolated development');assert.equal(status.appliedMigrations,87);assert.equal(status.held.length,4)
 const actual=JSON.parse(run('cat',manifest));assert.equal(actual.root,'/workspace');assert.equal(actual.runtime,'/private/integration');assert.equal(actual.reviewed_proposal,undefined)
 const lane=process.argv[2]||'visit'
-const files={visit:'local-visit.browser.mjs',prescription:'local-prescription.browser.mjs',operations:'integration-operations.browser.mjs',workforce:'staff-roster-publication.browser.mjs',receipts:'local-receipt-navigation.browser.mjs',history:'local-clinical-history.browser.mjs'}
+const files={visit:'local-visit.browser.mjs',prescription:'local-prescription.browser.mjs',operations:'integration-operations.browser.mjs',workforce:'staff-roster-publication.browser.mjs',receipts:'local-receipt-navigation.browser.mjs',history:'local-clinical-history.browser.mjs',queue:'stabilization-queue.browser.mjs',qa:'stabilization-original-qa.browser.mjs',ownerqa:'stabilization-owner-qa.browser.mjs'}
 assert(files[lane],'Choose a listed integration acceptance lane; no arbitrary script execution')
 const root=resolve(process.env.INTEGRATION_BROWSER_EVIDENCE||join(tmpdir(),'dentalops-integration-browser-20261117'))
 mkdirSync(root,{recursive:true,mode:0o700});const evidence=join(root,lane);mkdirSync(evidence,{recursive:true,mode:0o700})
@@ -47,7 +48,9 @@ const script=join(root,lane+'.mjs');writeFileSync(script,source,{mode:0o600})
 const log=join(evidence,'browser.log');const result=spawnSync(process.execPath,[script,module],{env:{...process.env,LOCAL_SYSTEM_EVIDENCE:evidence,LOCAL_VISIT_DROP_PAYMENT_RESPONSE:'1'},encoding:'utf8',timeout:240000,maxBuffer:8*1024*1024})
 writeFileSync(log,(result.stdout||'')+(result.stderr||''),{mode:0o600})
 const sha=execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim()
-writeFileSync(join(evidence,'run.json'),JSON.stringify({candidate:sha,lane,status:result.status,source:files[lane],adapter:'Host origins and private artifact paths only; original assertion source unchanged',api:'http://127.0.0.1:8124',ui:'http://127.0.0.1:5198',executionTarget:{host:actual.host,port:actual.port,runtime:actual.runtime},error:result.error?.code||null},null,2),{mode:0o600})
+const sourcePaths=['backend/app/Services/Queue/QueueOrder.php','backend/app/Services/Queue/QueueService.php','backend/app/Services/Visits/VisitService.php','backend/app/Http/Controllers/QueueController.php','backend/app/Http/Resources/QueueEntryResource.php','backend/routes/api.php','src/api-client.js','src/queue-api.js','src/appointment-flow.js','src/pages/PatientFlow.jsx','src/pages/QueueOrderDialog.jsx','tests/'+files[lane]]
+const sourceSha256=Object.fromEntries(sourcePaths.map(path=>[path,createHash('sha256').update(readFileSync(resolve(path),'utf8').replaceAll('\r\n','\n')).digest('hex')]))
+writeFileSync(join(evidence,'run.json'),JSON.stringify({candidate:sha,workingTreeDirty:!!execFileSync('git',['status','--porcelain'],{encoding:'utf8'}).trim(),sourceSha256,lane,status:result.status,source:files[lane],adapter:'Host origins and private artifact paths only; original assertion source unchanged',api:'http://127.0.0.1:8124',ui:'http://127.0.0.1:5198',executionTarget:{host:actual.host,port:actual.port,runtime:actual.runtime},error:result.error?.code||null},null,2),{mode:0o600})
 console.log('Integration browser',lane,'exit',result.status,'evidence',evidence)
 for(const line of (result.stdout||'').split('\n').filter(s=>s.startsWith('PASS ')))console.log(line)
 if(result.status!==0)console.log((result.stderr||'').slice(-1400))

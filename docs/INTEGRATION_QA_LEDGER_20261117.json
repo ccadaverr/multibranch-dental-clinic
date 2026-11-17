@@ -6,8 +6,8 @@
     "local_complete": 25,
     "partial": 32,
     "blocked": 11,
-    "integrated_pass": 4,
-    "integrated_pending": 64
+    "integrated_pass": 9,
+    "integrated_pending": 59
   },
   "rows": [
     {
@@ -43,14 +43,14 @@
       "original_owner": "Celin",
       "exact_criterion_and_tasks": "Notif button has no outline in default, hover, and click states on every dashboard.<br>Original tasks: Remove the outline/border on the notification button in all dashboards; Keep an accessible focus indicator that is not a heavy outline (e.g. subtle focus ring on keyboard focus only) `FINALS-QA-REVISIONS.md:429`",
       "responsible_domain": "Jaztin Clinical/Patient; Joevan shared-role partner",
-      "source_evidence": "Already implemented and verified. [A10](GEN10_A10_NOTIFICATION_ACCEPTANCE.md); `253cac0`",
-      "focused_test_evidence": "Dated historical acceptance only; Fictional Shell bell at 1440/390: borderless presentation, hover fill, focus-visible, count and keyboard open/close; Existing borderless bell retained; focus-visible outline remains for accessibility. Scoped presentation only; no production delivery acceptance.",
+      "source_evidence": "src/foundation.css; src/layout.jsx; src/patient/Portal.jsx",
+      "focused_test_evidence": "All four dashboards at six widths: no bell border/outline in normal, hover or pointer-click states; 2px keyboard-only focus indicator and Enter activation",
       "current_status": "Complete",
-      "remaining_requirements_and_next_action": "Revalidate all-role default/hover/keyboard bell behavior on the integrated shell; preserve focus accessibility.",
-      "integrated_acceptance": "Pending",
-      "integration_evidence": "PENDING: full original criterion not accepted on the combined candidate. Both exact sources are now available; passing subsets do not close this row.",
-      "local_acceptance": "Provisional bounded local/historical acceptance; integrated acceptance pending.",
-      "blockers": "No additional policy/reproduction blocker established; all-role or item-specific acceptance/source reconciliation pending."
+      "remaining_requirements_and_next_action": "No unmet subcriterion observed for this original item. Preserve focused regressions; this does not certify broader accessibility or deployment readiness.",
+      "integrated_acceptance": "Pass",
+      "integration_evidence": "Sprint01 real synthetic integration target55527: All four dashboards at six widths: no bell border/outline in normal, hover or pointer-click states; 2px keyboard-only focus indicator and Enter activation. Browser source: tests/stabilization-original-qa.browser.mjs; durable private results: C:\\Users\\Joevan Delos Santos\\Downloads\\proj\\dentalops-s01-evidence-20261117\\browser\\qa\\results.json. See STABILIZATION_S01_ACCEPTANCE_20261117.md.",
+      "local_acceptance": "Complete original criterion executed on the combined candidate; no longer based only on inherited provisional evidence.",
+      "blockers": "None for this criterion."
     },
     {
       "original_id": "GEN-04",
@@ -337,14 +337,14 @@
       "original_owner": "Celin",
       "exact_criterion_and_tasks": "Check in has a single refresh and it works.<br>Original tasks: Find the two refresh controls/triggers on Check in; Remove the duplicate; keep one icon refresh (GEN-13) `FINALS-QA-REVISIONS.md:500`",
       "responsible_domain": "Jaztin Clinical/Patient; Joevan shared-role partner",
-      "source_evidence": "src/pages/PatientFlow.jsx",
-      "focused_test_evidence": "Batch 02 single refresh and actual arrival browser acceptance; prior evidence, not rerun here.",
+      "source_evidence": "src/pages/PatientFlow.jsx; src/components.jsx; src/store.jsx",
+      "focused_test_evidence": "One icon Refresh on Check-In at all six widths; keyboard activation reloads the authorized queue from Laravel",
       "current_status": "Complete",
-      "remaining_requirements_and_next_action": "Retain one working refresh on Check-In and request ownership; integrate without duplicate controls.",
-      "integrated_acceptance": "Pending",
-      "integration_evidence": "PENDING: full original criterion not accepted on the combined candidate. Both exact sources are now available; passing subsets do not close this row.",
-      "local_acceptance": "Provisional bounded local/historical acceptance; integrated acceptance pending.",
-      "blockers": "No additional policy/reproduction blocker established; all-role or item-specific acceptance/source reconciliation pending."
+      "remaining_requirements_and_next_action": "No unmet subcriterion observed for this original item. Preserve focused regressions; this does not certify broader accessibility or deployment readiness.",
+      "integrated_acceptance": "Pass",
+      "integration_evidence": "Sprint01 real synthetic integration target55527: One icon Refresh on Check-In at all six widths; keyboard activation reloads the authorized queue from Laravel. Browser source: tests/stabilization-original-qa.browser.mjs; durable private results: C:\\Users\\Joevan Delos Santos\\Downloads\\proj\\dentalops-s01-evidence-20261117\\browser\\qa\\results.json. See STABILIZATION_S01_ACCEPTANCE_20261117.md.",
+      "local_acceptance": "Complete original criterion executed on the combined candidate; no longer based only on inherited provisional evidence.",
+      "blockers": "None for this criterion."
     },
     {
       "original_id": "STF-11",
@@ -365,14 +365,14 @@
       "original_owner": "Celin",
       "exact_criterion_and_tasks": "One field finds and selects a walk-in patient; the separate dropdown is gone.<br>Original tasks: Merge the \"find patient\" textbox and the patient dropdown into one searchable combobox; Type-ahead results (name/phone), keyboard navigable, selects patient in one step `FINALS-QA-REVISIONS.md:508`",
       "responsible_domain": "Jaztin Clinical/Patient; Joevan shared-role partner",
-      "source_evidence": "src/pages/PatientFlow.jsx",
-      "focused_test_evidence": "Batch 02 real selected existing-Patient walk-in and keyboard combobox; registration/admission policy not included.",
+      "source_evidence": "src/pages/PatientFlow.jsx; src/store.jsx; backend/app/Http/Controllers/PatientDirectoryController.php",
+      "focused_test_evidence": "One searchable Patient combobox; actual name and phone endpoint results, ArrowDown/Enter selection, exact Patient identity, clear/reselect and six-width acceptance",
       "current_status": "Complete",
-      "remaining_requirements_and_next_action": "Retain one keyboard searchable Patient combobox and exact selection; separate STF-13 create/admit remains gated.",
-      "integrated_acceptance": "Pending",
-      "integration_evidence": "PENDING: full original criterion not accepted on the combined candidate. Both exact sources are now available; passing subsets do not close this row.",
-      "local_acceptance": "Provisional bounded local/historical acceptance; integrated acceptance pending.",
-      "blockers": "No additional policy/reproduction blocker established; all-role or item-specific acceptance/source reconciliation pending."
+      "remaining_requirements_and_next_action": "No unmet subcriterion observed for this original item. Preserve focused regressions; this does not certify broader accessibility or deployment readiness.",
+      "integrated_acceptance": "Pass",
+      "integration_evidence": "Sprint01 real synthetic integration target55527: One searchable Patient combobox; actual name and phone endpoint results, ArrowDown/Enter selection, exact Patient identity, clear/reselect and six-width acceptance. Browser source: tests/stabilization-original-qa.browser.mjs; durable private results: C:\\Users\\Joevan Delos Santos\\Downloads\\proj\\dentalops-s01-evidence-20261117\\browser\\qa\\results.json. See STABILIZATION_S01_ACCEPTANCE_20261117.md.",
+      "local_acceptance": "Complete original criterion executed on the combined candidate; no longer based only on inherited provisional evidence.",
+      "blockers": "None for this criterion."
     },
     {
       "original_id": "STF-13",
@@ -400,7 +400,8 @@
       "integrated_acceptance": "Pending",
       "integration_evidence": "PENDING: full original criterion not accepted on the combined candidate. Both exact sources are now available; passing subsets do not close this row.",
       "local_acceptance": "Unfinished: policy/reproduction gate prevents full local acceptance.",
-      "blockers": "Owner/domain review: loss-safe queue vocabulary mapping; preserve immutable histories and Served as treatment start; held migration blocked."
+      "blockers": "Owner/domain review: loss-safe queue vocabulary mapping; preserve immutable histories and Served as treatment start; held migration blocked.",
+      "stabilization_s01_evidence": "Branch FIFO, equal-time tie-breaker, audited explicit move, stale/revoked refusal, treatment-start semantics and retained history verified in QueueFifoAcceptanceTest and real browser/race lanes. Whole criterion remains open: held status conversion/urgent-removal requirements are not executed or accepted."
     },
     {
       "original_id": "STF-15",
@@ -414,7 +415,8 @@
       "integrated_acceptance": "Pending",
       "integration_evidence": "PENDING: full original criterion not accepted on the combined candidate. Both exact sources are now available; passing subsets do not close this row.",
       "local_acceptance": "Unfinished: policy/reproduction gate prevents full local acceptance.",
-      "blockers": "Owner/domain review: arrival ordering versus existing priority semantics and preservation of historical priority; held migration blocked."
+      "blockers": "Owner/domain review: arrival ordering versus existing priority semantics and preservation of historical priority; held migration blocked.",
+      "stabilization_s01_evidence": "Branch FIFO, equal-time tie-breaker, audited explicit move, stale/revoked refusal, treatment-start semantics and retained history verified in QueueFifoAcceptanceTest and real browser/race lanes. Whole criterion remains open: held status conversion/urgent-removal requirements are not executed or accepted."
     },
     {
       "original_id": "STF-16",
@@ -841,28 +843,28 @@
       "original_owner": "Richmon",
       "exact_criterion_and_tasks": "Closed is a button with a clear active state.<br>Original tasks: Replace the \"Closed\" checkbox with a button/toggle button with clear on/off state `FINALS-QA-REVISIONS.md:958`",
       "responsible_domain": "Joevan Operations/Workforce; Jaztin reviews clinical boundary",
-      "source_evidence": "Implemented and verified. [A3](OWNER_BRANCH_A3_ACCEPTANCE.md); [08ec129](https://github.com/ccadaverr/multibranch-dental-clinic/commit/08ec129668cef58c32ce82ae8dfc98e254f40eda)",
-      "focused_test_evidence": "Dated historical acceptance only; 35 frontend; 6 final branch API tests/49 assertions; 1440/390 rendered; Update-only management; OSM tiles blocked during fixture test; not branch creation/live map availability. Joevan implementation/test evidence is provisional here until approved source delivery and independent inspection.",
+      "source_evidence": "src/pages/Admin.jsx; backend/app/Http/Controllers/Reference/BranchController.php",
+      "focused_test_evidence": "Closed is an aria-pressed button; six-width keyboard toggles, Owner publication persists across reload, and the exact starting synthetic hours are restored through UI",
       "current_status": "Complete",
-      "remaining_requirements_and_next_action": "Retain historical accepted Closed toggle and authoritative persisted readback.",
-      "integrated_acceptance": "Pending",
-      "integration_evidence": "PENDING: full original criterion not accepted on the combined candidate. Both exact sources are now available; passing subsets do not close this row.",
-      "local_acceptance": "Provisional bounded local/historical acceptance; integrated acceptance pending.",
-      "blockers": "Source-delivery gate resolved November17; criterion-specific verification remains required. Other policy/reproduction limits in this row remain."
+      "remaining_requirements_and_next_action": "No unmet subcriterion observed for this original item. Preserve focused regressions; this does not certify broader accessibility or deployment readiness.",
+      "integrated_acceptance": "Pass",
+      "integration_evidence": "Sprint01 real synthetic integration target55527: Closed is an aria-pressed button; six-width keyboard toggles, Owner publication persists across reload, and the exact starting synthetic hours are restored through UI. Browser source: tests/stabilization-owner-qa.browser.mjs; durable private results: C:\\Users\\Joevan Delos Santos\\Downloads\\proj\\dentalops-s01-evidence-20261117\\browser\\ownerqa\\results.json. See STABILIZATION_S01_ACCEPTANCE_20261117.md.",
+      "local_acceptance": "Complete original criterion executed on the combined candidate; no longer based only on inherited provisional evidence.",
+      "blockers": "None for this criterion."
     },
     {
       "original_id": "OWN-06",
       "original_owner": "Richmon",
       "exact_criterion_and_tasks": "Services display in a 2x2 grid on desktop.<br>Original tasks: Lay out services in a 2x2 grid; make it responsive `FINALS-QA-REVISIONS.md:965`",
       "responsible_domain": "Joevan Operations/Workforce; Jaztin reviews clinical boundary",
-      "source_evidence": "Implemented and verified. [A3](OWNER_BRANCH_A3_ACCEPTANCE.md); [08ec129](https://github.com/ccadaverr/multibranch-dental-clinic/commit/08ec129668cef58c32ce82ae8dfc98e254f40eda)",
-      "focused_test_evidence": "Dated historical acceptance only; 35 frontend; 6 final branch API tests/49 assertions; 1440/390 rendered; Update-only management; OSM tiles blocked during fixture test; not branch creation/live map availability. Joevan implementation/test evidence is provisional here until approved source delivery and independent inspection.",
+      "source_evidence": "src/pages/Admin.jsx; src/foundation.css; src/reference-data-bridge.js; backend/app/Http/Controllers/Reference/BranchServiceController.php",
+      "focused_test_evidence": "Exact four-service pages,2x2 full desktop pages, phone column, all11 catalog services reachable without duplication; keyboard paging; real Owner service toggle persists across pages through POST/GET and is restored. Earlier two-column-only implementation was corrected before acceptance.",
       "current_status": "Complete",
-      "remaining_requirements_and_next_action": "Retain historical accepted responsive 2x2 service layout.",
-      "integrated_acceptance": "Pending",
-      "integration_evidence": "PENDING: full original criterion not accepted on the combined candidate. Both exact sources are now available; passing subsets do not close this row.",
-      "local_acceptance": "Provisional bounded local/historical acceptance; integrated acceptance pending.",
-      "blockers": "Source-delivery gate resolved November17; criterion-specific verification remains required. Other policy/reproduction limits in this row remain."
+      "remaining_requirements_and_next_action": "No unmet subcriterion observed for this original item. Preserve focused regressions; this does not certify broader accessibility or deployment readiness.",
+      "integrated_acceptance": "Pass",
+      "integration_evidence": "Sprint01 real synthetic integration target55527: Four-service pages form an exact 2x2 desktop/tablet grid and one phone column at six widths; all catalog services remain reachable and selection persists through API/readback across pages. Browser source: tests/stabilization-owner-qa.browser.mjs; durable private results: C:\\Users\\Joevan Delos Santos\\Downloads\\proj\\dentalops-s01-evidence-20261117\\browser\\ownerqa\\results.json. See STABILIZATION_S01_ACCEPTANCE_20261117.md.",
+      "local_acceptance": "Complete original criterion executed on the combined candidate; no longer based only on inherited provisional evidence.",
+      "blockers": "None for this criterion."
     },
     {
       "original_id": "OWN-07",
@@ -960,7 +962,25 @@
       "integrated_acceptance": "Pending",
       "integration_evidence": "PENDING: full original criterion not accepted on the combined candidate. Both exact sources are now available; passing subsets do not close this row.",
       "local_acceptance": "Unfinished: only cited subsets accepted; original tasks remain incomplete.",
-      "blockers": "Source-delivery gate resolved November17; criterion-specific verification remains required. Other policy/reproduction limits in this row remain."
+      "blockers": "Source-delivery gate resolved November17; criterion-specific verification remains required. Other policy/reproduction limits in this row remain.",
+      "stabilization_s01_evidence": "Branch FIFO, equal-time tie-breaker, audited explicit move, stale/revoked refusal, treatment-start semantics and retained history verified in QueueFifoAcceptanceTest and real browser/race lanes. Whole criterion remains open: held status conversion/urgent-removal requirements are not executed or accepted."
     }
-  ]
+  ],
+  "stabilization_s01": {
+    "starting_head": "0cf24b1f6a1d78d087d238d9573eeb5e02e9d8fc",
+    "new_integrated_ids": [
+      "GEN-03",
+      "STF-10",
+      "STF-12",
+      "OWN-05",
+      "OWN-06"
+    ],
+    "preserved_integrated_ids": [
+      "OWN-02",
+      "STF-09",
+      "STF-20",
+      "OWN-11"
+    ],
+    "inherited_locally_complete_without_full_integrated_acceptance": 16
+  }
 }
