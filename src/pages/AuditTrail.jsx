@@ -5,6 +5,7 @@ import { fetchAuditLogs, requestAuditLogsCsv } from '../audit-api.js'
 import { saveClinicCsv } from '../clinic-csv.js'
 import { me } from '../api-client.js'
 import { canAccessPage } from '../safeguards.js'
+import { addDays, clinicDate } from '../clock.js'
 
 export function AuditTrailPage({ store }) {
   const session=store.session,auth=store.getAuthGeneration?.()
@@ -29,6 +30,7 @@ function AuditLifetime({ store }) {
   const [dateTo, setDateTo] = useState('')
   const [selection, setInspectLog] = useState(null)
   const [target, setTarget] = useState(null)
+  const recordFilterStatus = useRef(null)
   const [loadedKey,setLoadedKey]=useState(null),[action,setAction]=useState('')
   const epoch=useRef(0),mounted=useRef(false),morePending=useRef(false),exportRequest=useRef(null),currentKey=useRef('')
   const auth=store.getAuthGeneration?.()
@@ -70,6 +72,21 @@ function AuditLifetime({ store }) {
     setStatus('loading')
     setAttempt(current => current + 1)
   }
+
+  const filterToRecord = ({ auditableType, auditableId }) => {
+    setTarget({ type: auditableType, id: auditableId })
+    setInspectLog(null)
+  }
+
+  const applyDateRange = (days) => {
+    const today = clinicDate()
+    setDateFrom(addDays(today, 1 - days))
+    setDateTo(today)
+  }
+
+  useEffect(() => {
+    if (target) recordFilterStatus.current?.focus()
+  }, [target])
 
   // Debounced server query. A response for an older filter set is discarded, and a failure is an explicit error with Retry:
   // never an empty list and never browser-held or demo activity.
@@ -209,7 +226,9 @@ function AuditLifetime({ store }) {
         <Field label="Operational activity"><select aria-label="Operational activity" value={action} onChange={e=>setAction(e.target.value)}><option value="">All authorized audit events</option><option value="notification.archived">Notification archive activity (metadata only)</option><option value="staff_profile.updated">Staff profile changes</option><option value="staff_roster.draft_saved">Dated Staff draft preparation</option><option value="staff_roster.saved">Staff roster drafts and requests</option><option value="staff_roster.approved">Staff roster approvals</option><option value="staff_roster.published">Staff roster publications</option></select></Field>
         {action==='notification.archived'&&<Notice>Archive activity shows who archived a notification and when. Notification contents remain private to their recipient. This view cannot restore or delete records.</Notice>}
         {target && <div className="row-actions">
-          <span role="status">Record filter: {target.type} <code>{target.id}</code></span>
+          <span role="status" tabIndex={-1} ref={recordFilterStatus} style={{ overflowWrap: 'anywhere' }}>
+            Record filter: {target.type} <code>{target.id}</code>
+          </span>
           <Button size="sm" variant="ghost" onClick={() => setTarget(null)}>Clear record filter</Button>
         </div>}
         <FilterBar
@@ -268,6 +287,10 @@ function AuditLifetime({ store }) {
           } : null}
         />
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginTop: '12px', flexWrap: 'wrap', paddingTop: '10px', borderTop: '1px solid var(--line)' }}>
+          <div role="group" aria-label="Manila date shortcuts" className="row-actions">
+            <Button variant="soft" onClick={() => applyDateRange(1)}>Today</Button>
+            <Button variant="soft" onClick={() => applyDateRange(7)}>Last 7 days</Button>
+          </div>
           <label style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ fontWeight: '600', color: 'var(--muted)' }}>From:</span>
             <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid var(--line)', fontSize: '13px' }}/>
@@ -368,9 +391,15 @@ function AuditLifetime({ store }) {
                   key: 'actions',
                   label: 'Details',
                   render: l => (
-                    <Button size="sm" variant="ghost" onClick={() => setInspectLog(l)}>
-                      Inspect
-                    </Button>
+                    <div className="row-actions">
+                      <Button size="sm" variant="ghost" onClick={() => setInspectLog(l)}>Inspect</Button>
+                      {l.auditableType && l.auditableId && (target?.type !== l.auditableType || target?.id !== l.auditableId) && (
+                        <Button variant="ghost" onClick={() => filterToRecord(l)}
+                          aria-label={`Show record history for ${l.auditableType} ${l.auditableId}`}>
+                          Record history
+                        </Button>
+                      )}
+                    </div>
                   ),
                 },
               ]}
@@ -442,10 +471,7 @@ function AuditLifetime({ store }) {
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
               {inspectLog.auditableType && inspectLog.auditableId && (
-                <Button variant="soft" onClick={() => {
-                  setTarget({ type: inspectLog.auditableType, id: inspectLog.auditableId })
-                  setInspectLog(null)
-                }}>Filter to this record</Button>
+                <Button variant="soft" onClick={() => filterToRecord(inspectLog)}>Filter to this record</Button>
               )}
               <Button onClick={() => setInspectLog(null)}>Close</Button>
             </div>
