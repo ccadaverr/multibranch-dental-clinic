@@ -254,7 +254,7 @@ export function appointmentAvailability(params) { return request(`/api/appointme
 export function appointmentRecommendation(params) { return request(`/api/appointments/recommendation${query(params)}`) }
 export function createAppointment(payload, key, beforeDispatch) { return command('/api/appointments', payload, key, beforeDispatch) }
 export function rescheduleAppointment(id, payload, key) { return command(`/api/appointments/${encodeURIComponent(id)}/reschedule`, payload, key) }
-export function cancelAppointmentRemote(id, payload, key) { return command(`/api/appointments/${encodeURIComponent(id)}/cancel`, payload, key) }
+export function cancelAppointmentRemote(id, payload, key, beforeDispatch) { return command(`/api/appointments/${encodeURIComponent(id)}/cancel`, payload, key, beforeDispatch) }
 // Appointment-only lifecycle command: the pre-arrival 'no-show' (Check-In and treatment progression are Visit commands).
 export function transitionAppointment(id, name, payload, key) { return command(`/api/appointments/${encodeURIComponent(id)}/${encodeURIComponent(name)}`, payload, key) }
 // Minimal M4 Patient directory (Staff/Owner selection) and front-desk registration (Person + Patient, no login).

@@ -56,12 +56,14 @@ export async function loadConversations(cursor = null, search = '') {
 }
 
 /** Find only a conversation the server exposed to this actor, then verify both Patient and branch identity. */
-export async function findPatientConversation(patientId, branchId, patientCode) {
+export async function findPatientConversation(patientId, branchId, patientCode, isCurrent = () => true) {
   if (!patientId || !branchId || !patientCode) return { ok: true, conversation: null }
   let cursor = null
   const seen = new Set()
   do {
+    if(!isCurrent())return {ok:false,kind:'superseded'}
     const result = await loadConversations(cursor, patientCode)
+    if(!isCurrent())return {ok:false,kind:'superseded'}
     if (!result.ok) return result
     const conversation = result.rows.find(row => row.patientId === patientId && row.branchId === branchId)
     if (conversation) return { ok: true, conversation }

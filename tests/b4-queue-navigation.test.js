@@ -33,14 +33,25 @@ test('missing, mismatched, and failed conversation reads never return another Pa
   assert.deepEqual([mapConversation(conversation('right', 'p1', 'b1')).patientId, mapConversation(conversation('right', 'p1', 'b1')).branchId], ['p1', 'b1'])
 })
 
+test('obsolete queue message lookup stops before another page or navigation result',async()=>{
+ let current=true
+ globalThis.fetch=async url=>{calls.push(String(url));current=false;return json(200,{data:[],meta:{next_cursor:'older'}})}
+ assert.equal((await findPatientConversation('p1','b1','P-100',()=>current)).kind,'superseded')
+ assert.equal(calls.length,1)
+ assert.equal((await findPatientConversation('p1','b1','P-100',()=>current)).kind,'superseded')
+ assert.equal(calls.length,1)
+})
+
 test('Live Queue rows support keyboard chart navigation and independent server Call and Message actions', () => {
   const page = read('src/pages/PatientFlow.jsx')
   assert.match(page, /<tr role="row"[^>]*className="queue-open-row" tabIndex=\{0\}/)
   assert.match(page, /e\.key === 'Enter' \|\| e\.key === ' '/)
   assert.match(page, /isAction\(e\.target\)/)
   assert.match(page, /onOpen=\{q=>setPage\('patients',encounterContext\(q\)\)\}/)
-  assert.match(page, /flow\.queueCommand\(entry,name,key\)/)
-  assert.match(page, /findPatientConversation\(entry\.patientPublicId,entry\.branchId,entry\.patientCode\)/)
+  assert.match(page, /flow\.queueCommand\(entry,name,key,owns\)/)
+  assert.match(page, /queueOwner\.current\(ticket\)/)
+  assert.match(page, /findPatientConversation\(entry\.patientPublicId,entry\.branchId,entry\.patientCode,owns\)/)
+  assert.match(page, /messageOwner\.current\(ticket\)/)
   assert.doesNotMatch(page, /toast\('Patient called\.'\)/)
   assert.match(read('src/b4-queue.css'), /\.queue-open-row:focus-visible/)
   const messages = read('src/pages/ServerMessages.jsx')

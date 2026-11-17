@@ -1,0 +1,33 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synthetic reception recovery</title></head><body><div id="root"></div><script type="module">
+import React,{useState} from 'react'
+import {createRoot} from 'react-dom/client'
+import {CheckInPage,QueuePage} from '/src/pages/PatientFlow.jsx'
+import {beginArrivalCommand} from '/src/arrival-command.js'
+import {setClockSource} from '/src/clock.js'
+import '/src/styles.css'
+import '/src/foundation.css'
+import '/src/polish.css'
+setClockSource(()=>new Date('2026-11-17T10:00:00+08:00'))
+const P='01ARZ3NDEKTSV4RRFFQ69G5FAB',P2='01ARZ3NDEKTSV4RRFFQ69G5FAC',A='01ARZ3NDEKTSV4RRFFQ69G5FAA',A2='01ARZ3NDEKTSV4RRFFQ69G5FAE'
+const patients=[{id:P,publicId:P,serverProjection:true,name:'Synthetic First Patient',patientCode:'TEST-01'},{id:P2,publicId:P2,serverProjection:true,name:'Synthetic Second Patient',patientCode:'TEST-02'}]
+const appointments=patients.map((p,i)=>({id:i?A2:A,patientId:p.id,patientPublicId:p.id,patientName:p.name,appointmentNo:'TEST-APT-'+i,revision:1,server:true,branchId:'b1',branch:'Synthetic branch',serviceId:'s1',service:'Synthetic service',dentistId:'d1',date:'2026-11-17',start:'10:00',duration:30,status:'Confirmed'}))
+window.a06={cancelMode:'throw',cancelCalls:[],events:[],auth:1,holdMessage:false}
+const conversation={id:'conversation-1',status:'Open',patient:{id:P,code:'TEST-01',name:patients[0].name},branch:{id:'b1',name:'Synthetic branch'}}
+window.fetch=async url=>{
+ if(String(url).includes('/api/conversations?')){
+  if(window.a06.holdMessage)await new Promise(resolve=>window.a06.releaseMessage=resolve)
+  return {ok:true,status:200,json:async()=>({data:[conversation],meta:{next_cursor:null}})}
+ }
+ return {ok:false,status:403,json:async()=>({message:'Ancillary fixture read unavailable'})}
+}
+function Fixture(){
+ const [view,setView]=useState(new URLSearchParams(location.search).get('mode')||'checkin'),[context,setContext]=useState(null),[,update]=useState(0)
+ const state={persons:[{id:'person-staff'}],users:[{id:'staff-user',personId:'person-staff',role:'Staff',status:'Active',branchId:'b1',permissions:['appointments','patient-demographics','checkin','queue','messages']}],staff:[{userId:'staff-user',personId:'person-staff',branchId:'b1'}],patients,appointments,branches:[{id:'b1',name:'Synthetic branch',status:'Open'}],services:[],branchServices:[],dentists:[{id:'d1',name:'Synthetic Dentist',branchIds:['b1']}],dentistServiceAssignments:[],visits:[],treatments:[],queue:[{id:'queue-1',server:true,revision:1,patientId:P,patientPublicId:P,patientCode:'TEST-01',patientName:patients[0].name,branchId:'b1',branch:'Synthetic branch',dentistId:'d1',clinicDate:'2026-11-17',status:'Waiting',visitStatus:'Checked In',queueNumber:1,position:1,walkIn:true}]}
+ const session={role:'staff',active:true,userId:'staff-user',serverUserId:'synthetic-staff',branchId:'b1',branchScopes:['b1']}
+ const navigate=(page,context)=>{window.a06.events.push({page,context});setView(page);setContext(context)}
+ const store={state,session,appointmentsStatus:'ready',queueSnapshot:{date:'2026-11-17',truncated:false},getAuthGeneration:()=>window.a06.auth,directoryPatients:patients,toast:message=>window.a06.events.push({message}),appointmentFlow:{refresh:async()=>({ok:true}),searchPatients:async()=>({ok:true}),queueCommand:async()=>({ok:true}),cancel:async(a,key,extra)=>{window.a06.cancelCalls.push({id:a.id,key,extra:JSON.parse(JSON.stringify(extra))});if(window.a06.cancelMode==='throw')throw Error('Synthetic transport interruption');if(window.a06.cancelMode==='hold')await new Promise(resolve=>window.a06.releaseCancel=resolve);return {ok:true}},beginArrival:(intent,options)=>beginArrivalCommand({intent,key:'synthetic-arrival',...options,send:async()=>({ok:true,row:{id:'01ARZ3NDEKTSV4RRFFQ69G5FAV',source:'appointment',status:'Checked In',revision:1,arrived_at:'2026-11-17T10:00:00+08:00',clinic_date:'2026-11-17',patient:{id:intent.patientPublicId,name:patients.find(p=>p.id===intent.patientPublicId).name},branch:{id:'b1'},service:{id:'s1'},dentist:{id:'d1'},appointment:{id:intent.appointmentId,status:'Checked In',revision:2},queue:{id:'01ARZ3NDEKTSV4RRFFQ69G5FAW',status:'Waiting',revision:1,queue_number:1}}}),refresh:async()=>({ok:true})})}}
+ Object.assign(window.a06,{store,setView,setContext,update:()=>update(x=>x+1),ids:{A,A2,P,P2}})
+ return view==='checkin'?React.createElement(CheckInPage,{store,context,setPage:navigate}):view==='queue'?React.createElement(QueuePage,{role:'staff',activeBranch:'Synthetic branch',store,setPage:navigate}):React.createElement('h1',null,'Synthetic destination')
+}
+createRoot(document.getElementById('root')).render(React.createElement(Fixture))
+</script></body></html>

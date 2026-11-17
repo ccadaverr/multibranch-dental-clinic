@@ -143,9 +143,18 @@ export function createAppointmentFlow({ getState, getSession, getActions, refres
     },
 
     async cancel(appointment, key, extra = {}) {
+      const actor=()=>({state:getState(),session:getSession(),getAuthGeneration})
+      const identity=schedulingActorKey(actor()),guard=extra.beforeDispatch
+      const owns=()=>identity===schedulingActorKey(actor())
+      extra={...extra,beforeDispatch:()=>owns()&&(!guard||guard())}
       const result = await api.cancelAppointment(appointment, key, extra)
+      if(!owns())return {ok:false,kind:'superseded',message:'The cancellation belongs to an earlier session. Review current clinic records.'}
       if (!result.ok) return afterServerCommand(result)
-      await refresh()
+      if(result.row?.id!==appointment.id||result.row?.status!=='Cancelled')return {ok:false,kind:'unverified',message:'The cancellation receipt did not match this appointment. Retry the original command.'}
+      let refreshFailed=false
+      try{refreshFailed=(await refresh())?.ok===false}catch{refreshFailed=true}
+      if(!owns())return {ok:false,kind:'superseded',message:'The cancellation belongs to an earlier session. Review current clinic records.'}
+      if(refreshFailed)return {ok:true,warning:'Cancellation verified. Clinic records could not be refreshed; refresh before taking another action.'}
       const local = getActions().applyAppointmentCancellation(appointment.id)
       return local.ok ? { ok: true } : { ok: true, warning: `The appointment is cancelled, but its local follow-up/notification records need review: ${local.message}` }
     },

@@ -232,7 +232,8 @@ export async function rescheduleAppointment(appointment, { date, start, dentistI
 }
 
 export async function cancelAppointment(appointment, key, extra = {}) {
-  return commandResult(await api.cancelAppointmentRemote(appointment.id, { expected_revision: appointment.revision, ...extra }, key))
+  const {beforeDispatch,...payload}=extra
+  return commandResult(await api.cancelAppointmentRemote(appointment.id, { expected_revision: appointment.revision, ...payload }, key, beforeDispatch))
 }
 
 /** The appointment-only lifecycle command: 'no-show' (the scheduled Patient did not arrive; no Visit exists). */

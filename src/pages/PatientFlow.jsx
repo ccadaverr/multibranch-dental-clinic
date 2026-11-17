@@ -9,11 +9,13 @@ import { STAFF_CANCELLATION_REASONS, commandKey } from '../appointments-api.js'
 import { compareBranchQueue } from '../queue-api.js'
 import { findPatientConversation } from '../messaging-api.js'
 import '../b4-queue.css'
+import '../checkin-reception.css'
 import { useVisibleRefresh } from '../use-visible-refresh.js'
 import { patientKeyResolver } from '../appointment-projection.js'
 import { DEFAULT_COUNTRY, normalizePhoneNumber } from '../phone.js'
 import { RecordedArrivals } from './ArrivalRecovery.jsx'
 import { bookableBranches } from './Scheduling.jsx'
+import { schedulingActorKey, useRequestOwner } from '../appointment-ui.js'
 
 import { addCalendarMonths, clinicDate } from '../clock.js'
 import { PatientQueuePage } from './PatientVisits.jsx'
@@ -29,6 +31,7 @@ import { encounterContext, inScope, isActiveQueue, isTodayQueue, sessionForRole 
 // writes an arrival or queue record locally.
 export function CheckInPage({ store, context, setPage }) {
   const { state, toast }=store
+  const latestStore=useRef(store);latestStore.current=store
   const session=store.session||sessionForRole('staff',state)
   const flow=store.appointmentFlow
   const [arrivalPhase,setArrivalPhase]=useState('idle'),[arrivalMessage,setArrivalMessage]=useState(''),[arrivalResult,setArrivalResult]=useState(null)
@@ -36,7 +39,7 @@ export function CheckInPage({ store, context, setPage }) {
   const arrivalLocked=['submitting','unknown'].includes(arrivalPhase)
   React.useLayoutEffect(()=>{arrivalLive.current=true;return()=>{arrivalLive.current=false}},[])
   useEffect(()=>{if(['unknown','refused','verified'].includes(arrivalPhase))arrivalFeedback.current?.focus()},[arrivalPhase])
-  const resetArrival=()=>{if(arrivalSending.current||arrivalAttempt.current?.outcome==='unknown')return false;arrivalAttempt.current=null;setArrivalPhase('idle');setArrivalMessage('');return true}
+  const resetArrival=()=>{if(arrivalSending.current||arrivalAttempt.current?.outcome==='unknown'||cancelSending.current||cancelAttempt.current?.uncertain)return false;arrivalAttempt.current=null;setArrivalPhase('idle');setArrivalMessage('');setArrivalResult(null);return true}
   const submitArrival=async command=>{
     if(!command||arrivalSending.current)return
     arrivalSending.current=true;setArrivalPhase('submitting');setArrivalMessage('')
@@ -72,6 +75,7 @@ export function CheckInPage({ store, context, setPage }) {
   const [arrivalProblem,setArrivalProblem]=useState('')
   const selectScheduled=snapshot=>{
     if(!resetArrival())return
+    cancelAttempt.current=null;setCancelModalOpen(false);setCancelUncertain(false);setCancelError('')
     const next=snapshot ? Object.freeze({...snapshot}) : null
     reviewedSelection.current=next;setSelectionContext(next);setAppointmentId(next?.appointmentId||'');setIdConfirmed(false);setArrivalProblem('')
   }
@@ -87,32 +91,42 @@ export function CheckInPage({ store, context, setPage }) {
   const [cancelNote, setCancelNote] = useState('')
   const [cancelling, setCancelling] = useState(false)
   const cancelKey = useRef(commandKey())
+  const cancelAttempt=useRef(null),cancelSending=useRef(false)
+  const [cancelUncertain,setCancelUncertain]=useState(false),[cancelError,setCancelError]=useState('')
 
   const handleCancelAppointment = async () => {
-    if (!selectedAppointment || cancelling) return
+    if (cancelSending.current || !selectedAppointment&&!cancelAttempt.current) return
     const effectiveReason = cancelReason === 'Other' ? cancelReasonOther.trim() : cancelReason
     if (cancelReason === 'Other' && !cancelReasonOther.trim()) {
       return toast('Please specify the cancellation reason.', 'warning')
     }
-    setCancelling(true)
-    const result = await flow.cancel(selectedAppointment, cancelKey.current, {
-      ...(store.session?.selectionDetailsAvailable
-        ? {reason_category: cancelReason, ...(cancelReason === 'Other' ? { reason_detail: effectiveReason } : {})}
-        : {reason:effectiveReason}),
-      note: cancelNote.trim() || undefined,
-    })
-    setCancelling(false)
-    if (!result.ok) {
-      return toast(result.message || 'Failed to cancel appointment.', 'warning')
+    if(!cancelAttempt.current){
+      if(!selectionContext||!checkInAppointmentFor(latestStore.current,selectionContext))return
+      cancelAttempt.current={appointment:Object.freeze({...selectedAppointment}),reviewed:reviewedSelection.current,key:cancelKey.current,uncertain:false,actor:schedulingActorKey(store),auth:store.getAuthGeneration?.(),
+        extra:Object.freeze({...(store.session?.selectionDetailsAvailable?{reason_category:cancelReason,...(cancelReason==='Other'?{reason_detail:effectiveReason}:{})}:{reason:effectiveReason}),note:cancelNote.trim()||undefined})}
     }
-    toast(`Appointment cancelled. Reason: ${effectiveReason}`, 'success')
-    setCancelModalOpen(false)
-    setAppointmentId('')
-    setIdConfirmed(false)
-    setCancelReason('No valid ID presented')
-    setCancelReasonOther('')
-    setCancelNote('')
-    cancelKey.current = commandKey()
+    const command=cancelAttempt.current
+    const owns=()=>arrivalLive.current&&cancelAttempt.current===command&&reviewedSelection.current===command.reviewed&&command.auth===latestStore.current.getAuthGeneration?.()&&command.actor===schedulingActorKey(latestStore.current)
+    if(!owns())return
+    cancelSending.current=true;setCancelling(true);setCancelError('')
+    try{
+      let result
+      let timer
+      try{result=await Promise.race([flow.cancel(command.appointment,command.key,{...command.extra,beforeDispatch:()=>owns()&&(command.uncertain||!!checkInAppointmentFor(latestStore.current,command.reviewed))}),new Promise(resolve=>{timer=setTimeout(()=>resolve({ok:false,kind:'network'}),30000)})])}
+      catch{result={ok:false,kind:'network'}}
+      finally{clearTimeout(timer)}
+      if(!owns())return
+      if(!result.ok){
+        command.uncertain=command.uncertain||!['validation','conflict','not_found','forbidden','unauthenticated','rate_limited','stale_context'].includes(result.kind)
+        setCancelUncertain(command.uncertain)
+        setCancelError(command.uncertain?'Cancellation is unconfirmed. Retry the same cancellation to recover its recorded result.':result.message||'Cancellation was refused. Review the appointment before trying again.')
+        if(!command.uncertain){cancelAttempt.current=null;cancelKey.current=commandKey()}
+        return
+      }
+      cancelAttempt.current=null;setCancelUncertain(false);setCancelModalOpen(false);reviewedSelection.current=null;setSelectionContext(null)
+      setAppointmentId('');setIdConfirmed(false);setArrivalResult(null);setCancelReason('No valid ID presented');setCancelReasonOther('');setCancelNote('');cancelKey.current=commandKey()
+      toast(result.warning||'Appointment cancelled.',result.warning?'warning':'success')
+    }finally{cancelSending.current=false;if(arrivalLive.current)setCancelling(false)}
   }
   const checkScheduledLegacy=async()=>{
     const reviewed=reviewedSelection.current
@@ -137,6 +151,7 @@ export function CheckInPage({ store, context, setPage }) {
   }
 
   const checkScheduled=async()=>{
+    if(cancelSending.current||cancelAttempt.current?.uncertain)return
     if(typeof flow?.beginArrival!=='function')return checkScheduledLegacy()
     if(arrivalSending.current||arrivalLocked||!selectedAppointment||!selectionContext)return
     if(!idConfirmed)return toast('Confirm that the patient presented a valid ID before completing check-in, or cancel the appointment.','warning')
@@ -212,11 +227,12 @@ export function CheckInPage({ store, context, setPage }) {
   const selectCombPatient=p=>{updateWalkin('patientPublicId',p.id);setSearch(`${p.name} • ${p.patientCode}`);setPatientMenuOpen(false);setActiveIndex(-1)}
 
   return <>
-    <PageHeader kicker="Front desk" title="Patient check-in" text="Confirm arrival and move the patient into the live queue. Arrivals are recorded by the clinic server; no repeated registration is needed for an existing patient."
+    <PageHeader kicker="Front desk" title="Patient check-in" text="Select the arrival, verify ID and record Check-In."
       aside={<div className="row-actions">
         <RefreshButton size="sm" onClick={()=>flow?.refresh()}/>
       </div>}/>
     <AppointmentsLoadNotice store={store}/>
+    {cancelUncertain&&(!cancelModalOpen||!selectedAppointment)&&<Notice tone="warning" title="Cancellation unconfirmed">{cancelError}<Button onClick={handleCancelAppointment} disabled={cancelling}>Retry same cancellation</Button></Notice>}
     <div ref={arrivalFeedback} tabIndex={-1} role={['unknown','refused'].includes(arrivalPhase)?'alert':'status'}>
       {arrivalPhase==='submitting'&&<p>Recording the reviewed arrival…</p>}
       {arrivalMessage&&<p>{arrivalMessage}</p>}
@@ -228,27 +244,29 @@ export function CheckInPage({ store, context, setPage }) {
       </Notice>}
     </div>
     <div className="checkin-shell">
-      <div className="checkin-mode"><button disabled={arrivalLocked} className={mode==='scheduled'?'active':''} onClick={()=>setMode('scheduled')}><Icon name="calendar" size={18}/>Scheduled arrivals</button><button disabled={arrivalLocked} className={mode==='walkin'?'active':''} onClick={()=>setMode('walkin')}><Icon name="user" size={18}/>Walk-in admission</button></div>
+      <div className="checkin-mode"><button disabled={arrivalLocked||cancelling||cancelUncertain} className={mode==='scheduled'?'active':''} onClick={()=>setMode('scheduled')}><Icon name="calendar" size={18}/>Scheduled arrivals</button><button disabled={arrivalLocked||cancelling||cancelUncertain} className={mode==='walkin'?'active':''} onClick={()=>setMode('walkin')}><Icon name="user" size={18}/>Walk-in admission</button></div>
       {mode==='scheduled'?<Card className="checkin-focus-card" title="Scheduled arrivals" subtitle="Select the patient who has arrived (earliest first).">
         {arrivalProblem&&<Notice tone="warning">{arrivalProblem}</Notice>}
         {selectionContext&&!contextualAppointment&&<Notice tone="warning">The selected appointment changed or is no longer eligible. Refresh and explicitly select the current appointment; no patient was substituted.</Notice>}
-        <div className="checkin-select-row"><Field label="Today’s appointment"><select disabled={busy||cancelling||arrivalLocked} value={selectedAppointment?.id||''} onChange={e=>selectScheduled(checkInSelectionFor(store,state.appointments.find(a=>a.id===e.target.value)))}><option value="">Select appointment</option>{eligible.map(a=><option value={a.id} key={a.id}>{displayTime(a.start)} • {patientName(a.patientId,state.patients)} • {a.service}</option>)}</select></Field></div>
+        <div className="checkin-select-row"><Field label="Today’s appointment"><select disabled={busy||cancelling||cancelUncertain||arrivalLocked} value={selectedAppointment?.id||''} onChange={e=>selectScheduled(checkInSelectionFor(store,state.appointments.find(a=>a.id===e.target.value)))}><option value="">Select appointment</option>{eligible.map(a=><option value={a.id} key={a.id}>{displayTime(a.start)} • {patientName(a.patientId,state.patients)} • {a.service}</option>)}</select></Field></div>
         {selectedAppointment?<div className="arrival-card"><div className="avatar large">{patientName(selectedAppointment.patientId,state.patients).split(' ').map(x=>x[0]).slice(0,2).join('')}</div><div className="arrival-main"><span>Arriving patient</span><h2>{patientName(selectedAppointment.patientId,state.patients)}</h2><p>{selectedAppointment.service} • {selectedAppointment.dentistName||dentistName(selectedAppointment.dentistId,state.dentists)}</p><div className="arrival-meta"><span><Icon name="calendar" size={15}/>{displayTime(selectedAppointment.start)}</span><span><Icon name="building" size={15}/>{selectedAppointment.branch}</span><span>{selectedAppointment.appointmentNo}</span></div></div><div className="arrival-action">
             <Status>{selectedAppointment.status}</Status>
             <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', margin: '4px 0', cursor: 'pointer' }}>
-              <input type="checkbox" disabled={busy||cancelling||arrivalLocked} checked={idConfirmed} onChange={e=>setIdConfirmed(e.target.checked)}/>
+              <input type="checkbox" disabled={busy||cancelling||cancelUncertain||arrivalLocked} checked={idConfirmed} onChange={e=>setIdConfirmed(e.target.checked)}/>
               <span>Valid ID presented</span>
             </label>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-              <Button onClick={checkScheduled} disabled={busy || cancelling || arrivalLocked} icon="checkin">{busy ? 'Recording…' : 'Confirm arrival'}</Button>
-              <Button variant="ghost" onClick={() => { cancelKey.current = commandKey(); setCancelModalOpen(true) }} disabled={busy || cancelling || arrivalLocked}>Cancel appointment</Button>
+              <Button onClick={checkScheduled} disabled={busy || cancelling || cancelUncertain || arrivalLocked} icon="checkin">{busy ? 'Recording…' : 'Confirm arrival'}</Button>
+              <Button variant="ghost" onClick={() => { cancelKey.current = commandKey(); setCancelModalOpen(true) }} disabled={busy || cancelling || cancelUncertain || arrivalLocked}>Cancel appointment</Button>
             </div>
           </div></div>:<Notice>Select an appointment to check the patient in.</Notice>}
         {selectedAppointment?.patientPublicId&&session?.role==='staff'&&<IdCheck patientId={selectedAppointment.patientPublicId} toast={toast} getAuthGeneration={store.getAuthGeneration}/>}
         {cancelModalOpen && selectedAppointment && (
-          <Modal title={`Cancel appointment: ${patientName(selectedAppointment.patientId, state.patients)}`} onClose={() => !cancelling && setCancelModalOpen(false)}>
+          <Modal open title={`Cancel appointment: ${patientName(selectedAppointment.patientId, state.patients)}`} onClose={() => !cancelling && !cancelUncertain && setCancelModalOpen(false)}>
             <div className="form-grid">
+              {cancelError&&<p className="span-2" role="alert">{cancelError}</p>}
               <Notice tone="warning">Cancelling this appointment will mark it as Cancelled on the clinic server and reopen any linked follow-up.</Notice>
+              <fieldset className="span-2 form-grid" disabled={cancelling||cancelUncertain} style={{border:0,padding:0,margin:0,minWidth:0}}>
               <div className="span-2">
                 <SelectionDetailsNotice available={store.session?.selectionDetailsAvailable}/>
                 <SelectWithOther
@@ -265,20 +283,21 @@ export function CheckInPage({ store, context, setPage }) {
               <Field className="span-2" label="Additional note" hint="Optional note recorded in audit">
                 <input value={cancelNote} maxLength={500} placeholder="Any specific context…" onChange={e => setCancelNote(e.target.value)} />
               </Field>
+              </fieldset>
               <div className="span-2 row-actions" style={{ justifyContent: 'flex-end', gap: '8px', marginTop: '12px' }}>
-                <Button variant="ghost" onClick={() => setCancelModalOpen(false)} disabled={cancelling}>Keep appointment</Button>
+                <Button variant="ghost" onClick={() => setCancelModalOpen(false)} disabled={cancelling||cancelUncertain}>Keep appointment</Button>
                 <Button
                   className="pp-danger-solid"
                   disabled={cancelling || (cancelReason === 'Other' && !cancelReasonOther.trim())}
                   onClick={handleCancelAppointment}
                 >
-                  {cancelling ? 'Cancelling…' : 'Confirm cancellation'}
+                  {cancelling ? 'Cancelling…' : cancelUncertain?'Retry same cancellation':'Confirm cancellation'}
                 </Button>
               </div>
             </div>
           </Modal>
         )}
-        <div className="checkin-note"><Icon name="shield" size={17}/><div><b>Fast admission</b><span>The existing patient profile and appointment already identify the patient. The clinic server records the arrival, opens the visit and adds it to the Dentist’s queue; a patient who did not arrive is marked No-show from Appointments.</span></div></div>
+        <div className="checkin-note"><Icon name="shield" size={17}/><div><b>Visit and queue stay together</b><span>Check-In records the Visit and Dentist queue together. Mark absent patients No-show from Appointments.</span></div></div>
         {notQueued.length>0&&<div className="top-gap"><Notice tone="info" title="Checked in, not in a queue">These visits have no responsible Dentist yet, so they are not in a Dentist’s queue and treatment can’t start. Assigning a Dentist later isn’t available yet.</Notice>
           {notQueued.map(v=><div className="clinical-history" key={v.id}><div><b>{v.patientName||patientName(v.patientId,state.patients)}</b><p>{v.walkIn?'Walk-in':v.appointmentCode} • arrived {displayTime(v.checkedIn)} • No Dentist assigned</p></div></div>)}
         </div>}
@@ -401,24 +420,32 @@ function OperationalQueuePage({ role, activeBranch, store, setPage }) {
       toast(result.queued?`Arrival verified — queue number ${result.queueNumber}.`:'Arrival verified.','success')
     }finally{arrivalSending.current=false}
   }
-  const [busy,setBusy]=useState(null)
-  const [messageBusy,setMessageBusy]=useState(null)
+  const queueContext=JSON.stringify([role,activeBranch,schedulingActorKey(store),dentistFilter,statusFilter])
+  const queueOwner=useRequestOwner(queueContext,store.getAuthGeneration),messageOwner=useRequestOwner(queueContext,store.getAuthGeneration)
+  const latestQueueStore=useRef(store);latestQueueStore.current=store
+  const busy=queueOwner.busy,messageBusy=messageOwner.busy
   const run=async(entry,label,send)=>{
-    if(busy)return
-    setBusy(entry.id)
-    const result=await send(commandKey())
-    setBusy(null)
-    toast(result.ok?label:(result.message||'The queue could not be updated. Refresh and try again.'),result.ok?'success':'warning')
+    const ticket=queueOwner.begin();if(!ticket)return
+    try{
+      const result=await send(commandKey(),()=>queueOwner.current(ticket))
+      if(!queueOwner.current(ticket))return
+      toast(result.ok?label:(result.message||'The queue could not be updated. Refresh and try again.'),result.ok?'success':'warning')
+    }catch{if(queueOwner.current(ticket))toast('The queue action could not be confirmed. Refresh the queue before retrying.','warning')}
+    finally{queueOwner.finish(ticket)}
   }
-  const update=(entry,name,label)=>run(entry,label,key=>flow.queueCommand(entry,name,key))
+  const update=(entry,name,label)=>run(entry,label,(key,owns)=>flow.queueCommand(entry,name,key,owns))
   const openMessage=async entry=>{
-    if(messageBusy)return
-    setMessageBusy(entry.id)
-    const result=await findPatientConversation(entry.patientPublicId,entry.branchId,entry.patientCode)
-    setMessageBusy(null)
-    if(!result.ok)return toast(result.message||'Conversations could not be checked. Try again.','warning')
-    if(!result.conversation)return toast('No accessible conversation for this patient at this branch. Ask the patient to start a message from their portal.','warning')
-    setPage('messages',{conversationId:result.conversation.id,conversation:result.conversation,patientCode:entry.patientCode,patientPublicId:entry.patientPublicId,branchId:entry.branchId})
+    const ticket=messageOwner.begin();if(!ticket)return
+    const owns=()=>messageOwner.current(ticket)&&latestQueueStore.current.state.queue.some(row=>row.id===entry.id&&
+      ['patientPublicId','patientCode','branchId','dentistId'].every(key=>row[key]===entry[key])&&isTodayQueue(row)&&inScope(row,latestQueueStore.current.session,latestQueueStore.current.state))
+    try{
+      const result=await findPatientConversation(entry.patientPublicId,entry.branchId,entry.patientCode,owns)
+      if(!owns())return
+      if(!result.ok)return toast(result.message||'Conversations could not be checked. Try again.','warning')
+      if(!result.conversation)return toast('No accessible conversation for this patient at this branch. Ask the patient to start a message from their portal.','warning')
+      setPage('messages',{conversationId:result.conversation.id,conversation:result.conversation,patientCode:entry.patientCode,patientPublicId:entry.patientPublicId,branchId:entry.branchId})
+    }catch{if(owns())toast('Conversations could not be checked. Try again.','warning')}
+    finally{messageOwner.finish(ticket)}
   }
   const [orderEntry,setOrderEntry]=useState(null)
   const [restoreModalEntry, setRestoreModalEntry] = useState(null)

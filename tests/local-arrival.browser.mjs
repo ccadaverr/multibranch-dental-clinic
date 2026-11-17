@@ -1,8 +1,8 @@
 // Real React/Laravel/PostgreSQL admission. Only intentionally lost responses are intercepted.
 import assert from 'node:assert/strict'
 import {readFileSync,writeFileSync,existsSync} from 'node:fs'
-const {browser,login,get,api,evidence,target}=await import('./local-visit-support.mjs')
-const fixture=JSON.parse(readFileSync(target.runtime+'/visit-fixture.json','utf8'))
+const {browser,login,get,api,evidence,target,privateRead}=await import('./local-visit-support.mjs')
+const fixture=JSON.parse(privateRead(target.runtime+'/visit-fixture.json'))
 const journal=evidence+'/journey.json',state=existsSync(journal)?JSON.parse(readFileSync(journal,'utf8')):{groups:[]}
 const save=()=>writeFileSync(journal,JSON.stringify(state,null,2)),pass=name=>{if(!state.groups.includes(name))state.groups.push(name);save();console.log('PASS '+name)}
 state.accepted=false;save()
@@ -64,7 +64,9 @@ try{
  assert.equal((await get(patient.page,'/api/visits/'+state.visit.id)).status,404)
  const dentist=await login('sprint02.dentist@example.test')
  const seen=await get(dentist.page,'/api/visits/'+state.visit.id);assert.equal(seen.status,200);assert.equal(seen.body.data.queue.status,'Waiting');assert.equal(seen.body.data.status,'Checked In')
- const other=await login('patient@example.test',390);assert.equal((await get(other.page,'/api/appointments/'+state.appointment.id)).status,403)
+ const other=await login('patient@example.test',390)
+ const hidden=await get(other.page,'/api/appointments/'+state.appointment.id)
+ assert.equal(hidden.status,404);assert.equal(hidden.body.message,'Appointment not found.')
  await patient.context.close();await dentist.context.close();await other.context.close();await staff.context.close()
  pass('Patient sees own Checked In appointment; other Patient denied; assigned Dentist sees Waiting without treatment completion')
  if(!state.walkPatient){

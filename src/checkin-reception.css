@@ -1,0 +1,15 @@
+/* Reception only: shared Patient, clinical and Owner workspaces retain their tokens and layout. */
+.checkin-shell .checkin-mode { max-width: 100%; flex-wrap: wrap; }
+.checkin-shell .checkin-mode button { min-height: 44px; height: auto; font-size: 13px; }
+.checkin-shell .arrival-card { background: var(--surface, #fff); }
+.checkin-shell .arrival-main > span { font-size: 12px; text-transform: none; }
+.checkin-shell .arrival-main p,
+.checkin-shell .arrival-meta span { font-size: 13px; line-height: 1.5; }
+.checkin-shell .arrival-meta { flex-wrap: wrap; gap: 8px 16px; }
+.checkin-shell .checkin-note { align-items: flex-start; }
+.checkin-shell .checkin-note b { font-size: 13px; line-height: 1.5; }
+.checkin-shell .checkin-note span { font-size: 13px; line-height: 1.5; }
+@media (max-width: 600px) {
+  .checkin-shell .arrival-action { flex-direction: column; align-items: stretch; }
+  .checkin-shell .arrival-action .btn { min-height: 44px; }
+}
