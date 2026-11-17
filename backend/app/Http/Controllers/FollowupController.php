@@ -2,7 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ReadsIdempotencyKey;
 use App\Models\Branch;
+use App\Models\CommandKey;
+use App\Support\IdempotentCommand;
+use App\Support\ReasonSelection;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use App\Models\Appointment;
 use App\Models\AppointmentCommandKey;
 use App\Models\DentistProfile;
@@ -28,6 +33,8 @@ use Illuminate\Validation\ValidationException;
  */
 class FollowupController extends Controller
 {
+    use ReadsIdempotencyKey;
+
     /** Readiness is explicit and defaults closed; source support alone is not clinical acceptance. */
     public function bookingCapability(): JsonResponse
     {
@@ -107,26 +114,39 @@ class FollowupController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $user = $request->user();
-        $data = $request->validate(['patient_id' => ['required', 'string', 'max:40'], 'branch_ref' => ['required', 'string', 'max:50'], 'reason' => ['required', 'string', 'max:500'],
-            'due_on' => ['required', 'date_format:Y-m-d'], 'service_ref' => ['nullable', 'string', 'max:50'], 'assign_to_me' => ['sometimes', 'boolean']]);
-        $task = DB::transaction(function () use ($data, $user) {
+        return \App\Support\CommandActor::run($request->user(), function ($actor) use ($request) {
+            $user = $actor;
+            $data = $request->validate(['patient_id' => ['required', 'string', 'max:40'], 'branch_ref' => ['required', 'string', 'max:50'], 'reason' => ['nullable', 'required_without:reason_category', 'string', 'max:500', 'not_in:Other', 'prohibits:reason_category'],
+                ...ReasonSelection::rules('reason_category', 'reason_detail', ReasonSelection::FOLLOWUP, 500),
+                'due_on' => ['required', 'date_format:Y-m-d'], 'service_ref' => ['nullable', 'string', 'max:50'], 'assign_to_me' => ['sometimes', 'boolean']]);
             $patient = Patient::where('public_id', $data['patient_id'])->firstOrFail();
             $branch = Branch::where('legacy_ref', $data['branch_ref'])->firstOrFail();
             abort_unless(in_array($branch->id, $this->branchIds($user), true), 403, 'You can add follow-ups for your own branches only.');
             if ($user->role->value === 'staff') abort_unless($user->can('viewProfile', $patient), 403);
             if ($data['due_on'] < ClinicClock::addDays(ClinicClock::today(), -365)) throw ValidationException::withMessages(['due_on' => ['Choose a date within the last year or later.']]);
-            $task = FollowupTask::create(['patient_id' => $patient->id, 'branch_id' => $branch->id, 'reason' => $data['reason'], 'due_on' => $data['due_on'],
-                'service_id' => ! empty($data['service_ref']) ? Service::where('legacy_ref', $data['service_ref'])->value('id') : null,
-                'dentist_profile_id' => $user->role->value === 'dentist' ? DentistProfile::where('person_id', $user->person_id)->value('id') : null,
-                'assignee_user_id' => ! empty($data['assign_to_me']) ? $user->id : null, 'source' => $user->role->value === 'dentist' ? 'dentist' : 'front_desk',
-                'status' => 'Open', 'created_by_user_id' => $user->id, 'updated_by_user_id' => $user->id]);
-            $this->audit($user, 'followup.created', $task);
+            \App\Support\SelectionDetailsSchema::requireRequested($data, ['reason_category', 'reason_detail']);
+            $receipt = IdempotentCommand::run(CommandKey::class, $user, $this->idempotencyKey($request), 'followup.create', $data,
+                function () use ($data, $user, $patient, $branch) {
+                \App\Support\SelectionDetailsSchema::requireRequested($data, ['reason_category', 'reason_detail']);
+                $task = FollowupTask::create(['patient_id' => $patient->id, 'branch_id' => $branch->id, 'reason' => ReasonSelection::text($data, 'reason_category', 'reason_detail', 'reason'),
+                    ...(\App\Support\SelectionDetailsSchema::available() ? ['reason_category' => $data['reason_category'] ?? null] : []), 'due_on' => $data['due_on'],
+                    'service_id' => ! empty($data['service_ref']) ? Service::where('legacy_ref', $data['service_ref'])->value('id') : null,
+                    'dentist_profile_id' => $user->role->value === 'dentist' ? DentistProfile::where('person_id', $user->person_id)->value('id') : null,
+                    'assignee_user_id' => ! empty($data['assign_to_me']) ? $user->id : null, 'source' => $user->role->value === 'dentist' ? 'dentist' : 'front_desk',
+                    'status' => 'Open', 'created_by_user_id' => $user->id, 'updated_by_user_id' => $user->id]);
+                $this->audit($user, 'followup.created', $task);
 
-            return $task->fresh(['patient.person', 'branch', 'service', 'dentist.person', 'assignee.person']);
+                return [['id' => $task->public_id], 201];
+            }, fn () => new ConflictHttpException('This request key belongs to a different follow-up.'));
+
+            $task = FollowupTask::where('public_id', $receipt->getData(true)['id'])
+                ->where('patient_id', $patient->id)->where('branch_id', $branch->id)
+                ->with(['patient.person', 'branch', 'service', 'dentist.person', 'assignee.person', 'appointment'])->firstOrFail();
+            $response = response()->json(['data' => $this->view($task, $user)], 201)->header('Cache-Control', 'private, no-store');
+
+            return $receipt->headers->has('Idempotent-Replayed') ? $response->header('Idempotent-Replayed', 'true') : $response;
+
         });
-
-        return response()->json(['data' => $this->view($task, $user)], 201);
     }
 
     /** contacted: the patient was called or messaged. close: done (a note is required unless an appointment was booked). */
@@ -195,7 +215,7 @@ class FollowupController extends Controller
         $local = $t->appointment ? ClinicClock::local($t->appointment->starts_at) : null;
 
         return $out + ['patient' => ['id' => $t->patient?->public_id, 'name' => $t->patient?->person?->fullName(), 'code' => $t->patient?->patient_code, 'phone' => $t->patient?->person?->phone],
-            'reason' => $t->reason, 'service' => $t->service ? ['id' => $t->service->legacy_ref, 'name' => $t->service->name] : null,
+            'reason' => $t->reason, 'reason_category' => $t->reason_category, 'reason_detail' => $t->reason_category === 'Other' ? $t->reason : null, 'service' => $t->service ? ['id' => $t->service->legacy_ref, 'name' => $t->service->name] : null,
             'dentist' => $t->dentist ? ['id' => $t->dentist->legacy_ref, 'name' => $t->dentist->person?->fullName()] : null,
             'assignee' => $t->assignee ? $t->assignee->person?->fullName() : 'Branch front desk', 'close_note' => $t->close_note,
             'appointment' => $t->appointment ? ['id' => $t->appointment->public_id, 'code' => $t->appointment->appointment_code, 'when' => $local->format('D, M j, g:i A')] : null,

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Treatment;
 
+use App\Support\ReasonSelection;
 use Illuminate\Foundation\Http\FormRequest;
 
 // The complete editable Treatment documentation (decision Q-T3): the four clinical text fields, the Dentist's explicit
@@ -28,7 +29,11 @@ class DocumentTreatmentRequest extends FormRequest
             'followup_required' => ['required', 'boolean'],
             // Follow-up recommendation fields exist only when the Dentist marked a follow-up as required.
             'followup_recommended_date' => ['nullable', 'date_format:Y-m-d', 'prohibited_unless:followup_required,true,1'],
-            'followup_reason' => ['nullable', 'string', 'max:1000', 'prohibited_unless:followup_required,true,1'],
+            'followup_reason' => ['nullable', 'string', 'max:1000', 'not_in:Other', 'prohibits:followup_reason_category', 'prohibited_unless:followup_required,true,1'],
+            ...array_map(
+                fn ($rules) => [...$rules, 'prohibited_unless:followup_required,true,1'],
+                ReasonSelection::rules('followup_reason_category', 'followup_reason_detail', ReasonSelection::FOLLOWUP, 500),
+            ),
             'followup_interval' => ['nullable', 'string', 'max:100', 'prohibited_unless:followup_required,true,1'],
             'procedures' => ['present', 'array', 'max:30'],
             'procedures.*' => ['array:id,service_ref,quantity,notes'],
@@ -59,7 +64,10 @@ class DocumentTreatmentRequest extends FormRequest
         $fields['prescription_required'] = (bool) $v['prescription_required'];
         $fields['followup_required'] = (bool) $v['followup_required'];
         $fields['followup_recommended_date'] = $fields['followup_required'] ? ($v['followup_recommended_date'] ?? null) : null;
-        $fields['followup_reason'] = $fields['followup_required'] ? $text($v['followup_reason'] ?? null) : null;
+        $fields['followup_reason'] = $fields['followup_required'] ? $text(ReasonSelection::text($v, 'followup_reason_category', 'followup_reason_detail', 'followup_reason')) : null;
+        if (isset($v['followup_reason_category'])) {
+            $fields['followup_reason_category'] = $v['followup_reason_category'];
+        }
         $fields['followup_interval'] = $fields['followup_required'] ? $text($v['followup_interval'] ?? null) : null;
 
         $procedures = array_map(fn ($row) => [

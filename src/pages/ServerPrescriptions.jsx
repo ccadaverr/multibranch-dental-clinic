@@ -1,3 +1,4 @@
+import {SelectionDetailsNotice} from '../selection-details.jsx'
 import { useClinicalSession } from '../use-clinical-session.js'
 import { useClinicalProtection } from '../clinical-navigation.jsx'
 import { clinicalSessionKey, resolveEncounter } from '../encounter.js'
@@ -14,11 +15,16 @@ const EMPTY_LINE = { medicine: '', dosage: '', frequency: '', duration: '', inst
 const OTHER_OPTION = '__other__'
 const LINE_FIELDS = Object.keys(EMPTY_LINE)
 const CUSTOM_FIELDS = ['medicine', 'dosage', 'frequency', 'duration']
-const selectedOption = (line, field, catalog) => line[`${field}Other`] || (line[field] && !catalog.includes(line[field])) ? OTHER_OPTION : line[field]
-const chooseOption = (line, field, option) => ({ ...line, [field]: option === OTHER_OPTION ? '' : option, [`${field}Other`]: option === OTHER_OPTION })
-const apiLine = line => Object.fromEntries(LINE_FIELDS.map(field => [field, (line[field] ?? '').trim()]))
+const selectedOption = (line, field, catalog) => !line[field] && !line[`${field}Other`] ? '' : line[`${field}Other`] ? OTHER_OPTION : catalog.includes(line[field]) && line.value_origins?.[field] === 'standard' ? line[field] : '__recorded__'
+const chooseOption = (line, field, option) => ({ ...line, [field]: option === OTHER_OPTION ? '' : option, [`${field}Other`]: option === OTHER_OPTION, value_origins: {...line.value_origins, [field]: option === OTHER_OPTION ? 'other' : option ? 'standard' : undefined} })
+const apiLine = (line, withOrigins = true) => {
+  const values = Object.fromEntries(LINE_FIELDS.map(field => [field, (line[field] ?? '').trim()]))
+  const value_origins = Object.fromEntries(CUSTOM_FIELDS.filter(field => values[field] && line.value_origins?.[field]).map(field => [field, line.value_origins[field]]))
+  return { ...values, ...(withOrigins && Object.keys(value_origins).length ? { value_origins } : {}) }
+}
 const draftSnapshot = ({lines, note}) => JSON.stringify({lines: lines.map(line => ({
   ...Object.fromEntries(LINE_FIELDS.map(field => [field, line[field] ?? ''])),
+  value_origins: line.value_origins,
   ...Object.fromEntries(CUSTOM_FIELDS.map(field => [`${field}Other`, !!line[`${field}Other`]])),
 })), note})
 const TONE = { Draft: 'is-late', Issued: 'is-ok', Void: 'is-bad' }
@@ -100,7 +106,7 @@ function PrescriptionsBody({ store, role, context, setPage }) {
       text={owner ? 'Prescriptions issued at the clinic: number, date, dentist and branch. The medicines are visible only to the dentists, the branch front desk and the patient.'
         : dentist ? 'Write a prescription for a recent visit. Issuing locks it; a mistake is voided with a reason and a new one is issued. There is no drug list and no interaction check: you decide what to prescribe.'
           : 'Prescriptions issued at your branch, to view and print. Only a dentist writes or changes them.'}/>
-    {dentist && <WriteCard key={writing || 'new'} clinicalContext={store.session?.clinicalContext} getAuthGeneration={store.getAuthGeneration} context={context} toast={toast} onDone={id => { load(); setOpenId(id) }} editing={writing} onEdited={() => applyDraft(null)} leaveRef={editorLeave} isCurrent={() => editorGeneration.current===generation}/>}
+    {dentist && <WriteCard selectionDetailsAvailable={store.session?.selectionDetailsAvailable===true} key={writing || 'new'} clinicalContext={store.session?.clinicalContext} getAuthGeneration={store.getAuthGeneration} context={context} toast={toast} onDone={id => { load(); setOpenId(id) }} editing={writing} onEdited={() => applyDraft(null)} leaveRef={editorLeave} isCurrent={() => editorGeneration.current===generation}/>}
     {dentist && <LicenseCard toast={toast} clinicalContext={store.session?.clinicalContext} getAuthGeneration={store.getAuthGeneration}/>}
     {error && <Notice tone="warning" title="Unavailable">{error}</Notice>}
     <Card title={owner ? 'Issued prescriptions' : 'Prescriptions'}>
@@ -137,7 +143,7 @@ function PrescriptionsBody({ store, role, context, setPage }) {
   </div>
 }
 
-function WriteCard({ clinicalContext, toast, onDone, editing, onEdited, context, isCurrent, leaveRef, getAuthGeneration }) {
+function WriteCard({ selectionDetailsAvailable = false, clinicalContext, toast, onDone, editing, onEdited, context, isCurrent, leaveRef, getAuthGeneration }) {
   const mounted=useRef(true)
   const visitGeneration=useRef(0)
   const retryWrite=useRef(null), issueReview=useRef(null)
@@ -205,7 +211,7 @@ function WriteCard({ clinicalContext, toast, onDone, editing, onEdited, context,
     let live=true
     prescription(editing).then(r => {
       if(!live)return
-      if (r.ok && r.data.id===editing && r.data.status==='Draft' && r.data.can_edit) { setDraft(r.data); setVisitId(r.data.visit); replaceForm(r.data.lines.map(l => ({ ...EMPTY_LINE, ...l })), r.data.note || '') }
+      if (r.ok && r.data.id===editing && r.data.status==='Draft' && r.data.can_edit) { setDraft(r.data); setVisitId(r.data.visit); replaceForm(r.data.lines.map(l => ({ ...EMPTY_LINE, ...l, ...Object.fromEntries(CUSTOM_FIELDS.map(field => [`${field}Other`, l.value_origins?.[field] === 'other'])) })), r.data.note || '') }
       else setErr(r.ok ? 'This prescription is no longer an editable draft.' : firstError(r))
     })
     return()=>{live=false}
@@ -240,7 +246,7 @@ function WriteCard({ clinicalContext, toast, onDone, editing, onEdited, context,
     const authGeneration = getAuthGeneration?.()
     if (issue && !Number.isSafeInteger(authGeneration)) return setErr('Your authentication could not be confirmed. Sign in again before issuing. No issuance was started.')
     const generation=visitGeneration.current
-    const body = { lines: lines.filter(l => l.medicine.trim()).map(apiLine), note: note.trim() || null }
+    const body = { lines: lines.filter(l => l.medicine.trim()).map(line => apiLine(line, selectionDetailsAvailable)), note: note.trim() || null }
     const request = retry ? retryWrite.current : {generation, authGeneration, issue, body, base:draft ? structuredClone(draft) : null,
       visitId, patientId:draft?.patient?.id || visit?.patient.id, branch:draft?.branch || visit?.branch, saveKey:commandKey(), issueKey:commandKey()}
     if (!request) return
@@ -275,6 +281,7 @@ function WriteCard({ clinicalContext, toast, onDone, editing, onEdited, context,
       <p>Unsaved medicines and notes for {draft?.patient?.name || visit?.patient.name || 'this prescription'} will be discarded. A submitted request continues for its original Visit; its result is shown here only if you stay.</p>
     </ConfirmDialog>
     {visitError ? <Notice tone="warning" title="Visits unavailable"><p role="alert">{visitError}</p><Button variant="soft" onClick={() => setVisitAttempt(a => a + 1)}>Retry loading visits</Button></Notice> : !visits ? <p className="au-muted" role="status">Loading visits…</p> : <form className="au-form" onSubmit={e => { e.preventDefault(); save(false) }}>
+    <SelectionDetailsNotice available={selectionDetailsAvailable}/>
       {!visits.length && <p role="status">No eligible visits found.</p>}
       {!draft && <Field label="Visit" required hint="Visits at your branches in the last 30 days."><select value={visitId} onChange={e => changeVisit(e.target.value)} required>
         <option value="">Choose a visit…</option>{visits.map(v => <option key={v.id} value={v.id}>{day(v.date)} · {v.patient.name}{v.patient.age !== null ? ` (${v.patient.age})` : ''} · {v.branch}</option>)}</select></Field>}
@@ -299,6 +306,7 @@ function WriteCard({ clinicalContext, toast, onDone, editing, onEdited, context,
               }}
             >
               <option value="">Choose medicine…</option>
+              {medSelect === '__recorded__' && <option value="__recorded__" disabled>{l.medicine}</option>}
               {medicineCatalog.map(name => <option key={name} value={name}>{name}</option>)}
               <option value="__other__">Other (free-text entry)</option>
             </select>
@@ -320,6 +328,7 @@ function WriteCard({ clinicalContext, toast, onDone, editing, onEdited, context,
                 }}
               >
                 <option value="">Choose dosage…</option>
+              {dosageSelect === '__recorded__' && <option value="__recorded__" disabled>{l.dosage}</option>}
                 {COMMON_DOSAGES.map(d => <option key={d} value={d}>{d}</option>)}
                 <option value="__other__">Other (specify)</option>
               </select>
@@ -334,6 +343,7 @@ function WriteCard({ clinicalContext, toast, onDone, editing, onEdited, context,
                 }}
               >
                 <option value="">Choose frequency…</option>
+              {freqSelect === '__recorded__' && <option value="__recorded__" disabled>{l.frequency}</option>}
                 {COMMON_FREQUENCIES.map(f => <option key={f} value={f}>{f}</option>)}
                 <option value="__other__">Other (specify)</option>
               </select>
@@ -363,6 +373,7 @@ function WriteCard({ clinicalContext, toast, onDone, editing, onEdited, context,
               }}
             >
               <option value="">Choose duration…</option>
+              {durationSelect === '__recorded__' && <option value="__recorded__" disabled>{l.duration}</option>}
               {COMMON_DURATIONS.map(d => <option key={d} value={d}>{d}</option>)}
               <option value="__other__">Other (specify)</option>
             </select>

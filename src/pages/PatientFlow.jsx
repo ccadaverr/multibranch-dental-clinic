@@ -1,10 +1,11 @@
 import { checkInActorKey, checkInAppointmentFor, checkInSelectionFor } from '../checkin-navigation.js'
+import {SelectionDetailsNotice} from '../selection-details.jsx'
 import { QueueOrderDialog } from './QueueOrderDialog.jsx'
 import { DentistQueue } from './DentistQueue.jsx'
 import React, { useEffect, useState, useRef } from 'react'
 import { Button, Card, Field, FilterBar, Icon, Modal, Notice, PageHeader, Progress, RefreshButton, SelectWithOther, Status, Table } from '../components.jsx'
 import { branchCapacity, dentistName, displayTime, patientName, queueWaitEstimate } from '../logic.js'
-import { commandKey } from '../appointments-api.js'
+import { STAFF_CANCELLATION_REASONS, commandKey } from '../appointments-api.js'
 import { compareBranchQueue } from '../queue-api.js'
 import { findPatientConversation } from '../messaging-api.js'
 import '../b4-queue.css'
@@ -95,7 +96,9 @@ export function CheckInPage({ store, context, setPage }) {
     }
     setCancelling(true)
     const result = await flow.cancel(selectedAppointment, cancelKey.current, {
-      reason: effectiveReason,
+      ...(store.session?.selectionDetailsAvailable
+        ? {reason_category: cancelReason, ...(cancelReason === 'Other' ? { reason_detail: effectiveReason } : {})}
+        : {reason:effectiveReason}),
       note: cancelNote.trim() || undefined,
     })
     setCancelling(false)
@@ -247,12 +250,13 @@ export function CheckInPage({ store, context, setPage }) {
             <div className="form-grid">
               <Notice tone="warning">Cancelling this appointment will mark it as Cancelled on the clinic server and reopen any linked follow-up.</Notice>
               <div className="span-2">
+                <SelectionDetailsNotice available={store.session?.selectionDetailsAvailable}/>
                 <SelectWithOther
                   label="Cancellation reason"
                   required
                   value={cancelReason}
                   onChange={setCancelReason}
-                  options={['No valid ID presented', 'Patient requested cancellation', 'Patient unable to proceed', 'Emergency / personal conflict', 'Other']}
+                  options={STAFF_CANCELLATION_REASONS}
                   otherValue={cancelReasonOther}
                   onOtherChange={setCancelReasonOther}
                   placeholder="e.g., Unreachable, Duplicate booking, Arrived late"

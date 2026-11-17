@@ -529,7 +529,7 @@ export function leaveRequestConfirmed(body, data) {
 
 function MyLeave({ toast, onChanged, getAuthGeneration }) {
   const [rows, setRows] = useState(null), [denied, setDenied] = useState(false),[commandsAvailable,setCommandsAvailable]=useState(false)
-  const [f, setF] = useState({ type: 'vacation', start_date: '', end_date: '', partial: false, start_time: '09:00', end_time: '12:00', private_note: '' })
+  const [f, setF] = useState({ type: 'vacation', start_date: '', end_date: '', partial: false, start_time: '09:00', end_time: '12:00', private_note: '', other_reason: '' })
   const [err,setErr]=useState(''),[busy,setBusy]=useState(''),[readError,setReadError]=useState(''),[reloading,setReloading]=useState(false)
   const live=useRef(false),pending=useRef(false),readGeneration=useRef(0)
   const command=useLeaveCommand(getAuthGeneration)
@@ -551,7 +551,7 @@ function MyLeave({ toast, onChanged, getAuthGeneration }) {
   useEffect(()=>{load()},[])
   const complete=saved=>{
     if(!saved||!live.current)return
-    if(saved.status==='Pending'){toast('Leave requested. An authorized approver can review it.','success');setF(x=>({...x,start_date:'',end_date:'',private_note:''}))}
+    if(saved.status==='Pending'){toast('Leave requested. An authorized approver can review it.','success');setF(x=>({...x,start_date:'',end_date:'',private_note:'',other_reason:''}))}
     else toast('Leave cancelled. Current availability must be reloaded.','success')
   }
   const perform=async(action,leave,body)=>{
@@ -566,12 +566,13 @@ function MyLeave({ toast, onChanged, getAuthGeneration }) {
     e.preventDefault()
     if(!live.current||pending.current||command.locked||!commandsAvailable)return
     setErr('')
-    if(f.type==='other'&&!f.private_note.trim())return setErr('Please explain the reason for Other leave.')
+    const privateNote = f.type === 'other' ? f.other_reason.trim() : f.private_note.trim()
+    if(f.type==='other'&&!privateNote)return setErr('Please explain the reason for Other leave.')
     if(!f.start_date||f.start_date<manilaToday())return setErr('Choose today or a later date.')
     const endDate = f.partial ? f.start_date : (f.end_date || f.start_date)
     if (endDate < f.start_date) return setErr('The until date cannot be before the from date.')
     if (f.partial && (!f.start_time || !f.end_time || f.end_time <= f.start_time)) return setErr('The end time must be after the start time.')
-    const body={type:f.type,start_date:f.start_date,end_date:endDate,private_note:f.private_note.trim()||null,...(f.partial?{start_time:f.start_time,end_time:f.end_time}:{})}
+    const body={type:f.type,start_date:f.start_date,end_date:endDate,private_note:privateNote||null,...(f.partial?{start_time:f.start_time,end_time:f.end_time}:{})}
     await perform('create',null,body)
   }
   const cancel=leave=>{if(leave.can_cancel&&!command.locked)perform('cancel',leave)}
@@ -584,15 +585,24 @@ function MyLeave({ toast, onChanged, getAuthGeneration }) {
     {readError && <p role="alert">{readError}</p>}
     <form className="au-form" onSubmit={submit}>
       <fieldset className="au-form" disabled={!!busy || command.locked || !commandsAvailable} style={{border: 0, padding: 0, margin: 0, minWidth: 0}}>
-      <Field label="Type"><select value={f.type} onChange={e => set('type', e.target.value)}><option value="vacation">Vacation</option><option value="sick">Sick</option><option value="other">Other</option></select></Field>
+      <Field label="Type"><select value={f.type} onChange={e => {
+        const type = e.target.value
+        setF(previous => ({ ...previous, type, other_reason: type === 'other' ? previous.other_reason : '' }))
+      }}><option value="vacation">Vacation</option><option value="sick">Sick</option><option value="other">Other</option></select></Field>
       <div className="st-pair"><Field label="From" required><input aria-label="From" type="date" min={manilaToday()} value={f.start_date} onChange={e => setF(x => ({ ...x, start_date: e.target.value, end_date: x.end_date && x.end_date < e.target.value ? '' : x.end_date }))} required/></Field>
         <Field label="To (last day)"><input type="date" min={f.start_date || manilaToday()} value={f.partial ? f.start_date : f.end_date} disabled={f.partial} onChange={e => set('end_date', e.target.value)}/></Field></div>
       <label className="au-check"><input type="checkbox" checked={f.partial} onChange={e => set('partial', e.target.checked)}/> Only part of the day</label>
       {f.partial && <div className="st-pair"><Field label="From (time on selected date)"><input type="time" value={f.start_time} onChange={e => set('start_time', e.target.value)}/></Field>
         <Field label="Until (time on selected date)"><input type="time" value={f.end_time} onChange={e => set('end_time', e.target.value)}/></Field></div>}
-      <Field label={f.type === 'other' ? 'Specify reason' : 'Private note (optional)'} required={f.type === 'other'} hint="Seen only by you and the approver. Never emailed."><textarea required={f.type === 'other'} maxLength={500} placeholder={f.type === 'other' ? 'e.g., Family emergency, bereavement, medical appointment' : ''} value={f.private_note} onChange={e => set('private_note', e.target.value)}/></Field>
+      {f.type === 'other'
+        ? <Field key="other-reason" label="Specify reason" required hint="Seen only by you and the approver. Never emailed.">
+          <textarea required maxLength={500} placeholder="e.g., Family emergency" value={f.other_reason} onChange={e => set('other_reason', e.target.value)}/>
+        </Field>
+        : <Field key="private-note" label="Private note (optional)" hint="Seen only by you and the approver. Never emailed.">
+          <textarea maxLength={500} value={f.private_note} onChange={e => set('private_note', e.target.value)}/>
+        </Field>}
       {err && <p className="au-error" role="alert">{err}</p>}
-      <div className="au-actions"><Button type="submit" disabled={command.locked || !commandsAvailable || busy === 'add' || !f.start_date || f.start_date < manilaToday() || (!f.partial && f.end_date && f.end_date < f.start_date) || (f.partial && (!f.start_time || !f.end_time || f.end_time <= f.start_time)) || (f.type === 'other' && !f.private_note.trim())}>{busy === 'add' ? 'Sending…' : 'Request leave'}</Button></div>
+      <div className="au-actions"><Button type="submit" disabled={command.locked || !commandsAvailable || busy === 'add' || !f.start_date || f.start_date < manilaToday() || (!f.partial && f.end_date && f.end_date < f.start_date) || (f.partial && (!f.start_time || !f.end_time || f.end_time <= f.start_time)) || (f.type === 'other' && !f.other_reason.trim())}>{busy === 'add' ? 'Sending…' : 'Request leave'}</Button></div>
       </fieldset>
     </form>
     {!rows ? <p className="au-muted" role="status">Loading…</p> : !rows.length ? <p className="au-muted">No leave requested yet.</p> : <ul className="fd-list">{rows.map(l => <li key={l.id}>

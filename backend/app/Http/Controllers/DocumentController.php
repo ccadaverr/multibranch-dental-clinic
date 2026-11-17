@@ -105,43 +105,57 @@ class DocumentController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $user = $request->user();
-        $forbidden = array_fill_keys(self::CLIENT_CONTROLLED_FORBIDDEN, ['prohibited']);
-        $request->validate($forbidden + [
-            'file' => ['required', 'file', 'max:10240'], // 10MB
-            // A Patient's own account decides the owner; naming one is refused rather than silently overridden.
-            'patient_id' => $user->role === Role::Patient ? ['prohibited'] : ['nullable', 'string', 'max:64'],
-            'visit_id' => ['nullable', 'string', 'max:64'],
-            'hmo_case_id' => ['nullable', 'string', 'max:64'],
-            'branch_id' => ['nullable', 'string', 'max:64'],
-            'category' => ['nullable', 'string', 'in:'.implode(',', Document::CATEGORIES)],
-            'title' => ['nullable', 'string', 'max:255'],
-            // Descriptive metadata for HMO cards only; any other key is refused.
-            'metadata' => ['nullable', 'array:provider,member_number'],
-            'metadata.provider' => ['nullable', 'string', 'max:100'],
-            'metadata.member_number' => ['nullable', 'string', 'max:100'],
-        ]);
-        $attributes = $request->only(['patient_id', 'visit_id', 'hmo_case_id', 'branch_id', 'category', 'title', 'metadata']);
-        $file = $request->file('file');
-        $key = $this->idempotencyKey($request);
+        return \App\Support\CommandActor::run($request->user(), function ($actor) use ($request) {
+            $user = $actor;
+            $forbidden = array_fill_keys(self::CLIENT_CONTROLLED_FORBIDDEN, ['prohibited']);
+            $request->validate($forbidden + [
+                'file' => ['required', 'file', 'max:10240'], // 10MB
+                // A Patient's own account decides the owner; naming one is refused rather than silently overridden.
+                'patient_id' => $user->role === Role::Patient ? ['prohibited'] : ['nullable', 'string', 'max:64'],
+                'visit_id' => ['nullable', 'string', 'max:64'],
+                'hmo_case_id' => ['nullable', 'string', 'max:64'],
+                'branch_id' => ['nullable', 'string', 'max:64'],
+                'category' => ['required', 'string', 'in:'.implode(',', Document::CATEGORIES)],
+                'title' => ['nullable', 'string', 'max:255'],
+                'other_description' => ['nullable', 'required_if:category,other', 'prohibited_unless:category,other', 'string', 'max:255'],
+                // Descriptive metadata for HMO cards only; any other key is refused.
+                'metadata' => ['nullable', 'array:provider,member_number'],
+                'metadata.provider' => ['nullable', 'string', 'max:100'],
+                'metadata.member_number' => ['nullable', 'string', 'max:100'],
+            ]);
+            $attributes = $request->only(['patient_id', 'visit_id', 'hmo_case_id', 'branch_id', 'category', 'title', 'metadata']);
+            if ($attributes['category'] === 'other') {
+                $attributes['metadata']['other_description'] = $request->string('other_description')->trim()->toString();
+            }
+            $file = $request->file('file');
+            $key = $this->idempotencyKey($request);
 
-        try {
-            if ($key === null) {
-                $doc = $this->storage->store($user, $file, $attributes);
+            try {
+                if ($key === null) {
+                    $doc = $this->storage->store($user, $file, $attributes);
 
-                return response()->json(['data' => (new DocumentResource($doc))->detailed()->resolve($request)], 201);
+                    return response()->json(['data' => (new DocumentResource($doc))->detailed()->resolve($request)], 201);
+                }
+
+                // A replay of the same upload (same key and same content/target) returns the original result; the same key with
+                // different content or a different target is refused.
+                $fingerprint = $attributes + ['file_sha256' => hash_file('sha256', $file->getRealPath())];
+
+                $response = IdempotentCommand::run(CommandKey::class, $user, $key, 'document.upload', $fingerprint,
+                    fn () => [['data' => (new DocumentResource($this->storage->store($user, $file, $attributes)))->detailed()->resolve($request)], 201],
+                    fn () => new DocumentException(409, 'idempotency_key_reused', 'This Idempotency-Key was already used for a different upload.'));
+
+                if ($response->headers->get('Idempotent-Replayed') === 'true') {
+                    $id = $response->getData(true)['data']['id'] ?? null;
+                    abort_unless($id && Document::visibleTo($user)->where('public_id', $id)->exists(), 403);
+                }
+
+                return $response;
+            } catch (DocumentException $e) {
+                return $this->fail($e);
             }
 
-            // A replay of the same upload (same key and same content/target) returns the original result; the same key with
-            // different content or a different target is refused.
-            $fingerprint = $attributes + ['file_sha256' => hash_file('sha256', $file->getRealPath())];
-
-            return IdempotentCommand::run(CommandKey::class, $user, $key, 'document.upload', $fingerprint,
-                fn () => [['data' => (new DocumentResource($this->storage->store($user, $file, $attributes)))->detailed()->resolve($request)], 201],
-                fn () => new DocumentException(409, 'idempotency_key_reused', 'This Idempotency-Key was already used for a different upload.'));
-        } catch (DocumentException $e) {
-            return $this->fail($e);
-        }
+        });
     }
 
     public function show(Request $request, Document $document): JsonResponse

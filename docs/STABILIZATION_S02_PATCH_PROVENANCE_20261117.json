@@ -1,0 +1,373 @@
+{
+  "gen12": {
+    "baseline": "0cf24b1f6a1d78d087d238d9573eeb5e02e9d8fc",
+    "patch_sha256": "9504dbc5ce7bb11e864c56c8fa11765756eb005087335088072e7a46b066b28f",
+    "files": [
+      {
+        "path": "src/dentist-workspace.css",
+        "before_sha256": "2719b8a8078acdbd250de38ab2ff7734c634ae60cc39c3c45bc374216aa8b385",
+        "after_sha256": "ebe6aa08fd72f89aa5dc039c585d4ed40d27ffc0dc0956945195be113ef57a14",
+        "current_head_sha256_lf": "2719b8a8078acdbd250de38ab2ff7734c634ae60cc39c3c45bc374216aa8b385",
+        "integrated_working_sha256_lf": "ebe6aa08fd72f89aa5dc039c585d4ed40d27ffc0dc0956945195be113ef57a14"
+      },
+      {
+        "path": "src/foundation.css",
+        "before_sha256": "5b28958c5e5c0d0e91453230914da6a3c3a997d48f49538472b6190fc6e509c8",
+        "after_sha256": "0c147cb4c19df825c4397a9ddb19c6c1668898c28d2ac0d01ebe41c464d68845",
+        "current_head_sha256_lf": "5b28958c5e5c0d0e91453230914da6a3c3a997d48f49538472b6190fc6e509c8",
+        "integrated_working_sha256_lf": "0c147cb4c19df825c4397a9ddb19c6c1668898c28d2ac0d01ebe41c464d68845"
+      },
+      {
+        "path": "src/pages/Dashboards.jsx",
+        "before_sha256": "5a1db0925bea805acb8f1adf8ca3d1121fe47d308818a84c8525d8c7730c5058",
+        "after_sha256": "cb3b35b78fae654b5076de47c4868c33cf73edb1f1864de00ed91c4426753201",
+        "current_head_sha256_lf": "5a1db0925bea805acb8f1adf8ca3d1121fe47d308818a84c8525d8c7730c5058",
+        "integrated_working_sha256_lf": "cb3b35b78fae654b5076de47c4868c33cf73edb1f1864de00ed91c4426753201"
+      },
+      {
+        "path": "src/pages/DentistHome.jsx",
+        "before_sha256": "00dbb61c462a3618c21af114defeea207995353c1c541606759effa28015ecfe",
+        "after_sha256": "ce49419ba4277e6c612977ed3a7369ff6930fcaa824d6362db41454022ae264b",
+        "current_head_sha256_lf": "00dbb61c462a3618c21af114defeea207995353c1c541606759effa28015ecfe",
+        "integrated_working_sha256_lf": "ce49419ba4277e6c612977ed3a7369ff6930fcaa824d6362db41454022ae264b"
+      },
+      {
+        "path": "src/patient/portal.css",
+        "before_sha256": "b28517c8fc621b9e96c47ed7fb7535a3115d80e5c100c089201bb1d96f696a7b",
+        "after_sha256": "376b98120ae4798b0f57a2f632d14a19a8e249524a27c076b0c208893ac41bd4",
+        "current_head_sha256_lf": "b28517c8fc621b9e96c47ed7fb7535a3115d80e5c100c089201bb1d96f696a7b",
+        "integrated_working_sha256_lf": "376b98120ae4798b0f57a2f632d14a19a8e249524a27c076b0c208893ac41bd4"
+      },
+      {
+        "path": "tests/fixtures/gen12-controls.jsx",
+        "before_sha256": null,
+        "after_sha256": "b46b1f983a98b427df46b75c0366f4d0b8eaf13556f214d504f4d7a9aca97e9e",
+        "current_head_sha256_lf": null,
+        "integrated_working_sha256_lf": "b46b1f983a98b427df46b75c0366f4d0b8eaf13556f214d504f4d7a9aca97e9e"
+      },
+      {
+        "path": "tests/gen12-controls.browser.mjs",
+        "before_sha256": null,
+        "after_sha256": "0a8b7cc63d8692cf8a92ee144f3dc5118a20577d1d74252349a4f2da1b831cfa",
+        "current_head_sha256_lf": null,
+        "integrated_working_sha256_lf": "0a8b7cc63d8692cf8a92ee144f3dc5118a20577d1d74252349a4f2da1b831cfa"
+      }
+    ],
+    "integration_note": "Canonical before/after patch blobs independently verified; deliberate S01/schema compatibility resolutions differ from patch after blobs."
+  },
+  "gen07": {
+    "baseline": "0cf24b1f6a1d78d087d238d9573eeb5e02e9d8fc",
+    "patch_sha256": "3449824669181ae8a6d5c44deff43992e2bfce655aab7021578fc2a0014cb3a6",
+    "files": [
+      {
+        "path": "backend/app/Http/Controllers/AppointmentController.php",
+        "before_sha256": "d9a96782299ddad5f272f26148f6ac4b26295447b9b0b1d71fde8fcf9b4d549f",
+        "after_sha256": "a441de7a2b1873e25c0e63dd3595593af4afd703b1230a49c958b92f5fc86c04",
+        "current_head_sha256_lf": "d9a96782299ddad5f272f26148f6ac4b26295447b9b0b1d71fde8fcf9b4d549f",
+        "integrated_working_sha256_lf": "0a09c41e7311a28e3b56188861b5688766c6b8175dfe87f787c334ea30b0210b"
+      },
+      {
+        "path": "backend/app/Http/Controllers/AssistantAnswerController.php",
+        "before_sha256": "2fa95c6b961ba9838dafcf19f7abcc7b3d79244ab7ecccb81cb4ba6a61375888",
+        "after_sha256": "1a2784ace4d3e000112f06eff39735308caed1d3badbea649781055df81ad8a1",
+        "current_head_sha256_lf": "2fa95c6b961ba9838dafcf19f7abcc7b3d79244ab7ecccb81cb4ba6a61375888",
+        "integrated_working_sha256_lf": "6aba32705103b8a83ae954ae94463db2737f61d4dcf3968fa6d4cf6b1fe6b199"
+      },
+      {
+        "path": "backend/app/Http/Controllers/DocumentController.php",
+        "before_sha256": "4444bdad3675f5f3f4f46f7a28c7d105ee58398883fec57061530404a0f1b5b3",
+        "after_sha256": "17a11b893f2513aa2670e5467345a05151822d4ed34a93423cffb653c74e97fb",
+        "current_head_sha256_lf": "4444bdad3675f5f3f4f46f7a28c7d105ee58398883fec57061530404a0f1b5b3",
+        "integrated_working_sha256_lf": "c174dfee7707784dc5a118a8c25c6c3e36090800ae41961dc5ce28b84a59e7f5"
+      },
+      {
+        "path": "backend/app/Http/Controllers/FollowupController.php",
+        "before_sha256": "575280af3705f7369c25bd2a5381060c3c7ae7e20ead504f151f6c07d7b6697e",
+        "after_sha256": "05adc3b88c78b383a754378d1b152b0be12c33c4b7bc305f84aa8d440226b1a5",
+        "current_head_sha256_lf": "575280af3705f7369c25bd2a5381060c3c7ae7e20ead504f151f6c07d7b6697e",
+        "integrated_working_sha256_lf": "926e8a836abff7801e5db6478834823ba78bd38ea807b03064071ef058edcd64"
+      },
+      {
+        "path": "backend/app/Http/Controllers/PrescriptionController.php",
+        "before_sha256": "6785e3ccd60d6644078c11b56bbc5af01ffe1803fcb6456872d321aea2e0b678",
+        "after_sha256": "4e92850e81eb71125c058731f2f6c1b7b7012a921384a4428d4bef60d3d8ea64",
+        "current_head_sha256_lf": "6785e3ccd60d6644078c11b56bbc5af01ffe1803fcb6456872d321aea2e0b678",
+        "integrated_working_sha256_lf": "c47bd51678d27a683823f99c9496b76ef6e1c5a081ef3fc2c8be80a2021f2220"
+      },
+      {
+        "path": "backend/app/Http/Requests/Appointment/CancelAppointmentRequest.php",
+        "before_sha256": "c24e308b6bbfd362718a51c2fa4e8616f858673a0723a2494fbf881366ebb1bc",
+        "after_sha256": "e7ce75216ef6fdee46ee1e138ca9e0761564edbd93fb9f3645c861fbd525fbaa",
+        "current_head_sha256_lf": "c24e308b6bbfd362718a51c2fa4e8616f858673a0723a2494fbf881366ebb1bc",
+        "integrated_working_sha256_lf": "e7ce75216ef6fdee46ee1e138ca9e0761564edbd93fb9f3645c861fbd525fbaa"
+      },
+      {
+        "path": "backend/app/Http/Requests/Treatment/DocumentTreatmentRequest.php",
+        "before_sha256": "5a2abada53c4e4a40239b7807e730550d7f82292dd35de85bc0451f9d9ce6f93",
+        "after_sha256": "981df175a91db5e43e1b164f2eaca014215082b827ed112d6c2a07e0d36e0d30",
+        "current_head_sha256_lf": "5a2abada53c4e4a40239b7807e730550d7f82292dd35de85bc0451f9d9ce6f93",
+        "integrated_working_sha256_lf": "981df175a91db5e43e1b164f2eaca014215082b827ed112d6c2a07e0d36e0d30"
+      },
+      {
+        "path": "backend/app/Http/Resources/AppointmentResource.php",
+        "before_sha256": "e62496e3f0c45e511148fe2a94937c1bd0cfbdb6646d5efc7d4c62d4797603fc",
+        "after_sha256": "baadeba1464e83d99b2b5a3ed5ac0c342dc5c0db6203fa3d52d55ea4645733b4",
+        "current_head_sha256_lf": "e62496e3f0c45e511148fe2a94937c1bd0cfbdb6646d5efc7d4c62d4797603fc",
+        "integrated_working_sha256_lf": "baadeba1464e83d99b2b5a3ed5ac0c342dc5c0db6203fa3d52d55ea4645733b4"
+      },
+      {
+        "path": "backend/app/Http/Resources/DocumentResource.php",
+        "before_sha256": "8ada4bf196896d5fbfa17b79f7cdd1fccca09aa0cdecc87bb216c78e5387c7a0",
+        "after_sha256": "49cf265444fa1da7dbb20a41bc61bdcdc92f4497634689cb86816e3d79c26150",
+        "current_head_sha256_lf": "8ada4bf196896d5fbfa17b79f7cdd1fccca09aa0cdecc87bb216c78e5387c7a0",
+        "integrated_working_sha256_lf": "49cf265444fa1da7dbb20a41bc61bdcdc92f4497634689cb86816e3d79c26150"
+      },
+      {
+        "path": "backend/app/Http/Resources/TreatmentResource.php",
+        "before_sha256": "fb0395e0541ef9b763555f80311d36ad4189952f06340903d26b4f6b9ff162c8",
+        "after_sha256": "152f8bc93f42b7eb2ae08cb4e28b2da7bf7b5d7a300fa592c90687eced9318d8",
+        "current_head_sha256_lf": "fb0395e0541ef9b763555f80311d36ad4189952f06340903d26b4f6b9ff162c8",
+        "integrated_working_sha256_lf": "152f8bc93f42b7eb2ae08cb4e28b2da7bf7b5d7a300fa592c90687eced9318d8"
+      },
+      {
+        "path": "backend/app/Models/AssistantAnswer.php",
+        "before_sha256": "877fd014d233f5c3cc0101fb3f5f80e02035ab06e8a7aee37885351c6e66dea8",
+        "after_sha256": "c99bb082c6498c4f9a51dfc256031174b5b932a40f40355f5118b4277164f633",
+        "current_head_sha256_lf": "877fd014d233f5c3cc0101fb3f5f80e02035ab06e8a7aee37885351c6e66dea8",
+        "integrated_working_sha256_lf": "c99bb082c6498c4f9a51dfc256031174b5b932a40f40355f5118b4277164f633"
+      },
+      {
+        "path": "backend/app/Models/PrescriptionLine.php",
+        "before_sha256": "abfd054772633be6ffe94168deb304f31e8146d3d13cbb62c6624c18775a511a",
+        "after_sha256": "c55fd39b7e5e38aa107f7a2399a17bb9947aead4dab5771d89e47732b45677a8",
+        "current_head_sha256_lf": "abfd054772633be6ffe94168deb304f31e8146d3d13cbb62c6624c18775a511a",
+        "integrated_working_sha256_lf": "c55fd39b7e5e38aa107f7a2399a17bb9947aead4dab5771d89e47732b45677a8"
+      },
+      {
+        "path": "backend/app/Models/Treatment.php",
+        "before_sha256": "f2fccae88585f5e55fe1c948e415dbc77b60eaf11dc3c645723930b5905320dc",
+        "after_sha256": "864c6a0a924aafd6cccc2bc0860a372529d028bdcec1d5c94a9f8169b4bd5ca1",
+        "current_head_sha256_lf": "f2fccae88585f5e55fe1c948e415dbc77b60eaf11dc3c645723930b5905320dc",
+        "integrated_working_sha256_lf": "864c6a0a924aafd6cccc2bc0860a372529d028bdcec1d5c94a9f8169b4bd5ca1"
+      },
+      {
+        "path": "backend/app/Services/Appointments/AppointmentService.php",
+        "before_sha256": "e5f60063bbd617932c4d493723aaa48be36f04cb184c2ca0e057a9b677edfeb1",
+        "after_sha256": "7335769f1553e71d004b785d820d25f1b40ecc23978e23cb4bd38a9a6cc260a7",
+        "current_head_sha256_lf": "e5f60063bbd617932c4d493723aaa48be36f04cb184c2ca0e057a9b677edfeb1",
+        "integrated_working_sha256_lf": "96aa17c5ebe043b52d3cfca2173c6b6e1f460acbd5ee6c9699e9939a119cbdea"
+      },
+      {
+        "path": "backend/app/Services/Followups/Followups.php",
+        "before_sha256": "8d6945c2510023361f152250f6c822e12311b10f627afbc70fc24a808c8a741e",
+        "after_sha256": "ad788b1c4c125a21c1b8e1e8bf18296927593082a468b90c71a4d3e073a8d07a",
+        "current_head_sha256_lf": "8d6945c2510023361f152250f6c822e12311b10f627afbc70fc24a808c8a741e",
+        "integrated_working_sha256_lf": "24e15fb081ddee42575b945620ecfe9478b82b756b44c4172030d334d2af27a1"
+      },
+      {
+        "path": "backend/app/Services/Treatments/TreatmentService.php",
+        "before_sha256": "d6ef4fc41f6cfe8060a58a96bf497cc24c6e04f992b679a70d9fd13903e972c6",
+        "after_sha256": "8e6f5bf0be7f932052f31334b0d69a932f7993c3560637cb59a9ebe0ba8e3d98",
+        "current_head_sha256_lf": "d6ef4fc41f6cfe8060a58a96bf497cc24c6e04f992b679a70d9fd13903e972c6",
+        "integrated_working_sha256_lf": "eb8df991bd89471dd81f99ecdca18632812b863d56b3172ae78d9b48d132ee03"
+      },
+      {
+        "path": "backend/app/Support/ReasonSelection.php",
+        "before_sha256": null,
+        "after_sha256": "13daebeb8792232edb9ea1030fd6d96bfe364bfaddb6d919a504f4e9ef17906c",
+        "current_head_sha256_lf": null,
+        "integrated_working_sha256_lf": "13daebeb8792232edb9ea1030fd6d96bfe364bfaddb6d919a504f4e9ef17906c"
+      },
+      {
+        "path": "backend/database/proposals/2026_11_22_000100_add_gen07_selection_details.php",
+        "before_sha256": null,
+        "after_sha256": "dd6fc2ae8a68a8d806e66cf776fbad7555224b65dfaeba965811852341854016",
+        "current_head_sha256_lf": null,
+        "integrated_working_sha256_lf": "dd6fc2ae8a68a8d806e66cf776fbad7555224b65dfaeba965811852341854016"
+      },
+      {
+        "path": "backend/tests/Feature/Documents/DocumentManagementTest.php",
+        "before_sha256": "17ae0ddc86a88b78ab2652e309e4d745f8d98e4a226e09cce99d8dfea675c0fb",
+        "after_sha256": "f8603c901bcd17fe56c85b093b87c3db706dbbb6df36146dda6c256873dbfffb",
+        "current_head_sha256_lf": "17ae0ddc86a88b78ab2652e309e4d745f8d98e4a226e09cce99d8dfea675c0fb",
+        "integrated_working_sha256_lf": "f8603c901bcd17fe56c85b093b87c3db706dbbb6df36146dda6c256873dbfffb"
+      },
+      {
+        "path": "backend/tests/Feature/Gen07/SelectionPersistenceTest.php",
+        "before_sha256": null,
+        "after_sha256": "7074760208d514a090e235d70255c0ad98b6e71a3e4d3c64b089b38da88766cb",
+        "current_head_sha256_lf": null,
+        "integrated_working_sha256_lf": "7074760208d514a090e235d70255c0ad98b6e71a3e4d3c64b089b38da88766cb"
+      },
+      {
+        "path": "backend/tests/Support/ClinicalRuntimeLabTest.php",
+        "before_sha256": "2196019fd1e7ee6ce955500576286eadae83e4975b645aa8227a169a3707fe6d",
+        "after_sha256": "dff725b69773b54c42088d2143f7a9f0244a17c20d1241b3201735c0ce10f674",
+        "current_head_sha256_lf": "2196019fd1e7ee6ce955500576286eadae83e4975b645aa8227a169a3707fe6d",
+        "integrated_working_sha256_lf": "dff725b69773b54c42088d2143f7a9f0244a17c20d1241b3201735c0ce10f674"
+      },
+      {
+        "path": "backend/tests/Support/ConversationGrantLabTest.php",
+        "before_sha256": "b8ab0c8a849c1850720c8a5b594f5b1d1aec316333b825a4e81b0421812ecdd3",
+        "after_sha256": "ac474d303ef9c044fc8ed16bf41d7ea9e5aa5035c9acac3cf1edc274cec04081",
+        "current_head_sha256_lf": "b8ab0c8a849c1850720c8a5b594f5b1d1aec316333b825a4e81b0421812ecdd3",
+        "integrated_working_sha256_lf": "ac474d303ef9c044fc8ed16bf41d7ea9e5aa5035c9acac3cf1edc274cec04081"
+      },
+      {
+        "path": "scripts/m14-documents-browser-qa.mjs",
+        "before_sha256": "7668c21a91af089afcbd925958e71a04131f9a8699298a7d0073207c04311fa6",
+        "after_sha256": "1c563058cc4342d422feedfdba175ce1df94d1e6c3c0b569bb4b97ab7980d0d4",
+        "current_head_sha256_lf": "7668c21a91af089afcbd925958e71a04131f9a8699298a7d0073207c04311fa6",
+        "integrated_working_sha256_lf": "fe97b489f8d4274ca60d2a91830782b96f39a0fcecfb2ba0f02820cf11e648a8"
+      },
+      {
+        "path": "src/api-client.js",
+        "before_sha256": "de6f707a08b52d1d89c9afa75156de9ac0a0b7371e7264e8ee98c374ccaf2a7d",
+        "after_sha256": "632e16d1b54e08d16a0453e4f5cfd9e3ef77ccf2d1532f8ce28872aff05794eb",
+        "current_head_sha256_lf": "2346a9ec2003e56302e6ed9c2a81a1c8ef40b31aeef7949c6cee32a534c95384",
+        "integrated_working_sha256_lf": "bea2379d7f2e32f20689bc2d59980023e910b84fad1666b6c56785e59706e579"
+      },
+      {
+        "path": "src/appointments-api.js",
+        "before_sha256": "06e4094012cd0c5cb11386071076e4ff7bce5af12ea140da6eacb9cddb6ee7b7",
+        "after_sha256": "a64cfb32ff318faa428409a9009356e45e52fe2aa7cc43463b94818be7404012",
+        "current_head_sha256_lf": "06e4094012cd0c5cb11386071076e4ff7bce5af12ea140da6eacb9cddb6ee7b7",
+        "integrated_working_sha256_lf": "a64cfb32ff318faa428409a9009356e45e52fe2aa7cc43463b94818be7404012"
+      },
+      {
+        "path": "src/documents-api.js",
+        "before_sha256": "ad0a8c08ae424da657e06ec6da59869d42310e8361320bf7c2e2611d1f6c29df",
+        "after_sha256": "3f6510c9c1ab57530355b02c9b0a1563418daeb7c0a6bcc0512d5816ae32be0c",
+        "current_head_sha256_lf": "ad0a8c08ae424da657e06ec6da59869d42310e8361320bf7c2e2611d1f6c29df",
+        "integrated_working_sha256_lf": "3f6510c9c1ab57530355b02c9b0a1563418daeb7c0a6bcc0512d5816ae32be0c"
+      },
+      {
+        "path": "src/pages/AssistantAnswers.jsx",
+        "before_sha256": "48ba83a8458df2a574a964033337132ace7286e717daf9ad3272986ade130283",
+        "after_sha256": "5388e77c32c65fc4c464db7f2179ab5fa46cc27077ee3c0bfa5e8ff68829cadc",
+        "current_head_sha256_lf": "48ba83a8458df2a574a964033337132ace7286e717daf9ad3272986ade130283",
+        "integrated_working_sha256_lf": "12fa62802843a8802499bc2d7bb7d96d4591b2473f8f9e68fff31ecf08f57aca"
+      },
+      {
+        "path": "src/pages/Clinical.jsx",
+        "before_sha256": "2533b8b9d146021040d85b6cc6373ab289701d100f0f9ede7e173ee260539cb8",
+        "after_sha256": "61df4cbc94d13498d173fe08673809be6ced32a137cdd6e9d830b64801899636",
+        "current_head_sha256_lf": "2533b8b9d146021040d85b6cc6373ab289701d100f0f9ede7e173ee260539cb8",
+        "integrated_working_sha256_lf": "61df4cbc94d13498d173fe08673809be6ced32a137cdd6e9d830b64801899636"
+      },
+      {
+        "path": "src/pages/EncounterWorkspace.jsx",
+        "before_sha256": "9c8c59e48cc67d9ab2dd5dad19739d2c3a9ad8e16dfbb06cb72ae9ad1e7d526d",
+        "after_sha256": "9a3b8be0a95c6b822e31bbc1a1ba500f5ad2d93b80e97001a473731852725ed9",
+        "current_head_sha256_lf": "9c8c59e48cc67d9ab2dd5dad19739d2c3a9ad8e16dfbb06cb72ae9ad1e7d526d",
+        "integrated_working_sha256_lf": "cf574889f39552fbbe09c75a0aed96d6c357591428e8577845b5fc62b677d61e"
+      },
+      {
+        "path": "src/pages/PatientFlow.jsx",
+        "before_sha256": "98ea4b48b3ca7f193fa48d11739bb025e2951b7ac60dff0efa8c799823ad96fc",
+        "after_sha256": "67001f1a0ed5bf67f4cedf5da39a7f0c8ac7d3f24accc28a61e7cfe5c7ed0458",
+        "current_head_sha256_lf": "73afb65f74519e8b9ebf3bbdde2a9570bd1b529b8ada5b5a46ea52a386e235f2",
+        "integrated_working_sha256_lf": "4ff537d36be1e476d53eaf3d6394d4745f72d764802ef1936fb0c0f48a88178a"
+      },
+      {
+        "path": "src/pages/PatientMe.jsx",
+        "before_sha256": "2443f714f861cecb177f6a1ca91d17ebec097b396354f192b0819aebc6e8c4dd",
+        "after_sha256": "3a665ffbcc27b4e297abb8ea2ffa363f1feb5b93550e79f0bcd56773a693df35",
+        "current_head_sha256_lf": "2443f714f861cecb177f6a1ca91d17ebec097b396354f192b0819aebc6e8c4dd",
+        "integrated_working_sha256_lf": "3a665ffbcc27b4e297abb8ea2ffa363f1feb5b93550e79f0bcd56773a693df35"
+      },
+      {
+        "path": "src/pages/Scheduling.jsx",
+        "before_sha256": "b8f143987943fbfcc8ae5ba02c2b783d3c548f728e95ea673de6d130c4af2ab4",
+        "after_sha256": "d362b4533e35899ed639890feb3d0fc2907aa6b10c73b39b08eaee5a6e46c5b3",
+        "current_head_sha256_lf": "b8f143987943fbfcc8ae5ba02c2b783d3c548f728e95ea673de6d130c4af2ab4",
+        "integrated_working_sha256_lf": "ba603aca398a73f9c60fac6274df6f32176c22f572e35e1d7100fe3f05873495"
+      },
+      {
+        "path": "src/pages/ServerFollowups.jsx",
+        "before_sha256": "fefde258687a9cb8f849566f70f1afa791be74680b2ea3409d311d799c2a49a2",
+        "after_sha256": "5d468b36cb89c7ceb3c3e06b38addd9fbe517b6dc40a6eca52acd1eac6ebdf06",
+        "current_head_sha256_lf": "fefde258687a9cb8f849566f70f1afa791be74680b2ea3409d311d799c2a49a2",
+        "integrated_working_sha256_lf": "b6caff881178e060494ccd0b8fa1f77c88c08b3b9e9a34e7ccbe828f5e503447"
+      },
+      {
+        "path": "src/pages/ServerPrescriptions.jsx",
+        "before_sha256": "d79e62a795b28b1d5eff0bad60d573ec7bb919a69fd83b244861e7eb61f91b7b",
+        "after_sha256": "c5d2b880ffe6f5b8cf7497614f7b1319e1693bddbb651ec6f28187571215e620",
+        "current_head_sha256_lf": "d79e62a795b28b1d5eff0bad60d573ec7bb919a69fd83b244861e7eb61f91b7b",
+        "integrated_working_sha256_lf": "31ed1df83da79f5ca8f1fda40706995a8ab0159d942df16d63190fa1f4710dcf"
+      },
+      {
+        "path": "src/pages/Staffing.jsx",
+        "before_sha256": "751d18879b25fb3ed6c07b0929f9dddf3581100c60a1818c8746176863846e54",
+        "after_sha256": "5b17044e90581e80aa00bb4925e2700983b59133d4bf2d54c393cd635ce5bdc5",
+        "current_head_sha256_lf": "751d18879b25fb3ed6c07b0929f9dddf3581100c60a1818c8746176863846e54",
+        "integrated_working_sha256_lf": "5b17044e90581e80aa00bb4925e2700983b59133d4bf2d54c393cd635ce5bdc5"
+      },
+      {
+        "path": "src/patient/pages/Visits.jsx",
+        "before_sha256": "612fa85f4ae870316316e20c0d08d5fb24796269988027c4bb29e7d0d17712eb",
+        "after_sha256": "a5c6efcad6520b184ccf8496642cafa0e3a6dd39d01953ba57fe8c6257eda6cb",
+        "current_head_sha256_lf": "612fa85f4ae870316316e20c0d08d5fb24796269988027c4bb29e7d0d17712eb",
+        "integrated_working_sha256_lf": "182fa8958b356753cfd51cb134444aa7133a6a6a4286443060ada70865318a2c"
+      },
+      {
+        "path": "src/prescription-command.js",
+        "before_sha256": "35401744d5286261ef6be30ffc115723ef8f45af67c5934750fe0068eda2c1e0",
+        "after_sha256": "2f81258e5ac5a654ba9c660dfb47db7a772aac1b2c2efc53bb66839320a80bee",
+        "current_head_sha256_lf": "35401744d5286261ef6be30ffc115723ef8f45af67c5934750fe0068eda2c1e0",
+        "integrated_working_sha256_lf": "2f81258e5ac5a654ba9c660dfb47db7a772aac1b2c2efc53bb66839320a80bee"
+      },
+      {
+        "path": "src/treatments-api.js",
+        "before_sha256": "dd770dd4e83714911356cf31a88b34c5bf29576b90d4c4cadb8364611897e3f3",
+        "after_sha256": "92d4fb328c2ba6332e60f9145a27b2f97d5045d8f559a8c24a341fa0752bcecd",
+        "current_head_sha256_lf": "dd770dd4e83714911356cf31a88b34c5bf29576b90d4c4cadb8364611897e3f3",
+        "integrated_working_sha256_lf": "92d4fb328c2ba6332e60f9145a27b2f97d5045d8f559a8c24a341fa0752bcecd"
+      },
+      {
+        "path": "tests/documents-api.test.js",
+        "before_sha256": "06c898248813c6c0c69ee8fd4055e5d03af8cd61c9f168883d6421c562c98fad",
+        "after_sha256": "c9e38f81163bdc015100b2c073133ce433fc53f91e54fd618d037e0ad5cd2d61",
+        "current_head_sha256_lf": "06c898248813c6c0c69ee8fd4055e5d03af8cd61c9f168883d6421c562c98fad",
+        "integrated_working_sha256_lf": "c9e38f81163bdc015100b2c073133ce433fc53f91e54fd618d037e0ad5cd2d61"
+      },
+      {
+        "path": "tests/gen07-followup-other.test.js",
+        "before_sha256": "ac72684e28cc9393eec88c55cc633ec015177b311cdcbb32a23b90e7901b9ee8",
+        "after_sha256": "9030a354e6b7a4c057096d8db5524dbe7b3f335d370d6ef4bd191b72eac5f16f",
+        "current_head_sha256_lf": "ac72684e28cc9393eec88c55cc633ec015177b311cdcbb32a23b90e7901b9ee8",
+        "integrated_working_sha256_lf": "9030a354e6b7a4c057096d8db5524dbe7b3f335d370d6ef4bd191b72eac5f16f"
+      },
+      {
+        "path": "tests/gen07-other-clear.browser.mjs",
+        "before_sha256": "af9ab3efc608f305af5a49771671c41921b65a5fc544a15aac0b464db033bf92",
+        "after_sha256": "73763f4fdafec31586f2c50bc57cfd1157f5a1bbef9f30e8bda93bcb8a12b742",
+        "current_head_sha256_lf": "af9ab3efc608f305af5a49771671c41921b65a5fc544a15aac0b464db033bf92",
+        "integrated_working_sha256_lf": "f9ca3517df288ef074c94a2b882dcd371c4235613d70acf650e04528de5e945c"
+      },
+      {
+        "path": "tests/m19-prescriptions.test.js",
+        "before_sha256": "b8935fa05558bdf050eee6535c94271a6220940187605b1c2d06924dc0086313",
+        "after_sha256": "d546b0fe37c3d354e1cc5a0959c513889e39d6eca523b5b49ebfeccb9f7d34e8",
+        "current_head_sha256_lf": "b8935fa05558bdf050eee6535c94271a6220940187605b1c2d06924dc0086313",
+        "integrated_working_sha256_lf": "86934628ec762dde712af592da530adf4cd01e6d771a2dcf98559e27f44a2cd9"
+      },
+      {
+        "path": "tests/stf11-checkin-cancel.test.js",
+        "before_sha256": "04b547ab706872865fc7d3da2ffe453a682e94dca37da430dfbe44682b3aa67b",
+        "after_sha256": "e899ae5e767e95dc0028c61b590c9a3c403b995ad2a257de4bd07efcba446d14",
+        "current_head_sha256_lf": "04b547ab706872865fc7d3da2ffe453a682e94dca37da430dfbe44682b3aa67b",
+        "integrated_working_sha256_lf": "e899ae5e767e95dc0028c61b590c9a3c403b995ad2a257de4bd07efcba446d14"
+      },
+      {
+        "path": "tests/yzh-clin-12-followup-lifecycle.test.js",
+        "before_sha256": "bd8f1e018cf9abeddd9ba7d020b3ae461fd7ae19fc92787d69a1eec6f871c311",
+        "after_sha256": "70b11be6b859f7b4974cb63b95ea4549843f27d02833ab48ac88fe78b942119a",
+        "current_head_sha256_lf": "bd8f1e018cf9abeddd9ba7d020b3ae461fd7ae19fc92787d69a1eec6f871c311",
+        "integrated_working_sha256_lf": "c60465f7a94f23a5af422b7e4517a48e195054fc0ba0b2594d9da504533a3424"
+      }
+    ],
+    "integration_note": "Canonical before/after patch blobs independently verified; deliberate S01/schema compatibility resolutions differ from patch after blobs."
+  }
+}

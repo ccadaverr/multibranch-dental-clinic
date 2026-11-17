@@ -176,7 +176,7 @@ final class ConversationGrantLabTest extends TestCase
         $visit = $this->postJson('/api/visits/walk-in', ['patient_id' => $this->p['A']->public_id, 'branch_ref' => 'b1', 'service_ref' => 'svc1', 'dentist_ref' => 'd1'],
             ['Idempotency-Key' => 'grant-boundary-visit'])->assertCreated()->json('data.id');
         $document = $this->postJson('/api/documents', ['patient_id' => $this->p['A']->public_id, 'branch_id' => 'b1', 'visit_id' => $visit,
-            'category' => 'other', 'file' => \Illuminate\Http\UploadedFile::fake()->createWithContent('synthetic.pdf', "%PDF-1.4\n1 0 obj\n<< >>\nstream\nBT (Synthetic grant boundary) Tj ET\nendstream\nendobj\n%%EOF")],
+            'category' => 'other', 'other_description' => 'Synthetic attachment', 'file' => \Illuminate\Http\UploadedFile::fake()->createWithContent('synthetic.pdf', "%PDF-1.4\n1 0 obj\n<< >>\nstream\nBT (Synthetic grant boundary) Tj ET\nendstream\nendobj\n%%EOF")],
             ['Idempotency-Key' => 'grant-boundary-document'])->assertCreated()->json('data.id');
         $state = \App\Models\Visit::where('public_id', $visit)->sole()->getAttributes();
         $this->assign('dentist2', 1, 'document-boundary-grant')->assertCreated();

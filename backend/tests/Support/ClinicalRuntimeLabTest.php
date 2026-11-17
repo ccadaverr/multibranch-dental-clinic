@@ -55,7 +55,7 @@ final class ClinicalRuntimeLabTest extends TestCase
         $visit = Visit::where('public_id', $visitId)->sole();
         $pdf = "%PDF-1.4\n1 0 obj\n<< >>\nstream\nBT (Synthetic private restore witness) Tj ET\nendstream\nendobj\n%%EOF";
         $this->postJson('/api/documents', ['patient_id' => $this->p['A']->public_id, 'branch_id' => 'b1', 'visit_id' => $visitId,
-            'category' => 'other', 'file' => UploadedFile::fake()->createWithContent('synthetic.pdf', $pdf)], ['Idempotency-Key' => 'runtime-lab-document'])
+            'category' => 'other', 'other_description' => 'Synthetic attachment', 'file' => UploadedFile::fake()->createWithContent('synthetic.pdf', $pdf)], ['Idempotency-Key' => 'runtime-lab-document'])
             ->assertCreated();
         $document = Document::sole();
         $this->assertSame([$this->p['A']->id, $this->b['b1']->id, $visit->id], [$document->patient_id, $document->branch_id, $document->visit_id]);

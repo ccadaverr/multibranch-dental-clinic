@@ -46,7 +46,12 @@ class DocumentManagementTest extends TestCase
 
     private function upload(array $fields = [], ?UploadedFile $file = null, array $headers = [])
     {
-        return $this->postJson('/api/documents', $fields + ['file' => $file ?? $this->pdf(), 'category' => 'other'], $headers);
+        $fields += ['category' => 'other'];
+        if ($fields['category'] === 'other') {
+            $fields += ['other_description' => 'Synthetic document description'];
+        }
+
+        return $this->postJson('/api/documents', $fields + ['file' => $file ?? $this->pdf()], $headers);
     }
 
     private function walkIn(string $patient = 'A', string $dentist = 'd1', string $branch = 'b1'): Visit
@@ -67,6 +72,77 @@ class DocumentManagementTest extends TestCase
     }
 
     // ---- upload: content validation -------------------------------------------------------------------------------
+
+    public function test_other_requires_explicit_description_and_persists_it_separately(): void
+    {
+        $this->actingAsUser('patientA');
+        foreach ([null, '   ', ['invalid'], str_repeat('x', 256)] as $invalid) {
+            $this->upload(['title' => 'Test file title', 'other_description' => $invalid])
+                ->assertUnprocessable()->assertJsonValidationErrors('other_description');
+        }
+        $this->upload(['category' => null, 'other_description' => null])->assertUnprocessable();
+        $this->upload(['category' => 'invalid'])->assertUnprocessable()->assertJsonValidationErrors('category');
+        $this->upload(['category' => 'valid_id', 'other_description' => 'Stale detail'])
+            ->assertUnprocessable()->assertJsonValidationErrors('other_description');
+        $this->assertSame(0, Document::count());
+
+        $body = ['title' => 'Test file title', 'other_description' => 'Synthetic school referral'];
+        $headers = ['Idempotency-Key' => 'gen07-document'];
+        $saved = $this->upload($body, headers: $headers)->assertCreated()
+            ->assertJsonPath('data.other_description', $body['other_description'])->json('data.id');
+        $this->upload($body, headers: $headers)->assertCreated()->assertHeader('Idempotent-Replayed', 'true')
+            ->assertJsonPath('data.id', $saved);
+        $this->upload(array_replace($body, ['other_description' => 'Different detail']), headers: $headers)->assertConflict();
+        $row = Document::sole();
+        $this->assertSame('other', $row->category);
+        $this->assertSame('Test file title', $row->title);
+        $this->assertSame($body['other_description'], $row->metadata['other_description']);
+        $this->getJson('/api/documents/mine')->assertOk()->assertJsonPath('data.0.other_description', $body['other_description']);
+        $this->actingAsUser('patientB');
+        $this->getJson('/api/documents/'.$saved)->assertForbidden();
+        $this->actingAsUser('owner');
+        $this->getJson('/api/documents/'.$saved)->assertForbidden();
+    }
+
+
+
+    public function test_standard_document_categories_round_trip_without_an_other_description(): void
+    {
+        $this->actingAsUser('patientA');
+        $categories = ['hmo_card', 'valid_id', 'treatment_request', 'clinical_attachment', 'consent_document', 'referral'];
+        foreach ($categories as $category) {
+            $id = $this->upload(['category' => $category])->assertCreated()
+                ->assertJsonPath('data.category', $category)->assertJsonPath('data.other_description', null)->json('data.id');
+            $row = Document::where('public_id', $id)->sole();
+            $this->assertSame($category, $row->category);
+            $this->assertArrayNotHasKey('other_description', $row->metadata ?? []);
+            $this->getJson('/api/documents/'.$id)->assertOk()
+                ->assertJsonPath('data.category', $category)->assertJsonPath('data.other_description', null);
+        }
+    }
+
+    public function test_other_description_is_scoped_and_legacy_uploads_are_not_relabelled(): void
+    {
+        $this->actingAsUser('staffB1');
+        $fields = ['patient_id' => $this->p['A']->public_id, 'branch_id' => 'b1', 'other_description' => 'School clearance'];
+        $headers = ['Idempotency-Key' => 'gen07-staff-document'];
+        $id = $this->upload($fields, headers: $headers)->assertCreated()->json('data.id');
+        $this->getJson('/api/documents/'.$id)->assertOk()->assertJsonPath('data.other_description', 'School clearance');
+        $this->actingAsUser('staffB2');
+        $this->getJson('/api/documents/'.$id)->assertForbidden();
+        $this->upload($fields)->assertForbidden();
+
+        $this->actingAsUser('staffB1');
+        \App\Models\UserBranchScope::where('user_id', $this->u['staffB1']->id)->delete();
+        $this->upload($fields, headers: $headers)->assertForbidden();
+        $this->assertSame(1, Document::count());
+
+        $row = Document::sole();
+        $row->update(['metadata' => null, 'title' => 'Legacy filename.pdf']);
+        $this->actingAsUser('patientA');
+        $this->getJson('/api/documents/'.$id)->assertOk()->assertJsonPath('data.category', 'other')
+            ->assertJsonPath('data.title', 'Legacy filename.pdf')->assertJsonPath('data.other_description', null);
+    }
 
     public function test_patient_uploads_own_document_with_a_server_generated_private_path(): void
     {

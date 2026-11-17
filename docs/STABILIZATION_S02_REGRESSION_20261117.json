@@ -1,0 +1,53 @@
+{
+  "baseline": {
+    "head": "9018a09ff0a9d2734944d56d5d3030927703be41",
+    "tests": 1271,
+    "failures": 26,
+    "errors": 1,
+    "skips": 3
+  },
+  "final": {
+    "tests": 1279,
+    "assertions": 14753,
+    "failures": 26,
+    "errors": 1,
+    "skips": 3,
+    "passing": 1249
+  },
+  "new_failure_identities": [],
+  "resolved_inherited_identities": [],
+  "inherited_failure_and_error_identities": [
+    "Tests\\Feature\\Automation\\AutomationControlTest::test_csv_export_neutralizes_formula_injection",
+    "Tests\\Feature\\Automation\\AutomationControlTest::test_owner_can_trigger_manual_evaluation_and_audit_is_created",
+    "Tests\\Feature\\Automation\\AutomationControlTest::test_owner_can_view_automation_rules_and_snapshot",
+    "Tests\\Feature\\Automation\\AutomationControlTest::test_staff_and_dentist_and_patient_are_forbidden_from_automation",
+    "Tests\\Feature\\Automation\\AutomationControlTest::test_unauthenticated_cannot_access_automation_endpoints",
+    "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_audit_events_carry_no_event_body_and_the_csv_marks_evaluation_only",
+    "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_legacy_descriptions_are_qualified_inside_the_csv_cell_and_in_the_exception_projection",
+    "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_is_rate_limited",
+    "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_refuses_clinical_flags_and_every_foreign_field",
+    "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_refuses_unexpected_top_level_fields_too",
+    "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_validates_each_rule_observation",
+    "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_only_the_owner_may_dispatch_and_authorization_precedes_validation",
+    "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_repeated_manual_dispatches_are_independent_evaluations_with_no_idempotency_contract",
+    "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_the_api_marks_every_action_row_as_evaluation_only_and_keeps_historical_text_unchanged",
+    "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_the_manual_message_says_evaluated_not_executed_and_the_event_stores_no_email",
+    "Tests\\Feature\\Feedback\\FeedbackTest::test_a_patient_reads_only_their_own_feedback_newest_first_with_a_cursor_that_reveals_nothing_about_others",
+    "Tests\\Feature\\Feedback\\FeedbackTest::test_a_patient_submits_free_text_about_their_own_completed_visit_and_the_record_is_minimal_and_server_derived",
+    "Tests\\Feature\\Feedback\\FeedbackTest::test_m26_is_a_foundation_only_no_rating_category_status_reply_publication_marketing_or_other_module_side_effect",
+    "Tests\\Feature\\Feedback\\FeedbackTest::test_only_the_patients_own_completed_visits_are_eligible_and_every_other_case_is_one_indistinguishable_refusal",
+    "Tests\\Feature\\Feedback\\FeedbackTest::test_owner_can_review_feedback_with_filters",
+    "Tests\\Feature\\Feedback\\FeedbackTest::test_owner_can_review_patient_feedback_with_branch_and_dentist_filters",
+    "Tests\\Feature\\Feedback\\FeedbackTest::test_patient_can_submit_1_to_5_star_rating_and_low_ratings_auto_create_followup_task",
+    "Tests\\Feature\\Feedback\\FeedbackTest::test_submission_is_idempotent_a_new_key_is_a_separate_submission_and_no_uniqueness_is_invented",
+    "Tests\\Feature\\Feedback\\FeedbackTest::test_submission_is_rate_limited_per_account_and_explains_itself",
+    "Tests\\Feature\\Feedback\\FeedbackTest::test_submitted_feedback_is_immutable_and_nothing_can_erase_it",
+    "Tests\\Feature\\Feedback\\FeedbackTest::test_the_feature_is_patient_only_and_owner_staff_dentist_and_guests_are_all_refused_everywhere",
+    "Tests\\Feature\\Feedback\\FeedbackTest::test_the_text_is_bounded_free_data_and_every_authority_or_policy_field_is_refused"
+  ],
+  "not_executed": [
+    "Six SelectionPersistenceTest cases requiring unapproved proposal installation",
+    "Wholesale replay of previous isolated contention/schema-mutation lanes"
+  ],
+  "fixture_correction": "PublicContentPublicationTest general-information answer uses about category; Other validation preserved and absent-schema refusal tested."
+}

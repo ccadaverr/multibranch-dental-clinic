@@ -5,14 +5,14 @@ import { runInNewContext } from 'node:vm'
 import { documentationPayload } from '../src/treatments-api.js'
 
 const page = readFileSync(new URL('../src/pages/EncounterWorkspace.jsx', import.meta.url), 'utf8')
-const helpers = ['FOLLOWUP_REASONS', 'savedFollowupReasonOther', 'followupReasonOption', 'chooseFollowupReason', 'missingFollowupReason']
+const helpers = ['followupReasonOption', 'chooseFollowupReason', 'missingFollowupReason']
   .map(name => {
     const declaration = page.match(new RegExp(`^const ${name} = .+$`, 'm'))?.[0]
     assert.ok(declaration, `${name} is present`)
     return declaration
   })
-const { savedFollowupReasonOther, followupReasonOption, chooseFollowupReason, missingFollowupReason } = runInNewContext(
-  `${helpers.join(';')}; ({ savedFollowupReasonOther, followupReasonOption, chooseFollowupReason, missingFollowupReason })`
+const { followupReasonOption, chooseFollowupReason, missingFollowupReason } = runInNewContext(
+  `${helpers.join(';')}; ({ followupReasonOption, chooseFollowupReason, missingFollowupReason })`
 )
 
 test('GEN-07: follow-up Other stays selected while its custom reason changes', () => {
@@ -38,14 +38,15 @@ test('GEN-07: follow-up Other stays selected while its custom reason changes', (
 })
 
 test('GEN-07: saved custom reason remains editable and UI state stays out of the treatment payload', () => {
-  assert.equal(savedFollowupReasonOther('Review healing'), true)
-  assert.equal(savedFollowupReasonOther('Post-Op Check'), false)
-  const form = { followupRequired: true, followupReason: 'Review healing', followupReasonOther: savedFollowupReasonOther('Review healing'), procedures: [] }
+  assert.equal(followupReasonOption({ followupReason: 'Post-Op Check' }), '__recorded__')
+  const form = { followupRequired: true, followupReason: 'Post-Op Check', followupReasonOther: true, followupReasonCategory: 'Other', procedures: [] }
   assert.equal(followupReasonOption(form), 'Other')
   const payload = documentationPayload(form)
-  assert.equal(payload.followup_reason, 'Review healing')
+  assert.equal(payload.followup_reason, null)
+  assert.equal(payload.followup_reason_category, 'Other')
+  assert.equal(payload.followup_reason_detail, 'Post-Op Check')
   assert.equal(Object.hasOwn(payload, 'followupReasonOther'), false)
-  assert.match(page, /followupReasonOther:savedFollowupReasonOther\(t\?\.followupReason\)/)
+  assert.match(page, /followupReasonOther:t\?\.followupReasonCategory === 'Other'/)
   assert.match(page, /value=\{followupReasonOption\(form\)\}/)
   assert.match(page, /onChange=\{e => setForm\(chooseFollowupReason\(form,e\.target\.value\)\)\}/)
   assert.match(page, /\{form\.followupReasonOther && \(/)

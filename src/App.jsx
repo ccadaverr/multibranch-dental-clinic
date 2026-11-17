@@ -151,7 +151,7 @@ function AppBody() {
   // ownership, resolved server-side) and the Staff authorization branch scopes. Neither is ever taken from browser input.
   const enterSession=(session,me)=>{
     setServerMe(me||null);setSignInNotice(null)
-    store.adoptSession({...session,clinicalContext:me?.clinical_context??null,serverUserId:me?.id??null,patientPublicId:me?.patient?.id??null,branchScopes:Array.isArray(me?.branch_scopes)?me.branch_scopes.map(b=>b.id):[]})
+    store.adoptSession({...session,selectionDetailsAvailable:me?.selection_details_available===true,clinicalContext:me?.clinical_context??null,serverUserId:me?.id??null,patientPublicId:me?.patient?.id??null,branchScopes:Array.isArray(me?.branch_scopes)?me.branch_scopes.map(b=>b.id):[]})
     setContext(null)
     setPageState(START_PAGE[session.role]||'dashboard')
     setActiveBranch(store.state.branches.find(b=>b.id===session.branchId)?.name||'All Branches')

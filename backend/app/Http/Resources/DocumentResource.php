@@ -29,6 +29,7 @@ class DocumentResource extends JsonResource
         return [
             'id' => $d->public_id,
             'category' => $d->category,
+            'other_description' => $d->category === 'other' ? ($d->metadata['other_description'] ?? null) : null,
             'title' => $d->title,
             'original_filename' => $d->original_filename,
             'mime_type' => $d->mime_type,

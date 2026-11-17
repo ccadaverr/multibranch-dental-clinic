@@ -235,7 +235,13 @@ final class AppointmentService
             $from = $current->status;
             // F4 (R2-13): the Patient's own cancellation less than the policy's hours before the visit is a late cancellation.
             $late = $actor->role === Role::Patient && \App\Services\Automations\AttendancePolicy::isLate(\Carbon\CarbonImmutable::instance($current->starts_at), $now);
-            $current->update([
+            \App\Support\SelectionDetailsSchema::requireRequested($input, ['reason_category', 'reason_detail']);
+            $selection = isset($input['reason_category']) ? [
+                'cancellation_category' => $input['reason_category'],
+                'cancellation_detail' => $input['reason_detail'] ?? null,
+                'cancellation_actor_role' => $actor->role->value,
+            ] : [];
+            $current->update($selection + [
                 'status' => 'Cancelled',
                 'cancelled_at' => $now,
                 'late_cancellation' => $late,
@@ -243,9 +249,10 @@ final class AppointmentService
                 'updated_by_user_id' => $actor->id,
             ]);
             $this->record($current, $actor, 'appointment.cancelled', $from);
-            if (! empty($input['reason'])) {
+            $reason = \App\Support\ReasonSelection::text($input, 'reason_category', 'reason_detail', 'reason');
+            if ($reason !== null) {
                 app(\App\Services\Audit\AuditService::class)->recordAdministrative('appointment.cancelled', $actor, $current, [
-                    'reason' => $input['reason'],
+                    'reason' => $input['reason_category'] ?? $reason,
                     'note' => $input['note'] ?? null,
                 ]);
             }

@@ -32,6 +32,7 @@ export function mapDocument(row) {
     id: row.id,
     title: row.title || row.original_filename,
     category: row.category,
+    otherDescription: row.category === 'other' && typeof row.other_description === 'string' ? row.other_description : null,
     originalFilename: row.original_filename,
     mimeType: row.mime_type,
     fileSizeBytes: row.file_size_bytes,

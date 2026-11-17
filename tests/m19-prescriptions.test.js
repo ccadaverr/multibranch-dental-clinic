@@ -33,8 +33,9 @@ test('M19 (4.4): medicine name autocomplete and Other free-text option exist wit
 
 test('M19: Other selection retains custom values and sends only clinical line fields', () => {
   const page = read('src/pages/ServerPrescriptions.jsx')
-  const names = ['OTHER_OPTION', 'EMPTY_LINE', 'LINE_FIELDS', 'selectedOption', 'chooseOption', 'apiLine']
+  const names = ['OTHER_OPTION', 'EMPTY_LINE', 'LINE_FIELDS', 'CUSTOM_FIELDS', 'selectedOption', 'chooseOption', 'apiLine']
   const declarations = names.map(name => {
+    if (name === 'apiLine') return page.slice(page.indexOf('const apiLine ='), page.indexOf('const draftSnapshot ='))
     const line = page.match(new RegExp(`^const ${name} = .+$`, 'm'))?.[0]
     assert.ok(line, `${name} helper is present`)
     return line
@@ -50,7 +51,8 @@ test('M19: Other selection retains custom values and sends only clinical line fi
     assert.equal(selectedOption(line, field, catalogs[field]), '__other__', `${field}: custom input stays selected after typing`)
   }
   line = { ...line, instructions: 'After meals' }
-  assert.deepEqual({ ...apiLine(line) }, { medicine: 'Custom medicine', dosage: '750mg', frequency: 'Every 4 hours', duration: '9 days', instructions: 'After meals' })
+  assert.deepEqual(JSON.parse(JSON.stringify(apiLine(line))), { medicine: 'Custom medicine', dosage: '750mg', frequency: 'Every 4 hours', duration: '9 days', instructions: 'After meals', value_origins: { medicine: 'other', dosage: 'other', frequency: 'other', duration: 'other' } })
+  assert.equal('value_origins' in apiLine(line, false), false, '87-profile sends recorded text without inventing category storage')
   assert.equal(Object.keys(apiLine(line)).some(key => key.endsWith('Other')), false, 'UI selection flags stay out of payload')
   for (const [field, catalog] of Object.entries(catalogs)) {
     line = chooseOption(line, field, catalog[0])
@@ -59,12 +61,12 @@ test('M19: Other selection retains custom values and sends only clinical line fi
   line = chooseOption(line, 'medicine', '__other__')
   line = { ...line, medicine: 'Amoxicillin' }
   assert.equal(selectedOption(line, 'medicine', catalogs.medicine), '__other__', 'custom editing keeps Other selected even when text matches catalog')
-  assert.equal(selectedOption({ medicine: 'Previously saved custom' }, 'medicine', catalogs.medicine), '__other__', 'saved custom value remains editable')
+  assert.equal(selectedOption({ medicine: 'Previously saved custom' }, 'medicine', catalogs.medicine), '__recorded__', 'legacy value is retained without inventing Other provenance')
   for (const field of Object.keys(catalogs)) {
     assert.match(page, new RegExp(`set\\(i, '${field}', e\\.target\\.value, true\\)`), `${field}: custom input preserves Other selection`)
     assert.match(page, new RegExp(`choose\\(i, '${field}', val\\)`), `${field}: selector uses separate option state`)
   }
-  assert.match(page, /lines\.filter\(l => l\.medicine\.trim\(\)\)\.map\(apiLine\)/)
+  assert.match(page, /lines\.filter\(l => l\.medicine\.trim\(\)\)\.map\(line => apiLine\(line, selectionDetailsAvailable\)\)/)
   assert.match(page, /const missingCustomValue = lines\.some/)
   assert.match(page, /\|\| missingCustomValue \|\| lines\.some\(l => !l\.medicine\.trim\(\)\)/)
 })

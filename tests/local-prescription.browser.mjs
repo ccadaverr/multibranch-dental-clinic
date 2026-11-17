@@ -28,8 +28,18 @@ try {
  await page.getByRole('dialog').getByRole('button',{name:'Close',exact:true}).click()
  await page.reload();await page.getByRole('button',{name:'Prescriptions',exact:true}).first().click()
  const item=()=>page.locator('ul.fd-list > li').filter({hasText:'Draft'}).filter({hasText:state.draft.patient.name}).first()
- await item().getByRole('button',{name:'Edit draft',exact:true}).click();await page.getByRole('textbox',{name:'Specify medicine name',exact:true}).waitFor()
- assert.equal(await page.getByRole('textbox',{name:'Specify medicine name',exact:true}).inputValue(),'Synthetic Sprint03 medicine')
+ await item().getByRole('button',{name:'Edit draft',exact:true}).click()
+ if(state.draft.lines[0].value_origins?.medicine==='other'){
+  await page.getByRole('textbox',{name:'Specify medicine name',exact:true}).waitFor()
+  assert.equal(await page.getByRole('textbox',{name:'Specify medicine name',exact:true}).inputValue(),'Synthetic Sprint03 medicine')
+ }else{
+  // 87-entry profile stores the exact clinical text, without fabricated Other provenance.
+  await page.getByRole('combobox',{name:'Select medicine 1',exact:true}).locator('option[value="__recorded__"]').waitFor({state:'attached'})
+  assert.equal(await page.getByRole('combobox',{name:'Select medicine 1',exact:true}).inputValue(),'__recorded__')
+  assert.equal(await page.getByRole('combobox',{name:'Select medicine 1',exact:true}).locator('option:checked').textContent(),'Synthetic Sprint03 medicine')
+  assert.equal(await page.getByRole('textbox',{name:'Specify medicine name',exact:true}).count(),0)
+  await page.getByText('This workspace saves the entered text without a separate category label.',{exact:false}).waitFor()
+ }
  console.log('PASS actual Dentist encounter → draft; validation, duplicate Save and persisted reload')
  const patient=await login('sprint02.patient@example.test',390);assert.equal((await get(patient.page,'/api/prescriptions/'+state.draft.id)).status,404);assert.ok(!(await get(patient.page,'/api/me/prescriptions')).body.data.some(p=>p.id===state.draft.id));console.log('PASS Patient draft privacy')
  // A second tab replaces the cookie without notifying the held editor, even for the same Dentist.
@@ -48,7 +58,7 @@ try {
  assert.equal((await refused).status(),409);assert.equal(heldHeader,true)
  assert.equal((await get(page,'/api/prescriptions/'+state.draft.id)).body.data.status,'Draft')
  await otherTab.close();await page.reload();await page.getByRole('button',{name:'Prescriptions',exact:true}).first().click()
- await item().getByRole('button',{name:'Edit draft',exact:true}).click();await page.getByRole('textbox',{name:'Specify medicine name',exact:true}).waitFor()
+ await item().getByRole('button',{name:'Edit draft',exact:true}).click();await page.getByRole('combobox',{name:'Select medicine 1',exact:true}).waitFor()
  state.crossTabSessionRefused=true;save();console.log('PASS stale clinical confirmation refused after same-Dentist cross-tab logout/login; Draft remains unissued')
  // Commit on real server, then discard only the outgoing response to force recovery.
  const commands=[];page.on('request',r=>{if(r.url()===api+'/api/prescriptions/'+state.draft.id+'/issue'&&r.method()==='POST')commands.push({key:r.headers()['idempotency-key'],body:r.postDataJSON()})})
@@ -81,7 +91,8 @@ try {
  await page.getByRole('textbox',{name:'Specify medicine name',exact:true}).fill('Synthetic corrected medicine')
  state.correctedDraft=await waitPost(page,'/api/prescriptions',()=>page.getByRole('button',{name:'Save draft',exact:true}).click())
  await page.getByRole('dialog').getByRole('button',{name:'Edit draft',exact:true}).click()
- await page.getByRole('textbox',{name:'Specify medicine name',exact:true}).waitFor()
+ await page.getByRole('combobox',{name:'Select medicine 1',exact:true}).waitFor()
+ assert.equal(await page.getByRole('combobox',{name:'Select medicine 1',exact:true}).locator('option:checked').textContent(),'Synthetic corrected medicine')
  await page.getByRole('button',{name:'Issue prescription',exact:true}).click()
  state.corrected=await waitPost(page,'/api/prescriptions/'+state.correctedDraft.id+'/issue',()=>page.getByRole('dialog',{name:'Issue and lock prescription?',exact:true}).getByRole('button',{name:'Issue prescription',exact:true}).click())
  assert.notEqual(state.corrected.id,state.voided.id);assert.notEqual(state.corrected.number,state.voided.number)

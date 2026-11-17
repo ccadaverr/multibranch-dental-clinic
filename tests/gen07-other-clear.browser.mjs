@@ -10,16 +10,20 @@ import {SelectWithOther} from './src/components.jsx';import {SelfRegistered,IdCh
 window.other={calls:[],feedback:[],mode:'id'};
 const generation=()=>1;
 function Shared(){const[v,setV]=React.useState('Other'),[detail,setDetail]=React.useState('');return <form onSubmit={e=>{e.preventDefault();window.other.calls.push({kind:'shared',value:v,detail})}}><SelectWithOther label="Relationship" required value={v} onChange={setV} options={['Child','Other']} otherValue={detail} onOtherChange={setDetail} placeholder="e.g., Cousin"/><button type="submit">Save relationship</button></form>}
-function Harness(){const[mode,setMode]=React.useState('id');window.other.setMode=setMode;return mode==='shared'?<Shared/>:mode==='intake'?<SelfRegistered store={{session:{serverUserId:'staff',userId:'staff',role:'staff',branchId:'b1'},state:{}}} toast={()=>{}}/>:mode==='followup'?<FollowupPanel patientId="p1" role="staff" branches={[{id:'b1',name:'Synthetic branch'}]} store={{getAuthGeneration:generation,session:{serverUserId:'staff',userId:'staff',role:'staff',branchId:'b1'}}} toast={(...x)=>window.other.feedback.push(x)}/>:<IdCheck patientId="p1" toast={(...x)=>window.other.feedback.push(x)}/>}createRoot(document.getElementById('root')).render(<Harness/>);`;
+function Harness(){const[mode,setMode]=React.useState('id');window.other.setMode=setMode;return mode==='shared'?<Shared/>:mode==='intake'?<SelfRegistered store={{session:{selectionDetailsAvailable:true,serverUserId:'staff',userId:'staff',role:'staff',branchId:'b1'},state:{}}} toast={()=>{}}/>:mode==='followup'?<FollowupPanel patientId="p1" role="staff" branches={[{id:'b1',name:'Synthetic branch'}]} store={{getAuthGeneration:generation,session:{selectionDetailsAvailable:true,serverUserId:'staff',userId:'staff',role:'staff',branchId:'b1'}}} toast={(...x)=>window.other.feedback.push(x)}/>:<IdCheck patientId="p1" toast={(...x)=>window.other.feedback.push(x)}/>}createRoot(document.getElementById('root')).render(<Harness/>);`;
 const api = `
 export const onSessionInvalidated=()=>()=>{};
 export const pendingIntake=async()=>({ok:true,data:[{id:'intake1',reference:'SYNTHETIC',channel:'phone',branch_ref:'b1',self:{first_name:'Synthetic',last_name:'Patient'},id_type:'philid',join_queue:false}],meta:{id_types:{philid:'PhilID',other:'Other valid ID'}}});
-export const getPatientRecord=async()=>({ok:true,data:{id:'p1',profile_access:'full'}});
+export const getPatientRecord=async()=>({ok:true,data:{id:'p1',profile_access:'full',id_check:null}});
 const refuse=(kind,id,body)=>{window.other.calls.push({kind,id,body});return Promise.resolve({ok:false,kind:'validation',message:'Synthetic refusal',errors:{other_details:['Synthetic specify error']}})};
 export const verifyPatientId=(id,body)=>{if(window.other.receipt){window.other.calls.push({kind:'id',id,body});return Promise.resolve({ok:true,data:window.other.receipt})}return refuse('id',id,body)},confirmIntake=(id,body)=>refuse('intake',id,body);
 export const patientFollowups=async()=>({ok:true,data:[]});
 export const createFollowup=body=>refuse('followup','p1',body);
 export const followups=patientFollowups;
+export const apiBase=()=>location.origin;
+export const followupBookingCapability=async()=>({ok:false,kind:'not_found'});
+export const followupTask=async()=>({ok:false,kind:'not_found'});
+export const followupBookingReceipt=followupTask;
 const unexpected=()=>{throw Error('Unexpected operation')};
 export const reportSessionInvalidated=unexpected,listAppointments=unexpected,getAppointment=unexpected,appointmentAvailability=unexpected,appointmentRecommendation=unexpected,createAppointment=unexpected,rescheduleAppointment=unexpected,cancelAppointmentRemote=unexpected,transitionAppointment=unexpected,searchPatients=unexpected;
 export const updateFollowup=unexpected,cancelIntake=unexpected,offerOnlineAccount=unexpected,requestHandover=unexpected,branchPosterUrl=unexpected,intakeCode=unexpected,refreshIntakeCode=unexpected;
@@ -88,7 +92,7 @@ try {
   await custom.fill(" Review healing ");
   await submit.click();
   await p.getByRole("alert").first().waitFor();
-  assert.equal((await p.evaluate(() => window.other.calls))[0].body.reason, "Review healing");
+  assert.equal((await p.evaluate(() => window.other.calls))[0].body.reason_detail, "Review healing");
   assert.equal(await custom.inputValue(), " Review healing ");
   await reason.selectOption("Suture Removal");
   assert.equal(await custom.count(), 0);
@@ -98,7 +102,7 @@ try {
   await reason.selectOption("Suture Removal");
   await submit.click();
   await p.waitForFunction(() => window.other.calls.length === 2);
-  assert.equal((await p.evaluate(() => window.other.calls))[1].body.reason, "Suture Removal");
+  assert.equal((await p.evaluate(() => window.other.calls))[1].body.reason_category, "Suture Removal");
   assert.deepEqual(await p.evaluate(() => window.other.feedback), []);
   completed.push("followup: whitespace refusal, trimmed payload, error retention, hidden clear, ordinary reason");
   // A real browser's native constraint validation must also protect shared
@@ -120,7 +124,7 @@ try {
   for(const detail of [undefined,'Different ID type','Company ID']) {
     await p.goto(origin);await p.waitForFunction(()=>window.other?.setMode);
     await choose().selectOption('other');await p.getByRole('textbox',{name:/^Specify ID type/}).fill(' Company ID ');
-    await p.evaluate(detail=>{window.other.receipt={id_type:'other',id_verified_at:'2026-11-13T08:00:00+08:00',...(detail===undefined?{}:{other_details:detail})}},detail);
+    await p.evaluate(detail=>{window.other.receipt={patient_id:'p1',id_type:'other',id_verified_at:'2026-11-13T08:00:00+08:00',...(detail===undefined?{}:{other_details:detail})}},detail);
     await p.getByRole('button',{name:'ID checked',exact:true}).click();
     if(detail==='Company ID') {
       await p.getByRole('status').filter({hasText:'ID checked: Other valid ID (Company ID)'}).waitFor();

@@ -102,11 +102,12 @@
       "source_evidence": "src/components.jsx; CounterIntake.jsx; EncounterWorkspace.jsx",
       "focused_test_evidence": "Batches 02–04 supported ID/follow-up Other validation. Batch07 verifies existing Join/Family Other controls and backend conditional validation/readback; Family creation now has exact Patient/link recovery after response loss. The Specify controls predate Batch07; no blanket all-form closure.",
       "current_status": "Partial",
-      "remaining_requirements_and_next_action": "Integrate and reconcile remaining cross-role Other fields; supported ID/follow-up/Family subsets are covered. Do not rebuild existing Specify controls or treat duplicate-safe Family creation as a new original QA.",
+      "remaining_requirements_and_next_action": "Separate exact disposable-schema installation approval and integrated provenance persistence tests; approve and implement Staff Patient Sex/Other two-field contract; complete all-form inventory/acceptance. Existing 87-entry workflows qualified only for recorded text, not stored category provenance.",
       "integrated_acceptance": "Pending",
       "integration_evidence": "PENDING: full original criterion not accepted on the combined candidate. Both exact sources are now available; passing subsets do not close this row.",
       "local_acceptance": "Unfinished: only cited subsets accepted; original tasks remain incomplete.",
-      "blockers": "Cross-role inventory incomplete; flattened custom prescription/follow-up values do not retain a separate Other category. Confirm contract treatment of existing descriptive fields before claiming all tasks."
+      "blockers": "Exact proposal uninstalled; Staff Sex/Other demographic/storage policy unresolved. GEN-07 remains Partial/Pending.",
+      "stabilization_s02_evidence": "Cumulative 44-path handoff integrated with S01 conflict reconciliation and safe 87-entry readiness handling. 131 focused PostgreSQL tests/2133 assertions; subsequent publication/compatibility cohort19/225. Seven standalone browser cases and427 six-width HTTP-fixture checks pass; real care/Cash/receipt and prescription revocation/retry/void/replacement flows pass. Schema-dependent six-case persistence suite NOT executed: exact proposal installation lacks approval. See STABILIZATION_S02_GEN07_CONTRACT_20261117.md. No full original-QA acceptance."
     },
     {
       "original_id": "GEN-08",
@@ -172,11 +173,12 @@
       "source_evidence": "Not yet verified. [Master](../FINALS-QA-REVISIONS.md) and [Yzhekiel tracker](../QA-YZHEKIEL.md)",
       "focused_test_evidence": "Tracker/source review only; no item-specific runtime acceptance established by A9; Retain historical claim; do not promote based on checkbox or broad test count.",
       "current_status": "Partial",
-      "remaining_requirements_and_next_action": "Verify readable standard controls and touch targets across all roles after integration; keep functional clinical checks.",
+      "remaining_requirements_and_next_action": "Complete populated clinical/administrative modal, density/zoom, keyboard and target-size coverage across all roles; retain accepted queue/shared-control evidence.",
       "integrated_acceptance": "Pending",
       "integration_evidence": "PENDING: full original criterion not accepted on the combined candidate. Both exact sources are now available; passing subsets do not close this row.",
       "local_acceptance": "Unfinished: only cited subsets accepted; original tasks remain incomplete.",
-      "blockers": "No additional policy/reproduction blocker established; all-role or item-specific acceptance/source reconciliation pending."
+      "blockers": "Remaining all-dialog/readability coverage. No policy blocker; Partial/Pending whole integrated acceptance.",
+      "stabilization_s02_evidence": "Seven-file patch integrated at fc9eb81392d78d688d980951e2780ba015e91f89.39 focused frontend;1997 full frontend passes/8 skips;59 PostgreSQL tests/732 assertions;54 shared/four-role fixture measurement groups at six widths; real populated Staff/Dentist queue and Move-dialog target/focus checks; smoke/build pass. Whole clinical/administrative-dialog coverage not established."
     },
     {
       "original_id": "GEN-13",
@@ -982,5 +984,27 @@
       "OWN-11"
     ],
     "inherited_locally_complete_without_full_integrated_acceptance": 16
+  },
+  "stabilization_s02": {
+    "starting_head": "9018a09ff0a9d2734944d56d5d3030927703be41",
+    "gen12_checkpoint": "fc9eb81392d78d688d980951e2780ba015e91f89",
+    "changed_evidence_ids": [
+      "GEN-07",
+      "GEN-12"
+    ],
+    "new_integrated_ids": [],
+    "preserved_integrated_ids": [
+      "GEN-03",
+      "STF-09",
+      "STF-10",
+      "STF-12",
+      "STF-20",
+      "OWN-02",
+      "OWN-05",
+      "OWN-06",
+      "OWN-11"
+    ],
+    "proposal_installed": false,
+    "note": "Evidence additions only; original wording/status totals and nine integrated passes unchanged."
   }
 }

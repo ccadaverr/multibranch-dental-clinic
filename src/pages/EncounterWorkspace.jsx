@@ -1,3 +1,4 @@
+import {SelectionDetailsNotice} from '../selection-details.jsx'
 import React, { useEffect, useRef, useState } from 'react'
 import { Button, RefreshButton, Card, ConfirmDialog, Field, Notice, PageHeader, Status } from '../components.jsx'
 import { commandKey } from '../appointments-api.js'
@@ -12,15 +13,14 @@ import '../encounter-workspace.css'
 // The editable Treatment form, derived from the server record (or empty before treatment starts). Unsaved changes live
 // only in React memory; there are no browser Treatment drafts.
 const FOLLOWUP_REASONS = ['Post-Op Check','Suture Removal','Crown / Bridge Fitting','Restoration Polish','Ortho Adjustment','Routine Cleaning / Recall']
-const savedFollowupReasonOther = reason => !!reason && !FOLLOWUP_REASONS.includes(reason)
-const followupReasonOption = form => form.followupReasonOther ? 'Other' : FOLLOWUP_REASONS.includes(form.followupReason) ? form.followupReason : ''
-const chooseFollowupReason = (form, option) => ({...form, followupReason: option === 'Other' ? '' : option, followupReasonOther: option === 'Other'})
+const followupReasonOption = form => form.followupReasonCategory || (form.followupReason ? '__recorded__' : '')
+const chooseFollowupReason = (form, option) => ({...form, followupReason: option === 'Other' ? '' : option, followupReasonOther: option === 'Other', followupReasonCategory: option || null})
 const missingFollowupReason = form => form.followupRequired && !form.followupReason.trim()
 const treatmentForm=(t,dentist)=>({
   complaint:t?.complaint||'',plan:t?.plan||'',procedure:t?.procedure||'',notes:t?.notes||'',
   assistant:t?t.assistant||'Unassigned':dentist?.assistant||'Unassigned',
   prescriptionRequired:!!t?.prescriptionRequired,followupRequired:!!t?.followupRequired,
-  followupDate:t?.followupDate||'',followupReason:t?.followupReason||'',followupReasonOther:savedFollowupReasonOther(t?.followupReason),followupInterval:t?.followupInterval||'',
+  followupDate:t?.followupDate||'',followupReason:t?.followupReason||'',followupReasonOther:t?.followupReasonCategory === 'Other',followupReasonCategory:t?.followupReasonCategory||null,followupInterval:t?.followupInterval||'',
   procedures:(t?.procedures||[]).map(p=>({id:p.id,serviceId:p.serviceId,quantity:p.quantity,notes:p.notes||''})),
 })
 const formKey=form=>JSON.stringify({...form,assistant:undefined,procedures:form.procedures.map(p=>({...p,quantity:String(p.quantity)}))})
@@ -87,7 +87,7 @@ function EncounterEditor({ store, context, setPage }) {
   const run=async(mode, retry=false)=>{
     if (!encounter.ok || gate.current.pending || !fresh || (!retry && (newer || readOnly || mode==='start'&&!canStart || mode==='complete'&&dirty))) return
     setSaving(true);setProblem(null);setNotice('')
-    const result=await gate.current.run({mode, entry:queueEntry, visit:encounter.visit, treatment:base, form:structuredClone(form)}, attempt=>{
+    const result=await gate.current.run({mode, entry:queueEntry, visit:encounter.visit, treatment:base, form:structuredClone({...form,followupReasonCategory:store.session?.selectionDetailsAvailable?form.followupReasonCategory:null})}, attempt=>{
       if(attempt.mode==='start')return flow.startTreatment(attempt.entry, attempt.form, attempt.keys.start, attempt.keys.save, attempt.visit,()=>live.current)
       if(attempt.mode==='save')return flow.saveTreatment(attempt.treatment,attempt.form,attempt.keys.save,()=>live.current)
       return flow.completeTreatment(attempt.treatment,null,{dirty:false,completeKey:attempt.keys.complete})
@@ -145,7 +145,9 @@ function EncounterEditor({ store, context, setPage }) {
               value={followupReasonOption(form)}
               onChange={e => setForm(chooseFollowupReason(form,e.target.value))}
             >
-              <option value="">Select a reason</option>{[...FOLLOWUP_REASONS,'Other'].map(r => <option key={r} value={r}>{r}</option>)}
+              <option value="">Select a reason</option>
+              {followupReasonOption(form) === '__recorded__' && <option value="__recorded__" disabled>{form.followupReason}</option>}
+              {[...FOLLOWUP_REASONS,'Other'].map(r => <option key={r} value={r}>{r}</option>)}
             </select>
           </Field>
           {form.followupReasonOther && (
@@ -153,13 +155,13 @@ function EncounterEditor({ store, context, setPage }) {
               <input
                 required
                 value={form.followupReason}
-                placeholder="Specify follow-up details..."
+                placeholder="e.g., Review healing at the next visit"
                 onChange={e => setForm({ ...form, followupReason: e.target.value })}
                 aria-required="true"
               />
             </Field>
           )}
-          <Field label="Recommended interval"><input value={form.followupInterval} placeholder="e.g. 1 week, 2 weeks" onChange={e=>setForm({...form,followupInterval:e.target.value})}/></Field>
+          <SelectionDetailsNotice available={store.session?.selectionDetailsAvailable}/><Field label="Recommended interval"><input value={form.followupInterval} placeholder="e.g. 1 week, 2 weeks" onChange={e=>setForm({...form,followupInterval:e.target.value})}/></Field>
         </div>}
         {!readOnly&&<div className="form-actions">
           {!treatment?<Button disabled={saving||!canStart||followupReasonMissing||!fresh} onClick={()=>run('start')}>Start Treatment</Button>:<>

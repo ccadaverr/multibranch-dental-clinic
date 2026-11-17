@@ -11,10 +11,10 @@ const helpers=slice('const firstError','// One selection lifetime')
 const listCode=slice('function useFollowupList(','/**')
 const rowCode=slice('function FollowupRow(','  return <li')+'return {act, error, busy, setNote, note, setClosing, closing, setBooking, bookingToken, closeBooking, ownsBooking, bookingStore};\n}'
 const panelCode=slice('function PatientFollowupPanel(','  return <section')+'return {add, err, busy, f, setF, setReasonCategory, setCustomReason, customReason, setAdding, adding, rows, error, load, reload, needsReload};\n}'
-const reasons=slice('const STANDARD_REASONS','/** The follow-up tasks')
+const reasons=slice('function matchesFollowupSelection','/** The follow-up tasks')
 const wire=x=>JSON.parse(JSON.stringify(x))
 const deferred=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b});return {promise,resolve,reject}}
-const task=(patient='A',extra={})=>({id:'task-'+patient,patient:{id:patient},branch:{id:'b1'},status:'Open',revision:['Contacted','Booked','Closed'].includes(extra.status)?2:1,can_contact:true,can_close:true,...extra})
+const task=(patient='A',extra={})=>({id:'task-'+patient,patient:{id:patient},branch:{id:'b1'},status:'Open',revision:['Contacted','Booked','Closed'].includes(extra.status)?2:1,can_contact:true,can_close:true,reason_category:'Post-Op Check',reason_detail:null,...extra})
 const ok=data=>({ok:true,data})
 const syntheticAuth=()=>1
 const operations=()=>({tasks:new Map(),creates:new Map(),verified:new Map(),settlement:0})
@@ -25,7 +25,7 @@ function hooks(code,name,globals,initial,{deferEffects=false}={}){
  const memo=(fn,deps)=>{const i=cursor++,old=cells[i];if(!old||deps.some((d,j)=>d!==old.deps[j]))cells[i]={deps,value:fn};return cells[i].value}
  const effect=(run,deps,queue=effects)=>{const i=cursor++,old=cells[i];if(!old||deps.some((d,j)=>d!==old.deps[j])){old?.cleanup?.();cells[i]={deps};queue.push(()=>{cells[i].cleanup=run()})}}
  const React={useRef:ref,useState:state,useCallback:memo,useEffect:effect,useLayoutEffect:(run,deps)=>effect(run,deps,layoutEffects)}
- const fn=runInNewContext(helpers+listCode+reasons+code+'\n'+name,{React,useState:state,useEffect:effect,...globals})
+ const fn=runInNewContext(helpers+listCode+reasons+code+'\n'+name,{React,useState:state,useEffect:effect,commandKey:()=> 'synthetic-create-key',...globals})
  const render=patch=>{props={...props,...patch};cursor=0;value=fn(props);for(const run of layoutEffects.splice(0))run();if(!deferEffects)for(const run of effects.splice(0))run();return value}
  render()
  return {render,flushEffects(count=effects.length){for(const run of effects.splice(0,count))run()},get value(){return value},unmount(){for(const cell of cells)cell?.cleanup?.()}}
@@ -35,9 +35,9 @@ function row({respond=async()=>ok(task('A',{status:'Contacted'})),current=()=>tr
  const h=hooks(rowCode,'FollowupRow',{updateFollowup:(id,body)=>{calls.push({id,body:wire(body)});return respond(id,body)}},{pendingTasks,t:record,role:'staff',owner:false,store:{getAuthGeneration:auth},toast:(...args)=>feedback.push(args),isCurrent:current,onChanged:()=>{reloads++;return reload()}},{deferEffects})
  return {...h, get value(){return h.value},calls,feedback,get reloads(){return reloads}}
 }
-function panel({respond=async()=>ok(task()),read=async()=>ok([]),lifetime,auth=syntheticAuth,deferEffects=false}={}){
+function panel({respond=async()=>ok(task()),read=async()=>ok([]),lifetime,auth=syntheticAuth,deferEffects=false,selectionDetailsAvailable=true}={}){
  const calls=[],feedback=[],reads=[]
- const h=hooks(panelCode,'PatientFollowupPanel',{createFollowup:body=>{calls.push(wire(body));return respond(body)},patientFollowups:id=>{reads.push(id);return read(id)}},{patientId:'A',branches:[{id:'b1'}],role:'staff',lifetime,store:{getAuthGeneration:auth},toast:(...a)=>feedback.push(a)},{deferEffects})
+ const h=hooks(panelCode,'PatientFollowupPanel',{createFollowup:body=>{calls.push(wire(body));return respond(body)},patientFollowups:id=>{reads.push(id);return read(id)}},{patientId:'A',branches:[{id:'b1'}],role:'staff',lifetime,store:{session:{selectionDetailsAvailable},getAuthGeneration:auth},toast:(...a)=>feedback.push(a)},{deferEffects})
  return {...h,get value(){return h.value},calls,feedback,reads}
 }
 const submit=e=>e.value.add({preventDefault(){}})
@@ -84,7 +84,7 @@ for(const failure of [{ok:false,kind:'network'},{ok:false,kind:'server'},null,'t
 })
 test('CLIN-12 add same-tick duplicates stay latched after rerender and snapshot payload',async()=>{
  const held=deferred(),e=panel({respond:()=>held.promise});const work=submit(e);await submit(e);e.render();await submit(e)
- assert.equal(e.calls.length,1);assert.deepEqual(e.calls[0],{patient_id:'A',reason:'Post-Op Check',branch_ref:'b1',due_on:e.value.f.due_on})
+ assert.equal(e.calls.length,1);assert.deepEqual(e.calls[0],{patient_id:'A',reason_category:'Post-Op Check',branch_ref:'b1',due_on:e.value.f.due_on})
  held.resolve(ok(task()));await work;assert.equal(e.feedback.length,1);e.unmount()
 })
 for(const failure of [{ok:false,kind:'network'},{ok:false,kind:'server'},ok(task('B')),ok(task('A',{branch:{id:'b2'}})),null])test('CLIN-12 uncertain create cannot be blindly repeated '+JSON.stringify(failure),async()=>{
@@ -286,4 +286,14 @@ test('CLIN-12-R2 replacement Add effect still reconciles when settlement precede
  replacement.flushEffects(1);await setImmediate();replacement.render()
  result=[task()];write.resolve(ok(task()));await command;replacement.flushEffects();await setImmediate();replacement.render();replacement.render()
  assert.equal(replacement.reads.length,2,'the pending Add observed by the rendered panel must trigger reconciliation');assert.equal(replacement.value.needsReload,false);replacement.unmount()
+})
+
+// The uninstalled proposal must not prevent the existing recorded-text workflow.
+test('GEN-07 87-profile followup keeps exact recorded text and duplicate suppression',async()=>{
+ const e=panel({selectionDetailsAvailable:false,respond:async body=>ok(task('A',{reason:body.reason,reason_category:null}))})
+ e.value.setReasonCategory('Other');e.value.setCustomReason('Synthetic detail');e.render()
+ await submit(e);e.render()
+ assert.equal(e.calls.length,1);assert.equal(e.calls[0].reason,'Synthetic detail')
+ assert.equal('reason_category' in e.calls[0],false);assert.equal(e.feedback.length,1)
+ e.unmount()
 })

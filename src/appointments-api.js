@@ -36,6 +36,8 @@ const MAX_PAGES = 20
 const SOURCE_LABELS = { patient_portal: 'Patient Portal', front_desk: 'Front Desk' }
 
 /** Server appointment row -> read-model record. `patientIdFor` maps the Patient public id to the id the UI keys on. */
+export const STAFF_CANCELLATION_REASONS = ['No valid ID presented', 'Patient requested cancellation', 'Patient unable to proceed', 'Emergency / personal conflict', 'Other']
+
 export function mapAppointment(row, patientIdFor = id => id) {
   return {
     id: row.id,
@@ -63,6 +65,8 @@ export function mapAppointment(row, patientIdFor = id => id) {
     source: SOURCE_LABELS[row.source] || row.source,
     assignmentMethod: row.assignment_method,
     notes: row.notes || '',
+    cancellationCategory: row.cancellation_category ?? null,
+    cancellationDetail: row.cancellation_detail ?? null,
     bookingFeePhp: row.booking_fee_php ?? null,
     bookingPaymentStatus: row.booking_payment_status ?? 'unpaid',
     bookingPaymentMethod: row.booking_payment_method ?? null,

@@ -45,8 +45,11 @@ class PrescriptionController extends Controller
         return array_fill_keys(self::SERVER_FIELDS, ['prohibited']);
     }
 
-    private const LINE_RULES = ['lines' => ['required', 'array', 'min:1', 'max:20'], 'lines.*.medicine' => ['required', 'string', 'max:200'],
-        'lines.*.dosage' => ['nullable', 'string', 'max:120'], 'lines.*.frequency' => ['nullable', 'string', 'max:120'], 'lines.*.duration' => ['nullable', 'string', 'max:120'],
+    private const LINE_RULES = ['lines' => ['required', 'array', 'min:1', 'max:20'],
+        'lines.*.dosage' => ['nullable', 'required_with:lines.*.value_origins.dosage', 'string', 'max:120'], 'lines.*.frequency' => ['nullable', 'required_with:lines.*.value_origins.frequency', 'string', 'max:120'], 'lines.*.duration' => ['nullable', 'required_with:lines.*.value_origins.duration', 'string', 'max:120'],
+        'lines.*.value_origins' => ['nullable', 'array:medicine,dosage,frequency,duration'],
+        'lines.*.value_origins.*' => ['required', 'string', 'in:standard,other'],
+        'lines.*.medicine' => ['required', 'string', 'max:200'],
         'lines.*.instructions' => ['nullable', 'string', 'max:500'], 'note' => ['nullable', 'string', 'max:1000']];
 
     public function index(Request $request): JsonResponse
@@ -323,8 +326,10 @@ class PrescriptionController extends Controller
     private function writeLines(Prescription $p, array $lines): void
     {
         foreach (array_values($lines) as $i => $l) {
+            \App\Support\SelectionDetailsSchema::requireRequested($l, ['value_origins']);
             $p->lines()->create(['line_no' => $i + 1, 'medicine' => trim($l['medicine']), 'dosage' => $l['dosage'] ?? null, 'frequency' => $l['frequency'] ?? null,
-                'duration' => $l['duration'] ?? null, 'instructions' => $l['instructions'] ?? null]);
+                'duration' => $l['duration'] ?? null, 'instructions' => $l['instructions'] ?? null,
+                ...(\App\Support\SelectionDetailsSchema::available() ? ['value_origins' => $l['value_origins'] ?? null] : [])]);
         }
     }
 
@@ -349,7 +354,7 @@ class PrescriptionController extends Controller
             'can_void' => $viewer->role->value === 'dentist' && $p->status === 'Issued' && in_array($p->branch_id, $this->dentistBranchIds($viewer), true)];
         if ($content) {
             $out += ['note' => $p->note, 'license_no' => $p->license_no, 'lines' => $p->lines->map(fn ($l) => ['medicine' => $l->medicine, 'dosage' => $l->dosage,
-                'frequency' => $l->frequency, 'duration' => $l->duration, 'instructions' => $l->instructions])->values()];
+                'frequency' => $l->frequency, 'duration' => $l->duration, 'instructions' => $l->instructions, 'value_origins' => $l->value_origins])->values()];
         }
 
         return $out;

@@ -1,3 +1,4 @@
+import {SelectionDetailsNotice} from '../../selection-details.jsx'
 import React, { useEffect, useRef, useState } from 'react'
 import { Button, Icon, Modal } from '../../components.jsx'
 import { acceptSlotOffer, listAppointments, myDependents, mySlotOffers, myTreatments, sayOnMyWay } from '../../api-client.js'
@@ -12,7 +13,7 @@ import { treatmentSummaries, visitFilter, loadPatientAppointments, loadTreatment
 const addDays = (date, n) => { const d = new Date(`${date}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10) }
 
 /** Visits: upcoming and past appointments from the server, with reschedule, cancel, and absorbed historical archives. */
-export function VisitsPage({ context, onNavigate, toast }) {
+export function VisitsPage({ selectionDetailsAvailable = false, context, onNavigate, toast }) {
   const today = todayManila()
   const [tab, setTab] = useState(visitFilter(context?.tab))
   const active = useLoad(() => loadActiveAppointments(listAppointments), [today])
@@ -76,6 +77,7 @@ export function VisitsPage({ context, onNavigate, toast }) {
           <p>{dateLong(a.date)}{a.start_time ? ` · ${time12(a.start_time)}${a.end_time ? ` – ${time12(a.end_time)}` : ''}` : ''}</p>
           <p className="pp-muted"><Icon name="pin" size={14}/> {a.branch?.name}{a.dentist?.name ? ` · ${a.dentist.name}` : ''}</p>
           <p className="pp-muted">Ref. {a.code} <Pill>{a.status}</Pill></p>
+          {a.cancellation_category && <p style={{overflowWrap:'anywhere'}}>{a.cancellation_category}{a.cancellation_detail && `: ${a.cancellation_detail}`}</p>}
           {['Checked In','In Treatment','Completed'].includes(a.status)&&<Button size="sm" variant="soft" icon="receipt" onClick={()=>onNavigate('billing',{appointmentId:a.id,patientId:a.patient?.id,receiptOnly:true})}>Invoice and receipt</Button>}
           {tab === 'upcoming' && a.date === today && ['Pending', 'Confirmed'].includes(a.status) && <OnMyWay appointment={a} toast={toast}/>}
           {a.status === 'Pending' && <p className="pp-hint">{a.booking_payment_status === 'held' ? 'Awaiting verified online payment. Your slot hold expires if payment is not completed.' : 'Waiting for the front desk to confirm this booking.'}</p>}
@@ -95,12 +97,12 @@ export function VisitsPage({ context, onNavigate, toast }) {
       {treatments.status === 'ready' && !summaries.length && <p>No treatment summaries available.</p>}
       <ul className="pp-list">{summaries.map(t => <li key={t.id} className="pp-card"><h3>{t.service.name}</h3><p>{dateLong(t.date) || 'Date unavailable'}</p>{t.dentist?.name && <p>{t.dentist.name}</p>}</li>)}</ul>
     </section>}
-    {action?.kind === 'cancel' && <CancelDialog appointment={action.appointment} onClose={() => setAction(null)} onDone={() => { setAction(null); toast?.('Your appointment is cancelled.', 'success'); list.reload({ quiet: true }) }}/>}
+    {action?.kind === 'cancel' && <CancelDialog selectionDetailsAvailable={selectionDetailsAvailable} appointment={action.appointment} onClose={() => setAction(null)} onDone={() => { setAction(null); toast?.('Your appointment is cancelled.', 'success'); list.reload({ quiet: true }) }}/>}
     {action?.kind === 'reschedule' && <RescheduleDialog appointment={action.appointment} onClose={() => setAction(null)} onDone={() => { setAction(null); toast?.('Your appointment is moved.', 'success'); list.reload({ quiet: true }) }}/>}
   </div>
 }
 
-function CancelDialog({ appointment, onClose, onDone }) {
+function CancelDialog({ selectionDetailsAvailable = false, appointment, onClose, onDone }) {
   const [reason, setReason] = useState('Schedule conflict')
   const [customReason, setCustomReason] = useState('')
   const [note, setNote] = useState('')
@@ -114,12 +116,13 @@ function CancelDialog({ appointment, onClose, onDone }) {
       return setError('Please provide a reason for cancelling.')
     }
     setBusy(true); setError('')
-    const r = await cancelAppointment(appointment, key.current, { reason: effectiveReason, note: note.trim() })
+    const r = await cancelAppointment(appointment, key.current, { ...(selectionDetailsAvailable ? { reason_category: reason, ...(reason === 'Other' ? { reason_detail: effectiveReason } : {}) } : {reason:effectiveReason}), note: note.trim() })
     setBusy(false)
     if (!r.ok) return setError(r.message)
     onDone()
   }
   return <Modal open title="Cancel this visit?" subtitle={`${appointment.service?.name} · ${dateLong(appointment.date)} at ${time12(appointment.start_time)}`} onClose={onClose}>
+    <SelectionDetailsNotice available={selectionDetailsAvailable}/>
     <p>Your time will be released for other patients. You can book again any time.</p>
     <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
       <label className="field">
@@ -139,7 +142,7 @@ function CancelDialog({ appointment, onClose, onDone }) {
           <input
             type="text"
             required
-            placeholder="Please tell us why you need to cancel"
+            placeholder="e.g., My work schedule changed"
             value={customReason}
             onChange={e => { setCustomReason(e.target.value); setError('') }}
             autoFocus

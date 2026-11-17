@@ -62,7 +62,8 @@ export function mapTreatment(row, patientIdFor = id => id) {
     prescriptionRequired: row.prescription_required === true,
     followupRequired: row.followup_required === true,
     followupDate: row.followup_recommended_date ?? '',
-    followupReason: row.followup_reason ?? '',
+    followupReason: (row.followup_reason_category === 'Other' ? row.followup_reason_detail : row.followup_reason) ?? '',
+    followupReasonCategory: row.followup_reason_category ?? null,
     followupInterval: row.followup_interval ?? '',
     history: row.history || null,
   }
@@ -158,7 +159,8 @@ export function documentationPayload(form, saved = null) {
     prescription_required: form.prescriptionRequired === true,
     followup_required: followup,
     followup_recommended_date: followup ? text(form.followupDate) : null,
-    followup_reason: followup ? text(form.followupReason) : null,
+    followup_reason: followup && !form.followupReasonCategory ? text(form.followupReason) : null,
+    ...(followup && form.followupReasonCategory ? { followup_reason_category: form.followupReasonCategory, ...(form.followupReasonCategory === 'Other' ? { followup_reason_detail: text(form.followupReason) } : {}) } : {}),
     followup_interval: followup ? text(form.followupInterval) : null,
     procedures: (form.procedures || []).filter(Boolean).map(p => {
       const kept = p.id && savedLines.get(p.id)?.serviceId === p.serviceId ? p.id : null

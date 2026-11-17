@@ -14,7 +14,7 @@ class AssistantAnswer extends Model
     // timestamptz columns: write the offset, or PostgreSQL reads a UTC wall-clock time as Asia/Manila (an 8-hour shift).
     protected $dateFormat = 'Y-m-d H:i:sP';
 
-    protected $fillable = ['seed_key', 'question', 'answer', 'keywords', 'category', 'branch_id', 'active', 'draft', 'source'];
+    protected $fillable = ['seed_key', 'question', 'answer', 'keywords', 'category', 'category_detail', 'branch_id', 'active', 'draft', 'source'];
 
     protected function casts(): array
     {

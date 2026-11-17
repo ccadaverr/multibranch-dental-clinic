@@ -1,7 +1,10 @@
 // Clinical intent stays in memory. The server's encrypted command journal owns durable recovery.
 const fields = ['medicine', 'dosage', 'frequency', 'duration', 'instructions']
 const text = value => String(value ?? '').trim()
-const content = value => JSON.stringify({ lines: (value.lines || []).map(l => Object.fromEntries(fields.map(f => [f, text(l[f])]))), note: text(value.note) })
+const content = value => JSON.stringify({ lines: (value.lines || []).map(l => ({
+  ...Object.fromEntries(fields.map(f => [f, text(l[f])])),
+  value_origins: Object.fromEntries(fields.filter(f => l.value_origins?.[f]).map(f => [f, l.value_origins[f]])),
+})), note: text(value.note) })
 export function prescriptionWriteMatches(row, request, issued = false) {
   if (![request.visitId,request.patientId,request.branch].every(value => typeof value === 'string' && !!value.trim())) return false
   const base = request.acceptedDraft || request.base

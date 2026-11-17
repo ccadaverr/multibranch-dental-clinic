@@ -17,7 +17,7 @@ class Treatment extends Model
 
     public const EDITABLE = [
         'chief_complaint', 'treatment_plan', 'procedure_summary', 'clinical_notes', 'prescription_required',
-        'followup_required', 'followup_recommended_date', 'followup_reason', 'followup_interval',
+        'followup_required', 'followup_recommended_date', 'followup_reason', 'followup_reason_category', 'followup_interval',
     ];
 
     protected $dateFormat = 'Y-m-d H:i:sP';

@@ -1,4 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import {SelectionDetailsNotice} from '../selection-details.jsx'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { commandKey } from '../appointments-api.js'
 import { Button, Empty, Field, Icon, Modal, Notice, PageHeader } from '../components.jsx'
 import { createAssistantAnswer, listAssistantAnswers, listBranches, testAssistantAnswer, updateAssistantAnswer } from '../api-client.js'
 
@@ -72,6 +74,7 @@ export function AssistantAnswersPage({ store }) {
       {shown.map(a => <li key={a.id} className={`pp-card aa-item ${a.active ? '' : 'is-inactive'}`}>
         <div className="aa-item-head">
           <span className="pp-pill info">{CATEGORY_LABELS[a.category] || a.category}</span>
+          {a.category === 'other' && a.category_detail && <span>{a.category_detail}</span>}
           {a.draft && a.active && <span className="pp-pill wait">Draft</span>}
           {!a.active && <span className="pp-pill off">Inactive</span>}
           {a.branch && <span className="pp-pill off">{a.branch.name}</span>}
@@ -88,7 +91,7 @@ export function AssistantAnswersPage({ store }) {
       </li>)}
     </ul>
 
-    {editing && <EditAnswer answer={editing} categories={meta.categories} branches={branches} onClose={() => setEditing(null)}
+    {editing && <EditAnswer selectionDetailsAvailable={store?.session?.selectionDetailsAvailable===true} answer={editing} categories={meta.categories} branches={branches} onClose={() => setEditing(null)}
       onSaved={row => { setEditing(null); saved(row); toast(editing.id ? 'Answer saved.' : 'Answer added.', 'success') }}/>}
   </div>
 }
@@ -123,15 +126,17 @@ function TestBox() {
   </section>
 }
 
-function EditAnswer({ answer, categories, branches, onClose, onSaved }) {
+function EditAnswer({ selectionDetailsAvailable = false, answer, categories, branches, onClose, onSaved }) {
   const isNew = !answer.id
-  const [form, setForm] = useState({ question: answer.question || '', answer: answer.answer || '', category: answer.category || 'other',
+  const createKey = useRef(commandKey())
+  const [form, setForm] = useState({ question: answer.question || '', answer: answer.answer || '', category: answer.category || 'other', category_detail: answer.category_detail || '',
     keywords: (answer.keywords || []).join(', '), branch: answer.branch?.id || '', draft: isNew ? false : !!answer.draft })
   const [errors, setErrors] = useState({}), [busy, setBusy] = useState(false), [error, setError] = useState('')
   const set = key => e => { setForm(f => ({ ...f, [key]: e.target.type === 'checkbox' ? e.target.checked : e.target.value })); setErrors(x => ({ ...x, [key]: null })) }
   const keywords = form.keywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean)
   const check = () => {
     const found = {}
+    if (form.category === 'other' && !form.category_detail.trim()) found.category_detail = 'Specify the category.'
     if (form.question.trim().length < 5) found.question = 'Write the question (at least 5 characters).'
     if (form.answer.trim().length < 5) found.answer = 'Write the answer (at least 5 characters).'
     if (keywords.length > LIMITS.keywords) found.keywords = `Use at most ${LIMITS.keywords} keywords.`
@@ -141,12 +146,13 @@ function EditAnswer({ answer, categories, branches, onClose, onSaved }) {
   const save = async e => {
     e.preventDefault()
     if (busy) return
+    if (!selectionDetailsAvailable && form.category === 'other') return setError('Other categories cannot be saved in this workspace yet. Your draft is retained.');
     const found = check()
     setErrors(found)
     if (Object.keys(found).length) return
     setBusy(true); setError('')
-    const payload = { question: form.question.trim(), answer: form.answer.trim(), category: form.category, keywords: [...new Set(keywords)], branch_ref: form.branch || null, draft: form.draft }
-    const r = isNew ? await createAssistantAnswer(payload) : await updateAssistantAnswer(answer.id, { ...payload, expected_revision: answer.revision })
+    const payload = { question: form.question.trim(), answer: form.answer.trim(), category: form.category, ...(form.category === 'other' ? { category_detail: form.category_detail.trim() } : {}), keywords: [...new Set(keywords)], branch_ref: form.branch || null, draft: form.draft }
+    const r = isNew ? await createAssistantAnswer(payload, createKey.current) : await updateAssistantAnswer(answer.id, { ...payload, expected_revision: answer.revision })
     setBusy(false)
     if (!r.ok) {
       if (r.kind === 'validation') setErrors(Object.fromEntries(Object.entries(r.errors || {}).map(([k, v]) => [k.startsWith('keywords') ? 'keywords' : k, Array.isArray(v) ? v[0] : String(v)])))
@@ -156,6 +162,7 @@ function EditAnswer({ answer, categories, branches, onClose, onSaved }) {
   }
   return <Modal open title={isNew ? 'Add an answer' : 'Edit the answer'} subtitle="Patients see this answer exactly as written. Keep it short, true and confirmed by the clinic." onClose={onClose} wide>
     <form onSubmit={save} noValidate className="aa-form">
+      {!selectionDetailsAvailable&&<Notice tone="info">Other categories are unavailable for new or changed answers. Existing answers remain available.</Notice>}
       <Field label={`Question (${form.question.length}/${LIMITS.question})`} required error={errors.question}><input value={form.question} maxLength={LIMITS.question} onChange={set('question')}/></Field>
       <Field label={`Answer (${form.answer.length}/${LIMITS.answer})`} required error={errors.answer} hint="Plain text. Do not include prices or promises the clinic has not approved.">
         <textarea rows={5} value={form.answer} maxLength={LIMITS.answer} onChange={set('answer')}/>
@@ -164,12 +171,19 @@ function EditAnswer({ answer, categories, branches, onClose, onSaved }) {
         <input value={form.keywords} onChange={set('keywords')}/>
       </Field>
       <div className="aa-form-row">
-        <Field label="Category"><select value={form.category} onChange={set('category')}>{categories.map(c => <option key={c} value={c}>{CATEGORY_LABELS[c] || c}</option>)}</select></Field>
+        <Field label="Category"><select value={form.category} onChange={e => {
+          const category = e.target.value
+          setForm(f => ({ ...f, category, category_detail: category === 'other' ? f.category_detail : '' }))
+          setErrors(f => ({ ...f, category_detail: null }))
+        }}>{categories.map(c => <option key={c} value={c}>{CATEGORY_LABELS[c] || c}</option>)}</select></Field>
         <Field label="Only for one branch" hint="Leave empty for every branch."><select value={form.branch} onChange={set('branch')}><option value="">Every branch</option>{branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>
       </div>
+      {form.category === 'other' && <Field label="Specify category" required error={errors.category_detail}>
+        <input required maxLength={255} value={form.category_detail} onChange={set('category_detail')} placeholder="e.g., Accessibility information"/>
+      </Field>}
       <label className="aa-check"><input type="checkbox" checked={form.draft} onChange={set('draft')}/> Draft — still to be confirmed by the clinic</label>
       {error && <p className="pp-error-text" role="alert">{error}</p>}
-      <div className="form-actions"><Button variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button></div>
+      <div className="form-actions"><Button variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" disabled={busy||!selectionDetailsAvailable&&form.category==='other'}>{busy ? 'Saving…' : 'Save'}</Button></div>
     </form>
   </Modal>
 }

@@ -35,6 +35,7 @@ final class Followups
             // A savepoint: a duplicate (already created) never aborts the completing treatment's transaction.
             $task = \Illuminate\Support\Facades\DB::transaction(fn () => FollowupTask::create(['patient_id' => $t->visit->patient_id, 'branch_id' => $t->visit->branch_id, 'treatment_id' => $t->id,
                 'service_id' => $t->procedures->first()?->service_id ?? $t->visit->requested_service_id, 'dentist_profile_id' => $t->dentist_profile_id,
+                ...(\App\Support\SelectionDetailsSchema::available() ? ['reason_category' => $t->followup_reason_category] : []),
                 'reason' => trim((string) ($t->followup_reason ?: 'Follow-up visit')), 'due_on' => $t->followup_recommended_date ? substr((string) $t->getRawOriginal('followup_recommended_date'), 0, 10) : ClinicClock::today(),
                 'source' => 'treatment', 'status' => 'Open', 'created_by_user_id' => $t->updated_by_user_id]));
         } catch (QueryException $e) {

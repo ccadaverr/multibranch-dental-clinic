@@ -337,7 +337,7 @@ function parseSse(text, onEvent) {
 
 // M7 knowledge base (Owner): the clinic's own assistant answers. Every change is audited by the server.
 export function listAssistantAnswers() { return request('/api/assistant-answers') }
-export function createAssistantAnswer(payload) { return request('/api/assistant-answers', { method: 'POST', body: JSON.stringify(payload) }) }
+export function createAssistantAnswer(payload, key) { return command('/api/assistant-answers', payload, key) }
 export function updateAssistantAnswer(id, payload) { return request(`/api/assistant-answers/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) }) }
 export function testAssistantAnswer(question) { return request('/api/assistant-answers/test', { method: 'POST', body: JSON.stringify({ question }) }) }
 
@@ -494,7 +494,7 @@ export function patientFollowups(patientId) { return request(`/api/patients/${en
 export function followupTask(id) { return request(`/api/followups/${encodeURIComponent(id)}`) }
 export function followupBookingReceipt(id) { return request(`/api/followups/${encodeURIComponent(id)}/booking-receipt`) }
 export function followupBookingCapability() { return request('/api/followups/booking-capability') }
-export function createFollowup(body) { return json('/api/followups', 'POST', body) }
+export function createFollowup(body, key) { return command('/api/followups', body, key) }
 export function updateFollowup(id, body) { return json(`/api/followups/${encodeURIComponent(id)}`, 'PATCH', body) }
 // M19 Prescriptions
 export function listPrescriptions(params = {}) { return request(`/api/prescriptions${query(params)}`) }

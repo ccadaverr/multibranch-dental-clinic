@@ -44,6 +44,16 @@ class AppointmentResource extends JsonResource
             'booking_paid_at' => $iso($this->booking_paid_at),
             'checkout_url' => $this->checkout_url ?? $this->activeCheckoutSession?->checkout_url,
             'checkout_session_id' => $this->checkout_session_id ?? $this->activeCheckoutSession?->provider_session_id,
+            'cancellation_category' => $this->when(
+                $request->user()?->role?->value === 'staff' ||
+                ($request->user()?->role?->value === 'patient' && $this->cancellation_actor_role === 'patient'),
+                fn () => $this->cancellation_category,
+            ),
+            'cancellation_detail' => $this->when(
+                $request->user()?->role?->value === 'staff' ||
+                ($request->user()?->role?->value === 'patient' && $this->cancellation_actor_role === 'patient'),
+                fn () => $this->cancellation_detail,
+            ),
             'cancelled_at' => $iso($this->cancelled_at),
             'created_at' => $iso($this->created_at),
             'updated_at' => $iso($this->updated_at),

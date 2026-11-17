@@ -14,7 +14,7 @@ class PrescriptionLine extends Model
 
     protected function casts(): array
     {
-        return ['medicine' => 'encrypted', 'dosage' => 'encrypted', 'frequency' => 'encrypted', 'duration' => 'encrypted', 'instructions' => 'encrypted', 'line_no' => 'integer'];
+        return ['medicine' => 'encrypted', 'dosage' => 'encrypted', 'frequency' => 'encrypted', 'duration' => 'encrypted', 'instructions' => 'encrypted', 'line_no' => 'integer', 'value_origins' => 'array'];
     }
 
     public function prescription(): BelongsTo { return $this->belongsTo(Prescription::class); }

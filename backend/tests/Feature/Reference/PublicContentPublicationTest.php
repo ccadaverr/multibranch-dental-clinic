@@ -23,7 +23,7 @@ class PublicContentPublicationTest extends TestCase
     {
         $this->actingAsUser('owner');
         $id = $this->postJson('/api/assistant-answers', [
-            'question' => 'Fictional publication acceptance question?', 'answer' => 'Fictional owner-reviewed answer.', 'category' => 'other', 'draft' => true,
+            'question' => 'Fictional publication acceptance question?', 'answer' => 'Fictional owner-reviewed answer.', 'category' => 'about', 'draft' => true,
         ])->assertCreated()->json('data.id');
         $this->getJson('/api/public/faq')->assertOk()->assertJsonCount(0, 'data');
         $this->patchJson("/api/assistant-answers/{$id}", ['expected_revision' => 1, 'draft' => false])->assertOk();

@@ -163,6 +163,10 @@ final class TreatmentService
             $this->assertActiveEncounter($current, $visit, $appointment, $queueEntry);
             $lines = $this->resolveLines($current, $visit, $data['procedures']);
             $fields = $data['fields'];
+            \App\Support\SelectionDetailsSchema::requireRequested($fields, ['followup_reason_category']);
+            if (\App\Support\SelectionDetailsSchema::available()) {
+                $fields += ['followup_reason_category' => null];
+            }
             if (! empty($fields['followup_recommended_date']) && $fields['followup_recommended_date'] < $visit->clinic_date->format('Y-m-d')) {
                 throw VisitCommandException::rule('followup_date_invalid', 'Choose a recommended follow-up date on or after the visit date.', 'followup_recommended_date');
             }

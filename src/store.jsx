@@ -216,7 +216,7 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
   const setSession=role=>{
     const previous=sessionRef.current
     const derived=role?(previous?.employeeBridge&&previous.role===role?sessionForEmployee(stateRef.current,previous):sessionForRole(role,stateRef.current)):null
-    const next=derived&&previous?.role===role?{...derived,clinicalContext:previous.clinicalContext??null,serverUserId:previous.serverUserId??null,patientPublicId:previous.patientPublicId??null,branchScopes:previous.branchScopes}:derived
+    const next=derived&&previous?.role===role?{...derived,selectionDetailsAvailable:previous.selectionDetailsAvailable===true,clinicalContext:previous.clinicalContext??null,serverUserId:previous.serverUserId??null,patientPublicId:previous.patientPublicId??null,branchScopes:previous.branchScopes}:derived
     sessionRef.current=next
     authLifetime.current.rederive()
     setSessionState(next)

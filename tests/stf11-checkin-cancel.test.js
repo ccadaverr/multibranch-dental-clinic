@@ -18,8 +18,8 @@ test('STF-11: Check-in enforces ID check confirmation and provides cancellation 
   assert.match(patientFlow, /cancelModalOpen/, 'CheckInPage must track cancel modal visibility')
 
   // 3. Predefined cancellation reasons including "No valid ID presented" and "Other" with specify
-  assert.match(patientFlow, /'No valid ID presented'/, 'Predefined cancellation reasons must include No valid ID presented')
-  assert.match(patientFlow, /'Patient requested cancellation'/, 'Predefined reasons must include Patient requested cancellation')
+  assert.match(read('src/appointments-api.js'), /'No valid ID presented'/, 'Predefined cancellation reasons must include No valid ID presented')
+  assert.match(read('src/appointments-api.js'), /'Patient requested cancellation'/, 'Predefined reasons must include Patient requested cancellation')
   assert.match(patientFlow, /SelectWithOther/, 'Cancellation reason selector must support specify for Other')
 
   // 4. Appointment flow cancel forwards reason and note to API
@@ -29,7 +29,7 @@ test('STF-11: Check-in enforces ID check confirmation and provides cancellation 
 
   // 5. Backend controller passes reason and note to AppointmentService
   const controller = read('backend/app/Http/Controllers/AppointmentController.php')
-  assert.match(controller, /\$request->safe\(\)->only\(\['expected_revision', 'reason', 'note'\]\)/, 'AppointmentController must pass reason and note')
+  assert.match(controller, /\$request->safe\(\)->only\(\['expected_revision', 'reason', 'note', 'reason_category', 'reason_detail'\]\)/, 'AppointmentController must pass reason and note')
 
   // 6. Backend service records administrative audit log with cancellation reason
   const service = read('backend/app/Services/Appointments/AppointmentService.php')

@@ -74,6 +74,8 @@ class TreatmentResource extends JsonResource
                 'assistant' => $t->assistant ? ['id' => $t->assistant->legacy_ref, 'name' => $t->assistant->person?->fullName()] : null,
                 'followup_recommended_date' => $t->followup_recommended_date?->format('Y-m-d'),
                 'followup_reason' => $t->followup_reason,
+                'followup_reason_category' => $t->followup_reason_category,
+                'followup_reason_detail' => $t->followup_reason_category === 'Other' ? $t->followup_reason : null,
                 'followup_interval' => $t->followup_interval,
             ];
         }

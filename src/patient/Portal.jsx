@@ -93,7 +93,7 @@ export function PatientPortal({ me, store, initialPage = 'home', initialContext 
   let content
   switch (page) {
     case 'book': content = <BookPage key={JSON.stringify([store.session?.serverUserId,store.session?.patientPublicId,store.getAuthGeneration?.()])} prefill={context} session={store.session} getAuthGeneration={store.getAuthGeneration} onNavigate={navigate} toast={toast} onDone={() => notes.reload()}/>; break
-    case 'visits': content = <VisitsPage context={context} onNavigate={navigate} toast={toast}/>; break
+    case 'visits': content = <VisitsPage selectionDetailsAvailable={store.session?.selectionDetailsAvailable===true} context={context} onNavigate={navigate} toast={toast}/>; break
     case 'billing': content = <BillingPage key={JSON.stringify([store.session?.serverUserId,store.getAuthGeneration?.(),context?.invoiceId,context?.appointmentId,context?.receiptId,context?.patientId])} context={context} toast={toast} session={store.session} getAuthGeneration={store.getAuthGeneration} onNavigate={navigate}/>; break
     case 'messages': content = <div className="pp-page pp-legacy role-patient"><ServerMessagesPage store={store} role="patient" initial={context}/></div>; break
     case 'archives': content = <ArchivesPage key={JSON.stringify([store.session?.serverUserId,store.session?.patientPublicId,store.getAuthGeneration?.()])} toast={toast} session={store.session} getAuthGeneration={store.getAuthGeneration} onNavigate={navigate}/>; break

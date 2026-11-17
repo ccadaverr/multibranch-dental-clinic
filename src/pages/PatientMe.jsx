@@ -24,6 +24,8 @@ export function PatientMePage({ store, setPage, documentsOnly = false }) {
   const [uploadOpen, setUploadOpen] = useState(false)
   const [fileToUpload, setFileToUpload] = useState(null)
   const [uploadTitle, setUploadTitle] = useState('')
+  const [otherDescription, setOtherDescription] = useState('')
+  const [descriptionError, setDescriptionError] = useState('')
   const [uploadCategory, setUploadCategory] = useState('valid_id')
   const [uploading, setUploading] = useState(false)
   const [retractTarget, setRetractTarget] = useState(null)
@@ -67,10 +69,13 @@ export function PatientMePage({ store, setPage, documentsOnly = false }) {
   const handleUpload = async (e) => {
     e.preventDefault()
     if (!fileToUpload) return toast('Please select a file to upload.', 'warning')
-    if (uploadCategory === 'other' && !uploadTitle.trim()) return toast('Please specify a description for this document.', 'warning')
     const formData = new FormData()
     formData.append('file', fileToUpload)
     formData.append('category', uploadCategory)
+    if (uploadCategory === 'other') {
+      if (!otherDescription.trim()) return setDescriptionError('Specify the document type.')
+      formData.append('other_description', otherDescription.trim())
+    }
     if (uploadTitle.trim()) formData.append('title', uploadTitle.trim())
 
     setUploading(true)
@@ -81,8 +86,11 @@ export function PatientMePage({ store, setPage, documentsOnly = false }) {
       setUploadOpen(false)
       setFileToUpload(null)
       setUploadTitle('')
+      setOtherDescription('')
+      setDescriptionError('')
       await reload()
     } catch (err) {
+      if (err.errors?.other_description?.[0]) setDescriptionError(err.errors.other_description[0])
       toast(err.message || 'Upload failed.', 'warning')
     } finally {
       setUploading(false)
@@ -170,7 +178,8 @@ export function PatientMePage({ store, setPage, documentsOnly = false }) {
           {docs.map(doc => (
             <RecordCard key={doc.id} title={doc.title} subtitle={`${doc.originalFilename} • ${doc.fileSizeFormatted} • Uploaded ${dateLabel(doc.createdAt)}${doc.branch?.name ? ` • ${doc.branch.name}` : ''}`} status={doc.status}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
-                <span className="split-badge info"><b>Type</b><span>{doc.category ? doc.category.replace(/_/g, ' ') : 'document'}</span></span>
+                <span className="split-badge info"><b>Type</b><span>{doc.category === 'other' ? 'Other Document' : doc.category?.replace(/_/g, ' ') || 'Document'}</span></span>
+                {doc.otherDescription && <span style={{ overflowWrap: 'anywhere' }}>Specified type: {doc.otherDescription}</span>}
                 <span className="split-badge"><b>Source</b><span>{doc.uploadedByPatient ? 'Uploaded by you' : 'Shared by clinic'}</span></span>
               </div>
               <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
@@ -202,16 +211,16 @@ export function PatientMePage({ store, setPage, documentsOnly = false }) {
             required
           />
         </Field>
-        <Field label={uploadCategory === 'other' ? 'Specify Document Description' : 'Title / Description'} required={uploadCategory === 'other'}>
-          <input
-            value={uploadTitle}
-            onChange={e => setUploadTitle(e.target.value)}
-            placeholder={uploadCategory === 'other' ? 'e.g., Insurance certificate, Medical clearance, School referral' : "e.g. Driver's License or Maxicare Card"}
-            aria-required={uploadCategory === 'other' || undefined}
-          />
+        <Field label="Title / Description">
+          <input value={uploadTitle} maxLength={255} onChange={e => setUploadTitle(e.target.value)} placeholder="e.g., Driver’s License" />
         </Field>
         <Field label="Category" required>
-          <select value={uploadCategory} onChange={e => setUploadCategory(e.target.value)}>
+          <select value={uploadCategory} onChange={e => {
+            const category = e.target.value
+            setUploadCategory(category)
+            setDescriptionError('')
+            if (category !== 'other') setOtherDescription('')
+          }}>
             <option value="valid_id">Valid ID (Passport, Driver's License, Senior/PWD ID)</option>
             <option value="clinical_attachment">Medical / Dental Record, Lab Result, X-Ray</option>
             <option value="referral">Referral Letter / Note</option>
@@ -221,6 +230,10 @@ export function PatientMePage({ store, setPage, documentsOnly = false }) {
             <option value="other">Other Document</option>
           </select>
         </Field>
+        {uploadCategory === 'other' && <Field label="Specify document type" required error={descriptionError}>
+          <input value={otherDescription} maxLength={255} required placeholder="e.g., School clearance"
+            onChange={e => { setOtherDescription(e.target.value); setDescriptionError('') }} />
+        </Field>}
         <div className="span-2" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '12px' }}>
           <Button type="button" variant="ghost" onClick={() => setUploadOpen(false)} disabled={uploading}>Cancel</Button>
           <Button type="submit" disabled={uploading}>{uploading ? 'Uploading...' : 'Upload'}</Button>

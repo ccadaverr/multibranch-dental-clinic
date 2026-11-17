@@ -325,6 +325,8 @@ function PatientDocumentsTab({ patient, role, store }) {
   const [fileToUpload, setFileToUpload] = useState(null)
   const [uploadCategory, setUploadCategory] = useState('clinical_attachment')
   const [uploadTitle, setUploadTitle] = useState('')
+  const [otherDescription, setOtherDescription] = useState('')
+  const [descriptionError, setDescriptionError] = useState('')
   const [uploading, setUploading] = useState(false)
   const [expandedExtraction, setExpandedExtraction] = useState(null)
   const [extractionDetail, setExtractionDetail] = useState({})
@@ -370,6 +372,10 @@ function PatientDocumentsTab({ patient, role, store }) {
     formData.append('file', fileToUpload)
     formData.append('patient_id', patientIdentifier)
     formData.append('category', uploadCategory)
+    if (uploadCategory === 'other') {
+      if (!otherDescription.trim()) return setDescriptionError('Specify the document type.')
+      formData.append('other_description', otherDescription.trim())
+    }
     if (uploadTitle.trim()) formData.append('title', uploadTitle.trim())
     if (isStaff) {
       if (!uploadBranchId) return toast('You have no authorized branch to upload into.', 'warning')
@@ -383,9 +389,12 @@ function PatientDocumentsTab({ patient, role, store }) {
       setUploadOpen(false)
       setFileToUpload(null)
       setUploadTitle('')
+      setOtherDescription('')
+      setDescriptionError('')
       uploadKey.current = commandKey()
       await reload()
     } catch (err) {
+      if (err.errors?.other_description?.[0]) setDescriptionError(err.errors.other_description[0])
       toast(err.message || 'Upload failed.', 'warning')
     } finally {
       setUploading(false)
@@ -515,8 +524,9 @@ function PatientDocumentsTab({ patient, role, store }) {
                         </span>
                       </div>
                       <small style={{ color: 'var(--muted)', fontSize: '10px' }}>
-                        {doc.originalFilename} • {doc.fileSizeFormatted} • {doc.category?.replace(/_/g, ' ')} • Source: {doc.uploadedByPatient ? 'Patient' : 'Clinic'} • Uploaded {dateLabel(doc.createdAt)}
+                        {doc.originalFilename} • {doc.fileSizeFormatted} • {doc.category === 'other' ? 'Other Document' : doc.category?.replace(/_/g, ' ')} • Source: {doc.uploadedByPatient ? 'Patient' : 'Clinic'} • Uploaded {dateLabel(doc.createdAt)}
                       </small>
+                      {doc.otherDescription && <div style={{ overflowWrap: 'anywhere' }}>Specified type: {doc.otherDescription}</div>}
                     </div>
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                       <Status>{doc.status}</Status>
@@ -593,10 +603,19 @@ function PatientDocumentsTab({ patient, role, store }) {
           <input value={uploadTitle} onChange={e => setUploadTitle(e.target.value)} placeholder="e.g. National ID or Panoramic X-Ray" />
         </Field>
         <Field label="Category" required>
-          <select value={uploadCategory} onChange={e => setUploadCategory(e.target.value)}>
+          <select value={uploadCategory} onChange={e => {
+            const category = e.target.value
+            setUploadCategory(category)
+            setDescriptionError('')
+            if (category !== 'other') setOtherDescription('')
+          }}>
             {DOCUMENT_CATEGORIES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </Field>
+        {uploadCategory === 'other' && <Field label="Specify document type" required error={descriptionError}>
+          <input value={otherDescription} maxLength={255} required placeholder="e.g., School clearance"
+            onChange={e => { setOtherDescription(e.target.value); setDescriptionError('') }} />
+        </Field>}
         {branchOptions.length > 1 && <Field label="Branch" required hint="The branch this document belongs to.">
           <select value={uploadBranchId} onChange={e => setBranchChoice(e.target.value)}>{branchOptions.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select>
         </Field>}

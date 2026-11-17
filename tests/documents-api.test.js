@@ -89,3 +89,11 @@ test('the document screens show errors with Retry, hide actions by role, never c
   assert.match(me, /doc\.uploadedByPatient/)
   assert.match(clinical, /const patientIdentifier = patient\?\.publicId \|\| null/)
 })
+
+test('GEN-07 reads an explicit Other description and preserves unlabelled legacy titles', () => {
+  const row = { title: 'Legacy filename.pdf', category: 'other', file_size_bytes: 1024 }
+  assert.equal(mapDocument(row).title, 'Legacy filename.pdf')
+  assert.equal(mapDocument(row).otherDescription, null)
+  assert.equal(mapDocument({ ...row, other_description: 'School clearance' }).otherDescription, 'School clearance')
+  assert.equal(mapDocument({ ...row, category: 'valid_id', other_description: 'Stale detail' }).otherDescription, null)
+})

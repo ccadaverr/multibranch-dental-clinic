@@ -1,10 +1,11 @@
+import {SelectionDetailsNotice} from '../selection-details.jsx'
 import React, { useEffect, useId, useRef, useState } from 'react'
-import { Button, Card, ConfirmDialog, Field, FilterBar, Modal, Notice, PageHeader, RefreshButton, Status, Table } from '../components.jsx'
+import { Button, Card, ConfirmDialog, Field, FilterBar, Modal, Notice, PageHeader, RefreshButton, SelectWithOther, Status, Table } from '../components.jsx'
 import { addMinutes, dateLabel, dentistName, displayTime, patientName } from '../logic.js'
 import { canAccessPage } from '../safeguards.js'
 import { checkInNavigationFor } from '../checkin-navigation.js'
 import { clinicDate } from '../clock.js'
-import { commandKey, selectedFollowupProblem } from '../appointments-api.js'
+import { commandKey, selectedFollowupProblem, STAFF_CANCELLATION_REASONS } from '../appointments-api.js'
 import { publicPatientIdFor } from '../appointment-projection.js'
 import { useDayAvailability } from '../booking-availability.js'
 import { dentistsFor, servicesAt } from '../scheduling.js'
@@ -275,22 +276,25 @@ function AppointmentManagement({ role, store, setPage, context }) {
     }
     return true
   }).sort((a,b)=>`${a.date}${a.start}`.localeCompare(`${b.date}${b.start}`))
-  const runAction=async(action,a,close,command)=>{
+  const runAction=async(action,a,close,command,keepOpen=false)=>{
     const problem=appointmentActionProblem(store,a,action)
-    if(problem){close(null);setActionError(problem);return}
+    if(problem){if(!keepOpen)close(null);setActionError(problem);return {ok:false,message:problem}}
     const ticket=owner.begin()
     if(!ticket)return
-    close(null);setActionError('')
+    if(!keepOpen)close(null)
+    setActionError('')
     try{
       const result=await command(a)
       if(!owner.current(ticket))return
       if(result.ok&&result.warning)toast(result.warning,'warning')
       if(!result.ok)setActionError(result.message)
+      if(result.ok&&keepOpen)close(null)
       toast(result.ok?(action==='cancel'?'Appointment cancelled.':'Marked as No-show.'):result.message,result.ok?'success':'warning')
-    }catch{if(owner.current(ticket))setActionError('Could not confirm the action. Refresh the appointment before retrying.')}
+      return result
+    }catch{if(owner.current(ticket)){const message='Could not confirm the action. Refresh the appointment before retrying.';setActionError(message);return {ok:false,message}}}
     finally{owner.finish(ticket)}
   }
-  const cancel=()=>runAction('cancel',cancelling,setCancelling,a=>store.appointmentFlow.cancel(a,commandKey()))
+  const cancel=(selection,key)=>runAction('cancel',cancelling,setCancelling,a=>store.appointmentFlow.cancel(a,key,selection),true)
   // Pre-arrival No-show (M6): a manual same-day Staff decision that the scheduled Patient did not arrive. No Visit is
   // created; once the Patient has checked in, No-show is no longer possible.
   const markNoShow=()=>runAction('noShow',missed,setMissed,a=>store.appointmentFlow.noShow(a,commandKey()))
@@ -327,6 +331,7 @@ function AppointmentManagement({ role, store, setPage, context }) {
         {key:'service',label:'Service'},{key:'dentist',label:'Dentist',render:a=>a.dentistName||dentistName(a.dentistId,state.dentists)},
         {key:'status',label:'Status',render:a=><div>
           <Status>{a.status}</Status>
+          {a.cancellationCategory && <small className="block-muted" style={{overflowWrap:'anywhere'}}>{a.cancellationCategory}{a.cancellationDetail && ` — ${a.cancellationDetail}`}</small>}
           <small className="block-muted">{a.bookingPaymentStatus==='paid'?`Deposit paid${a.bookingPaymentMethod?` (${a.bookingPaymentMethod})`:''}`:a.bookingPaymentStatus==='held'?'Held':a.bookingPaymentStatus==='refunded'?'Refunded':a.bookingPaymentStatus==='forfeited'?'Forfeited':'Unpaid'}</small>
         </div>},
         {key:'actions',label:'Actions',render:a=><div className="row-actions">{checkInNavigationFor(store,a)&&<Button size="sm" variant="soft" onClick={()=>{const checkIn=checkInNavigationFor(store,a);if(checkIn)setPage('checkin',{mode:'scheduled',checkIn})}}>Check in</Button>}{role==='staff'&&appointmentRecordPatient(a,state,session)&&<Button size="sm" variant="soft" onClick={()=>{const patient=appointmentRecordPatient(a,state,session);if(patient)setPage('patients',{patientId:patient.id})}}>Open Patient Record</Button>}{canSchedule(store,a.branchId)&&['Confirmed','Pending'].includes(a.status)&&<><Button size="sm" variant="soft" onClick={()=>openAction(setReschedule,a)}>Reschedule</Button><Button size="sm" variant="ghost" disabled={owner.busy} onClick={()=>openAction(setCancelling,a)}>Cancel</Button>{a.date===clinicDate()&&<Button size="sm" variant="ghost" disabled={owner.busy} onClick={()=>openAction(setMissed,a)}>No-show</Button>}</>}</div>}
@@ -334,13 +339,48 @@ function AppointmentManagement({ role, store, setPage, context }) {
     </Card>
     <Modal open={newOpen} title="Create appointment" subtitle="The clinic server validates the slot and assigns an eligible Dentist unless you choose one." wide onClose={()=>setNewOpen(false)}><AppointmentForm role={role} store={store} onSaved={()=>setNewOpen(false)}/></Modal>
     <Modal open={!!reschedule} title="Reschedule appointment" subtitle="The new time must pass the same conflict-prevention rules as a new booking." wide onClose={()=>setReschedule(null)}>{reschedule&&<AppointmentForm role={role} store={store} appointment={reschedule} submitLabel="Save new time" onSaved={()=>setReschedule(null)}/>}</Modal>
-    <ConfirmDialog open={!!cancelling} title="Cancel this appointment?" confirmLabel="Cancel appointment" cancelLabel="Keep appointment" tone="danger" onConfirm={cancel} onCancel={()=>setCancelling(null)}>
-      {cancelling&&<p>{cancelling.appointmentNo} • {dateLabel(cancelling.date)} at {displayTime(cancelling.start)} • {cancelling.patientName}. The reserved time will be released.</p>}
-    </ConfirmDialog>
+    {cancelling && <StaffCancellationDialog selectionDetailsAvailable={store.session?.selectionDetailsAvailable===true} key={cancelling.id} appointment={cancelling} onCancel={()=>setCancelling(null)} onConfirm={cancel}/>}
     <ConfirmDialog open={!!missed} title="Mark as No-show?" confirmLabel="Mark No-show" cancelLabel="Keep appointment" tone="danger" onConfirm={markNoShow} onCancel={()=>setMissed(null)}>
       {missed&&<p>{missed.appointmentNo} • today at {displayTime(missed.start)} • {missed.patientName}. Use this only when the patient did not arrive; no visit is created. A patient who has already checked in can’t be marked No-show.</p>}
     </ConfirmDialog>
   </>
+}
+
+function StaffCancellationDialog({ selectionDetailsAvailable = false, appointment, onCancel, onConfirm }) {
+  const [category, setCategory] = useState('')
+  const [detail, setDetail] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const key = useRef(commandKey())
+  const submitting = useRef(false)
+  const ready = !!category && (category !== 'Other' || !!detail.trim())
+  const submit = async event => {
+    event.preventDefault()
+    if (!ready || submitting.current) return
+    submitting.current = true
+    setBusy(true)
+    setError('')
+    const result = await onConfirm((selectionDetailsAvailable ? { reason_category: category, ...(category === 'Other' ? { reason_detail: detail.trim() } : {}) } : {reason:category==='Other'?detail.trim():category}), key.current)
+    submitting.current = false
+    setBusy(false)
+    if (result?.ok === false) setError(result.message)
+  }
+  return <Modal open title="Cancel this appointment?" onClose={()=>!busy&&onCancel()}>
+    <p>{appointment.appointmentNo} · {appointment.patientName}. The reserved time will be released.</p>
+    <form className="au-form" onSubmit={submit}>
+      <SelectionDetailsNotice available={selectionDetailsAvailable}/>
+      <fieldset disabled={busy}>
+        <SelectWithOther label="Cancellation reason" value={category} onChange={setCategory}
+          options={[{value:'',label:'Select a reason'}, ...STAFF_CANCELLATION_REASONS]}
+          placeholder="e.g., Duplicate booking" required otherValue={detail} onOtherChange={setDetail}/>
+      </fieldset>
+      {error && <p role="alert">{error}</p>}
+      <div className="row-actions">
+        <Button type="button" variant="ghost" onClick={onCancel} disabled={busy}>Keep appointment</Button>
+        <Button type="submit" variant="danger" disabled={busy || !ready}>{busy?'Cancelling…':'Cancel appointment'}</Button>
+      </div>
+    </form>
+  </Modal>
 }
 
 // The active Dentist route delegates to the calendar-first workspace.

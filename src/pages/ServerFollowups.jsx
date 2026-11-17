@@ -1,7 +1,9 @@
+import {SelectionDetailsNotice} from '../selection-details.jsx'
 import { useClinicalSession } from '../use-clinical-session.js'
 import { clinicalSessionKey, encounterKey, resolveEncounter } from '../encounter.js'
 import React, { useEffect, useState } from 'react'
 import { Button, Card, Field, FilterBar, Modal, Notice, PageHeader, RefreshButton } from '../components.jsx'
+import { commandKey } from '../appointments-api.js'
 import { apiBase, createFollowup, followups, patientFollowups, updateFollowup, followupTask, followupBookingReceipt, followupBookingCapability } from '../api-client.js'
 import { AppointmentForm } from './Scheduling.jsx'
 import { canSchedule, schedulingActorKey } from '../appointment-ui.js'
@@ -311,7 +313,7 @@ function FollowupRow({ t, pendingTasks, owner, role, store, toast, onChanged, on
   return <li className={t.overdue ? 'fu-overdue' : ''}>
     <div><b>{owner ? `Due ${day(t.due_on)}` : `${t.patient.name} · ${t.patient.code}`}</b>
       <span><span className={`fd-badge ${TONE[t.status]}`}>{t.status}</span>{t.overdue ? <span className="fd-badge is-bad">Overdue</span> : ''} · {owner ? '' : `due ${day(t.due_on)} · `}{t.branch.name}{owner ? '' : ` · ${t.assignee}`}</span>
-      {!owner && <span>{t.reason}{t.service ? ` · book: ${t.service.name}` : ''}{t.patient.phone ? ` · ${t.patient.phone}` : ''}</span>}
+      {!owner && <span>{t.reason_category === 'Other' ? `Other: ${t.reason_detail}` : t.reason}{t.service ? ` · book: ${t.service.name}` : ''}{t.patient.phone ? ` · ${t.patient.phone}` : ''}</span>}
       {!owner && t.appointment && <span>Booked: {t.appointment.code} · {t.appointment.when}</span>}
       {!owner && t.close_note && <span>Closed: {t.close_note}</span>}
       {closing && <Field label="Why is it closed without a booking?" required><input value={note} disabled={!!busy || needsReload || !!taskRequest || staleRow} maxLength={500} onChange={e => setNote(e.target.value)}/></Field>}
@@ -375,6 +377,13 @@ function BookingRecoveryNotice() {
 }
 
 export { clinicalBookingSelection, currentFollowupReview, recoveredFollowupReceipt }
+
+function matchesFollowupSelection(result, body) {
+  return result?.ok === true && result.data?.id && result.data.patient?.id === body.patient_id &&
+    result.data.branch?.id === body.branch_ref && result.data.status === 'Open' &&
+    Number.isSafeInteger(result.data.revision) && result.data.revision > 0 &&
+    (body.reason_category ? result.data.reason_category === body.reason_category && (result.data.reason_detail ?? null) === (body.reason_detail ?? null) : result.data.reason === body.reason)
+}
 
 const STANDARD_REASONS = [
   'Post-Op Check',
@@ -449,17 +458,17 @@ function PatientFollowupPanel({ patientId, branches = [], toast, store, role, li
     setErr('')
     if (!effectiveReason) { setOtherTouched(true); return setErr('Please select or enter a reason for follow-up.') }
     if (!branchRef || !f.due_on) return setErr('Choose a branch and due date.')
-    const body = {patient_id: patientId, reason: effectiveReason, ...f, branch_ref: branchRef}
-    const operation = {kind: 'request', phase: 'pending', body, token: {}, owner: pending}
+    const body = {patient_id: patientId, ...(store.session?.selectionDetailsAvailable ? {reason_category: reasonCategory, ...(reasonCategory === 'Other' ? { reason_detail: effectiveReason } : {})} : {reason:effectiveReason}), ...f, branch_ref: branchRef}
+    const operation = {kind: 'request', phase: 'pending', body, key: commandKey(), token: {}, owner: pending}
     pendingTasks.creates.set(patientId, operation)
     pending.current = operation; setBusy(true)
     operation.promise = (async () => {
       let result
-      try { result = await createFollowup(body) }
+      try { result = await createFollowup(body, operation.key) }
       catch { result = {ok: false, kind: 'network', message: 'The follow-up result could not be confirmed. Reload the list before retrying.'} }
       if (pendingTasks.creates.get(patientId)?.token === operation.token) {
         pendingTasks.settlement++
-        const confirmed = result?.ok === true && result.data?.id && result.data?.patient?.id === body.patient_id && result.data?.branch?.id === body.branch_ref && result.data.status === 'Open' && Number.isSafeInteger(result.data.revision) && result.data.revision > 0
+        const confirmed = matchesFollowupSelection(result, body)
         operation.kind = 'reload'
         operation.phase = confirmed ? 'confirmed' : followupUncertain(result) ? 'recovery' : 'refused'
         if (confirmed) { operation.taskId = result.data.id; rememberFollowup(pendingTasks, result.data) }
@@ -470,7 +479,7 @@ function PatientFollowupPanel({ patientId, branches = [], toast, store, role, li
     const r = await operation.promise
     if (!live.current || !isCurrent()) return
     setBusy(false)
-    const confirmed = r?.ok === true && r.data?.id && r.data?.patient?.id === body.patient_id && r.data?.branch?.id === body.branch_ref && r.data.status === 'Open' && Number.isSafeInteger(r.data.revision) && r.data.revision > 0
+    const confirmed = matchesFollowupSelection(r, body)
     if (!confirmed) {
       const uncertain = followupUncertain(r)
       pending.current = uncertain ? operation : false; setNeedsReload(uncertain)
@@ -483,6 +492,7 @@ function PatientFollowupPanel({ patientId, branches = [], toast, store, role, li
   }
   return <section className="st-panel" ref={recoveryRoot} tabIndex={-1} aria-labelledby={`fu-${patientId}`}>
     <h3 id={`fu-${patientId}`} className="st-sub">Follow-ups</h3>
+    {canCreate&&<SelectionDetailsNotice available={store.session?.selectionDetailsAvailable}/>}
     {role === 'staff' && <BookingRecoveryNotice/>}
     {error && <Notice tone="error" title="Follow-ups unavailable">{error} <Button variant="soft" onClick={reload}>Reload follow-ups</Button></Notice>}
     {!rows ? !error && <p className="au-muted" role="status">Loading follow-ups…</p> : !rows.length ? <p className="au-muted" role="status">No follow-ups for this patient.</p>
@@ -495,7 +505,7 @@ function PatientFollowupPanel({ patientId, branches = [], toast, store, role, li
           {STANDARD_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
         </select>
       </Field>
-      {reasonCategory === 'Other' && <Field label="Specify reason" required error={otherTouched && !effectiveReason ? 'Specify the follow-up reason.' : undefined}><input disabled={busy || needsReload} value={customReason} maxLength={500} placeholder="Enter specific clinical reason…" onChange={e => setCustomReason(e.target.value)} onBlur={() => setOtherTouched(true)} required/></Field>}
+      {reasonCategory === 'Other' && <Field label="Specify reason" required error={otherTouched && !effectiveReason ? 'Specify the follow-up reason.' : undefined}><input disabled={busy || needsReload} value={customReason} maxLength={500} placeholder="e.g., Review healing after the visit" onChange={e => setCustomReason(e.target.value)} onBlur={() => setOtherTouched(true)} required/></Field>}
       <Field label="Due" required><input disabled={busy || needsReload} type="date" value={f.due_on} onChange={e => setF(x => ({ ...x, due_on: e.target.value }))} required/></Field>
       {err && <p className="au-error" role="alert">{err}</p>}
       {busy && <p className="au-muted" role="status">Adding follow-up for this patient…</p>}
