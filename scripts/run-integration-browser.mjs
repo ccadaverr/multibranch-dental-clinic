@@ -11,11 +11,23 @@ const status=JSON.parse(run('python3','scripts/local-system.py','--target',manif
 assert.equal(status.classification,'owned isolated development');assert.equal(status.appliedMigrations,87);assert.equal(status.held.length,4)
 const actual=JSON.parse(run('cat',manifest));assert.equal(actual.root,'/workspace');assert.equal(actual.runtime,'/private/integration');assert.equal(actual.reviewed_proposal,undefined)
 const lane=process.argv[2]||'visit'
-const files={visit:'local-visit.browser.mjs',prescription:'local-prescription.browser.mjs',operations:'integration-operations.browser.mjs',workforce:'staff-roster-publication.browser.mjs'}
-assert(files[lane],'Choose visit or prescription; no arbitrary script execution')
+const files={visit:'local-visit.browser.mjs',prescription:'local-prescription.browser.mjs',operations:'integration-operations.browser.mjs',workforce:'staff-roster-publication.browser.mjs',receipts:'local-receipt-navigation.browser.mjs',history:'local-clinical-history.browser.mjs'}
+assert(files[lane],'Choose a listed integration acceptance lane; no arbitrary script execution')
 const root=resolve(process.env.INTEGRATION_BROWSER_EVIDENCE||join(tmpdir(),'dentalops-integration-browser-20261117'))
 mkdirSync(root,{recursive:true,mode:0o700});const evidence=join(root,lane);mkdirSync(evidence,{recursive:true,mode:0o700})
 writeFileSync(join(root,'visit-fixture.json'),run('cat','/private/integration/visit-fixture.json'),{mode:0o600})
+if(['receipts','history'].includes(lane)){
+ const observed=JSON.parse(readFileSync(join(root,'visit','journey.json'),'utf8'));assert.equal(observed.accepted,true);assert.equal(observed.invoice.status,'Paid');
+ mkdirSync(join(root,'encounter-browser-batch03'),{recursive:true,mode:0o700});writeFileSync(join(root,'encounter-browser-batch03','journey.json'),JSON.stringify({scheduled:observed.treatment}),{mode:0o600});
+ writeFileSync(join(root,'receipt-fixture.json'),run('cat','/private/integration/receipt-fixture.json'),{mode:0o600});
+ if(lane==='receipts'){
+  const statePath=join(evidence,'journey.json');
+  try{readFileSync(statePath)}catch{writeFileSync(statePath,JSON.stringify({groups:[],scheduled:observed.invoice}),{mode:0o600})}
+ }else{
+  const receipts=JSON.parse(readFileSync(join(root,'receipts','journey.json'),'utf8'));assert.equal(receipts.accepted,true);
+  mkdirSync(join(root,'receipt-browser-batch05'),{recursive:true,mode:0o700});writeFileSync(join(root,'receipt-browser-batch05','journey.json'),JSON.stringify(receipts),{mode:0o600});
+ }
+}
 const module=process.env.PLAYWRIGHT_MODULE;assert(module,'Provide the installed Playwright index.mjs')
 const helper=join(root,'support.mjs')
 writeFileSync(helper,`
