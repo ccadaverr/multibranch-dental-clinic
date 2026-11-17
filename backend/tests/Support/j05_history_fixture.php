@@ -1,9 +1,6 @@
 <?php
 
 // Deliberate synthetic historical read data, not proof of clinical lifecycle commands.
-require getcwd().'/vendor/autoload.php';
-$app = require getcwd().'/bootstrap/app.php';
-$app->make(Kernel::class)->bootstrap();
 
 use App\Models\Branch;
 use App\Models\DentistProfile;
@@ -15,6 +12,10 @@ use App\Models\User;
 use App\Models\Visit;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Support\Facades\DB;
+
+require getcwd().'/vendor/autoload.php';
+$app = require getcwd().'/bootstrap/app.php';
+$app->make(Kernel::class)->bootstrap();
 
 $path = getenv('DENTALOPS_LOCAL_TARGET');
 if (getenv('DENTALOPS_J05_HISTORY_FIXTURE') !== '1' || ! $path || is_link($path) || ! is_file($path) || fileowner($path) !== posix_geteuid() || (fileperms($path) & 0077) !== 0) {
