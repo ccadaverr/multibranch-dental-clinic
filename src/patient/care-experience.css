@@ -67,3 +67,16 @@
 .pp-main .pp-invoice-head { align-items:flex-start; flex-wrap:wrap; }
 .pp-main .pp-invoice-head>div { flex:1; min-width:min(170px,100%); }
 .pp-main .pp-invoice-head>.pp-pill { flex-shrink:0; white-space:nowrap; }
+/* Saved Patient history; no shared table or control changes. */
+.history-list { list-style:none; padding:0; display:grid; gap:16px; }
+.history-record { padding:20px; overflow-wrap:anywhere; }
+.patient-history :is(.history-record,.pp-rx-list>li)>header { display:flex; align-items:start; justify-content:space-between; gap:16px; }
+.patient-history h2 { font-size:18px; margin:4px 0 8px; }
+.history-record p { margin:8px 0; }
+.history-amount { font-size:22px; font-weight:600; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.history-facts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; padding-block:16px; border-block:1px solid var(--care-edge); }
+.history-facts dt { font-size:13px; color:var(--care-muted); }.history-facts dd { margin:4px 0 0; font-variant-numeric:tabular-nums; }
+.history-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:16px; }
+.patient-history details { border-top:1px solid var(--care-edge); padding-top:12px; margin-top:16px; color:var(--care-muted); font-size:13px; }
+.patient-history details summary { min-height:32px; cursor:pointer; }.patient-history details p { overflow-wrap:anywhere; }
+@media(max-width:600px){.history-record { padding:18px; }.patient-history .history-record>header { flex-wrap:wrap; }.history-facts { grid-template-columns:1fr; }}
