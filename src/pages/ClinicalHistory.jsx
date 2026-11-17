@@ -37,7 +37,7 @@ function History({store,patient,selectedId}){
    setDetail(r.data)
   });return()=>{epoch.current++}
  },[picked,patient.id,attempt])
- return <Card title="Completed encounter history" subtitle="Authorized completed records across dates. Historical documentation is read-only." actions={<RefreshButton title="Reload clinical history" ariaLabel="Reload clinical history" onClick={()=>setAttempt(a=>a+1)}/>}>
+ return <Card title="Completed encounter history" subtitle="Authorized completed records across dates. Historical documentation is read-only." actions={<RefreshButton title="Reload clinical history" ariaLabel="Reload clinical history" loading={loading||reading} onClick={()=>setAttempt(a=>a+1)}/>}>
   {error&&<Notice tone="warning">{error}<Button onClick={()=>setAttempt(a=>a+1)}>Retry history</Button></Notice>}
   {loading&&<p role="status">Loading completed encounters…</p>}
   {!loading&&!error&&!rows.length&&<p>No authorized completed encounters were returned for this Patient.</p>}
