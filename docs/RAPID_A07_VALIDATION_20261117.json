@@ -1,0 +1,143 @@
+{
+  "starting_head": "65a1088563ff7435d98fa7f6af1fc838d0ee7e94",
+  "tested_code_head": "ba6a9035714e2f84c468bfc364cd92ae096994c4",
+  "commits": {
+    "b07": "5ad9f202c852c3307ef0763e037f6879ed93977f",
+    "b08": "905c7dee9cad9831beb1df263552088f70c861b3",
+    "jaztin_merge": "6ffe0acfcd18b1badd668095b080d8e6007f6769",
+    "staff": "3aee7a19be0e90625cdee345836d219638764199",
+    "runtime": "ba6a9035714e2f84c468bfc364cd92ae096994c4"
+  },
+  "jaztin": {
+    "published_checkpoint": "53b0e2e1cea0a1c4db1c498eb80b8fb3e81d77da",
+    "remote_and_fetch_match": true,
+    "common_base": "fc9eb81392d78d688d980951e2780ba015e91f89",
+    "new_commits": 5,
+    "changed_paths": 34,
+    "manifest_source_hashes_verified": {
+      "J01": 13,
+      "J02": 20
+    },
+    "conflicts_resolved": [
+      "src/pages/ServerPrescriptions.jsx",
+      "docs/handoff/SYSTEM_STATE.md"
+    ],
+    "j03_received": false
+  },
+  "patch_sha256": {
+    "B07": "98bc0015d1d405769cc484102731a17edb24624c91ad99f8d72c69c5e8fb0dd0",
+    "B08": "d02e41ae412447bf3a28a3037dceefe36bba4cd01aa81089696ec0177a605eb9"
+  },
+  "frontend": {
+    "total": 2027,
+    "passed": 2019,
+    "failed": 0,
+    "skipped": 8
+  },
+  "backend": {
+    "tests": 1303,
+    "assertions": 15145,
+    "passing": 1273,
+    "failures": 26,
+    "errors": 1,
+    "skipped": 3,
+    "new_failure_identities": [],
+    "inherited_failure_and_error_identities": [
+      "Tests\\Feature\\Automation\\AutomationControlTest::test_csv_export_neutralizes_formula_injection",
+      "Tests\\Feature\\Automation\\AutomationControlTest::test_owner_can_trigger_manual_evaluation_and_audit_is_created",
+      "Tests\\Feature\\Automation\\AutomationControlTest::test_owner_can_view_automation_rules_and_snapshot",
+      "Tests\\Feature\\Automation\\AutomationControlTest::test_staff_and_dentist_and_patient_are_forbidden_from_automation",
+      "Tests\\Feature\\Automation\\AutomationControlTest::test_unauthenticated_cannot_access_automation_endpoints",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_audit_events_carry_no_event_body_and_the_csv_marks_evaluation_only",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_legacy_descriptions_are_qualified_inside_the_csv_cell_and_in_the_exception_projection",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_is_rate_limited",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_refuses_clinical_flags_and_every_foreign_field",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_refuses_unexpected_top_level_fields_too",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_validates_each_rule_observation",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_only_the_owner_may_dispatch_and_authorization_precedes_validation",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_repeated_manual_dispatches_are_independent_evaluations_with_no_idempotency_contract",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_the_api_marks_every_action_row_as_evaluation_only_and_keeps_historical_text_unchanged",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_the_manual_message_says_evaluated_not_executed_and_the_event_stores_no_email",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_a_patient_reads_only_their_own_feedback_newest_first_with_a_cursor_that_reveals_nothing_about_others",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_a_patient_submits_free_text_about_their_own_completed_visit_and_the_record_is_minimal_and_server_derived",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_m26_is_a_foundation_only_no_rating_category_status_reply_publication_marketing_or_other_module_side_effect",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_only_the_patients_own_completed_visits_are_eligible_and_every_other_case_is_one_indistinguishable_refusal",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_owner_can_review_feedback_with_filters",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_owner_can_review_patient_feedback_with_branch_and_dentist_filters",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_patient_can_submit_1_to_5_star_rating_and_low_ratings_auto_create_followup_task",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_submission_is_idempotent_a_new_key_is_a_separate_submission_and_no_uniqueness_is_invented",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_submission_is_rate_limited_per_account_and_explains_itself",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_submitted_feedback_is_immutable_and_nothing_can_erase_it",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_the_feature_is_patient_only_and_owner_staff_dentist_and_guests_are_all_refused_everywhere",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_the_text_is_bounded_free_data_and_every_authority_or_policy_field_is_refused"
+    ],
+    "extra_vs_s03": "A06 plus two B07/B08 cases and nine J01/J02 cases"
+  },
+  "backend_unit": {
+    "tests": 252,
+    "assertions": 1193,
+    "notices": 30
+  },
+  "python_passed": 53,
+  "new_integrated_acceptance": [
+    "STF-17"
+  ],
+  "qa_totals": {
+    "local_complete": 28,
+    "partial": 29,
+    "blocked": 11,
+    "integrated_pass": 14,
+    "integrated_pending": 54
+  },
+  "accepted_demo": {
+    "frontend": "http://127.0.0.1:5198",
+    "restarted": false,
+    "predefense_failures": 0,
+    "predefense_warnings": 4
+  },
+  "schema": {
+    "approved_entries": 87,
+    "held_migrations_executed": 0,
+    "conversation_grants": false,
+    "gen07_proposal_columns": false,
+    "protected_jobs_untouched": 19
+  },
+  "worker_acceptance": {
+    "fresh_mail_only_target": true,
+    "historical_jobs_processed": 0,
+    "external_delivery": false,
+    "populated_target_precondition_failure_retained": true
+  },
+  "evidence_sha256": {
+    "b07-postgres.log": "42bb2ebc2694e408898c80492b23801621f67858088569e1ed6ce79420d2a9d4",
+    "b07-frontend.log": "4a5823741a2a2ebb2be021c0bcaa7e26486a182e3ca14aee762c46e4b539e325",
+    "b08-postgres.log": "70c08c966dd3f69a4a07827d6ffc5cfe36fb1f5e355e1ce22018dcad2879bf48",
+    "b08-frontend.log": "291b659ac8954c2f88243df2c334f53f878f8615db50887248a38c9af92caf62",
+    "b07-combined-browser.log": "6483901c89f57a468575f556a8b9088af5778a48231f64ff9cdcc03300bf8e56",
+    "b08-combined-browser.log": "c21789a5fffc12f68f967e19a7592ad7586ea76d1aae255696e41003e6742cc1",
+    "b06-combined-browser.log": "9523f9404fc946cac4e3b21cb2f42eb365f47791576076fb9bd8c002927eb8d9",
+    "jaztin-postgres.log": "91017b737be6c67960e9255c10b3cf1ccd392f73851a9ff6401c09f68a220360",
+    "jaztin-frontend.log": "d95ba9d764908bdbbb99feea8b02c177b89cab279311d6da661494cbd086932d",
+    "jaztin-prepare-browser-final.log": "73365aba871cf0522b71148ecea8b9065ebf35018c93700877afded1401fea8b",
+    "jaztin-booking-browser.log": "dddf82e4cff3b0d35f97dfc753acaafc75d5dcf382ac558a55f55debe8a89e75",
+    "jaztin-prescription-browser-final.log": "a12af4ddd621f1b3519cfab0248cd708d24dff56d2b6ea29c6101912cb7fafc3",
+    "jaztin-family-browser.log": "5f9d63157018173e561b1c40bd8013edd356ba1f4910c65ca42fa5384324be55",
+    "jaztin-care-browser.log": "d40e7c31a482c133c46c0355f25c90719d1bd212399b74225940b43e7a6bcb4e",
+    "stf17-focused-final.log": "c333121ebb712f9b6fa9493a6c26a7c424908d139ba68ff1eea88afae577fed3",
+    "stf17-recovery-browser.log": "b797f523ff1f1213ba4ca1bb5677d42f3ee159cdef31eea54b25e6156b775244",
+    "stf17-postgres-browser-final.log": "5e063bf7ace7a8cc44b3bb59723f87440d67fac7c6e30c057a6cbf6f98f5bb1d",
+    "stf17-concurrent.log": "9098c2b8de864d9526c5dae81710f2737e71cbb7c74cb299566537ca1b59929e",
+    "notifications-browser.log": "ff413f3816c74912f55e0886e3226efc89406482fd26d53547b11b4d221de6bd",
+    "roster-browser.log": "94fbce48cfebdb73df498d1f15d506a83c356c3e972ac7f5c8c010787fd6f24a",
+    "restart-browser-final.log": "26b5db888beb9ab4cde3b31290c1cfd6cfc5ffe9026d597639182e78da6d37d5",
+    "worker-acceptance-fresh.log": "223614e8bde5b102a6d1dee6a87691e1207e4573f88d64d2e9d8dd8f44cccf50",
+    "frontend-final.log": "6741c4e52c6ebde4a6ad3e2b3d97ae6f2f0dfb6f50e62bea2237515b97fcd0b7",
+    "backend-reviewed.log": "f6637e67ea5d052aa4b8defb433a67a4037c7587223c24db912fc0f824391ca3",
+    "backend-unit-final.log": "d314077f72ad7cf0ca84f6bb64135792a227e998cbd86d9e08b124629558cccc",
+    "python-final.log": "b8f7aab7c4a2ea10a28cb0f189968b2b361835fe40dc9d64a33221ceb81e9acc",
+    "schema-final.log": "f310ea68852bcb55fa8f17a113746cf58845b0baa6b7647d1b97bbf051363f19",
+    "smoke-final.log": "f8e350bcbde5a5673b15046fc53a19b3f195662482773ca992b92261b51e4816",
+    "build-final.log": "e5af3e9e6cdde8d770dcc32de7129ccb9ccb677654112cfae9a6c769bd5675eb",
+    "predefense-main-final.log": "f1e74df52d6cc1f5140aac34a977ba58de5d20fe8967b923dab520469ae26d3f"
+  }
+}

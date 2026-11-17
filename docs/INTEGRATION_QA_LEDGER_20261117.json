@@ -3,11 +3,11 @@
   "clinical": "407f0c6b74ce44a7d955d4b897e6100e2bd80a51",
   "integration_branch": "integration/dentalops-fullstack-20261117",
   "totals": {
-    "local_complete": 27,
-    "partial": 30,
+    "local_complete": 28,
+    "partial": 29,
     "blocked": 11,
-    "integrated_pass": 13,
-    "integrated_pending": 55
+    "integrated_pass": 14,
+    "integrated_pending": 54
   },
   "rows": [
     {
@@ -439,14 +439,14 @@
       "original_owner": "Celin",
       "exact_criterion_and_tasks": "Queue rows show call and message icons; both work.<br>Original tasks: Replace the \"Call patient\" text button with a call icon; Add a message icon that opens a message to that patient; Tooltips + aria-labels on both; reasonable tap size `FINALS-QA-REVISIONS.md:524`",
       "responsible_domain": "Jaztin Clinical/Patient; Joevan shared-role partner",
-      "source_evidence": "src/pages/PatientFlow.jsx; QueueService.php; messaging-api.js",
-      "focused_test_evidence": "Named call and exact Patient conversation actions exist; current integrated row/access acceptance pending.",
-      "current_status": "Partial",
-      "remaining_requirements_and_next_action": "Verify actual queue call and identity-specific message actions with authorization/retry; retain named transition semantics.",
-      "integrated_acceptance": "Pending",
-      "integration_evidence": "PENDING: full original criterion not accepted on the combined candidate. Both exact sources are now available; passing subsets do not close this row.",
-      "local_acceptance": "Unfinished: only cited subsets accepted; original tasks remain incomplete.",
-      "blockers": "No additional policy/reproduction blocker established; all-role or item-specific acceptance/source reconciliation pending."
+      "source_evidence": "src/pages/PatientFlow.jsx; queue-api.js; messaging-api.js; QueueService.php; tests/stf17-queue-postgres.browser.mjs; tests/stf17-concurrent.browser.mjs. See RAPID_A07_ACCEPTANCE_20261117.md.",
+      "focused_test_evidence": "A07: 42 focused frontend tests pass, two existing skips; real browser verifies icon-only Call/Message, tooltips and labels, 44px controls, exact Patient/Visit/branch, committed-response loss and same-key keyboard retry, one queue history event, unchanged FIFO and Patient called readback. Message navigation selects the exact authorized thread; retry persists one reply visible to Patient. Foreign-branch Staff denied. Two fresh Staff sessions issue concurrent same-revision Calls: one commit, one stale conflict. Six widths and full runtime restart readback pass.",
+      "current_status": "Complete",
+      "remaining_requirements_and_next_action": "Maintain the existing in-app queue Call and Patient-initiated conversation contracts; preserve authorization, immutable history, FIFO and treatment-start semantics.",
+      "integrated_acceptance": "Pass",
+      "integration_evidence": "PASS on A07 combined B07/B08/J01/J02 source: all original Staff queue Call/Message icon, accessible label/tooltip, touch-size and working dispatch criteria independently verified against synthetic Laravel/PostgreSQL. Current actor/identity guards, exact uncertain retry, durable history/readback, concurrent CAS and reload/restart qualify the actions. Call changes in-app queue state; it is not telephone, SMS or external-provider delivery. Visit remains Checked In until explicit treatment start.",
+      "local_acceptance": "Complete original bounded Staff queue criterion independently accepted in the combined application.",
+      "blockers": "None for the bounded Staff queue Call/Message criterion. Staff initiation/reopening of conversations and admitted-Visit closure retain their separate policies."
     },
     {
       "original_id": "STF-18",
