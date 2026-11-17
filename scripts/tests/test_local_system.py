@@ -98,6 +98,91 @@ class LocalSystemTargetTest(unittest.TestCase):
                 local.main()
             launch.assert_not_called()
 
+    def test_arrival_contention_refuses_regular_target_before_launching_workers(self):
+        args = ['local-system.py', '--target', str(self.manifest), '--profile', 'test', 'arrival-concurrency']
+        with patch.object(sys, 'argv', args), patch.object(local, 'verify'), patch.object(local, 'migrations'), \
+                patch.object(local.subprocess, 'run') as launch:
+            with self.assertRaisesRegex(ValueError, 'separate clone-test'):
+                local.main()
+            launch.assert_not_called()
+
+    def test_encounter_contention_refuses_regular_target_before_launching_workers(self):
+        args = ['local-system.py', '--target', str(self.manifest), '--profile', 'test', 'encounter-concurrency']
+        with patch.object(sys, 'argv', args), patch.object(local, 'verify'), patch.object(local, 'migrations'), \
+                patch.object(local.subprocess, 'run') as launch:
+            with self.assertRaisesRegex(ValueError, 'separate clone-test'):
+                local.main()
+            launch.assert_not_called()
+
+    def test_profile_contention_refuses_regular_target_before_launching_workers(self):
+        args = ['local-system.py', '--target', str(self.manifest), '--profile', 'test', 'profile-concurrency']
+        with patch.object(sys, 'argv', args), patch.object(local, 'verify'), patch.object(local, 'migrations'), \
+                patch.object(local.subprocess, 'run') as launch:
+            with self.assertRaisesRegex(ValueError, 'separate clone-test'):
+                local.main()
+            launch.assert_not_called()
+
+    def test_chart_contention_refuses_regular_target_before_launching_workers(self):
+        args = ['local-system.py', '--target', str(self.manifest), '--profile', 'test', 'chart-concurrency']
+        with patch.object(sys, 'argv', args), patch.object(local, 'verify'), patch.object(local, 'migrations'), \
+                patch.object(local.subprocess, 'run') as launch:
+            with self.assertRaisesRegex(ValueError, 'separate clone-test'):
+                local.main()
+            launch.assert_not_called()
+
+    def test_dependent_contention_refuses_regular_target(self):
+        args = ['local-system.py', '--target', str(self.manifest), '--profile', 'test', 'dependent-concurrency']
+        with patch.object(sys, 'argv', args), patch.object(local, 'verify'), patch.object(local, 'migrations'), patch.object(local.subprocess, 'run') as launch:
+            with self.assertRaisesRegex(ValueError, 'separate clone-test'):
+                local.main()
+            launch.assert_not_called()
+
+    def test_backup_remains_available_while_source_migrations_are_awaiting_review(self):
+        args = ['local-system.py', '--target', str(self.manifest), '--profile', 'test', 'backup']
+        with patch.object(sys, 'argv', args), patch.object(local, 'verify') as verify, \
+                patch.object(local, 'migrations', side_effect=AssertionError('do not gate backup on source')), \
+                patch.object(local, 'backup') as backup:
+            local.main()
+            verify.assert_called_once()
+            backup.assert_called_once()
+
+    def test_reset_fixture_suite_is_refused_before_php_execution(self):
+        args = ['local-system.py', '--target', str(self.manifest), '--profile', 'test', 'test',
+                'tests/Feature/Followups/Follow02AtomicTransitionsTest.php']
+        with patch.object(sys, 'argv', args), patch.object(local, 'verify'), patch.object(local, 'migrations'), \
+                patch.object(local.subprocess, 'run') as launch:
+            with self.assertRaisesRegex(ValueError, 'separately reviewed'):
+                local.main()
+            launch.assert_not_called()
+
+    def test_suite_mail_defaults_are_opt_in_and_do_not_change_target_or_database_identity(self):
+        for mode in ['target', 'suite']:
+            args = ['local-system.py', '--target', str(self.manifest), '--profile', 'test',
+                    '--test-mail-profile', mode, 'test', 'tests/Feature/Intake/IntakeTest.php']
+            self.config['php'] = '/synthetic/php'
+            self.write()
+            original = {'MAIL_MAILER': 'local_capture', 'QUEUE_CONNECTION': 'database', 'DB_DATABASE': 'dental_clinic_test',
+                        'DB_HOST': '127.0.0.1', 'DB_PORT': '55488', 'DENTALOPS_LOCAL_TARGET': str(self.manifest)}
+            with patch.object(sys, 'argv', args), patch.object(local, 'verify') as verify, patch.object(local, 'migrations'), \
+                    patch.object(local, 'environment', return_value=original.copy()), patch.object(local.subprocess, 'run') as launch:
+                local.main()
+                verify.assert_called_once_with(self.config, self.runtime, 'dental_clinic_test')
+                actual = launch.call_args.kwargs['env']
+                expected = {**original, **({'MAIL_MAILER': 'array', 'QUEUE_CONNECTION': 'sync'} if mode == 'suite' else {})}
+                self.assertEqual(actual, expected)
+
+    def test_suite_mail_profile_cannot_change_demo_services_or_other_test_lanes(self):
+        for profile, action in [('demo', 'test'), ('demo', 'serve'), ('demo', 'worker'), ('demo', 'scheduler'),
+                                ('test', 'verify-schema'), ('test', 'chart-concurrency')]:
+            args = ['local-system.py', '--target', str(self.manifest), '--profile', profile,
+                    '--test-mail-profile', 'suite', action]
+            with patch.object(sys, 'argv', args), patch.object(local, 'verify') as verify, patch.object(local.subprocess, 'run') as launch:
+                with self.assertRaisesRegex(ValueError, 'only for explicit test'):
+                    local.main()
+                verify.assert_not_called()
+                launch.assert_not_called()
+
+
     def test_operations_contention_refuses_regular_target_before_launching_workers(self):
         args = ['local-system.py', '--target', str(self.manifest), '--profile', 'test', 'operations-contention']
         with patch.object(sys, 'argv', args), patch.object(local, 'verify'), patch.object(local, 'migrations'), \
@@ -129,16 +214,6 @@ class LocalSystemTargetTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'fresh leave-recovery clone-test'):
                 local.main()
             launch.assert_not_called()
-
-    def test_backup_remains_available_while_source_migrations_are_awaiting_review(self):
-        args = ['local-system.py', '--target', str(self.manifest), '--profile', 'test', 'backup']
-        with patch.object(sys, 'argv', args), patch.object(local, 'verify') as verify, \
-                patch.object(local, 'migrations', side_effect=AssertionError('do not gate backup on source')), \
-                patch.object(local, 'backup') as backup:
-            local.main()
-            verify.assert_called_once()
-            backup.assert_called_once()
-
 
 if __name__ == '__main__':
     unittest.main()

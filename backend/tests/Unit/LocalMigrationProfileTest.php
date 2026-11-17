@@ -76,4 +76,18 @@ final class LocalMigrationProfileTest extends TestCase
         $this->expectException(RuntimeException::class);
         LocalMigrationProfile::assertSelection($command, $paths, $this->target());
     }
+
+    public function test_unreviewed_proposal_paths_bytes_and_regular_runtimes_are_refused_before_environment_access(): void
+    {
+        $proposal = ['path' => 'docs/integration/proposals/2026_11_16_001000_add_conversation_dentist_grants.php',
+            'sha256' => '9b53175b26d656c62c29524da742d7f654bc2a0ce1451704784bb101fae56612'];
+        foreach ([['path' => 'unreviewed.php'], ['sha256' => str_repeat('0',64)], []] as $patch) {
+            try {
+                LocalMigrationProfile::paths($this->target()+['reviewed_proposal' => array_replace($proposal,$patch), 'runtime' => '/private/tmp/regular-demo']);
+                $this->fail('An unreviewed or non-disposable proposal target must be refused.');
+            } catch (RuntimeException $e) {
+                $this->assertStringContainsString('new explicit disposable test cluster', $e->getMessage());
+            }
+        }
+    }
 }

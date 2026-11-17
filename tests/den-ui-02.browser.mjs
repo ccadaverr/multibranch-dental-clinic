@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import {createRequire} from 'node:module'
 import {mkdir,writeFile} from 'node:fs/promises'
-import {visitRow,queueRow,treatmentRow,today} from './support/den-ui-02-fixture.js'
+import {visitRow as rawVisit,queueRow as rawQueue,treatmentRow as rawTreatment,today,clinicalIds,canonicalClinical} from './support/den-ui-02-fixture.js'
+const visitRow=(...a)=>canonicalClinical(rawVisit(...a)),queueRow=(...a)=>canonicalClinical(rawQueue(...a)),treatmentRow=(...a)=>canonicalClinical(rawTreatment(...a))
 const require=createRequire(import.meta.url)
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE)
 const browser=await chromium.launch({headless:true,channel:'chrome'})
@@ -14,14 +15,15 @@ function reset(){visits=[visitRow(),visitRow('v2','p2')];queue=visits.map((v,i)=
 reset()
 const fulfill=(route,data,status=200)=>route.fulfill({status,json:status===200?{data}:data})
 await page.route('**/api/**',async route=>{
- const req=route.request(),u=new URL(req.url()),p=u.pathname,method=req.method();calls.push({p,method,key:req.headers()['idempotency-key']})
+ const req=route.request(),u=new URL(req.url()),p=Object.entries(clinicalIds).reduce((path,[alias,id])=>path.replaceAll(id,alias),u.pathname),method=req.method();calls.push({p,method,key:req.headers()['idempotency-key']})
  if(delay)await new Promise(r=>setTimeout(r,delay))
  if(method==='GET'){
+  if(p==='/api/visits/v1/treatment'||p==='/api/visits/v2/treatment')return treatments.length?fulfill(route,treatments[0]):fulfill(route,{message:'No saved encounter'},404)
   if(p==='/api/notifications')return route.fulfill({json:{data:[],meta:{unread:0}}})
   if(p==='/api/queue')return fulfill(route,queue)
   if(p==='/api/visits')return fulfill(route,visits)
   if(p==='/api/treatments')return fulfill(route,treatments)
-  if(p.endsWith('/chart'))return fulfill(route,{settings:{numbering:'fdi',statuses:[]},current:[],history:[]})
+  if(p.endsWith('/chart'))return fulfill(route,{patient:{id:u.pathname.split('/')[3]},settings:{numbering:'fdi',statuses:[]},current:[],summary:[],history:[]})
   if(p==='/api/prescriptions/visits')return fulfill(route,visits.map(v=>({...v,date:today,branch:'Illustrative Central Branch'})))
   if(p==='/api/prescriptions')return fulfill(route,[])
   if(p.endsWith('/followups'))return fulfill(route,[])
@@ -32,19 +34,19 @@ await page.route('**/api/**',async route=>{
  if(p==='/api/queue/q1/call'){queue[0].status='Called';queue[0].revision++;return fulfill(route,queue[0])}
  if(p==='/api/visits/v1/treatment'){
   if(!['Called','Treatment Ready'].includes(queue[0].status))return fulfill(route,{message:'Call first'},422)
-  if(!treatments.length){visits[0].status='In Treatment';queue[0].status='Served';queue[0].visit.status='In Treatment';treatments=[treatmentRow(visits[0])]}
+  if(!treatments.length){visits[0].status='In Treatment';visits[0].revision++;queue[0].status='Served';queue[0].revision++;queue[0].visit.status='In Treatment';treatments=[treatmentRow(visits[0])]}
   return fulfill(route,treatments[0])
  }
  if(p==='/api/treatments/t1/document'){
   const t=treatments[0];if(body.expected_revision!==t.revision)return fulfill(route,{code:'stale_revision'},409)
   Object.assign(t,body,{revision:t.revision+1,procedures:body.procedures.map((l,i)=>({id:'line'+i,service:{id:l.service_ref,name:'Illustrative consultation'},quantity:l.quantity,notes:l.notes}))});return fulfill(route,t)
  }
- if(p==='/api/treatments/t1/complete'){treatments[0].status='Completed';treatments[0].revision++;visits[0].status='Completed';queue[0].visit.status='Completed';return fulfill(route,treatments[0])}
+ if(p==='/api/treatments/t1/complete'){treatments[0].status='Completed';treatments[0].visit.status='Completed';treatments[0].revision++;visits[0].status='Completed';queue[0].visit.status='Completed';return fulfill(route,treatments[0])}
  throw Error('Forbidden fixture mutation '+p)
 })
 await page.route('**/sanctum/csrf-cookie',r=>r.fulfill({status:204}))
 const button=name=>page.getByRole('button',{name,exact:true})
-const go=async()=>{await page.goto(url);await button('Call patient').first().waitFor()}
+const go=async()=>{await page.goto(url);await button('Call and open encounter').first().waitFor()}
 const noOverflow=async()=>assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1))
 const evidence=process.env.QA_EVIDENCE_DIR||'docs/ui-review/den-ui-02'
 await mkdir(evidence,{recursive:true})
@@ -53,9 +55,9 @@ try{
   reset();await page.setViewportSize({width,height:1000});await go();await noOverflow()
   await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:`${evidence}/queue-${width}.png`,fullPage:true})
   await button('Review encounter').first().click();await button('Start Treatment').waitFor();assert(await button('Start Treatment').isDisabled())
-  await button('My Queue').last().click();await button('Call patient').first().click();await button('Open encounter').click()
+  await button('My Queue').last().click();await button('Call and open encounter').first().click();await button('Start Treatment').waitFor()
   delay=100;await button('Start Treatment').dblclick();await page.getByText('Saved on the clinic server. Revision 1.',{exact:true}).waitFor();delay=0
-  assert.equal(calls.filter(c=>c.p==='/api/visits/v1/treatment').length,results.length+1)
+  assert.equal(calls.filter(c=>c.p==='/api/visits/v1/treatment'&&c.method==='POST').length,results.length+1)
   await page.getByLabel('Clinical notes',{exact:true}).fill('Illustrative unsaved note')
   await page.evaluate(()=>window.encFixture.setStatus('error'));const refresh=button('Refresh encounter');await refresh.waitFor();assert.equal(await refresh.textContent(),'');await refresh.click();await page.getByText('The encounter could not be verified as current.',{exact:false}).waitFor({state:'detached'});assert.equal(await page.getByLabel('Clinical notes',{exact:true}).inputValue(),'Illustrative unsaved note')
   for(const destination of ['queue','patients','chart','prescriptions','followups']){
@@ -72,7 +74,7 @@ try{
   fail='validation';await button('Complete Treatment').click();await page.getByRole('dialog').getByRole('button',{name:'Complete Treatment',exact:true}).click();await page.getByText('Command not confirmed',{exact:true}).waitFor();assert(await page.getByLabel('Clinical notes',{exact:true}).isEnabled())
   await button('Complete Treatment').click();await page.getByRole('dialog').getByRole('button',{name:'Complete Treatment',exact:true}).dblclick();await page.getByText('Treatment completion confirmed by the clinic server.',{exact:true}).waitFor();assert(await page.getByLabel('Clinical notes',{exact:true}).isDisabled())
   await page.getByText(/Prescription indicated; clinical review/).waitFor();await page.getByText(/This is not a booking confirmation/).waitFor()
-  await button('Open dental chart').click();await page.locator('.od-tooth').first().waitFor();assert.equal((await page.evaluate(()=>window.encFixture.getContext())).patientId,'p1')
+  await button('Open dental chart').click();await page.locator('.od-tooth').first().waitFor();assert.equal((await page.evaluate(()=>window.encFixture.getContext())).patientId,clinicalIds.p1)
   const tooth=page.locator('.od-tooth').first(), transform=await tooth.getAttribute('transform')
   await tooth.focus();await page.keyboard.press('Enter');assert(await tooth.evaluate(e=>e.classList.contains('is-selected')))
   assert.equal(await tooth.getAttribute('transform'),transform,'selection preserves tooth coordinates')
@@ -84,7 +86,7 @@ try{
   await button('Open patient follow-ups').click();await page.getByText(/Patient follow-up tasks. A recommendation/).waitFor();await button('Return to encounter').click()
   results.push({width,flow:'passed'});assert.deepEqual(errors,[])
  }
- reset();await go();await button('Call patient').first().click();await button('Open encounter').click();await button('Start Treatment').click();await page.getByText('Saved on the clinic server. Revision 1.',{exact:true}).waitFor();await page.getByLabel('Clinical notes',{exact:true}).fill('Discarded fixture draft')
+ reset();await go();await button('Call and open encounter').first().click();await button('Start Treatment').click();await page.getByText('Saved on the clinic server. Revision 1.',{exact:true}).waitFor();await page.getByLabel('Clinical notes',{exact:true}).fill('Discarded fixture draft')
  await page.evaluate(()=>window.encFixture.go('treatment',{queueEntryId:'q2',visitId:'v2',patientId:'p2',dentistId:'d1',branchId:'b1',appointmentId:null}))
  await button('Discard unsaved changes and leave').click();await page.getByRole('heading',{name:'Illustrative Patient Beatriz',exact:true}).waitFor();assert.equal(await page.getByLabel('Clinical notes',{exact:true}).inputValue(),'')
  await page.evaluate(()=>window.encFixture.expire());await page.getByText('Clinical session unavailable',{exact:true}).waitFor();assert.equal(await page.getByLabel('Clinical notes',{exact:true}).count(),0)
@@ -108,8 +110,8 @@ try{
  // Empty, error and keyboard worklist states.
  reset();await go();await page.getByLabel('Find patient or queue number').fill('no matching synthetic patient');await page.getByText('No patients match this search.',{exact:true}).waitFor()
  await page.getByLabel('Find patient or queue number').fill('');await button('Review encounter').first().focus();await page.keyboard.press('Enter');await button('Start Treatment').waitFor();assert(await button('Start Treatment').isDisabled())
- await page.evaluate(()=>window.encFixture.go('queue'));await page.evaluate(()=>window.encFixture.setStatus('error'));await page.getByText('Live queue counts unavailable',{exact:true}).waitFor();assert(await button('Call patient').first().isDisabled())
- await button('Refresh queue').click();await button('Call patient').first().waitFor();assert(await button('Call patient').first().isEnabled())
+ await page.evaluate(()=>window.encFixture.go('queue'));await page.evaluate(()=>window.encFixture.setStatus('error'));await page.getByText('Live queue counts unavailable',{exact:true}).waitFor();assert(await button('Call and open encounter').first().isDisabled())
+ await button('Refresh queue').click();await button('Call and open encounter').first().waitFor();assert(await button('Call and open encounter').first().isEnabled())
  // Unknown/foreign context never substitutes a patient.
  await page.evaluate(()=>window.encFixture.go('treatment',{queueEntryId:'q1',patientId:'p2',visitId:'v1'}));await page.getByRole('heading',{name:'Encounter unavailable',exact:true}).waitFor();assert.equal(await page.getByLabel('Clinical notes',{exact:true}).count(),0)
  assert.deepEqual(errors,[])

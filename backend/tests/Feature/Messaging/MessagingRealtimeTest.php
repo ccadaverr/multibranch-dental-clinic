@@ -160,7 +160,7 @@ class MessagingRealtimeTest extends TestCase
         }
     }
 
-    public function test_a_dentist_joins_only_when_staff_add_one_who_works_at_the_branch(): void
+    public function test_new_dentist_access_fails_closed_until_reviewed_grants_are_available(): void
     {
         $id = $this->start()->json('data.conversation.id');
         $this->actingAsUser('dentist1');
@@ -168,15 +168,13 @@ class MessagingRealtimeTest extends TestCase
         $this->actingAsUser('patientA');
         $this->postJson("/api/conversations/{$id}/participants", ['dentist_id' => $this->u['dentist1']->public_id])->assertForbidden();
         $this->actingAsUser('staffB1');
-        $options = $this->getJson("/api/conversations/{$id}/dentist-options")->assertOk()->json('data');
-        $this->assertEqualsCanonicalizing([$this->u['dentist1']->public_id, $this->u['dentist2']->public_id], array_column($options, 'id'));
-        $this->postJson("/api/conversations/{$id}/participants", ['dentist_id' => $this->u['dentist3']->public_id])->assertStatus(422)->assertJsonPath('code', 'dentist_not_available');
-        $this->postJson("/api/conversations/{$id}/participants", ['dentist_id' => $this->u['dentist1']->public_id])->assertCreated()->assertJsonPath('data.added', true);
-        $this->postJson("/api/conversations/{$id}/participants", ['dentist_id' => $this->u['dentist1']->public_id])->assertOk()->assertJsonPath('data.added', false);
-        $this->send($id, 'dentist1', 'Dentist here')->assertCreated();
+        $this->getJson("/api/conversations/{$id}/dentist-options")->assertConflict()->assertJsonPath('code', 'conversation_grants_unavailable');
+        $this->postJson("/api/conversations/{$id}/participants", ['dentist_id' => $this->u['dentist1']->public_id])->assertConflict()->assertJsonPath('code', 'conversation_grants_unavailable');
+        $this->send($id, 'dentist1', 'Unassigned Dentist')->assertForbidden();
         $this->actingAsUser('dentist2');
         $this->getJson("/api/conversations/{$id}")->assertForbidden();
-        $this->assertSame(1, AuditLog::where('action', 'conversation.participant_added')->count());
+        $this->assertSame(0, AuditLog::where('action', 'conversation.participant_added')->count());
+        $this->assertFalse(ConversationParticipant::where('conversation_id', Conversation::where('public_id', $id)->value('id'))->where('user_id', $this->u['dentist1']->id)->exists());
     }
 
     // ---- realtime channel authorization -------------------------------------------------------------------------------

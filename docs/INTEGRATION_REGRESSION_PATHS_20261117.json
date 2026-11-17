@@ -1,0 +1,290 @@
+{
+  "regular": [
+    "tests/Feature/Analytics/AnalyticsComparisonTest.php",
+    "tests/Feature/Analytics/AnalyticsCorrectionsTest.php",
+    "tests/Feature/Analytics/AnalyticsTest.php",
+    "tests/Feature/Analytics/OwnerDashboardEvidenceTest.php",
+    "tests/Feature/Appointments/AppointmentAuthorizationTest.php",
+    "tests/Feature/Appointments/AppointmentBookingTest.php",
+    "tests/Feature/Appointments/AppointmentCutoverSupportTest.php",
+    "tests/Feature/Appointments/AppointmentEmailTest.php",
+    "tests/Feature/Appointments/AppointmentLifecycleTest.php",
+    "tests/Feature/Appointments/AppointmentReadPrivacyTest.php",
+    "tests/Feature/Appointments/BookingIntegrationContractTest.php",
+    "tests/Feature/Appointments/BookingSessionAcceptanceTest.php",
+    "tests/Feature/Appointments/BranchHoursTest.php",
+    "tests/Feature/Appointments/PatientBookingContractTest.php",
+    "tests/Feature/Appointments/PatientPortalApiTest.php",
+    "tests/Feature/Appointments/PatientPublicIdMigrationTest.php",
+    "tests/Feature/Archives/ArchivesIsolationTest.php",
+    "tests/Feature/Assistant/AssistantKnowledgeTest.php",
+    "tests/Feature/Assistant/AssistantTest.php",
+    "tests/Feature/Assistant/GeminiAuthorizationTest.php",
+    "tests/Feature/Assistant/GeminiChatTest.php",
+    "tests/Feature/Audit/AuditEmittersTest.php",
+    "tests/Feature/Audit/AuditHardeningTest.php",
+    "tests/Feature/Audit/AuditTrailTest.php",
+    "tests/Feature/Audit/OperationalArchiveActivityTest.php",
+    "tests/Feature/Audit/OperationalArchiveScopeTest.php",
+    "tests/Feature/Auth/AccountRecoveryTest.php",
+    "tests/Feature/Auth/AuthenticationTest.php",
+    "tests/Feature/Auth/EmailVerificationTest.php",
+    "tests/Feature/Auth/ProductionHardeningTest.php",
+    "tests/Feature/Auth/RegistrationTest.php",
+    "tests/Feature/Automation/AutomationControlTest.php",
+    "tests/Feature/Automation/AutomationTruthfulnessTest.php",
+    "tests/Feature/Automations/AutomationsTest.php",
+    "tests/Feature/Automations/InterviewRoundTwoTest.php",
+    "tests/Feature/Billing/BillingDocumentDownloadTest.php",
+    "tests/Feature/Billing/BillingHardeningTest.php",
+    "tests/Feature/Billing/BillingTest.php",
+    "tests/Feature/Billing/DemoClinicSeederTest.php",
+    "tests/Feature/Billing/DemoUnpaidInvoiceSeederTest.php",
+    "tests/Feature/Billing/PatientReceiptNavigationTest.php",
+    "tests/Feature/Billing/VisitSettlementJourneyTest.php",
+    "tests/Feature/Charts/ChartBe01AuditAtomicityTest.php",
+    "tests/Feature/Charts/ChartCommandRecoveryTest.php",
+    "tests/Feature/Charts/DentalChartTest.php",
+    "tests/Feature/Console/DemoCheckTest.php",
+    "tests/Feature/Documents/DocumentManagementTest.php",
+    "tests/Feature/ExampleTest.php",
+    "tests/Feature/Feedback/FeedbackTest.php",
+    "tests/Feature/Followups/Follow03RevisionResponseTest.php",
+    "tests/Feature/Followups/FollowupExactReadbackTest.php",
+    "tests/Feature/Followups/FollowupTest.php",
+    "tests/Feature/Followups/SelectedFollowupBookingTest.php",
+    "tests/Feature/Followups/SelectedFollowupRecoveryTest.php",
+    "tests/Feature/Hmo/HmoTest.php",
+    "tests/Feature/Identity/DemoStaffProfileSeederTest.php",
+    "tests/Feature/Identity/EmployeeInvitationTest.php",
+    "tests/Feature/Identity/IdentityBridgeTest.php",
+    "tests/Feature/Identity/Scope02StaffDirectoryVisibilityTest.php",
+    "tests/Feature/Identity/Scope04StaffScopeAtomicityTest.php",
+    "tests/Feature/Identity/Scope05StaffScopeAuditTest.php",
+    "tests/Feature/Identity/StaffP0BranchScopePreservationTest.php",
+    "tests/Feature/Identity/StaffShiftRecoveryTest.php",
+    "tests/Feature/Inquiries/InquiryAssignmentReplayTest.php",
+    "tests/Feature/Inquiries/InquiryTest.php",
+    "tests/Feature/Intake/DependentCreationRecoveryTest.php",
+    "tests/Feature/Intake/IdVerificationAtomicityTest.php",
+    "tests/Feature/Intake/IntakeTest.php",
+    "tests/Feature/LocalInfrastructureCheckTest.php",
+    "tests/Feature/Mail/ClinicMailerTest.php",
+    "tests/Feature/Mail/EmailDesignTest.php",
+    "tests/Feature/Mail/LocalCaptureTransportTest.php",
+    "tests/Feature/Mail/MailOutboxTest.php",
+    "tests/Feature/Mail/QueuedLocalCaptureTest.php",
+    "tests/Feature/Messaging/MessageSearchTest.php",
+    "tests/Feature/Messaging/MessagingRealtimeTest.php",
+    "tests/Feature/Messaging/MessagingTest.php",
+    "tests/Feature/Notifications/NotificationArchiveTest.php",
+    "tests/Feature/Notifications/NotificationHistoryTest.php",
+    "tests/Feature/Notifications/NotificationIntegrationTest.php",
+    "tests/Feature/Operations/Batch4ServerRulesTest.php",
+    "tests/Feature/Operations/OpsQa03ClinicalLinkIntegrityTest.php",
+    "tests/Feature/Patients/PatientRecordTest.php",
+    "tests/Feature/Patients/ProfileSaveRecoveryTest.php",
+    "tests/Feature/Payment/AppointmentBookingPaymentTest.php",
+    "tests/Feature/Payment/Fin02PreCreditRefundTest.php",
+    "tests/Feature/Payment/PayMongoPaymentTest.php",
+    "tests/Feature/Payment/RefundIntegrationAcceptanceTest.php",
+    "tests/Feature/Prescriptions/PrescriptionRecoveryTest.php",
+    "tests/Feature/Prescriptions/PrescriptionTest.php",
+    "tests/Feature/Pricing/PricingTest.php",
+    "tests/Feature/Queue/PreservationMigrationTest.php",
+    "tests/Feature/Queue/QueueTest.php",
+    "tests/Feature/RbacTest.php",
+    "tests/Feature/Reference/BranchCodeOptionsTest.php",
+    "tests/Feature/Reference/BranchHardeningTest.php",
+    "tests/Feature/Reference/BranchReferenceResolverTest.php",
+    "tests/Feature/Reference/ClosureFilterReadbackTest.php",
+    "tests/Feature/Reference/OwnerBranchAcceptanceTest.php",
+    "tests/Feature/Reference/PublicBranchesTest.php",
+    "tests/Feature/Reference/PublicContentPublicationTest.php",
+    "tests/Feature/Reference/ReferenceDataAuthorizationTest.php",
+    "tests/Feature/Reference/ReferenceDataMutationTest.php",
+    "tests/Feature/Reference/ReferenceDataResourceContractTest.php",
+    "tests/Feature/Reference/ReferenceDataSeedIdentityTest.php",
+    "tests/Feature/Settings/BrandingSettingsTest.php",
+    "tests/Feature/Staffing/HandoverTest.php",
+    "tests/Feature/Staffing/Hnd01HandoverTransitionTest.php",
+    "tests/Feature/Staffing/Hnd02HandoverCreateTest.php",
+    "tests/Feature/Staffing/Hnd03CreationAuthorizationTest.php",
+    "tests/Feature/Staffing/LeaveAuditAtomicityTest.php",
+    "tests/Feature/Staffing/LeaveCollectionScopeTest.php",
+    "tests/Feature/Staffing/LeaveRecoveryCapabilityTest.php",
+    "tests/Feature/Staffing/LeaveRecoveryTest.php",
+    "tests/Feature/Staffing/LeaveTest.php",
+    "tests/Feature/Staffing/OnDutyStatusTest.php",
+    "tests/Feature/Staffing/PersonnelUpdateReadbackTest.php",
+    "tests/Feature/Staffing/Scope01WorkScheduleVisibilityTest.php",
+    "tests/Feature/Staffing/Scope03WorkScheduleProjectionTest.php",
+    "tests/Feature/Staffing/StaffRosterDraftCapabilityTest.php",
+    "tests/Feature/Staffing/StaffRosterDraftCollectionTest.php",
+    "tests/Feature/Staffing/StaffRosterDraftTest.php",
+    "tests/Feature/Staffing/StaffRosterPublicationTest.php",
+    "tests/Feature/Staffing/WorkforceSelfAccessTest.php",
+    "tests/Feature/Staffing/WorkSchedulesTest.php",
+    "tests/Feature/Treatments/ClinicalIntegrationAcceptanceTest.php",
+    "tests/Feature/Treatments/EncounterRecoveryTest.php",
+    "tests/Feature/Treatments/HistoricalTreatmentReadTest.php",
+    "tests/Feature/Treatments/TreatmentTest.php",
+    "tests/Feature/UserManagementTest.php",
+    "tests/Feature/Visits/ArrivalRecoveryTest.php",
+    "tests/Feature/Visits/ClinicalArrivalOrderingTest.php",
+    "tests/Feature/Visits/Stf12WalkInAcceptanceTest.php",
+    "tests/Feature/Visits/VisitBackfillTest.php",
+    "tests/Feature/Visits/VisitReadPrivacyTest.php",
+    "tests/Feature/Visits/VisitTest.php"
+  ],
+  "separate_lanes": [
+    {
+      "path": "backend/tests/Feature/Appointments/ConcurrentBookingTest.php",
+      "reason": "dedicated disposable contention lane; schema mutation/reset requires separate review"
+    },
+    {
+      "path": "backend/tests/Feature/Audit/AuditQueryTest.php",
+      "reason": "schema mutation/reset requires separate review"
+    },
+    {
+      "path": "backend/tests/Feature/Auth/ConcurrentVerificationTest.php",
+      "reason": "dedicated disposable contention lane; schema mutation/reset requires separate review"
+    },
+    {
+      "path": "backend/tests/Feature/Billing/ConcurrentBillingTest.php",
+      "reason": "dedicated disposable contention lane; schema mutation/reset requires separate review"
+    },
+    {
+      "path": "backend/tests/Feature/Billing/SettlementContentionTest.php",
+      "reason": "dedicated disposable contention lane"
+    },
+    {
+      "path": "backend/tests/Feature/Charts/ChartBe02ConcurrentRecordingTest.php",
+      "reason": "dedicated disposable contention lane"
+    },
+    {
+      "path": "backend/tests/Feature/Charts/ChartCommandContentionTest.php",
+      "reason": "dedicated disposable contention lane"
+    },
+    {
+      "path": "backend/tests/Feature/Feedback/ConcurrentFeedbackTest.php",
+      "reason": "dedicated disposable contention lane; schema mutation/reset requires separate review"
+    },
+    {
+      "path": "backend/tests/Feature/Followups/Follow02AtomicTransitionsTest.php",
+      "reason": "schema mutation/reset requires separate review"
+    },
+    {
+      "path": "backend/tests/Feature/Followups/SelectedFollowupConcurrencyTest.php",
+      "reason": "dedicated disposable contention lane"
+    },
+    {
+      "path": "backend/tests/Feature/Hmo/ConcurrentHmoDecisionTest.php",
+      "reason": "dedicated disposable contention lane; schema mutation/reset requires separate review"
+    },
+    {
+      "path": "backend/tests/Feature/Inquiries/ConcurrentInquiryTest.php",
+      "reason": "dedicated disposable contention lane; schema mutation/reset requires separate review"
+    },
+    {
+      "path": "backend/tests/Feature/Inquiries/InquiryAssignmentContentionTest.php",
+      "reason": "dedicated disposable contention lane"
+    },
+    {
+      "path": "backend/tests/Feature/Intake/DependentCreationContentionTest.php",
+      "reason": "dedicated disposable contention lane"
+    },
+    {
+      "path": "backend/tests/Feature/LocalMigrationSafetyTest.php",
+      "reason": "schema mutation/reset requires separate review"
+    },
+    {
+      "path": "backend/tests/Feature/Messaging/ConcurrentMessagingTest.php",
+      "reason": "dedicated disposable contention lane; schema mutation/reset requires separate review"
+    },
+    {
+      "path": "backend/tests/Feature/Operations/OpsQa03AdmissionRaceTest.php",
+      "reason": "schema mutation/reset requires separate review"
+    },
+    {
+      "path": "backend/tests/Feature/Patients/ConcurrentPatientRecordTest.php",
+      "reason": "dedicated disposable contention lane; schema mutation/reset requires separate review"
+    },
+    {
+      "path": "backend/tests/Feature/Patients/ProfileSaveContentionTest.php",
+      "reason": "dedicated disposable contention lane"
+    },
+    {
+      "path": "backend/tests/Feature/Prescriptions/ConcurrentPrescriptionTest.php",
+      "reason": "dedicated disposable contention lane; schema mutation/reset requires separate review"
+    },
+    {
+      "path": "backend/tests/Feature/Prescriptions/PrescriptionContentionTest.php",
+      "reason": "dedicated disposable contention lane"
+    },
+    {
+      "path": "backend/tests/Feature/Prescriptions/Rx01PrescriptionAuditAtomicityTest.php",
+      "reason": "schema mutation/reset requires separate review"
+    },
+    {
+      "path": "backend/tests/Feature/Prescriptions/Rx02AcceptedDraftRevisionTest.php",
+      "reason": "schema mutation/reset requires separate review"
+    },
+    {
+      "path": "backend/tests/Feature/Pricing/ConcurrentPriceVersionTest.php",
+      "reason": "dedicated disposable contention lane; schema mutation/reset requires separate review"
+    },
+    {
+      "path": "backend/tests/Feature/Queue/ConcurrentQueueNumberTest.php",
+      "reason": "dedicated disposable contention lane; schema mutation/reset requires separate review"
+    },
+    {
+      "path": "backend/tests/Feature/Reference/BranchCodeContentionTest.php",
+      "reason": "dedicated disposable contention lane"
+    },
+    {
+      "path": "backend/tests/Feature/Staffing/Hnd03ConcurrentRevocationTest.php",
+      "reason": "dedicated disposable contention lane"
+    },
+    {
+      "path": "backend/tests/Feature/Staffing/LeaveAuthorityContentionTest.php",
+      "reason": "dedicated disposable contention lane"
+    },
+    {
+      "path": "backend/tests/Feature/Staffing/LeaveRecoveryContentionTest.php",
+      "reason": "dedicated disposable contention lane"
+    },
+    {
+      "path": "backend/tests/Feature/Staffing/OperationsContentionTest.php",
+      "reason": "dedicated disposable contention lane"
+    },
+    {
+      "path": "backend/tests/Feature/Staffing/PersonnelAuthorityContentionTest.php",
+      "reason": "dedicated disposable contention lane"
+    },
+    {
+      "path": "backend/tests/Feature/Staffing/StaffRosterDraftContentionTest.php",
+      "reason": "dedicated disposable contention lane"
+    },
+    {
+      "path": "backend/tests/Feature/Staffing/StaffRosterPublicationContentionTest.php",
+      "reason": "dedicated disposable contention lane"
+    },
+    {
+      "path": "backend/tests/Feature/Treatments/ConcurrentTreatmentStartTest.php",
+      "reason": "dedicated disposable contention lane; schema mutation/reset requires separate review"
+    },
+    {
+      "path": "backend/tests/Feature/Treatments/EncounterContentionTest.php",
+      "reason": "dedicated disposable contention lane"
+    },
+    {
+      "path": "backend/tests/Feature/Visits/ArrivalContentionTest.php",
+      "reason": "dedicated disposable contention lane"
+    },
+    {
+      "path": "backend/tests/Feature/Visits/ConcurrentCheckInTest.php",
+      "reason": "dedicated disposable contention lane; schema mutation/reset requires separate review"
+    }
+  ]
+}

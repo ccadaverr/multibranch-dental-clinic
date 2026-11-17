@@ -101,9 +101,8 @@ def clone_test(c, runtime):
     # macOS Unix-domain socket paths must fit 104 bytes, including PostgreSQL's socket filename.
     clone = runtime.with_name('contention-' + secrets.token_hex(4))
     clone.mkdir(mode=0o700)
-    for name in ['sockets', 'logs', 'backups', 'cache', 'env']:
+    for name in ['sockets', 'logs', 'backups', 'cache', 'cache/test', 'env']:
         (clone / name).mkdir(mode=0o700)
-    (clone / 'cache/test').mkdir(mode=0o700)
     with socket.socket() as sock:
         sock.bind(('127.0.0.1', 0))
         port = sock.getsockname()[1]
@@ -136,6 +135,7 @@ def clone_test(c, runtime):
     (clone / 'env/test.env').chmod(0o600)
     verify(state, clone, 'dental_clinic_test')
     print('Isolated contention target:', manifest)
+    return manifest
 
 
 def main():
@@ -143,9 +143,13 @@ def main():
     parser.add_argument('--target', required=True, help='Private manifest for a newly provisioned, owned local cluster')
     parser.add_argument('--profile', choices=['demo', 'test'], default='demo')
     parser.add_argument('--filter', help='Optional PHPUnit test-name filter; explicit reviewed files remain required')
-    parser.add_argument('action', choices=['status', 'start', 'stop', 'backup', 'migrate', 'seed', 'seed-demo', 'visit-fixture', 'test', 'clone-test', 'concurrency', 'billing-concurrency', 'prescription-concurrency', 'operations-contention', 'roster-draft-contention', 'roster-publication-contention', 'leave-authority-contention', 'leave-recovery-contention', 'verify-schema', 'verify-guard', 'serve', 'ui', 'mailbox', 'worker', 'scheduler'])
+    parser.add_argument('--test-mail-profile', choices=['target', 'suite'], default='target',
+                        help='For explicit test action only: target keeps queued capture; suite uses PHPUnit array/sync defaults')
+    parser.add_argument('action', choices=['status', 'start', 'stop', 'backup', 'migrate', 'seed', 'seed-demo', 'visit-fixture', 'test', 'clone-test', 'concurrency', 'billing-concurrency', 'prescription-concurrency', 'operations-contention', 'roster-draft-contention', 'roster-publication-contention', 'leave-authority-contention', 'leave-recovery-contention', 'arrival-concurrency', 'encounter-concurrency', 'profile-concurrency', 'chart-concurrency', 'dependent-concurrency', 'verify-schema', 'verify-guard', 'serve', 'ui', 'mailbox', 'worker', 'scheduler'])
     parser.add_argument('tests', nargs='*')
     args = parser.parse_args()
+    if args.test_mail_profile != 'target' and (args.action != 'test' or args.profile != 'test'):
+        raise ValueError('Suite mail defaults are available only for explicit test action and test profile.')
     c, runtime = target(args.target)
     database = c[args.profile + '_database']
     if args.action in ['start', 'stop']:
@@ -159,7 +163,7 @@ def main():
     selected = migrations(c) if args.action != 'backup' else []
     # Separate profiles may run independently. One profile never runs overlapping suites or schema/seed work.
     lock = None
-    if args.action in ['migrate', 'seed', 'seed-demo', 'visit-fixture', 'test', 'clone-test', 'concurrency', 'billing-concurrency', 'prescription-concurrency', 'operations-contention', 'roster-draft-contention', 'roster-publication-contention', 'leave-authority-contention', 'leave-recovery-contention', 'verify-schema', 'verify-guard', 'backup']:
+    if args.action in ['migrate', 'seed', 'seed-demo', 'visit-fixture', 'test', 'clone-test', 'concurrency', 'billing-concurrency', 'prescription-concurrency', 'operations-contention', 'roster-draft-contention', 'roster-publication-contention', 'leave-authority-contention', 'leave-recovery-contention', 'arrival-concurrency', 'encounter-concurrency', 'profile-concurrency', 'chart-concurrency', 'dependent-concurrency', 'verify-schema', 'verify-guard', 'backup']:
         lock = open(runtime / (database + '.lock'), 'a')
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -209,7 +213,7 @@ def main():
         seeder = 'DemoClinicSeeder' if args.action == 'seed-demo' else 'DatabaseSeeder'
         subprocess.run([c['php'], 'artisan', 'db:seed', '--class=' + seeder, '--force', '--no-interaction'],
                        cwd=ROOT / 'backend', env=environment(c, runtime, args.profile), check=True)
-    elif args.action in ['test', 'verify-schema', 'verify-guard', 'concurrency', 'billing-concurrency', 'prescription-concurrency', 'operations-contention', 'roster-draft-contention', 'roster-publication-contention', 'leave-authority-contention', 'leave-recovery-contention']:
+    elif args.action in ['test', 'arrival-concurrency', 'encounter-concurrency', 'profile-concurrency', 'chart-concurrency', 'dependent-concurrency', 'verify-schema', 'verify-guard', 'concurrency', 'billing-concurrency', 'prescription-concurrency', 'operations-contention', 'roster-draft-contention', 'roster-publication-contention', 'leave-authority-contention', 'leave-recovery-contention']:
         if args.action == 'roster-publication-contention':
             if not runtime.name.startswith('contention-') or not set(ROSTER_PUBLICATION_MIGRATIONS) <= set(c.get('operations_migrations', [])):
                 raise ValueError('Publication contention requires a fresh publication-enabled clone-test target.')
@@ -246,15 +250,39 @@ def main():
             if not runtime.name.startswith('contention-'):
                 raise ValueError('Run prescription contention only in a separate clone-test target.')
             args.tests = ['tests/Feature/Prescriptions/PrescriptionContentionTest.php']
+        if args.action == 'arrival-concurrency':
+            if not runtime.name.startswith('contention-'):
+                raise ValueError('Run arrival contention only in a separate clone-test target.')
+            args.tests = ['tests/Feature/Visits/ArrivalContentionTest.php']
+        if args.action == 'encounter-concurrency':
+            if not runtime.name.startswith('contention-'):
+                raise ValueError('Run encounter contention only in a separate clone-test target.')
+            args.tests = ['tests/Feature/Treatments/EncounterContentionTest.php']
+        if args.action == 'profile-concurrency':
+            if not runtime.name.startswith('contention-'):
+                raise ValueError('Run profile contention only in a separate clone-test target.')
+            args.tests = ['tests/Feature/Patients/ProfileSaveContentionTest.php']
+        if args.action == 'chart-concurrency':
+            if not runtime.name.startswith('contention-'):
+                raise ValueError('Run chart contention only in a separate clone-test target.')
+            args.tests = ['tests/Feature/Charts/ChartCommandContentionTest.php']
+        if args.action == 'dependent-concurrency':
+            if not runtime.name.startswith('contention-'):
+                raise ValueError('Run dependent contention only in a separate clone-test target.')
+            args.tests = ['tests/Feature/Intake/DependentCreationContentionTest.php']
         if args.profile != 'test' or not args.tests:
             raise ValueError('Choose test profile and explicit reviewed test paths; no blanket Feature/concurrency/reset suite.')
         for name in args.tests:
             file = (ROOT / 'backend' / name).resolve()
             if not file.is_relative_to(ROOT / 'backend/tests') or not file.name.endswith('Test.php'):
                 raise ValueError('Expected explicit backend test files.')
-            if ('migrate:fresh' in file.read_text() and args.action != 'verify-guard') or ('Concurren' in file.name and args.action != 'concurrency'):
+            if (('migrate:fresh' in file.read_text() or 'use DatabaseMigrations' in file.read_text()) and args.action != 'verify-guard') or ('Concurren' in file.name and args.action != 'concurrency'):
                 raise ValueError('This test requires a separately reviewed concurrency/reset runner.')
         test_env = environment(c, runtime, 'test')
+        if args.test_mail_profile == 'suite':
+            # phpunit.xml declares these defaults, but inherited target env wins over non-forced XML values.
+            # Opt in explicitly; demo/capture/worker/concurrency behavior and all database guards stay unchanged.
+            test_env.update(MAIL_MAILER='array', QUEUE_CONNECTION='sync')
         if args.action == 'verify-schema':
             test_env['DENTALOPS_SCHEMA_VERIFICATION'] = '1'
         if args.action == 'concurrency':
@@ -267,6 +295,16 @@ def main():
             test_env['OPERATIONS_DISPOSABLE_POSTGRES_ACCEPTANCE'] = '1'
         if args.action in ['roster-draft-contention', 'roster-publication-contention', 'leave-authority-contention', 'leave-recovery-contention']:
             test_env['OPERATIONS_DISPOSABLE_POSTGRES_ACCEPTANCE'] = '1'
+        if args.action == 'arrival-concurrency':
+            test_env['ARRIVAL_DISPOSABLE_POSTGRES_ACCEPTANCE'] = '1'
+        if args.action == 'encounter-concurrency':
+            test_env['ENCOUNTER_DISPOSABLE_POSTGRES_ACCEPTANCE'] = '1'
+        if args.action == 'profile-concurrency':
+            test_env['PROFILE_DISPOSABLE_POSTGRES_ACCEPTANCE'] = '1'
+        if args.action == 'chart-concurrency':
+            test_env['CHART_DISPOSABLE_POSTGRES_ACCEPTANCE'] = '1'
+        if args.action == 'dependent-concurrency':
+            test_env['DEPENDENT_DISPOSABLE_POSTGRES_ACCEPTANCE'] = '1'
         subprocess.run([c['php'], 'vendor/bin/phpunit', '-c', 'phpunit.xml', '--bootstrap', 'tests/Support/IsolatedTestBootstrap.php',
                         '--cache-directory', str(runtime / 'cache/phpunit'), *(['--filter', args.filter] if args.filter else []), *args.tests],
                        cwd=ROOT / 'backend', env=test_env, check=True)

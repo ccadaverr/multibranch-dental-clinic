@@ -9,6 +9,10 @@ use App\Models\ToothChartEntry;
 use App\Models\Treatment;
 use App\Models\User;
 use App\Models\Visit;
+use App\Models\CommandKey;
+use App\Http\Controllers\Concerns\ReadsIdempotencyKey;
+use App\Support\IdempotentCommand;
+use App\Services\Visits\VisitCommandException;
 use App\Services\Audit\AuditService;
 use App\Services\Automations\AutomationCatalog;
 use App\Services\Intake\Guardianship;
@@ -28,6 +32,7 @@ use Illuminate\Validation\ValidationException;
  */
 class DentalChartController extends Controller
 {
+    use ReadsIdempotencyKey;
     public const SURFACES = ['M', 'O', 'D', 'B', 'L'];
 
     public const CATEGORY_BASELINE = 'baseline';
@@ -86,7 +91,7 @@ class DentalChartController extends Controller
         }, $role === 'owner' ? 403 : 404);
         if ($role === 'staff') app(AuditService::class)->recordAdministrative('chart.viewed', $user, $patient, ['patient' => $patient->public_id]);
 
-        return response()->json(['data' => $this->chart($patient, $role === 'dentist', true)]);
+        return response()->json(['data' => $this->chart($patient, $role === 'dentist', true)])->header('Cache-Control', 'private, no-store');
     }
 
     /** Patient (or guardian for a dependent): the simplified current chart, read-only. */
@@ -97,14 +102,13 @@ class DentalChartController extends Controller
         $patient = ! empty($data['patient_id']) ? Patient::where('public_id', $data['patient_id'])->firstOrFail() : $user->patient;
         abort_unless($patient && in_array($patient->id, Guardianship::patientIdsFor($user), true), 404);
 
-        return response()->json(['data' => $this->chart($patient, false, false)]);
+        return response()->json(['data' => $this->chart($patient, false, false)])->header('Cache-Control', 'private, no-store');
     }
 
     public function store(Request $request, Patient $patient): JsonResponse
     {
         $user = $request->user();
-        $me = DentistProfile::where('person_id', $user->person_id)->first();
-        abort_unless($user->role->value === 'dentist' && $me && $this->dentistMayChart($user, $patient), 403, 'Only a dentist caring for this patient records the chart.');
+        $me = $this->authorizeRecording($user, $patient);
         $data = $request->validate([
             'tooth' => ['required', 'string', 'regex:/^([1-4][1-8]|[5-8][1-5])$/'],
             'surfaces' => ['nullable', 'array', 'max:5'],
@@ -113,26 +117,41 @@ class DentalChartController extends Controller
             'note' => ['nullable', 'string', 'max:1000'],
             'recorded_on' => ['nullable', 'date_format:Y-m-d'],
             'treatment_id' => ['nullable', 'string', 'max:40'],
-            'branch_id' => ['nullable', 'integer', 'exists:branches,id'],
-            'branch_ref' => ['nullable', 'string', 'exists:branches,legacy_ref'],
+            'expected_revision' => ['required', 'integer', 'min:0', 'max:2147483647'],
+            'expected_treatment_revision' => ['sometimes', 'required', 'integer', 'min:1', 'required_with:treatment_id'],
+            'branch_id' => ['nullable', 'integer', 'exists:branches,id', 'prohibits:branch_ref'],
+            'branch_ref' => ['nullable', 'string', 'exists:branches,legacy_ref', 'prohibits:branch_id'],
+            ...array_fill_keys(['patient_id','dentist_id','dentist_ref','visit_id','created_by_user_id','created_at','history','id','revision'], ['prohibited']),
         ]);
-        $status = collect($this->settings()['statuses'])->first(fn ($s) => mb_strtolower($s) === mb_strtolower(trim($data['status'])));
-        if (! $status) throw ValidationException::withMessages(['status' => ['Choose a status from the clinic’s list.']]);
+        if (isset($data['expected_treatment_revision']) && empty($data['treatment_id'])) throw ValidationException::withMessages(['treatment_id' => ['A treatment revision requires its exact treatment.']]);
+        $key = $this->idempotencyKey($request, true);
+        if (!empty($data['treatment_id']) && !isset($data['expected_treatment_revision'])) throw ValidationException::withMessages(['expected_treatment_revision' => ['Review the linked treatment revision before recording.']]);
         $on = $data['recorded_on'] ?? ClinicClock::today();
-        if ($on > ClinicClock::today()) throw ValidationException::withMessages(['recorded_on' => ['The date cannot be in the future.']]);
         $treatment = null;
         if (! empty($data['treatment_id'])) {
             // Only this patient's treatment that this Dentist performed.
             $treatment = Treatment::where('public_id', $data['treatment_id'])->where('dentist_profile_id', $me->id)->whereHas('visit', fn ($v) => $v->where('patient_id', $patient->id))->first();
             if (! $treatment) throw ValidationException::withMessages(['treatment_id' => ['Link only a treatment of this patient that you performed.']]);
         }
-        $branchId = $this->resolveBranchId($me, $patient, $treatment, $data, $on);
-        DB::transaction(function () use ($patient, $data, $status, $on, $treatment, $branchId, $me, $user) {
-            // This is the only runtime chart-entry writer. Serialize even the first finding (there may be no row to
-            // lock) by patient + tooth, without locking unrelated teeth or append-only historical rows. No other
-            // runtime writer acquires this advisory lock, and no encounter row lock precedes it here. Hash collisions
-            // only add contention; tooth is a validated FDI integer. PostgreSQL releases it on commit or rollback.
+        $work = function () use ($patient, $data, $on, $treatment, $me, $user) {
+            $me = $this->authorizeRecording($user, $patient);
+            $status = collect($this->settings()['statuses'])->first(fn ($s) => mb_strtolower($s) === mb_strtolower(trim($data['status'])));
+            if (! $status) throw ValidationException::withMessages(['status' => ['Choose a status from the clinic’s list.']]);
+            if ($on > ClinicClock::today()) throw ValidationException::withMessages(['recorded_on' => ['The date cannot be in the future.']]);
+            if ($treatment) {
+                // Preserve encounter lock order. A chart append never updates the finalized treatment/visit.
+                $visit = Visit::whereKey($treatment->visit_id)->lockForUpdate()->firstOrFail();
+                $current = Treatment::whereKey($treatment->id)->lockForUpdate()->firstOrFail();
+                if ($current->visit_id !== $visit->id || $visit->patient_id !== $patient->id || $current->dentist_profile_id !== $me->id) abort(403);
+                if (isset($data['expected_treatment_revision']) && $current->revision !== (int) $data['expected_treatment_revision']) throw new VisitCommandException(409, 'chart_treatment_changed', 'The linked treatment changed. Return to the encounter and review its latest revision before recording this linked finding.');
+                $treatment = $current->setRelation('visit', $visit);
+            }
+            $branchId = $this->resolveBranchId($me, $patient, $treatment, $data, $on);
+            // Serialize first/subsequent entries by exact Patient+FDI tooth. Linked Visit/Treatment locks precede this
+            // advisory lock; treatment commands never acquire chart locks. History is never locked for mutation.
             DB::select('SELECT pg_advisory_xact_lock(hashtext(?), ?)', ['dental-chart:'.$patient->id, (int) $data['tooth']]);
+            $revision = ToothChartEntry::where('patient_id', $patient->id)->where('tooth', $data['tooth'])->count();
+            if (isset($data['expected_revision']) && $revision !== (int) $data['expected_revision']) throw new VisitCommandException(409, 'chart_revision_changed', 'This tooth changed after you reviewed it. Load the current chart before recording another finding.');
             // Read AFTER acquiring the lock: a waiting writer must validate against the preceding committed finding.
             if (! empty($data['surfaces'])) {
                 $currentChart = $this->chart($patient, false, false);
@@ -148,9 +167,15 @@ class DentalChartController extends Controller
                 'status' => $status, 'recorded_on' => $on, 'note' => $data['note'] ?? null, 'treatment_id' => $treatment?->id,
                 'branch_id' => $branchId, 'dentist_profile_id' => $me->id, 'created_by_user_id' => $user->id]);
             app(AuditService::class)->recordAdministrative('chart.recorded', $user, $patient, ['entry' => $entry->public_id, 'tooth' => $entry->tooth]); // no status text, no note
-        });
-
-        return response()->json(['data' => $this->chart($patient, true, true)], 201);
+            return [['data' => $this->chart($patient, true, true), 'meta' => ['chart_receipt' => [
+                'entry_id' => $entry->public_id, 'patient_id' => $patient->public_id, 'tooth' => $entry->tooth,
+                'revision' => $revision + 1, 'branch_ref' => $entry->branch->legacy_ref, 'dentist_ref' => $me->legacy_ref,
+                'treatment_id' => $treatment?->public_id, 'visit_id' => $treatment?->visit?->public_id,
+                'treatment_revision' => $treatment?->revision,
+            ]]], 201];
+        };
+        return IdempotentCommand::run(CommandKey::class, $user, $key, 'chart.record', ['patient' => $patient->public_id, 'data' => $data], $work,
+            fn () => VisitCommandException::rule('idempotency_key_reused', 'This key was used for a different chart command.', 'idempotency_key'))->header('Cache-Control', 'private, no-store');
     }
 
     // ---- helpers ------------------------------------------------------------------------------------------------------
@@ -166,6 +191,9 @@ class DentalChartController extends Controller
     private function resolveBranchId(DentistProfile $me, Patient $patient, ?Treatment $treatment, array $data, string $on): int
     {
         if ($treatment?->visit?->branch_id) {
+            if (!$me->branches()->where('branches.id', $treatment->visit->branch_id)->exists()) throw ValidationException::withMessages(['branch_ref' => ['You are not currently assigned to the linked treatment branch.']]);
+            if ((!empty($data['branch_id']) && (int) $data['branch_id'] !== $treatment->visit->branch_id)
+                || (!empty($data['branch_ref']) && $data['branch_ref'] !== $treatment->visit->branch->legacy_ref)) throw ValidationException::withMessages(['branch_ref' => ['The selected branch must match the linked treatment Visit.']]);
             return (int) $treatment->visit->branch_id;
         }
 
@@ -225,6 +253,14 @@ class DentalChartController extends Controller
             || self::openHandoverTo($me, $patient);
     }
 
+    private function authorizeRecording(User $actor, Patient $patient): DentistProfile
+    {
+        $current = $actor->fresh();
+        abort_unless($current && $current->account_status === 'Active' && $current->auth_version === $actor->auth_version && $current->person_id === $actor->person_id
+            && $current->role->value === 'dentist' && $this->dentistMayChart($current, $patient), 403);
+        return DentistProfile::where('person_id', $current->person_id)->firstOrFail();
+    }
+
     /** A handover to this Dentist counts for the same Owner-set number of days as everywhere else (from sending or acknowledgement). */
     private static function openHandoverTo(int $dentistId, Patient $patient): bool
     {
@@ -242,7 +278,7 @@ class DentalChartController extends Controller
 
     private function chart(Patient $patient, bool $notes, bool $history): array
     {
-        $entries = ToothChartEntry::where('patient_id', $patient->id)->with('dentist.person')->orderBy('id')->get();
+        $entries = ToothChartEntry::where('patient_id', $patient->id)->with(['dentist.person','branch','treatment.visit'])->orderBy('id')->get();
         $view = fn (ToothChartEntry $e, array $surfaces = []) => [
             'id' => $e->public_id,
             'tooth' => $e->tooth,
@@ -250,7 +286,9 @@ class DentalChartController extends Controller
             'status' => $e->status,
             'recorded_on' => substr((string) $e->getRawOriginal('recorded_on'), 0, 10),
             'dentist' => $e->dentist ? 'Dr. '.$e->dentist->person?->fullName() : null,
-        ] + ($notes ? ['note' => $e->note] : []);
+        ] + ($notes ? ['note' => $e->note, 'branch' => $e->branch ? ['id' => $e->branch->legacy_ref,'name' => $e->branch->name] : null,
+            'dentist_id' => $e->dentist?->legacy_ref, 'treatment_id' => $e->treatment?->public_id, 'visit_id' => $e->treatment?->visit?->public_id,
+            'created_at' => ClinicClock::local($e->created_at)->toIso8601String()] : []);
 
         // Compute active findings per tooth and per surface:
         // Rule: Whole-Tooth & Surface Finding Precedence
@@ -328,6 +366,7 @@ class DentalChartController extends Controller
             'current' => $currentEntries->values(),
             'summary' => $summary,
             'history' => $history ? $entries->reverse()->map(fn ($e) => $view($e))->values() : null,
-        ];
+        ] + ($notes ? ['write_contract' => ['version' => 2, 'revision_scheme' => 'tooth_entry_count', 'idempotency' => true, 'requires_revision' => true, 'requires_idempotency' => true],
+            'tooth_revisions' => (object) $entries->groupBy('tooth')->map(fn ($rows) => $rows->count())->all()] : []);
     }
 }

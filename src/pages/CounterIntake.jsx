@@ -162,6 +162,7 @@ function ReviewDialog({ row, reviewInstance, isCurrent, idTypes, toast, onClose,
             type="text"
             required={idChecked}
             maxLength={100}
+            placeholder="e.g. Company ID"
             value={idOther}
             onChange={e => setIdOther(e.target.value)}
             onBlur={() => setIdOtherTouched(true)}
@@ -181,7 +182,7 @@ function ReviewDialog({ row, reviewInstance, isCurrent, idTypes, toast, onClose,
 }
 
 const ID_TYPES = { philid: 'PhilID / ePhilID', drivers_license: 'Driver’s license', umid: 'UMID', passport: 'Passport', postal: 'Postal ID', prc: 'PRC ID', voters: 'Voter’s ID', senior: 'Senior citizen ID', pwd: 'PWD ID', other: 'Other valid ID' }
-const idReceiptMatches = (body, data) => Object.hasOwn(ID_TYPES, body.id_type) && data?.id_type === body.id_type &&
+const idReceiptMatches = (body, data, patientId) => (!patientId || data?.patient_id === patientId) && Object.hasOwn(ID_TYPES, body.id_type) && data?.id_type === body.id_type &&
   typeof data.id_verified_at === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:Z|[+-]\d\d:\d\d)$/.test(data.id_verified_at) && Number.isFinite(Date.parse(data.id_verified_at)) &&
   (body.id_type !== 'other' || typeof body.other_details === 'string' && !!body.other_details.trim() && data.other_details === body.other_details)
 
@@ -288,7 +289,7 @@ function PatientIdCheck({ patientId, toast, getAuthGeneration }) {
     if (!r?.ok) return setFailure(!r?.kind || ['network','server'].includes(r.kind)
       ? {kind:'unconfirmed', message:'The earlier ID-check outcome is still unverified. An unchanged record does not prove it failed. Reload ID status or ask the branch team to verify before another check.'}
       : r)
-    if (!idReceiptMatches(body, r.data)) {
+    if (!idReceiptMatches(body, r.data, patientId)) {
       return setFailure({kind: 'unconfirmed', message: 'The ID-check result could not be confirmed. Reload ID status before retrying.'})
     }
     setRecord(x => ({ ...x, id_check: { type: r.data.id_type, other_details: r.data.other_details, at: r.data.id_verified_at } }))
@@ -301,7 +302,7 @@ function PatientIdCheck({ patientId, toast, getAuthGeneration }) {
     <div className="ci-id">
       <Field label="ID shown" error={failure?.errors?.id_type?.[0]}><select disabled={busy || blocked} value={type} onChange={e => { setType(e.target.value); setOtherTouched(false); setFailure(null); if (e.target.value !== 'other') setOtherText('') }}>{Object.entries(ID_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>
       {type === 'other' && <Field label="Specify ID type" required hint="Example: Company ID. Enter the type only, not its number." error={otherError}>
-        <input type="text" required maxLength={100} disabled={busy || blocked} value={otherText} onChange={e => { setOtherText(e.target.value); setFailure(null) }} onBlur={() => setOtherTouched(true)}/>
+        <input type="text" required maxLength={100} placeholder="e.g. Company ID" disabled={busy || blocked} value={otherText} onChange={e => { setOtherText(e.target.value); setFailure(null) }} onBlur={() => setOtherTouched(true)}/>
       </Field>}
       <div className="au-actions"><Button variant="soft" disabled={busy || blocked || (type === 'other' && !otherText.trim())} onClick={go}>{busy ? 'Recording ID check…' : 'ID checked'}</Button></div>
     </div>

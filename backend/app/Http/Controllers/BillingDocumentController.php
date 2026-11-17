@@ -24,7 +24,10 @@ class BillingDocumentController extends Controller
         $row = $this->visible($request, $invoice);
         abort_unless(in_array($row->status, ['Issued', 'Paid'], true), 404);
 
-        return $this->pdf($documents->invoicePdf($row), BillingDocuments::invoiceFileName($row));
+        $response = $this->pdf($documents->invoicePdf($row), BillingDocuments::invoiceFileName($row));
+        $response->headers->set('X-Invoice-Id', $row->public_id);
+        $response->headers->set('X-Patient-Id', $row->patient->public_id);
+        return $response;
     }
 
     public function receipt(Request $request, string $invoice, BillingDocuments $documents): Response
@@ -33,7 +36,11 @@ class BillingDocumentController extends Controller
         $receipt = $row->receipt;
         abort_unless($receipt !== null, 404);
 
-        return $this->pdf($documents->receiptPdf($receipt), BillingDocuments::receiptFileName($receipt));
+        $response = $this->pdf($documents->receiptPdf($receipt), BillingDocuments::receiptFileName($receipt));
+        $response->headers->set('X-Invoice-Id', $row->public_id);
+        $response->headers->set('X-Patient-Id', $row->patient->public_id);
+        $response->headers->set('X-Receipt-Id', $receipt->public_id);
+        return $response;
     }
 
     public function resendReceipt(Request $request, string $invoice, MailDispatcher $dispatcher, AuditService $audit): JsonResponse

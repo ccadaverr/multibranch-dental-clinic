@@ -54,8 +54,14 @@ function EncounterEditor({ store, context, setPage }) {
     const owns = () => live.current && refreshOwner.current === owner && auth === store.getAuthGeneration?.()
     refreshPending.current = true; setRefreshing(true); setRefreshError('')
     try {
+      const exact = context?.visitId && flow?.readEncounter ? await flow.readEncounter(context) : null
+      if (!owns()) return
       const result = await flow?.refresh()
-      if (owns() && result?.ok !== true) setRefreshError('The encounter could not be refreshed. Review the current record before continuing.')
+      if (owns()) {
+        if (result?.ok !== true) setRefreshError('The encounter could not be refreshed. Review the current record before continuing.')
+        else if (exact?.ok) setNotice(`Saved encounter ${exact.record.id} verified for this Visit: ${exact.record.status}, revision ${exact.record.revision}. Unsaved text is retained until you review the latest record.`)
+        else if (exact && exact.kind !== 'not_found') setRefreshError(exact.message || 'This exact encounter could not be verified.')
+      }
     } catch {
       if (owns()) setRefreshError('The encounter could not be refreshed. Review the current record before continuing.')
     } finally {
@@ -82,8 +88,8 @@ function EncounterEditor({ store, context, setPage }) {
     if (!encounter.ok || gate.current.pending || !fresh || (!retry && (newer || readOnly || mode==='start'&&!canStart || mode==='complete'&&dirty))) return
     setSaving(true);setProblem(null);setNotice('')
     const result=await gate.current.run({mode, entry:queueEntry, visit:encounter.visit, treatment:base, form:structuredClone(form)}, attempt=>{
-      if(attempt.mode==='start')return flow.startTreatment(attempt.entry, attempt.form, attempt.keys.start, attempt.keys.save, attempt.visit)
-      if(attempt.mode==='save')return flow.saveTreatment(attempt.treatment,attempt.form,attempt.keys.save)
+      if(attempt.mode==='start')return flow.startTreatment(attempt.entry, attempt.form, attempt.keys.start, attempt.keys.save, attempt.visit,()=>live.current)
+      if(attempt.mode==='save')return flow.saveTreatment(attempt.treatment,attempt.form,attempt.keys.save,()=>live.current)
       return flow.completeTreatment(attempt.treatment,null,{dirty:false,completeKey:attempt.keys.complete})
     })
     if(!live.current)return
@@ -107,7 +113,7 @@ function EncounterEditor({ store, context, setPage }) {
   return <div className="enc-workspace">
     <div className="enc-breadcrumb"><Button variant="ghost" size="sm" onClick={()=>setPage('queue')}>My Queue</Button><span> / Encounter</span></div>
     <header className="enc-header"><div><p className="enc-eyebrow">{patient.patientCode || 'Patient encounter'}{queueEntry?.queueNumber!=null?` / Queue ${queueEntry.queueNumber}`:''}</p><h1>{patient.name}</h1><p>{state.branches.find(b=>b.id===record.branchId)?.name} · {treatment?.dentistName||dentist?.name} · {visit.clinicDate}</p></div><Status>{base?.status==='Completed'?'Completed':treatment?.status||visit.status}</Status></header>
-    <dl className="enc-identity"><div><dt>Visit</dt><dd>{visit.walkIn?'Walk-in':'Appointment'}{record.appointmentId?' · '+(state.appointments.find(a=>a.id===record.appointmentId)?.code||'Scheduled'):''}</dd></div><div><dt>Requested service</dt><dd>{state.services.find(s=>s.id===(queueEntry?.serviceId||treatment?.requestedServiceId))?.name||'Not available'}</dd></div><div><dt>Documentation</dt><dd>{base?`Revision ${base.revision}`:'Not started'}{dirty?' · Unsaved changes':''}</dd></div></dl>
+    <dl className="enc-identity"><div><dt>Visit</dt><dd>{visit.walkIn?'Walk-in':'Appointment'}{record.appointmentId?' · '+(state.appointments.find(a=>a.id===record.appointmentId)?.code||'Scheduled'):''}<small className="block-muted">{visit.id}</small></dd></div><div><dt>Requested service</dt><dd>{state.services.find(s=>s.id===(queueEntry?.serviceId||treatment?.requestedServiceId))?.name||'Not available'}</dd></div><div><dt>Documentation</dt><dd>{base?`Revision ${base.revision}`:'Not started'}{dirty?' · Unsaved changes':''}{base&&<small className="block-muted">Encounter {base.id}</small>}</dd></div></dl>
     {refreshError&&<p role="alert">{refreshError}</p>}
     {!fresh&&<Notice tone="warning">The encounter could not be verified as current. Your text is retained; commands are paused. <RefreshButton title="Refresh encounter" ariaLabel="Refresh encounter" loading={refreshing} onClick={refreshEncounter}/></Notice>}
     {problem&&<Notice tone="warning" title="Command not confirmed">{problem.message}{gate.current.retry&&<><p>Retry sends the same command and documentation. Review the latest record before starting a different command.</p><Button disabled={saving||!fresh} onClick={()=>run(gate.current.retry.mode,true)}>Retry same command</Button><RefreshButton title="Check server record" ariaLabel="Check server record" loading={refreshing} onClick={refreshEncounter}/><Button variant="ghost" onClick={()=>setReloadOpen(true)}>Review latest record</Button></>}</Notice>}
@@ -115,7 +121,7 @@ function EncounterEditor({ store, context, setPage }) {
     <div className="enc-layout"><section className="enc-documentation" aria-labelledby="enc-documentation-title">
       <h2 id="enc-documentation-title">Clinical documentation</h2>
       {(base?.status==='Completed'||treatment?.status==='Completed')&&<Notice>This encounter is complete and read-only. Completed-record amendment is not available here.</Notice>}
-      {newer&&dirty&&<Notice tone="warning" title="A newer version was saved">Your unsaved text is retained below; it is not the latest clinic record. Review the latest version before saving. <Button size="sm" variant="soft" onClick={()=>setReloadOpen(true)}>Review latest record</Button></Notice>}
+      {newer&&<Notice tone="warning" title="A newer version was saved">{dirty?'Your unsaved text is retained below; it is not the latest clinic record.':'The clinic record changed after this revision was opened.'} Review the latest version before continuing. <Button size="sm" variant="soft" onClick={()=>setReloadOpen(true)}>Review latest record</Button></Notice>}
       <fieldset disabled={readOnly||saving||!!gate.current.retry} style={{border:0,padding:0,margin:0,minWidth:0}}><div className="form-grid one-col">
         <Notice>Confirm the procedures actually performed. The booked service is visit context only.</Notice>
         {form.procedures.map((p,index)=><div className="form-grid" key={p.id||`new-${index}`}>

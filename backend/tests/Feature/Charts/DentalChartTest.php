@@ -25,7 +25,10 @@ class DentalChartTest extends TestCase
 
     private function record(array $body)
     {
-        return $this->postJson('/api/patients/'.$this->p['A']->public_id.'/chart', $body + ['tooth' => '36', 'status' => 'Caries', 'surfaces' => ['O', 'D'], 'note' => 'Deep lesion, monitor sensitivity']);
+        // Each helper invocation is a newly reviewed intent; stale/replay tests retain explicit originals elsewhere.
+        $body += ['expected_revision' => ToothChartEntry::where('patient_id', $this->p['A']->id)->where('tooth', $body['tooth'] ?? '36')->count()];
+        if (!empty($body['treatment_id'])) $body += ['expected_treatment_revision' => \App\Models\Treatment::where('public_id', $body['treatment_id'])->value('revision') ?? 1];
+        return $this->postJson('/api/patients/'.$this->p['A']->public_id.'/chart', $body + ['tooth' => '36', 'status' => 'Caries', 'surfaces' => ['O', 'D'], 'note' => 'Deep lesion, monitor sensitivity'], ['Idempotency-Key' => (string) \Illuminate\Support\Str::uuid()]);
     }
 
     public function test_history_is_append_only_and_the_current_chart_is_the_latest_entry_per_tooth(): void

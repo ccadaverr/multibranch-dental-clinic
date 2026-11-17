@@ -1,5 +1,7 @@
 # Feature acceptance and QA traceability
 
+Current Phase 1 status reconciliation: [all 68 original QAs, 2026-11-16](../QA_RECONCILIATION_20261116.md). The dated assessments below remain historical evidence; they are not the current integrated closure count.
+
 ## A11 merged-state assessment (2026-10-31, Asia/Manila)
 
 Joevan reconciled this document on `session/developer-a-ui-20261031` at **`85a9552bf5544c73db6bde9f7b01792a5cf9cb0a`**. Local `integration/developer-a-b` and cached `origin/integration/developer-a-b` match that commit; A11 performed no fetch or branch update. Ancestry confirms **A8, B3 (including its follow-up), B4, B5, B6, B7 and A10 are included**. Integration establishes code ancestry, not a new runtime pass, deployment approval or production readiness.

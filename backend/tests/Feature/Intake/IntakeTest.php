@@ -140,8 +140,8 @@ class IntakeTest extends TestCase
         $this->u['patientA']->forceFill(['email' => 'guardian@mailbox.ph', 'email_verified_at' => now()])->save();
         $this->p['A']->person->update(['date_of_birth' => '1985-01-01']);
         $this->actingAsUser('patientA');
-        $this->postJson('/api/me/dependents', ['first_name' => 'Ana', 'last_name' => 'Kid', 'date_of_birth' => '2016-02-02', 'relationship' => 'Daughter'])->assertStatus(422); // consent
-        $ana = $this->postJson('/api/me/dependents', ['first_name' => 'Ana', 'last_name' => 'Kid', 'date_of_birth' => '2016-02-02', 'relationship' => 'Daughter', 'consent' => true])
+        $this->postJson('/api/me/dependents', ['first_name' => 'Ana', 'last_name' => 'Kid', 'date_of_birth' => '2016-02-02', 'relationship' => 'Daughter'], ['Idempotency-Key' => (string) \Illuminate\Support\Str::uuid()])->assertStatus(422); // consent
+        $ana = $this->postJson('/api/me/dependents', ['first_name' => 'Ana', 'last_name' => 'Kid', 'date_of_birth' => '2016-02-02', 'relationship' => 'Daughter', 'consent' => true], ['Idempotency-Key' => (string) \Illuminate\Support\Str::uuid()])
             ->assertCreated()->assertJsonPath('data.minor', true)->json('data.id');
         $id = $this->book(['for_patient_id' => $ana, 'date' => '2026-09-30', 'start_time' => '09:00'])->assertCreated()->json('data.id');
         Mail::assertSent(AppointmentConfirmationMail::class, fn ($m) => $m->hasTo('guardian@mailbox.ph'));
@@ -153,7 +153,7 @@ class IntakeTest extends TestCase
         // Years later Ana is an adult: the guardian invites her, she claims her account, and the guardian's access ends.
         $kai = $this->p['A'];
         $this->actingAsUser('patientA');
-        $adult = $this->postJson('/api/me/dependents', ['first_name' => 'Kai', 'last_name' => 'Kid', 'date_of_birth' => '2008-01-01', 'relationship' => 'Son', 'consent' => true])->json('data.id');
+        $adult = $this->postJson('/api/me/dependents', ['first_name' => 'Kai', 'last_name' => 'Kid', 'date_of_birth' => '2008-01-01', 'relationship' => 'Son', 'consent' => true], ['Idempotency-Key' => (string) \Illuminate\Support\Str::uuid()])->json('data.id');
         $this->postJson("/api/patients/$ana/claim-invite", ['email' => 'ana@mailbox.ph'])->assertStatus(422); // under 18
         $this->postJson("/api/patients/$adult/claim-invite", ['email' => 'kai@mailbox.ph'])->assertOk();
         $adultAppt = $this->book(['for_patient_id' => $adult, 'date' => '2026-10-01', 'start_time' => '10:00'])->assertCreated()->json('data.id');
@@ -534,7 +534,7 @@ class IntakeTest extends TestCase
             'date_of_birth' => '2017-05-05',
             'relationship' => 'Other',
             'consent' => true,
-        ])->assertStatus(422)->assertJsonValidationErrors('relationship_other');
+        ], ['Idempotency-Key' => (string) \Illuminate\Support\Str::uuid()])->assertStatus(422)->assertJsonValidationErrors('relationship_other');
 
         // 2. Portal /api/me/dependents accepts Relationship = Other with relationship_other and persists both
         $res = $this->postJson('/api/me/dependents', [
@@ -544,7 +544,7 @@ class IntakeTest extends TestCase
             'relationship' => 'Other',
             'relationship_other' => 'Niece',
             'consent' => true,
-        ])->assertCreated();
+        ], ['Idempotency-Key' => (string) \Illuminate\Support\Str::uuid()])->assertCreated();
 
         $this->assertSame('Other', $res->json('data.relationship'));
         $this->assertSame('Niece', $res->json('data.relationship_other'));

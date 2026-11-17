@@ -54,6 +54,41 @@ class PrescriptionTest extends TestCase
             ->assertJsonPath('data.status', 'Issued')->assertJsonPath('data.number', 'RX-2026-000001');
     }
 
+    public function test_exact_visit_filter_preserves_patient_branch_and_role_boundaries(): void
+    {
+        $firstVisit = $this->visit();
+        $first = $this->draft($firstVisit)->assertCreated()->json('data.id');
+        $this->postJson("/api/prescriptions/$first/issue", ['expected_revision' => 1])->assertOk();
+        $otherVisit = $this->visit('B');
+        $other = $this->draft($otherVisit)->assertCreated()->json('data.id');
+        $this->postJson("/api/prescriptions/$other/issue", ['expected_revision' => 1])->assertOk();
+        $draft = $this->draft($firstVisit)->assertCreated()->json('data.id');
+        $path = '/api/prescriptions?patient_id='.$this->p['A']->public_id.'&visit_id='.$firstVisit->public_id;
+        $before = [Prescription::count(), AuditLog::count(), DB::table('command_keys')->count()];
+
+        $this->assertSame([$draft, $first], array_column($this->getJson($path)->assertOk()->assertHeader('Cache-Control', 'no-store, private')->json('data'), 'id'));
+        $this->getJson("/api/prescriptions/$first")->assertOk()->assertHeader('Cache-Control', 'no-store, private')->assertJsonPath('data.branch_id', 'b1')
+            ->assertJsonPath('data.visit', $firstVisit->public_id)->assertJsonPath('data.patient.id', $this->p['A']->public_id);
+        $this->getJson('/api/prescriptions?visit_id='.$otherVisit->public_id)->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $other);
+        $this->getJson($path.'&status=Issued')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $first);
+        $this->getJson('/api/prescriptions?patient_id='.$this->p['B']->public_id.'&visit_id='.$firstVisit->public_id)->assertOk()->assertJsonCount(0, 'data');
+        $this->getJson('/api/prescriptions?visit_id=unknown-visit')->assertOk()->assertJsonCount(0, 'data');
+        $this->getJson('/api/prescriptions?visit_id[]=invalid')->assertUnprocessable();
+
+        $this->actingAsUser('staffB1');
+        $this->getJson($path)->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $first)->assertJsonPath('data.0.branch_id', 'b1');
+        $this->actingAsUser('staffB2');
+        $this->getJson($path)->assertOk()->assertJsonCount(0, 'data');
+        $this->actingAsUser('dentist3');
+        $this->getJson($path)->assertOk()->assertJsonCount(0, 'data');
+        $this->actingAsUser('patientA');
+        $this->getJson($path)->assertForbidden();
+        $this->actingAsUser('owner');
+        $meta = $this->getJson($path)->assertOk()->assertJsonCount(1, 'data')->json('data.0');
+        foreach (['patient', 'visit', 'branch_id', 'lines', 'note'] as $private) $this->assertArrayNotHasKey($private, $meta);
+        $this->assertSame($before, [Prescription::count(), AuditLog::count(), DB::table('command_keys')->count()]);
+    }
+
     public function test_issuing_locks_it_a_void_keeps_its_history_and_numbers_continue(): void
     {
         $visit = $this->visit();

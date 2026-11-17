@@ -23,6 +23,23 @@ const STAFF_ROW = {
 }
 const IDENTITY_ROW = { id: STAFF_ROW.id, code: 'PAT-0001', name: 'Maria Santos', first_name: 'Maria', last_name: 'Santos', date_of_birth: '1990-05-06', phone: '+639171234567', profile_access: 'identity' }
 
+test('profile and linked-index reads reject another Patient instead of adopting their values/counts',async()=>{
+  stubFetch(json(200,{data:{...STAFF_ROW,id:'another-patient'}}));assert.equal((await loadPatientRecord(STAFF_ROW.id)).kind,'unverified')
+  stubFetch(json(200,{data:{patient:{id:'another-patient'},appointments:[],visits:[],treatments:[],invoices:[],hmo_cases:[]}}));assert.equal((await loadPatientRecordIndex(STAFF_ROW.id)).kind,'unverified')
+  stubFetch(json(200,{data:{patient:{id:STAFF_ROW.id},appointments:[]}}));assert.equal((await loadPatientRecordIndex(STAFF_ROW.id)).kind,'unverified','Missing families are not zero counts')
+})
+test('save requires exact Patient, full access and the original resulting revision',async()=>{
+ const record=mapPatientRecord(STAFF_ROW)
+ for(const patch of [{id:'another-patient'},{profile_access:'identity'},{revision:5},{revision:3}]){
+  api.__resetCsrfCacheForTests();stubFetch(json(204,{}),json(200,{data:{...STAFF_ROW,revision:4,...patch}}))
+  const r=await savePatientRecord(record,{...record,address:'Synthetic changed address'},{key:'profile-exact'});assert.equal(r.kind,'unverified',JSON.stringify(patch));assert.equal(r.record,undefined)
+ }
+})
+test('explicit same-revision no-op receipt remains compatible without inventing a new revision',async()=>{
+ const record=mapPatientRecord(STAFF_ROW);stubFetch(json(204,{}),json(200,{data:STAFF_ROW,meta:{unchanged:true}}))
+ const r=await savePatientRecord(record,{...record,address:'Synthetic normalization'},{key:'profile-noop'});assert.equal(r.ok,true);assert.equal(r.unchanged,true);assert.equal(r.record.revision,3)
+})
+
 test('a full projection maps to the UI record and an identity-tier projection leaves everything beyond the directory fields undefined', () => {
   const full = mapPatientRecord(STAFF_ROW)
   assert.deepEqual([full.id, full.patientCode, full.dob, full.email, full.address, full.sex, full.preferredBranchId, full.revision, full.hasPortalAccount, full.access], [STAFF_ROW.id, 'PAT-0001', '1990-05-06', 'maria@example.test', '1 Main St', 'Female', 'b1', 3, true, 'full'])

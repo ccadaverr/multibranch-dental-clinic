@@ -1,4 +1,6 @@
 import * as api from './api-client.js'
+import {boundedMessageRead} from './message-read.js'
+export {boundedMessageRead} from './message-read.js'
 import { normalizeFailure } from './appointments-api.js'
 
 // M17 client. Laravel/PostgreSQL is the ONLY authority for conversations and messages in a clinic-server session. These are in-app
@@ -14,6 +16,9 @@ export const messageReceipt = row => identifier(row?.id) && typeof row.body === 
   typeof row.sent_at === 'string' && Number.isFinite(Date.parse(row.sent_at))
 const validRows = (rows, check) => Array.isArray(rows) && rows.every(check) && new Set(rows.map(row=>row.id)).size === rows.length
 
+
+
+const messageContext=(result,id,expected)=>result?.meta?.context?.conversation_id===id&&identifier(result.meta.context.patient_id)&&identifier(result.meta.context.branch_id)&&(!expected||result.meta.context.patient_id===expected.patientId&&result.meta.context.branch_id===expected.branchId)
 
 export function mapConversation(row) {
   return {
@@ -44,7 +49,7 @@ export function mapMessage(row) {
 
 export async function loadConversations(cursor = null, search = '') {
   const q = String(search || '').trim()
-  const result = await api.listConversations({ per_page: 25, ...(cursor ? { cursor } : {}), ...(q ? { q } : {}) })
+  const result = await boundedMessageRead(()=>api.listConversations({ per_page: 25, ...(cursor ? { cursor } : {}), ...(q ? { q } : {}) }))
   if (!result.ok) return normalizeFailure(result)
   if (!validRows(result.data, row => identifier(row?.id) && Array.isArray(row.participants ?? []) && (row.participants ?? []).every(p=>p&&typeof p==='object') && (row.last_message_at == null || typeof row.last_message_at === 'string'))) return unavailable()
   return { ok: true, rows: result.data.map(mapConversation), nextCursor: result.meta?.next_cursor ?? null, channels: Array.isArray(result.meta?.channels) ? result.meta.channels : [] }
@@ -71,11 +76,11 @@ export async function findPatientConversation(patientId, branchId, patientCode) 
  * Messages NEWER than `afterId`, oldest first. The one sync read used both after a realtime signal and by the polling fallback, so the
  * two paths always show the same server projection.
  */
-export async function loadNewerMessages(conversationId, afterId) {
-  if (!afterId) return loadMessages(conversationId).then(r => (r.ok ? { ok: true, rows: [...r.rows].reverse(), more: false } : r))
-  const result = await api.listConversationMessages(conversationId, { after: afterId, per_page: 100 })
+export async function loadNewerMessages(conversationId, afterId, expectedContext = null) {
+  if (!afterId) return loadMessages(conversationId,null,'',expectedContext).then(r => (r.ok ? { ok: true, rows: [...r.rows].reverse(), more: false } : r))
+  const result = await boundedMessageRead(()=>api.listConversationMessages(conversationId, { after: afterId, per_page: 100 }))
   if (!result.ok) return normalizeFailure(result)
-  if (!validRows(result.data, messageReceipt)) return unavailable()
+  if (!messageContext(result,conversationId,expectedContext) || !validRows(result.data, messageReceipt)) return {ok:false,kind:'unverified',message:'The returned messages did not confirm the selected conversation and Patient. No messages were adopted.'}
   return { ok: true, rows: result.data.map(mapMessage), more: result.meta?.more === true }
 }
 
@@ -99,16 +104,21 @@ export async function startConversation(branchId, body, key, beforeDispatch) {
   return { ok: true, conversationId: result.data?.conversation?.id, reused: result.data?.conversation?.reused === true, message: mapMessage(result.data?.message || {}) }
 }
 
-export async function loadDentistOptions(conversationId) {
+export async function loadDentistOptions(conversationId, expected) {
   const result = await api.conversationDentistOptions(conversationId)
   if (!result.ok) return normalizeFailure(result)
   if (!validRows(result.data, d => identifier(d?.id) && typeof d.name === 'string' && typeof d.participant === 'boolean')) return unavailable()
-  return { ok: true, rows: result.data.map(d => ({ id: d.id, name: d.name ?? '', participant: d.participant === true })) }
+  if (result.meta?.grant_required !== true) return unavailable()
+  if (result.meta && 'grant_required' in result.meta && typeof result.meta.grant_required !== 'boolean') return unavailable()
+  if (result.meta?.grant_required && (!expected || !messageContext(result,conversationId,expected) || !Number.isSafeInteger(result.meta.revision) || result.meta.revision < 1)) return unavailable()
+  return { ok: true, rows: result.data.map(d => ({ id: d.id, name: d.name ?? '', participant: d.participant === true })), ...(result.meta?.grant_required ? {grantRequired:true,revision:result.meta.revision,patientId:result.meta.context.patient_id,branchId:result.meta.context.branch_id} : {}) }
 }
 
-export async function addDentist(conversationId, dentistId, beforeDispatch) {
-  const result = await api.addConversationDentist(conversationId, dentistId, beforeDispatch)
+export async function addDentist(conversationId, dentistId, beforeDispatch, grant) {
+  if (!grant || !identifier(grant.key) || !identifier(grant.patientId) || !identifier(grant.branchId) || !Number.isSafeInteger(grant.revision) || grant.revision<1 || !grant.reason?.trim()) return {ok:false,kind:'validation',message:'Refresh the conversation and enter the authorized reassignment details before trying again.'}
+  const result = await api.addConversationDentist(conversationId, dentistId, beforeDispatch, grant)
   if (!result.ok) return normalizeFailure(result)
+  if (grant) return result.data?.id===conversationId && result.data.dentist_id===dentistId && result.data.patient_id===grant.patientId && result.data.branch_id===grant.branchId && identifier(result.data.grant_id) && Number.isSafeInteger(result.data.revision) && typeof result.data.changed==='boolean' && result.data.revision===grant.revision+(result.data.changed?1:0) ? {ok:true,added:result.data.changed,revision:result.data.revision} : unconfirmed()
   return result.data?.id === conversationId && typeof result.data.added === 'boolean' ? {ok:true,added:result.data.added} : unconfirmed()
 }
 
@@ -116,11 +126,11 @@ export async function addDentist(conversationId, dentistId, beforeDispatch) {
 export function sendPresence() { return api.conversationPresence() }
 
 /** Newest-first page (the server order). `cursor` continues to OLDER messages; a failed page is an error, never a shorter history. */
-export async function loadMessages(conversationId, cursor = null, search = '') {
+export async function loadMessages(conversationId, cursor = null, search = '', expectedContext = null) {
   const q = String(search || '').trim()
-  const result = await api.listConversationMessages(conversationId, { per_page: PAGE_SIZE, ...(cursor ? { cursor } : {}), ...(q ? { q } : {}) })
+  const result = await boundedMessageRead(()=>api.listConversationMessages(conversationId, { per_page: PAGE_SIZE, ...(cursor ? { cursor } : {}), ...(q ? { q } : {}) }))
   if (!result.ok) return normalizeFailure(result)
-  if (!validRows(result.data, messageReceipt)) return unavailable()
+  if (!messageContext(result,conversationId,expectedContext) || !validRows(result.data, messageReceipt)) return {ok:false,kind:'unverified',message:'The returned messages did not confirm the selected conversation and Patient. No messages were adopted.'}
   return { ok: true, rows: result.data.map(mapMessage), nextCursor: result.meta?.next_cursor ?? null }
 }
 

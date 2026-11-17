@@ -1,0 +1,2 @@
+// A per-read deadline, not an additional poll/retry loop. Message content is never cached.
+export async function boundedMessageRead(read,timeoutMs=30000){let timer;try{return await Promise.race([Promise.resolve().then(read),new Promise(r=>{timer=setTimeout(()=>r({ok:false,kind:'network',message:'The message read timed out. Retry to read the saved conversation.'}),timeoutMs)})])}catch{return {ok:false,kind:'network',message:'Messages could not be read. Retry the saved conversation.'}}finally{clearTimeout(timer)}}

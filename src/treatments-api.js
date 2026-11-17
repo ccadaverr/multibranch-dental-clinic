@@ -130,9 +130,15 @@ const treatmentFailure = result => {
 const commandResult = result => (result.ok ? { ok: true, row: result.data } : treatmentFailure(result))
 
 /** Atomic M5 start: Queue -> Served, Visit/appointment -> In Treatment and the Treatment created, in one server transaction. */
-export async function startTreatment(visit, key) {
-  const result = await api.startTreatment(visit.id, { expected_revision: visit.revision }, key)
+export async function startTreatment(visit, key, entry = null, beforeDispatch) {
+  const result = await api.startTreatment(visit.id, { expected_revision: visit.revision,
+    ...(entry?{queue_id:entry.id,expected_queue_revision:entry.revision}:{}) }, key, beforeDispatch)
   return result.ok ? { ok: true, row: result.data } : treatmentFailure(result)
+}
+
+export async function encounterForVisit(visitId, options) {
+  const result = await api.encounterForVisit(visitId, options)
+  return result.ok ? {ok:true,row:result.data} : treatmentFailure(result)
 }
 
 const text = value => (typeof value === 'string' && value.trim() ? value.trim() : null)
@@ -162,8 +168,8 @@ export function documentationPayload(form, saved = null) {
   }
 }
 
-export async function documentTreatment(treatment, form, key) {
-  return commandResult(await api.treatmentCommand(treatment.id, 'document', { expected_revision: treatment.revision, ...documentationPayload(form, treatment) }, key))
+export async function documentTreatment(treatment, form, key, beforeDispatch) {
+  return commandResult(await api.treatmentCommand(treatment.id, 'document', { expected_revision: treatment.revision, ...documentationPayload(form, treatment) }, key, beforeDispatch))
 }
 
 export async function completeTreatment(treatment, key) {

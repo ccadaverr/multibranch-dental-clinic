@@ -10,6 +10,13 @@ export function encounterContextFor(record) {
     treatmentId: record.server && 'author' in record ? record.id : record.treatmentId || null,
     patientId: record.patientId, branchId: record.branchId, dentistId: record.dentistId, appointmentId: record.appointmentId || null }
 }
+export function calledEncounterContext(row, entry) {
+  if (!row || row.id !== entry.id || row.revision !== entry.revision + 1 || row.status !== 'Called' ||
+      row.visit?.id !== entry.visitId || row.visit.status !== 'Checked In' || row.patient?.id !== entry.patientPublicId ||
+      row.branch?.id !== entry.branchId || row.dentist?.id !== entry.dentistId || row.clinic_date !== entry.clinicDate ||
+      (row.appointment?.id ?? null) !== (entry.appointmentId ?? null)) return null
+  return encounterContextFor(entry)
+}
 export function resolveEncounter(state, session, context) {
   const refused = message => ({ ok: false, message })
   if (session?.role !== 'dentist' || !session.serverUserId || !validSession(state, session)) return refused('Your clinical session is unavailable. Return to My Queue after signing in.')

@@ -112,6 +112,29 @@ test('GET requests never fetch a CSRF cookie first', async () => {
   assert.equal(calls.length, 1)
 })
 
+test('getVisit exposes identical recovery for out-of-scope and missing Visit 404s', async () => {
+  mockFetch([
+    jsonResponse(404, { message: 'Visit not found.' }),
+    jsonResponse(404, { message: 'Visit not found.' }),
+  ])
+  const existing = await api.getVisit('protected-visit')
+  const missing = await api.getVisit('missing-visit')
+  assert.deepEqual(existing, { ok: false, kind: 'not_found', message: 'That record could not be found.' })
+  assert.deepEqual(missing, existing)
+  assert.equal(calls.length, 2, 'read denials do not retry or fetch CSRF')
+})
+
+test('getVisit preserves unauthenticated failures and permits an explicit read retry after network failure', async () => {
+  mockFetch([jsonResponse(403, { code: 'session_revoked', message: 'Your session has ended. Sign in again.' })])
+  assert.deepEqual(await api.getVisit('visit'), { ok: false, kind: 'unauthenticated' })
+  globalThis.fetch = async () => { throw new TypeError('offline') }
+  assert.equal((await api.getVisit('visit')).kind, 'network')
+  const row = { id: 'visit', patient: { id: 'patient' }, branch: { id: 'branch' }, appointment: { id: 'appointment' } }
+  mockFetch([jsonResponse(200, { data: row })])
+  assert.deepEqual(await api.getVisit('visit'), { ok: true, data: row })
+  assert.equal(calls.at(-1).options.method, 'GET')
+})
+
 test('logout() reports backendConfirmed true only on a real 204 from the server', async () => {
   mockFetch([jsonResponse(200, {}), { ok: true, status: 204, json: async () => null }])
   assert.deepEqual(await api.logout(), { ok: true, backendConfirmed: true })

@@ -1,0 +1,6 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import {loadMessages,boundedMessageRead} from '../src/messaging-api.js'
+const body={data:[{id:'m',body:'Synthetic message',mine:false,sent_at:'2026-11-16T10:00:00+08:00'}],meta:{context:{conversation_id:'c',patient_id:'p',branch_id:'b'}}}
+test('history/search require the exact returned conversation and optional selected Patient/branch before adoption',async()=>{globalThis.document={cookie:''};for(const context of [{conversation_id:'foreign',patient_id:'p',branch_id:'b'},{conversation_id:'c',patient_id:'foreign',branch_id:'b'},{conversation_id:'c',patient_id:'p',branch_id:'foreign'},undefined]){globalThis.fetch=async()=>({ok:true,status:200,json:async()=>({...body,meta:{context}})});const r=await loadMessages('c',null,'needle',{patientId:'p',branchId:'b'});assert.equal(r.ok,false);assert.equal(r.rows,undefined)}globalThis.fetch=async()=>({ok:true,status:200,json:async()=>body});assert.equal((await loadMessages('c',null,'needle',{patientId:'p',branchId:'b'})).rows.length,1)})
+test('bounded read failure is never an empty matching history',async()=>{const r=await boundedMessageRead(()=>new Promise(()=>{}),5);assert.equal(r.ok,false);assert.equal(r.data,undefined)})

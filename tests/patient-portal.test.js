@@ -156,11 +156,11 @@ test('Section 2.1: ProfilePage Open Family link navigates to FamilyPage where de
   assert.match(account, /onNavigate\('family'\)/)
   assert.match(account, /Open Family/)
   const portal = read('src/patient/Portal.jsx')
-  assert.match(portal, /case 'family': content = <FamilyPage\/>; break/)
+  assert.match(portal, /case 'family': content = <FamilyPage[^\n]*session=\{store\.session\}[^\n]*getAuthGeneration=\{store\.getAuthGeneration\}/)
   assert.equal(ui.portalPageFromHash('#p/family'), 'family')
   const family = read('src/patient/pages/Family.jsx')
   assert.match(family, /myDependents\(\)/)
-  assert.match(family, /addDependent\(form\)/)
+  assert.match(family, /createDependentCommand\(\{guardianId:session\.patientPublicId,payload,isCurrent:owns\}\)/)
   assert.match(family, /inviteToClaim\(d\.id, inviteEmail\)/)
 })
 

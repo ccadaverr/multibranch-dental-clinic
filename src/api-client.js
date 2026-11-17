@@ -262,7 +262,7 @@ export function searchPatients(params) { return request(`/api/patients${query(pa
 export function registerPatient(payload, key) { return command('/api/patients', payload, key) }
 // M4 Patient record: non-clinical profile (read; Staff-only edit with expected_revision) and the read-only linked-record index.
 export function getPatientRecord(id) { return request(`/api/patients/${encodeURIComponent(id)}`) }
-export function updatePatientRecordRemote(id, payload) { return request(`/api/patients/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) }) }
+export function updatePatientRecordRemote(id, payload, key, beforeDispatch) { return request(`/api/patients/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload),headers:key?{'Idempotency-Key':key}:{},beforeDispatch }) }
 export function getPatientRecordIndex(id) { return request(`/api/patients/${encodeURIComponent(id)}/records`) }
 
 // M8 Patient Check-In and the shared Visit / Clinical Encounter. Raw calls only; src/visits-api.js owns mapping.
@@ -271,7 +271,8 @@ export function getVisit(id) { return request(`/api/visits/${encodeURIComponent(
 export function checkInVisit(payload, key, beforeDispatch) {
   return request('/api/visits/check-in', { method:'POST', body:JSON.stringify(payload), headers:key ? {'Idempotency-Key':key} : {}, beforeDispatch })
 }
-export function walkInVisit(payload, key) { return command('/api/visits/walk-in', payload, key) }
+export function walkInVisit(payload, key, beforeDispatch) { return request('/api/visits/walk-in', {method:'POST',body:JSON.stringify(payload),headers:key?{'Idempotency-Key':key}:{},beforeDispatch}) }
+export function arrivalReceipt(id, {signal}={}) { return request(`/api/visits/${encodeURIComponent(id)}/arrival-receipt`,signal?{signal}:{}) }
 
 // M5 Treatment & Clinical Workflow. Raw calls only; src/treatments-api.js owns mapping. Starting treatment is the atomic
 // Treatment command on the Visit (there is no standalone Visit start/complete command).
@@ -279,13 +280,14 @@ export function listTreatments(params) { return request(`/api/treatments${query(
 export function getTreatment(id) { return request(`/api/treatments/${encodeURIComponent(id)}`) }
 // Cursor-paged (newest first): per_page 1-100, cursor = the previous page's meta.next_cursor.
 export function myTreatments(params) { return request(`/api/treatments/mine${query(params)}`) }
-export function startTreatment(visitId, payload, key) { return command(`/api/visits/${encodeURIComponent(visitId)}/treatment`, payload, key) }
-export function treatmentCommand(id, name, payload, key) { return command(`/api/treatments/${encodeURIComponent(id)}/${encodeURIComponent(name)}`, payload, key) }
+export function startTreatment(visitId, payload, key, beforeDispatch) { return request(`/api/visits/${encodeURIComponent(visitId)}/treatment`, {method:'POST',body:JSON.stringify(payload),headers:key?{'Idempotency-Key':key}:{},beforeDispatch}) }
+export function encounterForVisit(visitId, {signal}={}) { return request(`/api/visits/${encodeURIComponent(visitId)}/treatment`, signal?{signal}:{}) }
+export function treatmentCommand(id, name, payload, key, beforeDispatch) { return request(`/api/treatments/${encodeURIComponent(id)}/${encodeURIComponent(name)}`, {method:'POST',body:JSON.stringify(payload),headers:key?{'Idempotency-Key':key}:{},beforeDispatch}) }
 
 // M9 Patient Queue Management (entries are created only by M8 arrival). Raw calls only; src/queue-api.js owns mapping.
 export function listQueue(params) { return request(`/api/queue${query(params)}`) }
 export function myQueue() { return request('/api/queue/mine') }
-export function queueCommand(id, name, payload, key) { return command(`/api/queue/${encodeURIComponent(id)}/${encodeURIComponent(name)}`, payload, key) }
+export function queueCommand(id, name, payload, key, beforeDispatch) { return command(`/api/queue/${encodeURIComponent(id)}/${encodeURIComponent(name)}`, payload, key, beforeDispatch) }
 
 // M7 Patient assistant: the ONLY input is the message; the server derives everything else and holds the provider credential.
 export function askAssistant(message, history = []) { return request('/api/assistant/messages', { method: 'POST', body: JSON.stringify(history.length ? { message, history } : { message }) }) }
@@ -373,7 +375,7 @@ export function conversationStartOptions() { return request('/api/conversations/
 export function startConversation(payload, key, beforeDispatch) { return command('/api/conversations', payload, key, beforeDispatch) }
 export function conversationPresence() { return request('/api/conversations/presence', { method: 'POST', body: '{}' }) }
 export function conversationDentistOptions(id) { return request(`/api/conversations/${encodeURIComponent(id)}/dentist-options`) }
-export function addConversationDentist(id, dentistId, beforeDispatch) { return request(`/api/conversations/${encodeURIComponent(id)}/participants`, { method: 'POST', body: JSON.stringify({ dentist_id: dentistId }), beforeDispatch }) }
+export function addConversationDentist(id, dentistId, beforeDispatch, grant) { return request(`/api/conversations/${encodeURIComponent(id)}/participants`, { method: 'POST', body: JSON.stringify({ dentist_id: dentistId, ...(grant ? {expected_revision:grant.revision,reason:grant.reason} : {}) }), headers:grant?{'Idempotency-Key':grant.key}:{}, beforeDispatch }) }
 // M17 realtime: private-channel authorization for the socket client (same session cookie + CSRF as every call).
 export function authorizeChannel(socketId, channelName) { return request('/api/broadcasting/auth', { method: 'POST', body: JSON.stringify({ socket_id: socketId, channel_name: channelName }) }) }
 
@@ -415,16 +417,22 @@ export function issueBillingInvoice(id, payload, key, beforeDispatch) { return c
 export function recordBillingPayment(id, payload, key, beforeDispatch) { return command(`/api/invoices/${encodeURIComponent(id)}/payment`, payload, key, beforeDispatch) }
 // Review and Pay: accepted methods in plain words and the billing-address prefill (Patient who owns the invoice, or scoped Staff).
 /** Downloads an invoice or receipt PDF (the emailed document) and saves it in the browser. {ok} or a normal failure. */
-export async function downloadBillingPdf(invoiceId, kind = 'invoice') {
+export async function downloadBillingPdf(invoiceId, kind = 'invoice', {receiptId,patientId,isCurrent=()=>true} = {}) {
+  if(!isCurrent())return {ok:false,kind:'stale_context'}
   let response
   try {
     response = await rawFetch(`/api/invoices/${encodeURIComponent(invoiceId)}/${kind === 'receipt' ? 'receipt-pdf' : 'pdf'}`, { headers: { Accept: 'application/pdf' } })
   } catch {
     return { ok: false, kind: 'network', message: 'Could not reach the clinic system. Check your connection and try again.' }
   }
+  if(!isCurrent())return {ok:false,kind:'stale_context'}
   if (!response.ok) return response.status === 404 ? { ok: false, kind: 'not_found', message: 'This document is not available.' } : parseFailure(response)
+  if((patientId&&(response.headers.get('X-Invoice-Id')!==invoiceId||response.headers.get('X-Patient-Id')!==patientId))||
+     (receiptId&&response.headers.get('X-Receipt-Id')!==receiptId)||!response.headers.get('Content-Type')?.includes('application/pdf'))return {ok:false,kind:'unverified',message:'The document did not confirm the selected invoice, Patient and receipt. No file was downloaded.'}
   const name = /filename="([^"]+)"/.exec(response.headers.get('Content-Disposition') || '')?.[1] || `${kind}.pdf`
-  const url = URL.createObjectURL(await response.blob())
+  const blob=await response.blob()
+  if(!isCurrent())return {ok:false,kind:'stale_context'}
+  const url = URL.createObjectURL(blob)
   const a = Object.assign(document.createElement('a'), { href: url, download: name })
   document.body.appendChild(a); a.click(); a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
@@ -435,16 +443,20 @@ export function resendBillingReceipt(invoiceId) {
   return request(`/api/invoices/${encodeURIComponent(invoiceId)}/resend-receipt`, { method: 'POST' })
 }
 /** Downloads an appointment booking deposit receipt PDF and saves it in the browser. */
-export async function downloadAppointmentReceiptPdf(appointmentId, code = null) {
+export async function downloadAppointmentReceiptPdf(appointmentId, code = null, {isCurrent=()=>true} = {}) {
+  if(!isCurrent())return {ok:false,kind:'stale_context'}
   let response
   try {
     response = await rawFetch(`/api/appointments/${encodeURIComponent(appointmentId)}/receipt-pdf`, { headers: { Accept: 'application/pdf' } })
   } catch {
     return { ok: false, kind: 'network', message: 'Could not reach the clinic system. Check your connection and try again.' }
   }
+  if(!isCurrent())return {ok:false,kind:'stale_context'}
   if (!response.ok) return response.status === 404 ? { ok: false, kind: 'not_found', message: 'This deposit receipt is not available.' } : parseFailure(response)
   const name = /filename="([^"]+)"/.exec(response.headers.get('Content-Disposition') || '')?.[1] || `Booking-Deposit-Receipt${code ? `-${code}` : ''}.pdf`
-  const url = URL.createObjectURL(await response.blob())
+  const blob=await response.blob()
+  if(!isCurrent())return {ok:false,kind:'stale_context'}
+  const url = URL.createObjectURL(blob)
   const a = Object.assign(document.createElement('a'), { href: url, download: name })
   document.body.appendChild(a); a.click(); a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
@@ -452,16 +464,20 @@ export async function downloadAppointmentReceiptPdf(appointmentId, code = null) 
 }
 
 /** M19: downloads a prescription PDF (issued or void) the signed-in person may read. */
-export async function downloadPrescriptionPdf(id, number = null) {
+export async function downloadPrescriptionPdf(id, number = null, {isCurrent=()=>true} = {}) {
+  if(!isCurrent())return {ok:false,kind:'stale_context'}
   let response
   try {
     response = await rawFetch(`/api/prescriptions/${encodeURIComponent(id)}/pdf`, { headers: { Accept: 'application/pdf' } })
   } catch {
     return { ok: false, kind: 'network', message: 'Could not reach the clinic system. Check your connection and try again.' }
   }
+  if(!isCurrent())return {ok:false,kind:'stale_context'}
   if (!response.ok) return response.status === 404 ? { ok: false, kind: 'not_found', message: 'This document is not available.' } : parseFailure(response)
   const name = /filename="([^"]+)"/.exec(response.headers.get('Content-Disposition') || '')?.[1] || `Prescription${number ? `-${number}` : ''}.pdf`
-  const url = URL.createObjectURL(await response.blob())
+  const blob=await response.blob()
+  if(!isCurrent())return {ok:false,kind:'stale_context'}
+  const url = URL.createObjectURL(blob)
   const a = Object.assign(document.createElement('a'), { href: url, download: name })
   document.body.appendChild(a); a.click(); a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
@@ -469,11 +485,14 @@ export async function downloadPrescriptionPdf(id, number = null) {
 }
 // M10 Dental Charts
 export function patientChart(patientId) { return request(`/api/patients/${encodeURIComponent(patientId)}/chart`) }
-export function recordChartEntry(patientId, body) { return json(`/api/patients/${encodeURIComponent(patientId)}/chart`, 'POST', body) }
+export function recordChartEntry(patientId, body, key, beforeDispatch) { return command(`/api/patients/${encodeURIComponent(patientId)}/chart`,body,key,beforeDispatch) }
 export function myChart(patientId = null) { return request(`/api/me/chart${patientId ? `?patient_id=${encodeURIComponent(patientId)}` : ''}`) }
 // M20 Patient Follow-Up
 export function followups(filters = {}) { const q = new URLSearchParams(Object.entries(filters).filter(([, v]) => v)).toString(); return request(`/api/followups${q ? `?${q}` : ''}`) }
 export function patientFollowups(patientId) { return request(`/api/patients/${encodeURIComponent(patientId)}/followups`) }
+export function followupTask(id) { return request(`/api/followups/${encodeURIComponent(id)}`) }
+export function followupBookingReceipt(id) { return request(`/api/followups/${encodeURIComponent(id)}/booking-receipt`) }
+export function followupBookingCapability() { return request('/api/followups/booking-capability') }
 export function createFollowup(body) { return json('/api/followups', 'POST', body) }
 export function updateFollowup(id, body) { return json(`/api/followups/${encodeURIComponent(id)}`, 'PATCH', body) }
 // M19 Prescriptions
@@ -658,7 +677,8 @@ export function verifyPatientId(patientId, body, beforeDispatch) { return reques
 export function branchPosterUrl(branchRef) { return `${apiBase()}/api/branches/${enc(branchRef)}/poster` }
 // Parents and guardians.
 export function myDependents() { return request('/api/me/dependents') }
-export function addDependent(body) { return json('/api/me/dependents', 'POST', body) }
+export function addDependent(body,key,beforeDispatch) { return command('/api/me/dependents',body,key,beforeDispatch) }
+export function dependentCreationReceipt(key) { return request('/api/me/dependents/creation-receipt',{headers:{'Idempotency-Key':key}}) }
 export function inviteToClaim(patientId, email) { return json(`/api/patients/${enc(patientId)}/claim-invite`, 'POST', { email }) }
 export function linkGuardian(patientId, body) { return json(`/api/patients/${enc(patientId)}/guardians`, 'POST', body) }
 export function myHmo() { return request('/api/me/hmo') }

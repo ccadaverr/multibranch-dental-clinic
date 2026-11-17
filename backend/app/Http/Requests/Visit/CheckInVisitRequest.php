@@ -18,6 +18,8 @@ class CheckInVisitRequest extends FormRequest
         return [
             'appointment_id' => ['required', 'string', 'max:26'],
             'expected_revision' => ['required', 'integer', 'min:1'],
+            // Additive evidence for the existing explicit Staff checkbox; no new global intake policy.
+            'id_confirmed' => ['sometimes', 'accepted'],
             'patient_id' => ['prohibited'],
             'branch_ref' => ['prohibited'],
             'dentist_ref' => ['prohibited'],

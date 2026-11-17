@@ -1,0 +1,13 @@
+# Exact encounter prescription review v1
+
+2026-11-16 Asia/Manila. Additive read contract; no schema, role, prescription lifecycle or PDF authorization change.
+
+`GET /api/prescriptions?patient_id=<Patient public ID>&visit_id=<Visit public ID>&status=<optional Draft|Issued|Void>` applies both filters **before** the existing descending-ID 200-row limit and existing role/branch scope. Unknown IDs or mismatched Patient/Visit return an empty scoped list; no existence permission is inferred. Invalid parameter types return validation errors. Dentist sees branch-authorized drafts/issued/void; Staff sees in-scope issued/void; Owner retains exactly the existing metadata projection; Patient cannot call this administrative index.
+
+Non-Owner list/detail/read projections add `branch_id`, the existing stable branch `legacy_ref` (not a numeric database key or branch name). Existing `patient.id`, `visit`, `id`, status and revision remain. Owner does not receive Patient, Visit, branch_id, medication lines or notes through this change. Existing branch display text remains `branch`. Index and detail responses are `Cache-Control: private, no-store`.
+
+The completed encounter review requests exact Patient/Visit and checks every returned record against expected Patient/Visit/branch, allowed status, positive integer revision and issued/void number. Duplicate IDs, malformed context and a 200-row capped result are unavailable, never silently complete or empty. The caller can retry explicitly; list reads have the existing 30-second clinical-read deadline. Older servers without `branch_id` cannot supply verified encounter-review records; deploy compatible source together. Global prescription reading remains compatible.
+
+The existing PrescriptionDialog optionally accepts `expectedContext={patientId,visitId,branchId}`. Detail adoption requires all three plus the requested prescription ID and existing forward-state/revision safeguards. Changing context invalidates the old selection synchronously. Encounter review passes `viewOnly`; no Edit, Issue, Void or retry-Void dispatch is available there, including retained handlers. Authoring stays in the existing explicit Dentist workspace. Draft is visibly unissued; original VOID and distinct replacement identities are not collapsed.
+
+Backend read/PDF authorization remains authoritative. This client context proof does not grant access or replace the existing server scope check. No new payment/email action, clinical sign-off, automatic correction, medication decision, historical rewrite or general audit content is introduced. Existing authorized PDF behavior is unchanged and not re-certified by the new draft-only browser journey.

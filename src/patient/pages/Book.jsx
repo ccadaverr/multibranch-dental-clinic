@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Icon } from '../../components.jsx'
 import { bookingBranchOptions, bookingDentistOptions, bookingOptions, cancelWaitlist, joinWaitlist, listServices, myDependents, publicFaq } from '../../api-client.js'
-import { commandKey, createAppointment } from '../../appointments-api.js'
+import { commandKey, createAppointment, fetchAppointment } from '../../appointments-api.js'
 import { clinic } from '../../clinic-config.js'
 import { BookingCalendar, TimeSlots } from '../BookingCalendar.jsx'
 import { dateLong, downloadIcs, hoursSummary, time12 } from '../format.js'
 import { EmptyState, ErrorState, PageHead, Skeleton, useLoad } from '../ui.jsx'
 
-import { bookingFeedback, createBookingAttempt, resolveBookingService, bookingPaymentChoices } from '../booking-flow.js'
+import { bookingFeedback, bookingReceiptMatches, currentBookingReadback, createBookingAttempt, resolveBookingService, bookingPaymentChoices } from '../booking-flow.js'
 
 const STEPS = ['Service', 'Branch', 'Date & time', 'Review']
 
@@ -15,7 +15,7 @@ const STEPS = ['Service', 'Branch', 'Date & time', 'Review']
  * One server-authoritative booking flow. Capability is a snapshot, never a
  * reservation or payment confirmation. Choices survive Back.
  */
-export function BookPage({ prefill = null, onDone, onNavigate, toast }) {
+export function BookPage({ prefill = null, onDone, onNavigate, toast, session, getAuthGeneration }) {
   const [fullDay, setFullDay] = useState(null) // a fully booked day the patient may wait for (A5)
   const [step, setStep] = useState(0)
   const [choice, setChoice] = useState({ service: null, branch: null, dentist: null, date: '', slot: null, wanted: null })
@@ -25,7 +25,16 @@ export function BookPage({ prefill = null, onDone, onNavigate, toast }) {
   const [busy, setBusy] = useState(false), [error, setError] = useState('')
   const [prefillError, setPrefillError] = useState('')
   const attempt = useRef(null)
-  if (!attempt.current) attempt.current = createBookingAttempt(createAppointment, commandKey)
+  const live = useRef(false), latestOwner = useRef('')
+  const generation = getAuthGeneration?.(), owner = JSON.stringify([session?.serverUserId,session?.patientPublicId,session?.role,session?.active,generation])
+  latestOwner.current = owner
+  React.useLayoutEffect(()=>{live.current=true;return()=>{live.current=false}},[])
+  const owns = () => live.current && latestOwner.current === owner && session?.role === 'patient' && session?.active === true &&
+    !!session?.patientPublicId && (!getAuthGeneration || generation != null && generation === getAuthGeneration())
+  if (!attempt.current || attempt.current.owner !== owner) {
+    attempt.current = createBookingAttempt(createAppointment, commandKey, {isCurrent:owns,verify:(row,payload)=>bookingReceiptMatches(row,payload,session?.patientPublicId)})
+    attempt.current.owner = owner
+  }
   const locked = busy || attempt.current.uncertain
 
   const services = useLoad(() => listServices(), [])
@@ -73,12 +82,15 @@ export function BookPage({ prefill = null, onDone, onNavigate, toast }) {
     const payload = { branchId: choice.branch.id, serviceId: choice.service.id, date: choice.date, start: choice.slot.start_time, dentistId: null, forPatientId: forPerson?.id || null, payAtClinic: paymentMode === 'cash', paymentChoice: paymentMode }
     setBusy(true); setError('')
     const result = await attempt.current.run(payload)
+    if (!owns()) return
+    if (!result.ok) { setBusy(false);setError(result.message || 'This time could not be booked. Choose another time.'); return }
+    const readback=await currentBookingReadback(result.row,payload,session.patientPublicId,fetchAppointment,owns)
+    if(!readback||!owns())return
     setBusy(false)
-    if (!result.ok) { setError(result.message || 'This time could not be booked. Choose another time.'); return }
-    const appointment = { ...result.row, serviceName: submittedChoice.service.name, branchName: submittedChoice.branch.name, branchAddress: submittedChoice.branch.address, forName: submittedPerson?.first_name || null }
+    const appointment = { ...readback.appointment, currentStatusVerified:readback.known,bookingChanged:readback.changed,serviceName: submittedChoice.service.name, branchName: submittedChoice.branch.name, branchAddress: submittedChoice.branch.address, forName: submittedPerson?.first_name || null }
     setDone(appointment)
     const feedback = bookingFeedback(appointment)
-    toast?.(feedback.title, feedback.tone)
+    toast?.(readback.known?feedback.title:'Booking recorded; check current status',readback.known?feedback.tone:'warning')
     onDone?.(appointment)
   }
   const go = n => setStep(Math.max(0, Math.min(STEPS.length - 1, n)))
@@ -257,17 +269,19 @@ function Success({ appointment, forName = null, onNavigate }) {
     branchAddress: appointment.branchAddress, dentist: appointment.dentistName || appointment.dentist?.name, startsAt: appointment.startsAt || appointment.starts_at,
     endsAt: appointment.endsAt || appointment.ends_at, clinicName: clinic.name })
   const date = appointment.date, start = appointment.start || appointment.start_time
-  const feedback = bookingFeedback(appointment)
+  const feedback = appointment.currentStatusVerified ? bookingFeedback(appointment) : {title:'Booking recorded; check its current status',text:'The original booking reference is verified. Current status could not be read. Open My visits before booking again.',tone:'warning'}
   return <div className="pp-page pp-success pp-fade">
     <div className="pp-card pp-success-card">
       <span className="pp-success-mark" aria-hidden="true"><Icon name={feedback.tone === 'success' ? 'check' : feedback.tone === 'warning' ? 'alert' : 'clock'} size={34}/></span>
       <h1>{feedback.tone === 'success' && forName ? `${forName} is booked!` : feedback.title}</h1>
       <p className="pp-lead">{appointment.serviceName || appointment.service?.name} on <b>{dateLong(date)}</b> at <b>{time12(start)}</b>, {appointment.branchName || appointment.branch?.name}.</p>
       <p className="pp-hint">{feedback.text}</p>
-      {appointment.checkout_url && appointment.booking_payment_status === 'held' && <p><a href={appointment.checkout_url}>Continue the checkout issued for this booking</a></p>}
+      <p>Reference: <b>{appointment.code}</b>{appointment.dentist?.name ? ` · ${appointment.dentist.name}` : ''}</p>
+      {appointment.bookingChanged&&<p role="status">The appointment details changed after the original booking. The latest saved date, time and Dentist are shown.</p>}
+      {appointment.currentStatusVerified && appointment.checkout_url && appointment.booking_payment_status === 'held' && <p><a href={appointment.checkout_url}>Continue the checkout issued for this booking</a></p>}
       <div className="pp-actions">
-        {appointment.status === 'Confirmed' && appointment.booking_payment_status !== 'held' && <Button icon="download" variant="soft" onClick={ics}>Add to calendar</Button>}
-        <Button onClick={() => onNavigate('visits')}>View my visits</Button>
+        {appointment.currentStatusVerified && appointment.status === 'Confirmed' && appointment.booking_payment_status !== 'held' && <Button icon="download" variant="soft" onClick={ics}>Add to calendar</Button>}
+        <Button onClick={() => onNavigate('visits',{appointmentId:appointment.id})}>View my visits</Button>
         <Button variant="ghost" onClick={() => onNavigate('home')}>Back to home</Button>
       </div>
     </div>

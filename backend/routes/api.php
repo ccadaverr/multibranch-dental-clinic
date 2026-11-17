@@ -153,6 +153,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
     Route::post('/patients/{patient}/offer-account', [\App\Http\Controllers\IntakeController::class, 'offerAccount'])->middleware(['role:staff', 'throttle:12,1']);
     Route::get('/branches/{branch}/poster', [\App\Http\Controllers\BranchPosterController::class, 'show'])->middleware('role:staff,owner');
     // Parents and guardians (dependents), account-claim invites, Staff linking.
+    Route::get('/me/dependents/creation-receipt', [\App\Http\Controllers\GuardianController::class, 'creationReceipt'])->middleware('role:patient');
     Route::get('/me/dependents', [\App\Http\Controllers\GuardianController::class, 'mine'])->middleware('role:patient');
     Route::post('/me/dependents', [\App\Http\Controllers\GuardianController::class, 'add'])->middleware(['role:patient', 'throttle:20,1']);
     Route::post('/patients/{patient}/claim-invite', [\App\Http\Controllers\GuardianController::class, 'invite'])->middleware(['role:patient,staff,owner', 'throttle:6,1']);
@@ -209,6 +210,8 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
         Route::post('/{patientHandover}/cancel', [\App\Http\Controllers\HandoverController::class, 'cancel'])->middleware(['role:staff,dentist', 'throttle:30,1']);
     });
     // M20 Patient Follow-Up: front desk and Dentists of the branch; Owner counts and dates only.
+    Route::get('/followups/booking-capability', [\App\Http\Controllers\FollowupController::class, 'bookingCapability'])->middleware('role:staff');
+    Route::get('/followups/{followupTask}/booking-receipt', [\App\Http\Controllers\FollowupController::class, 'bookingReceipt'])->middleware('role:staff');
     Route::get('/followups', [\App\Http\Controllers\FollowupController::class, 'index'])->middleware('role:staff,dentist,owner');
     Route::get('/followups/{followupTask}', [\App\Http\Controllers\FollowupController::class, 'show'])->middleware('role:staff,dentist');
     Route::post('/followups', [\App\Http\Controllers\FollowupController::class, 'store'])->middleware(['role:staff,dentist', 'throttle:30,1']);
@@ -455,10 +458,15 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
         Route::get('/', [VisitController::class, 'index'])->middleware('role:staff,dentist,owner');
         Route::post('/check-in', [VisitController::class, 'checkIn'])->middleware('role:staff,owner');
         Route::post('/walk-in', [VisitController::class, 'walkIn'])->middleware('role:staff,owner');
-        Route::get('/{visit}', [VisitController::class, 'show'])->middleware('role:staff,dentist,owner');
+        Route::get('/{visit}/arrival-receipt', [VisitController::class, 'arrivalReceipt'])->middleware('role:staff,owner');
+        // Direct reads use the authoritative visibility scope AND VisitPolicy; unpermitted roles (including
+        // Patients) receive the same 404 as missing IDs. No Patient Visit permission is added. Session/account
+        // middleware still runs first; leave every other Visit route's role and lifecycle contracts intact.
+        Route::get('/{visit}', [VisitController::class, 'show']);
         // M5: starting treatment is the atomic Treatment command (Queue Served + Visit/appointment In Treatment +
         // Treatment created). There is no standalone Visit start-treatment or complete endpoint.
         Route::post('/{visit}/treatment', [TreatmentController::class, 'start'])->middleware('role:dentist');
+        Route::get('/{visit}/treatment', [TreatmentController::class, 'forVisit'])->middleware('role:dentist');
         // M12: open the Visit's HMO case, or record the explicit self-pay / no-claim decision (terminal Withdrawn).
         Route::post('/{visit}/hmo-membership', [HmoController::class, 'setMembership'])->middleware('role:staff');
         Route::post('/{visit}/hmo-membership/end', [HmoController::class, 'endMembership'])->middleware('role:staff');

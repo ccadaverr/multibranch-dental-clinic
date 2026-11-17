@@ -4,3 +4,9 @@
 .chat-search-results .chat-bubble { flex-shrink: 0; }
 .chat .chat-log { overflow-anchor: none; scroll-behavior: auto; }
 @media (prefers-reduced-motion: reduce) { .chat-log { scroll-behavior: auto; } }
+
+.chat-add-dentist { max-width: 100%; min-width: 0; }
+.chat-add-dentist > label:not(.sr-only) { display: flex; flex-direction: column; gap: 4px; flex: 1 1 220px; min-width: 0; font-size: 14px; }
+.chat-add-dentist input { width: 100%; min-width: 0; max-width: 100%; }
+.chat-add-dentist > [role="alert"], .chat-add-dentist > [role="status"] { flex-basis: 100%; overflow-wrap: anywhere; }
+@media (max-width: 430px) { .chat-add-dentist select, .chat-add-dentist input, .chat-add-dentist button { min-height: 44px; } }

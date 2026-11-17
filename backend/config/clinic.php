@@ -1,6 +1,8 @@
 <?php
 
 return [
+    // Release control: enable only after the documented AUD-10 database/browser gates pass for this target.
+    'selected_followup_booking_enabled' => env('SELECTED_FOLLOWUP_BOOKING_ENABLED', false),
     // M1 employee invitations (PI-02: invitation by email). The validity period is an engineering default pending the
     // clinic's answer on invitation expiry; change it here or with EMPLOYEE_INVITATION_EXPIRE_HOURS.
     'invitation_expire_hours' => (int) env('EMPLOYEE_INVITATION_EXPIRE_HOURS', 72),
