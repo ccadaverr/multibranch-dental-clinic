@@ -6,8 +6,8 @@
     "local_complete": 27,
     "partial": 30,
     "blocked": 11,
-    "integrated_pass": 12,
-    "integrated_pending": 56
+    "integrated_pass": 13,
+    "integrated_pending": 55
   },
   "rows": [
     {
@@ -256,13 +256,13 @@
       "exact_criterion_and_tasks": "\"Other valid ID\" shows a required \"Please specify\" field.<br>Original tasks: Patient summary ID selection: when \"Other valid ID\" is chosen, show \"Please specify\"; Make it required; reuse GEN-07 pattern `FINALS-QA-REVISIONS.md:652`",
       "responsible_domain": "Jaztin Clinical/Patient; Joevan shared-role partner",
       "source_evidence": "src/pages/CounterIntake.jsx; backend/app/Http/Controllers/IntakeController.php",
-      "focused_test_evidence": "Batches 02/04 Patient-bound ID audit and required Specify/whitespace/example browser evidence.",
+      "focused_test_evidence": "A06 current combined-source browser: Patient Records summary Other ID reveals required Specify, refuses whitespace, saves Synthetic staff ID against the exact Patient and reloads it from PostgreSQL. Scheduled Check-In independently validates Other ID and committed-response recovery. Existing backend intake validation and patient-bound ID audit tests remain in the reviewed 1292-test cohort. See tests/local-arrival.browser.mjs and RAPID_A06_ACCEPTANCE_20261117.md.",
       "current_status": "Complete",
-      "remaining_requirements_and_next_action": "Retain Patient-bound ID Specify/whitespace/save/audit evidence; do not equate this with full STF-11.",
-      "integrated_acceptance": "Pending",
-      "integration_evidence": "PENDING: full original criterion not accepted on the combined candidate. Both exact sources are now available; passing subsets do not close this row.",
-      "local_acceptance": "Provisional bounded local/historical acceptance; integrated acceptance pending.",
-      "blockers": "No additional policy/reproduction blocker established; all-role or item-specific acceptance/source reconciliation pending."
+      "remaining_requirements_and_next_action": "Maintain required and whitespace validation plus exact Patient-bound saved ID details; preserve distinct physical-ID admission confirmation.",
+      "integrated_acceptance": "Pass",
+      "integration_evidence": "PASS on A06 combined source, independently owned synthetic PostgreSQL runtime: actual Staff Patient Records summary Other ID required/whitespace/refusal/save/readback exercised, with exact Patient/type/details and timestamp readback. Six widths pass without overflow. This bounded criterion does not approve GEN-07 proposal schema, STF-11 auto-confirmation or STF-13 find-or-create.",
+      "local_acceptance": "Complete original bounded ID Specify criterion independently verified on the integrated application.",
+      "blockers": "None for the bounded Patient summary Other ID criterion."
     },
     {
       "original_id": "STF-05",

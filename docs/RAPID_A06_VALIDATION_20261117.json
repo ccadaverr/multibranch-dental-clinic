@@ -1,0 +1,116 @@
+{
+  "starting_head": "394559646c7d86bc9a2b337bb30dd44e8c6e40cf",
+  "tested_code_head": "9a13ca5d826438a8ef68d782f07896c8427058f6",
+  "commits": {
+    "b06": "a8a56245584c10d9fd9ae2f62b4e375d44e66efc",
+    "reception": "e67b3f0ed7e4b58b1f5289ca289cdab305ae047e",
+    "runtime": "9a13ca5d826438a8ef68d782f07896c8427058f6"
+  },
+  "frontend": {
+    "total": 2015,
+    "passed": 2007,
+    "failed": 0,
+    "skipped": 8
+  },
+  "backend": {
+    "tests": 1292,
+    "assertions": 14896,
+    "passing": 1262,
+    "failures": 26,
+    "errors": 1,
+    "skipped": 3,
+    "new_failure_identities": [],
+    "inherited_failure_and_error_identities": [
+      "Tests\\Feature\\Automation\\AutomationControlTest::test_csv_export_neutralizes_formula_injection",
+      "Tests\\Feature\\Automation\\AutomationControlTest::test_owner_can_trigger_manual_evaluation_and_audit_is_created",
+      "Tests\\Feature\\Automation\\AutomationControlTest::test_owner_can_view_automation_rules_and_snapshot",
+      "Tests\\Feature\\Automation\\AutomationControlTest::test_staff_and_dentist_and_patient_are_forbidden_from_automation",
+      "Tests\\Feature\\Automation\\AutomationControlTest::test_unauthenticated_cannot_access_automation_endpoints",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_audit_events_carry_no_event_body_and_the_csv_marks_evaluation_only",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_legacy_descriptions_are_qualified_inside_the_csv_cell_and_in_the_exception_projection",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_is_rate_limited",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_refuses_clinical_flags_and_every_foreign_field",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_refuses_unexpected_top_level_fields_too",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_validates_each_rule_observation",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_only_the_owner_may_dispatch_and_authorization_precedes_validation",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_repeated_manual_dispatches_are_independent_evaluations_with_no_idempotency_contract",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_the_api_marks_every_action_row_as_evaluation_only_and_keeps_historical_text_unchanged",
+      "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_the_manual_message_says_evaluated_not_executed_and_the_event_stores_no_email",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_a_patient_reads_only_their_own_feedback_newest_first_with_a_cursor_that_reveals_nothing_about_others",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_a_patient_submits_free_text_about_their_own_completed_visit_and_the_record_is_minimal_and_server_derived",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_m26_is_a_foundation_only_no_rating_category_status_reply_publication_marketing_or_other_module_side_effect",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_only_the_patients_own_completed_visits_are_eligible_and_every_other_case_is_one_indistinguishable_refusal",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_owner_can_review_feedback_with_filters",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_owner_can_review_patient_feedback_with_branch_and_dentist_filters",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_patient_can_submit_1_to_5_star_rating_and_low_ratings_auto_create_followup_task",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_submission_is_idempotent_a_new_key_is_a_separate_submission_and_no_uniqueness_is_invented",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_submission_is_rate_limited_per_account_and_explains_itself",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_submitted_feedback_is_immutable_and_nothing_can_erase_it",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_the_feature_is_patient_only_and_owner_staff_dentist_and_guests_are_all_refused_everywhere",
+      "Tests\\Feature\\Feedback\\FeedbackTest::test_the_text_is_bounded_free_data_and_every_authority_or_policy_field_is_refused"
+    ],
+    "extra_vs_s03": "one GEN-10 authorization test and nine AuditQuery tests"
+  },
+  "python": {
+    "passed": 52
+  },
+  "focused_frontend": 109,
+  "b06_postgresql": {
+    "tests": 62,
+    "assertions": 847,
+    "failed": 0
+  },
+  "backend_unit": {
+    "tests": 252,
+    "assertions": 1193,
+    "notices": 30
+  },
+  "new_integrated_acceptances": [
+    "STF-04"
+  ],
+  "integrated_pass": 13,
+  "integrated_pending": 55,
+  "locally_complete": 27,
+  "partial": 30,
+  "blocked": 11,
+  "accepted_demo": {
+    "frontend": "http://127.0.0.1:5198",
+    "predefense_failures": 0,
+    "predefense_warnings": 4,
+    "runtime_restarted": false
+  },
+  "isolated_demo": {
+    "container": "dentalops-a06-20261117",
+    "frontend": "http://127.0.0.1:5208",
+    "full_restart_and_exact_readback": true,
+    "predefense_failures": 1,
+    "predefense_warnings": 5,
+    "diagnostic_exception": "Explicitly labelled after-hours synthetic branch intentionally has unconfirmed contact/hours; service probes pass."
+  },
+  "held_migrations_preserved": 4,
+  "approved_schema_entries": 87,
+  "protected_jobs_untouched": 19,
+  "jaztin_source_present": false,
+  "evidence_sha256": {
+    "frontend-final.log": "4ce13acc243efdd0980024bd9d6a313e30023d1d8dc8b744abc757663906b3ee",
+    "backend-reviewed.log": "9d80c9d574f182641d45e46c3a0cdfaf1c03c0293eb1630c9b2880ccab70a85e",
+    "backend-unit-final.log": "fa4f0dead6f0919c844ba97010301714515036d6f73f84ec0bb68b70d66678f7",
+    "python-final.log": "61641856b0a6b20ae3259628fd24cd4186a5b52420fc3180c35037819731431a",
+    "reception-focused-final.log": "3c68324ef013557d7eb50f6ea3a0a225651e86fb083bd9dc449d46e8e948bb46",
+    "b06-backend.log": "cef0eeeab425d47d5b27c3691971d00e7d34a15eda50a8dc835a7a4299480e55",
+    "b06-browser.log": "9523f9404fc946cac4e3b21cb2f42eb365f47791576076fb9bd8c002927eb8d9",
+    "b05-composition.log": "b093171aae6a822ab9a1e41a506dca5c0203cb5ac0f309ebfe32f6cf75b4af40",
+    "reception-browser-final.log": "05b1848b97a019f7a2f9a5aea524157ec329037a8e61103d661445146be1a800",
+    "arrival-postgres-final.log": "7b67d2d7e024c136b5d37f46ae643861c6ecb7c118038ec912ff1db3f0601675",
+    "cancellation-postgres-final.log": "3268f9f648400bb8f9a849bb30bbf51639a0ccc20c9a4f15eac28a05aa904780",
+    "restart-postgres-final.log": "ebe46e15fa86db06f1233f2f43ff99615a7903b72c2a368b930c2aa25dd9f179",
+    "roster-postgres.log": "94fbce48cfebdb73df498d1f15d506a83c356c3e972ac7f5c8c010787fd6f24a",
+    "notifications-postgres.log": "ff413f3816c74912f55e0886e3226efc89406482fd26d53547b11b4d221de6bd",
+    "runtime-lab-final.log": "e6c8157de63750da6ad0183250f2e2475778ac1512bb4e99531d718e5b78addf",
+    "schema-final.log": "7d122e590da259c04999757043070847b5b39012411e085b2575e250d794c8ae",
+    "predefense-main-final.log": "f2ab7009a3e9e5308f449f6cda9eeb12df856cafab30d8b6d8e2ef311f4fc4fb",
+    "predefense-isolated-final.log": "cba79ebd01e94d18973a8d82e6a3aeb82ad5e28da661ac43c51b10535a0a0d80",
+    "smoke-final.log": "98953d10e32cb40b93224bdfe8952a35a734966d73ade4746b6a0fa2f7e9ea31",
+    "build-final.log": "67c3a80f95341e57c08d12609a07dcdaad227cce7ec898d5a05c43061b7cc785"
+  }
+}
