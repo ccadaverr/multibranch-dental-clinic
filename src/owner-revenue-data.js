@@ -17,15 +17,22 @@ export function exactPeso(value) {
 }
 
 /** Validate the existing API projection; malformed/mismatched money is unavailable, never zero. */
-export function validateRevenueReport(data, weekly = false) {
+export function validateRevenueReport(data, weekly = false, requested = {}) {
   const rows = weekly ? data?.buckets : data?.days
   if (data?.timezone !== 'Asia/Manila' || !Array.isArray(rows) || !data.totals) throw new Error('Revenue figures are unavailable.')
   if (weekly && (rows.length !== 6 || typeof data.is_finalized !== 'boolean' || !validDate(data.week_start_date) || !validDate(data.week_end_date))) throw new Error('Weekly figures are unavailable.')
+  const custom = !weekly && Boolean(requested.date_from || requested.date_to)
+  if (custom && (rows[0]?.date !== requested.date_from || rows.at(-1)?.date !== requested.date_to)) throw new Error('Daily report date range mismatch.')
+  if (weekly && requested.date) {
+    const weekday = new Date(`${requested.date}T00:00:00Z`).getUTCDay() || 7
+    if (data.week_start_date !== addDays(requested.date, 1 - weekday)) throw new Error('Weekly report date range mismatch.')
+  }
   const totals = [0n, 0n, 0n]
   const counts = [0, 0]
   let previous = ''
   for (const [index, row] of rows.entries()) {
     if (!validDate(row.date) || row.date <= previous || (weekly && (row.day_of_week !== index + 1 || new Date(`${row.date}T00:00:00Z`).getUTCDay() !== index + 1))) throw new Error('Invalid revenue dates.')
+    if ((weekly || custom) && previous && row.date !== addDays(previous, 1)) throw new Error('Missing revenue dates.')
     previous = row.date
     const values = REVENUE_FIELDS.map(field => pesoCentavos(row[field]))
     if (values[0] < 0n || values[1] < 0n || values[0] - values[1] !== values[2]) throw new Error('Revenue amounts do not reconcile.')

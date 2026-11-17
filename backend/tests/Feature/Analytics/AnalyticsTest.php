@@ -292,6 +292,64 @@ class AnalyticsTest extends TestCase
         }
     }
 
+    public function test_saturday_chart_summary_and_csv_keep_transaction_and_invoice_date_bases_distinct(): void
+    {
+        $saturdayStart = CarbonImmutable::parse('2026-10-30T16:00:00Z');
+        $sundayStart = $saturdayStart->addDay();
+        [$invoice, $payment] = $this->recordSettledPayment('b1', '100.31', $saturdayStart->subSecond(), $saturdayStart);
+        $this->recordInvoiceRefund($invoice, $payment, '5.02', $sundayStart->subSecond(), 'Synthetic Saturday refund');
+        $this->recordInvoiceRefund($invoice, $payment, '3.04', $sundayStart, 'Synthetic Sunday refund');
+        $this->recordSettledPayment('b2', '21.09', $saturdayStart, $sundayStart->subSecond());
+        $this->recordSettledPayment('b2', '40.07', $saturdayStart, $sundayStart);
+        $issued = $this->recordInvoice('b1', '75.11', $saturdayStart);
+        $this->assertDatabaseHas('invoices', ['id' => $issued->id, 'status' => 'Issued', 'paid_amount' => '0.00']);
+        $this->assertDatabaseMissing('payments', ['invoice_id' => $issued->id]);
+
+        $this->actingAsUser('owner');
+        $this->travelTo($sundayStart->subSecond());
+        foreach ([
+            [null, '121.40', '116.38', '61.16', '75.11', 2],
+            [$this->b['b1'], '100.31', '95.29', '0.00', '75.11', 1],
+            [$this->b['b2'], '21.09', '21.09', '61.16', '0.00', 1],
+        ] as [$branch, $gross, $net, $invoiceCollected, $outstanding, $payments]) {
+            $branchQuery = $branch ? '&branch_id='.$branch->public_id : '';
+            $query = '?date_from=2026-10-26&date_to=2026-10-31'.$branchQuery;
+            $refunded = $branch?->id === $this->b['b2']->id ? '0.00' : '5.02';
+            $daily = $this->getJson('/api/analytics/daily-revenue'.$query)->assertOk()
+                ->assertJsonPath('data.branch', $branch ? ['public_id' => $branch->public_id, 'name' => $branch->name] : null)
+                ->assertJsonPath('data.days.4.gross_collected_php', '0.00')
+                ->assertJsonPath('data.days.5.gross_collected_php', $gross)
+                ->assertJsonPath('data.totals.net_cash_flow_php', $net)
+                ->assertJsonPath('data.totals.payments_count', $payments)
+                ->json('data');
+            $this->getJson('/api/analytics/weekly-histogram?date=2026-10-31'.$branchQuery)->assertOk()
+                ->assertJsonCount(6, 'data.buckets')->assertJsonPath('data.is_finalized', false)
+                ->assertJsonPath('data.buckets.5.net_cash_flow_php', $net)
+                ->assertJsonPath('data.totals', $daily['totals']);
+            $invoiceQuery = '?date_from=2026-10-31&date_to=2026-10-31'.$branchQuery;
+            $this->getJson('/api/analytics/executive-summary'.$invoiceQuery)->assertOk()
+                ->assertJsonPath('data.financials.total_collected_php', $invoiceCollected)
+                ->assertJsonPath('data.financials.outstanding_balance_php', $outstanding);
+            $csv = $this->get('/api/analytics/export'.$invoiceQuery.'&include_daily=1')->assertOk()->streamedContent();
+            $this->assertStringContainsString('Invoice creation (Asia/Manila); collected amounts use Paid invoices', $csv);
+            $this->assertStringContainsString('Payments recorded and refunds made (Asia/Manila)', $csv);
+            $this->assertStringContainsString('"Total Revenue Collected",'.$invoiceCollected, $csv);
+            $this->assertStringContainsString("2026-10-31,{$gross},{$refunded},{$net}", $csv);
+            $this->assertStringContainsString("Total,{$gross},{$refunded},{$net}", $csv);
+        }
+
+        $this->travelTo($sundayStart);
+        $this->getJson('/api/analytics/weekly-histogram?date=2026-11-01')->assertOk()
+            ->assertJsonPath('data.is_finalized', true)
+            ->assertJsonPath('data.week_end_date', '2026-10-31')
+            ->assertJsonPath('data.totals.net_cash_flow_php', '116.38');
+        $this->getJson('/api/analytics/daily-revenue?period=today')->assertOk()
+            ->assertJsonPath('data.days.0.date', '2026-11-01')
+            ->assertJsonPath('data.totals.gross_collected_php', '40.07')
+            ->assertJsonPath('data.totals.refunded_php', '3.04')
+            ->assertJsonPath('data.totals.net_cash_flow_php', '37.03');
+    }
+
     public function test_daily_revenue_groups_by_payment_recorded_at_with_manila_boundaries_and_continuous_zero_days(): void
     {
         // Invoice created Sep 20, but payment settled Sep 26 at 23:45 Manila (15:45 UTC Sep 26) -> buckets on 2026-09-26
@@ -510,6 +568,27 @@ class AnalyticsTest extends TestCase
         CarbonImmutable $invoiceCreatedAt,
         CarbonImmutable $paymentRecordedAt
     ): array {
+        $invoice = $this->recordInvoice($branchKey, $amount, $invoiceCreatedAt, $paymentRecordedAt);
+        $payment = new Payment([
+            'invoice_id' => $invoice->id,
+            'amount' => $amount,
+            'method' => 'Cash',
+            'recorded_by_user_id' => $this->u['owner']->id,
+            'recorded_at' => $paymentRecordedAt,
+        ]);
+        $payment->created_at = $paymentRecordedAt;
+        $payment->updated_at = $paymentRecordedAt;
+        $payment->save();
+
+        return [$invoice, $payment];
+    }
+
+    private function recordInvoice(
+        string $branchKey,
+        string $amount,
+        CarbonImmutable $invoiceCreatedAt,
+        ?CarbonImmutable $paymentRecordedAt = null
+    ): Invoice {
         $branch = $this->b[$branchKey];
         $dentistKey = $branchKey === 'b2' ? 'd3' : 'd1';
 
@@ -546,34 +625,23 @@ class AnalyticsTest extends TestCase
             'patient_id' => $this->p['A']->id,
             'branch_id' => $branch->id,
             'invoice_number' => 'INV-'.Str::upper(Str::random(10)),
-            'status' => 'Paid',
+            'status' => $paymentRecordedAt ? 'Paid' : 'Issued',
             'revision' => 1,
             'gross_amount' => $amount,
             'discount_amount' => '0.00',
             'hmo_coverage_amount' => '0.00',
             'patient_responsibility_amount' => $amount,
-            'paid_amount' => $amount,
+            'paid_amount' => $paymentRecordedAt ? $amount : '0.00',
             'issued_at' => $invoiceCreatedAt,
             'paid_at' => $paymentRecordedAt,
             'created_by_user_id' => $this->u['owner']->id,
             'updated_by_user_id' => $this->u['owner']->id,
         ]);
         $invoice->created_at = $invoiceCreatedAt;
-        $invoice->updated_at = $paymentRecordedAt;
+        $invoice->updated_at = $paymentRecordedAt ?? $invoiceCreatedAt;
         $invoice->save();
 
-        $payment = new Payment([
-            'invoice_id' => $invoice->id,
-            'amount' => $amount,
-            'method' => 'Cash',
-            'recorded_by_user_id' => $this->u['owner']->id,
-            'recorded_at' => $paymentRecordedAt,
-        ]);
-        $payment->created_at = $paymentRecordedAt;
-        $payment->updated_at = $paymentRecordedAt;
-        $payment->save();
-
-        return [$invoice, $payment];
+        return $invoice;
     }
 
     private function recordInvoiceRefund(

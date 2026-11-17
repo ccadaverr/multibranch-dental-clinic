@@ -135,6 +135,7 @@ class AnalyticsController extends Controller
             fputcsv($handle, ['EXECUTIVE OPERATIONAL SUMMARY']);
             fputcsv($handle, ['Reporting Period', $sanitize($scope['label'])]);
             fputcsv($handle, ['Branch Scope', $sanitize($summary['branch']['name'] ?? 'All Branches')]);
+            fputcsv($handle, ['Invoice date basis', 'Invoice creation (Asia/Manila); collected amounts use Paid invoices']);
             fputcsv($handle, []);
             fputcsv($handle, ['Metric Category', 'Metric Name', 'Value (PHP / Count)']);
             fputcsv($handle, ['Financial', 'Total Revenue Collected', $summary['financials']['total_collected_php']]);
@@ -154,6 +155,7 @@ class AnalyticsController extends Controller
 
             // Section 2: Branch Comparative Performance
             fputcsv($handle, ['BRANCH COMPARATIVE BREAKDOWN']);
+            fputcsv($handle, ['Revenue date basis', 'Paid invoices by invoice creation (Asia/Manila)']);
             fputcsv($handle, [
                 'Branch Name',
                 'Code',

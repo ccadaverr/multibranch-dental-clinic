@@ -20,8 +20,8 @@ function OverviewResource({ branchId, windows }) {
     const current = { ...windows.current, branch_id: branchId }, previous = { ...windows.previous, branch_id: branchId }
     Promise.all([fetchDailyRevenue(current), fetchDailyRevenue(previous), fetchExecutiveSummary(current), fetchExecutiveSummary(previous)])
       .then(([now, before, summary, priorSummary]) => {
-        validateRevenueScope(validateRevenueReport(now), branchId)
-        validateRevenueScope(validateRevenueReport(before), branchId)
+        validateRevenueScope(validateRevenueReport(now, false, current), branchId)
+        validateRevenueScope(validateRevenueReport(before, false, previous), branchId)
         validateRevenueScope(summary, branchId); validateRevenueScope(priorSummary, branchId)
         const visits = summary?.patient_flow?.total_visits, priorVisits = priorSummary?.patient_flow?.total_visits
         if (![visits, priorVisits].every(n => Number.isSafeInteger(n) && n >= 0)) throw new Error('Visit figures unavailable.')

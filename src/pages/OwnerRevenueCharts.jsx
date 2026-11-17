@@ -71,7 +71,7 @@ function RevenueReport({ weekly = false, params, today }) {
     setResult({ loading: true })
     const fetcher = weekly ? fetchWeeklyRevenueHistogram : fetchDailyRevenue
     fetcher(params).then(value => {
-      const data = validateRevenueScope(validateRevenueReport(value, weekly), params.branch_id)
+      const data = validateRevenueScope(validateRevenueReport(value, weekly, params), params.branch_id)
       if (active) setResult({ data })
     }).catch(() => { if (active) setResult({ error: true }) })
     return () => { active = false }
@@ -82,7 +82,7 @@ function RevenueReport({ weekly = false, params, today }) {
   return <Card title={weekly ? 'Monday–Saturday revenue summary' : 'Daily revenue'}
     subtitle={data ? (weekly ? data.week_label : data.period_label) : 'Collections and refunds from the clinic server'}>
     {result.loading && <p role="status" aria-busy="true">Loading {weekly ? 'weekly' : 'daily'} revenue…</p>}
-    {result.error && <Notice tone="warning" title="Revenue unavailable">No figures are shown. <Button size="sm" onClick={() => setRetry(n => n + 1)}>Retry revenue</Button></Notice>}
+    {result.error && <Notice tone="warning" title="Revenue unavailable">Could not verify figures for this selection. <Button size="sm" onClick={() => setRetry(n => n + 1)}>Retry revenue</Button></Notice>}
     {data && weekly && <p className="owner-revenue-week-status" role="status">{data.is_finalized ? 'Week finalized — Saturday has passed.' : data.week_end_date === today ? 'Saturday summary — in progress until the reporting day ends.' : 'In progress — not finalized.'}</p>}
     {data && !available && <Notice>Saturday summary is available on {data.week_end_date}. <Button size="sm" variant="soft" onClick={() => setPreview(true)}>Preview in-progress week</Button></Notice>}
     {data && available && <>

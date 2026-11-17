@@ -31,6 +31,25 @@ test('malformed or non-reconciling revenue projections fail instead of becoming 
   assert.throws(() => validateRevenueReport({...report(),timezone:'UTC'},true))
 })
 
+test('a reconciled report must cover every day of the requested Manila range', () => {
+  const value = report()
+  const daily = { ...value, days: value.buckets }
+  const range = { date_from: '2026-10-26', date_to: '2026-10-31' }
+  assert.throws(() => validateRevenueReport(daily, false, { ...range, date_from: '2026-10-25' }))
+  assert.throws(() => validateRevenueReport({ ...daily, days: daily.days.filter(row => row.date !== '2026-10-29') }, false, range))
+  assert.equal(validateRevenueReport(daily, false, range), daily)
+})
+
+test('weekly readback must match the requested Manila week, including a Sunday reference', () => {
+  const value = report()
+  assert.throws(() => validateRevenueReport(value, true, { date: '2026-11-02' }))
+  assert.equal(validateRevenueReport(value, true, { date: '2026-11-01' }), value)
+  value.buckets[3].date = '2026-11-05'
+  value.buckets[4].date = '2026-11-06'
+  value.buckets[5].date = value.week_end_date = '2026-11-07'
+  assert.throws(() => validateRevenueReport(value, true))
+})
+
 test('chart projection reconciles the backend two-partial-refund acceptance vector without double-counting collections', () => {
   const data=report()
   data.buckets=data.buckets.map(row=>({...row,gross_collected_php:'0.00',refunded_php:'0.00',net_cash_flow_php:'0.00',payments_count:0,refunds_count:0}))
