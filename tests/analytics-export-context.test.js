@@ -5,21 +5,23 @@ const file='src/pages/Admin.jsx',scope='AnalyticsPage'
 const allowed = overrides => {
   const inputs = {
     isServerSession: true, store: { session: { role: 'owner', active: true }, getAuthGeneration: () => 1 },
-    exportAuth: 1, activeBranch: 'Branch B', activeBranchId: 'b2', reportDenied: false, ...overrides,
+    exportAuth: 1, activeBranch: 'Branch B', activeBranchId: 'b2', reportDenied: false, rangeDirty: false, ...overrides,
   }
   const ownerSession = variableValue(file, 'ownerSession', inputs, scope)
   const validBranch = variableValue(file, 'validBranch', inputs, scope)
-  return variableValue(file, 'canExport', { reportScope: { enabled: ownerSession && validBranch }, reportDenied: inputs.reportDenied }, scope)
+  return variableValue(file, 'canExport', { reportScope: { enabled: ownerSession && validBranch },
+    reportDenied: inputs.reportDenied, rangeDirty: inputs.rangeDirty }, scope)
 }
 function harness(request=async()=>({blob:'synthetic',filename:'scope.csv'})) {
   const events=[],downloads=[],notices=[],busy=[],exportContext={current:'original'},exportMounted={current:true},exportPending={current:null}
   let auth=1
   const bindings={AbortController,Error,canExport:true,exportKey:'original',exportAuth:1,exportContext,exportMounted,exportPending,period:'This Week',activeBranch:'Branch B',activeBranchId:'b2',store:{session:{serverUserId:'owner'},getAuthGeneration:()=>auth},requestAnalyticsCsv:request,saveClinicCsv:r=>downloads.push(r),me:async()=>({ok:true,data:{id:'owner',role:'owner',account_status:'Active'}}),toast:(...args)=>events.push(args),setExporting:v=>busy.push(v),setExportNotice:v=>notices.push(v)}
-  bindings.reportDeniedRef = { current: false }
+  Object.assign(bindings, { reportDeniedRef: { current: false }, reportPeriod: 'this week', dateFrom: undefined, dateTo: undefined })
   return {events,downloads,busy,notices,bindings,exportContext,exportMounted,exportPending,revoke:()=>auth++,run:()=>variableValue(file,'exportServerCsv',bindings,scope)(),cancel:()=>variableValue(file,'cancelAnalyticsExport',bindings,scope)()}
 }
 test('CSV requires a live Owner and an explicit all-branch or resolved branch context',()=>{
   assert.equal(allowed(),true)
+  assert.equal(allowed({rangeDirty:true}),false)
   assert.equal(allowed({activeBranch:'All Branches',activeBranchId:null}),true)
   for(const overrides of [{activeBranchId:null},{isServerSession:false},{exportAuth:null},{reportDenied:true},{store:{session:{role:'staff',active:true}}},{store:{session:{role:'owner',active:false}}}])assert.equal(allowed(overrides),false)
 })

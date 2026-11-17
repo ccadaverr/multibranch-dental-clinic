@@ -1,7 +1,7 @@
 // Module 21: Operational Analytics & Executive Intelligence API
 import * as api from './api-client.js'
 import { normalizeFailure } from './appointments-api.js'
-import { clinicDate } from './clock.js'
+import { clinicDate, validDate } from './clock.js'
 import { requestClinicCsv, saveClinicCsv } from './clinic-csv.js'
 
 export { saveClinicCsv }
@@ -31,9 +31,11 @@ export async function fetchWeeklyRevenueHistogram(params = {}) {
 }
 
 export async function requestAnalyticsCsv(params, { signal } = {}) {
-  const { branch_id: branchId, period } = params ?? {}
-  if (typeof branchId !== 'string' || !branchId || branchId !== branchId.trim() || typeof period !== 'string' || !period.trim()) {
-    throw new Error('Choose a report branch and period before exporting.')
+  const { branch_id: branchId, period, date_from: from, date_to: to } = params ?? {}
+  const hasDates = from != null || to != null
+  const validPeriod = hasDates ? validDate(from) && validDate(to) && from <= to : typeof period === 'string' && !!period.trim()
+  if (typeof branchId !== 'string' || !branchId || branchId !== branchId.trim() || !validPeriod) {
+    throw new Error('Choose a report branch and valid dates or period before exporting.')
   }
   return requestClinicCsv('/api/analytics/export', params, {
     signal,

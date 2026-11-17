@@ -32,7 +32,7 @@ test('M21 page sends a public branch reference and never an internal number', ()
   assert.match(analyticsPage, /branchId: activeBranchId/)
   assert.match(analyticsPage, /useOwnerReportSection\(fetchExecutiveSummary, reportScope\)/)
   assert.match(analyticsPage, /useOwnerReportSection\(fetchBranchPerformance, reportScope\)/)
-  assert.match(reportSection, /fetchSection\(\{ period, branch_id: branchId \}\)/)
+  assert.match(reportSection, /fetchSection\(\{ period, date_from: dateFrom, date_to: dateTo, branch_id: branchId \}\)/)
 })
 
 test('M21 server session never falls back to local demo metrics and shows an explicit unavailable state', () => {

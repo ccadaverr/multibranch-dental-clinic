@@ -18,8 +18,11 @@ const archiveReference = (kind, record) => ({
   financial: record.invoiceNumber || record.invoice_number || receiptReference(record),
 }[kind] || record.id)
 const archiveType = { visit: 'Appointment', prescription: 'Prescription', financial: 'Invoice / receipt' }
-const archivePatient = record => record.patientName ||
-  (typeof record.patient === 'object' ? record.patient?.name : record.patient) || 'Patient'
+const archivePatientName = record => {
+  const name = record.patientName || (typeof record.patient === 'object' ? record.patient?.name : record.patient)
+  return typeof name === 'string' ? name : ''
+}
+const archivePatient = record => archivePatientName(record) || 'Patient'
 const archiveDate = record => record.issued_at || record.date
 const manilaIssuedDate = new Intl.DateTimeFormat('en-PH', {
   timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short',
@@ -145,7 +148,7 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
     if (!query.trim()) return list
     const q = (role === 'owner' ? query.trim() : query).toLowerCase()
     return list.filter(a =>
-      (a.patientName || '').toLowerCase().includes(q) ||
+      (role === 'owner' ? archivePatientName(a) : (a.patientName || '')).toLowerCase().includes(q) ||
       (a.serviceName || a.service?.name || (typeof a.service === 'string' ? a.service : '')).toLowerCase().includes(q) ||
       (a.dentistName || a.dentist?.name || '').toLowerCase().includes(q) ||
       (a.code || '').toLowerCase().includes(q)
@@ -159,7 +162,7 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
     const q = (role === 'owner' ? query.trim() : query).toLowerCase()
     return list.filter(p =>
       (p.number || '').toLowerCase().includes(q) ||
-      (p.patientName || '').toLowerCase().includes(q) ||
+      (role === 'owner' ? archivePatientName(p) : (p.patientName || '')).toLowerCase().includes(q) ||
       (p.dentistName || '').toLowerCase().includes(q)
     )
   }, [state.prescriptions, effectiveBranch, query, role, branches, enabled])
@@ -176,7 +179,7 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
     const q = (role === 'owner' ? query.trim() : query).toLowerCase()
     return list.filter(i =>
       (i.invoiceNumber || i.invoice_number || '').toLowerCase().includes(q) ||
-      (i.patientName || '').toLowerCase().includes(q) ||
+      (role === 'owner' ? archivePatientName(i) : (i.patientName || '')).toLowerCase().includes(q) ||
       (receiptReference(i) || '').toLowerCase().includes(q)
     )
   }, [state.invoices, effectiveBranch, query, canViewFinancials, role, branches])

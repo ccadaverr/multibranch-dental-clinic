@@ -71,9 +71,11 @@ test('invalid or unresolved scope never falls back and HTTP refusals never retry
     return new Response('private error body', { status, headers: { 'Content-Type': 'text/csv' } })
   }
   for (const branch_id of [undefined, null, '', '  ', ' all ']) {
-    await assert.rejects(() => requestAnalyticsCsv({ ...ownerScope, branch_id }), /Choose a report branch and period/)
+    await assert.rejects(() => requestAnalyticsCsv({ ...ownerScope, branch_id }), /Choose a report branch and valid dates or period/)
   }
-  await assert.rejects(() => requestAnalyticsCsv({ branch_id: 'b2' }), /Choose a report branch and period/)
+  await assert.rejects(() => requestAnalyticsCsv({ branch_id: 'b2' }), /Choose a report branch and valid dates or period/)
+  await assert.rejects(() => requestAnalyticsCsv({ ...ownerScope, date_from: '2026-11-16' }), /valid dates or period/)
+  await assert.rejects(() => requestAnalyticsCsv({ ...ownerScope, date_from: '2026-11-18', date_to: '2026-11-16' }), /valid dates or period/)
   await assert.rejects(() => requestAuditLogsCsv({ target_id: 'exact' }), /both the audit record type and ID/)
   await assert.rejects(() => requestAuditLogsCsv({ target_type: ' ', target_id: ' ' }), /both the audit record type and ID/)
   await assert.rejects(() => requestAuditLogsCsv({ branch_id: ' ' }), /valid audit branch/)

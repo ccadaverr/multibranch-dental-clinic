@@ -183,6 +183,43 @@ class AnalyticsTest extends TestCase
         }
     }
 
+    public function test_custom_report_reads_and_csv_keep_the_same_manila_dates_branch_and_centavos(): void
+    {
+        foreach ([
+            ['b1', '2026-09-27T16:00:00Z', '1250.51'],
+            ['b1', '2026-09-28T15:59:59Z', '10.04'],
+            ['b1', '2026-09-28T16:00:01Z', '99.99'],
+            ['b2', '2026-09-28T01:00:00Z', '4321.00'],
+        ] as [$branch, $instant, $amount]) {
+            $time = CarbonImmutable::parse($instant);
+            $this->recordSettledPayment($branch, $amount, $time, $time);
+        }
+
+        $this->actingAsUser('owner');
+        $branch = $this->b['b1']->public_id;
+        $query = '?branch_id='.$branch.'&date_from=2026-09-28&date_to=2026-09-28';
+        $this->getJson('/api/analytics/executive-summary'.$query)->assertOk()
+            ->assertJsonPath('data.period', 'custom')
+            ->assertJsonPath('data.branch.public_id', $branch)
+            ->assertJsonPath('data.financials.total_collected_php', '1260.55');
+        $this->getJson('/api/analytics/branch-performance'.$query)->assertOk()->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.public_id', $branch)
+            ->assertJsonPath('data.0.revenue_collected_php', '1260.55');
+        $this->getJson('/api/analytics/daily-revenue'.$query)->assertOk()->assertJsonCount(1, 'data.days')
+            ->assertJsonPath('data.days.0.date', '2026-09-28')
+            ->assertJsonPath('data.days.0.gross_collected_php', '1260.55');
+        $csv = $this->get('/api/analytics/export'.$query)->assertOk()->streamedContent();
+        $this->assertStringContainsString('1260.55', $csv);
+        $this->assertStringNotContainsString('4321.00', $csv);
+        $this->assertStringNotContainsString('99.99', $csv);
+
+        foreach (['staffB1', 'dentist1', 'patientA'] as $actor) {
+            $this->actingAsUser($actor);
+            $this->getJson('/api/analytics/executive-summary'.$query)->assertForbidden();
+            $this->getJson('/api/analytics/export'.$query)->assertForbidden();
+        }
+    }
+
     public function test_daily_revenue_groups_by_payment_recorded_at_with_manila_boundaries_and_continuous_zero_days(): void
     {
         // Invoice created Sep 20, but payment settled Sep 26 at 23:45 Manila (15:45 UTC Sep 26) -> buckets on 2026-09-26

@@ -92,7 +92,8 @@ function RevenueReport({ weekly = false, params, today }) {
   </Card>
 }
 
-export function OwnerRevenueCharts({ branchId, branchName, period, serverSession, validBranch = true, dashboard = false, showWeekly = true }) {
+export function OwnerRevenueCharts({ branchId, branchName, period, dateFrom, dateTo, validPeriod = true,
+  serverSession, validBranch = true, dashboard = false, showWeekly = true }) {
   const today = clinicDate()
   const [weekDate, setWeekDate] = useState(today)
   const weekInput = React.useRef(null)
@@ -102,10 +103,12 @@ export function OwnerRevenueCharts({ branchId, branchName, period, serverSession
   const validWeek = validDate(selectedWeek) && selectedWeek <= today
   return <section className="owner-revenue" aria-label={`Revenue analytics: ${branchName || 'All Branches'}`}>
     {!dashboard&&<OwnerPerformanceOverview branchId={branchId} branchName={branchName} today={today}/>}
-    <p className="muted-copy">Daily revenue follows the report period.{showWeekly?' The weekly summary uses Monday–Saturday and the same branch filter; Sunday is excluded.':''}</p>
+    <p className="muted-copy">Daily revenue follows the report period.{showWeekly?' The weekly summary uses its own Monday–Saturday date selection.':''}</p>
     <p className="muted-copy">Charts use payment and refund dates.{!dashboard?' Paid-invoice KPIs below use invoice creation dates and may differ.':''}</p>
     <div className={showWeekly?'owner-revenue-grid':''}>
-      <RevenueReport key={`daily:${branchId || 'all'}:${period}:${today}`} params={{ period: period.toLowerCase(), branch_id: branchId }} today={today}/>
+      {validPeriod ? <RevenueReport key={JSON.stringify(['daily', branchId, period, dateFrom, dateTo, today])}
+        params={{ period: period?.toLowerCase(), date_from: dateFrom, date_to: dateTo, branch_id: branchId }} today={today}/>
+        : <Card title="Daily revenue"><p className="muted-copy">Apply report dates to view daily revenue.</p></Card>}
       {showWeekly&&<div>{!dashboard&&<div className="owner-report-controls">
         <Field label="Week containing date"><input ref={weekInput} type="date" aria-label="Week containing date" value={weekDate} max={today} onChange={e => setWeekDate(e.target.value)}/></Field>
         {weekDate !== today && <Button variant="soft" onClick={() => {

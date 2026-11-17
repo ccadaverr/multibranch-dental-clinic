@@ -7,7 +7,8 @@ import { ROLE_INFO } from '../data.js'
 import { eventModuleLabel, ruleTargetLabel } from '../module-map.js'
 import { LOYALTY_PROGRAM, canManageLoyalty, ledgerIssue } from '../loyalty.js'
 import { Button, Card, ConfirmDialog, Field, FilterBar, Modal, Notice, PageHeader, Progress, RefreshButton, StatCard, Status, Table, Tabs } from '../components.jsx'
-import { clinicDate } from '../clock.js'
+import { clinicDate, validDate } from '../clock.js'
+import { exactPeso } from '../owner-revenue-data.js'
 import { branchCapacity, dateLabel, dentistName, makeCsv, patientName, peso, uid } from '../logic.js'
 import { syncBranchUpdate, syncBranchServiceToggle, syncPersonnelUpdate } from '../reference-data-bridge.js'
 import { createUserAccountRemote, deleteUserAccountRemote, fetchUserAccounts, updateUserAccountRemote } from '../user-management-bridge.js'
@@ -496,10 +497,30 @@ export function TeamPage({ store }) {
   </>
 }
 
+function reportPeso(value) {
+  try {
+    return exactPeso(value).replace(/\.00$/, '')
+  } catch {
+    return 'Amount unavailable'
+  }
+}
+
 export function AnalyticsPage({ activeBranch, store }) {
   const { state, toast } = store
   const [period, setPeriod] = useState('Today')
+  const [draftDates, setDraftDates] = useState(() => {
+    const today = clinicDate()
+    return { from: today, to: today }
+  })
+  const [appliedDates, setAppliedDates] = useState(null)
   const isServerSession = !!store.session?.serverUserId
+  const customDates = isServerSession && period === 'Custom dates'
+  const validPeriod = !customDates || !!appliedDates
+  const validDraft = validDate(draftDates.from) && validDate(draftDates.to) && draftDates.from <= draftDates.to
+  const rangeDirty = customDates && (draftDates.from !== appliedDates?.from || draftDates.to !== appliedDates?.to)
+  const reportPeriod = customDates ? undefined : period.toLowerCase()
+  const dateFrom = customDates ? appliedDates?.from : undefined
+  const dateTo = customDates ? appliedDates?.to : undefined
 
   const matchingBranches = state.branches.filter(b => b.name === activeBranch)
   const activeBranchRecord = matchingBranches.length === 1 ? matchingBranches[0] : null
@@ -509,7 +530,8 @@ export function AnalyticsPage({ activeBranch, store }) {
   const validBranch = activeBranch === 'All Branches' || !!activeBranchId
   const ownerSession = isServerSession && store.session?.role === 'owner' && store.session?.active === true &&
     (!store.getAuthGeneration || exportAuth != null)
-  const exportKey = JSON.stringify([store.session?.serverUserId, store.session?.role, store.session?.active, exportAuth, activeBranch, activeBranchId, period])
+  const exportKey = JSON.stringify([store.session?.serverUserId, store.session?.role, store.session?.active, exportAuth,
+    activeBranch, activeBranchId, reportPeriod, dateFrom, dateTo])
   const exportContext = useRef(exportKey), exportMounted = useRef(false), exportPending = useRef(null)
   const [exporting, setExporting] = useState(false)
   const [exportNotice, setExportNotice] = useState('')
@@ -519,9 +541,11 @@ export function AnalyticsPage({ activeBranch, store }) {
     exportContext.current === exportKey && exportAuth === getAuthGeneration?.(),
   [exportKey, exportAuth, getAuthGeneration])
   const reportScope = {
-    enabled: ownerSession && validBranch,
+    enabled: ownerSession && validBranch && validPeriod,
     context: exportKey,
-    period: period.toLowerCase(),
+    period: reportPeriod,
+    dateFrom,
+    dateTo,
     branchId: activeBranchId,
     isCurrent: isCurrentReport,
   }
@@ -531,7 +555,7 @@ export function AnalyticsPage({ activeBranch, store }) {
   const bothReportSectionsFailed = summarySection.status === 'error' && branchSection.status === 'error'
   const serverSummary = reportDenied ? null : summarySection.data
   const serverBranches = reportDenied ? null : branchSection.data
-  const canExport = reportScope.enabled && !reportDenied
+  const canExport = reportScope.enabled && !reportDenied && !rangeDirty
   const reportDeniedRef = useRef(reportDenied)
   reportDeniedRef.current = reportDenied
   const cancelAnalyticsExport = () => {
@@ -551,7 +575,7 @@ export function AnalyticsPage({ activeBranch, store }) {
       exportPending.current = null
       pending?.controller.abort()
     }
-  }, [exportKey])
+  }, [exportKey, rangeDirty])
 
   const exportServerCsv = async () => {
     if (!canExport || !exportMounted.current || exportPending.current) return
@@ -562,7 +586,10 @@ export function AnalyticsPage({ activeBranch, store }) {
     setExporting(true)
     setExportNotice('Preparing analytics CSV…')
     try {
-      const result = await requestAnalyticsCsv({ period: period.toLowerCase(), branch_id: activeBranch === 'All Branches' ? 'all' : activeBranchId }, { signal: ticket.controller.signal })
+      const result = await requestAnalyticsCsv({
+        period: reportPeriod, date_from: dateFrom, date_to: dateTo,
+        branch_id: activeBranch === 'All Branches' ? 'all' : activeBranchId,
+      }, { signal: ticket.controller.signal })
       if (!owns()) return
       const identity = await me({ signal: ticket.controller.signal })
       if (!owns()) return
@@ -614,10 +641,10 @@ export function AnalyticsPage({ activeBranch, store }) {
 
   const rateText = v => (v === null || v === undefined ? 'No data' : `${v}%`)
   const metrics = serverSummary ? [
-    { name: 'Recorded revenue', value: peso.format(serverSummary.financials.total_collected_php), note: `Paid invoices created in this period: ${serverSummary.financials.paid_invoices_count} • Gross invoiced: ${peso.format(serverSummary.financials.total_gross_php)}`, module: 'M11' },
+    { name: 'Recorded revenue', value: reportPeso(serverSummary.financials.total_collected_php), note: `Paid invoices created in this period: ${serverSummary.financials.paid_invoices_count} • Gross invoiced: ${reportPeso(serverSummary.financials.total_gross_php)}`, module: 'M11' },
     { name: 'Scheduling', value: serverSummary.scheduling.total_appointments, note: `Completion rate: ${rateText(serverSummary.scheduling.completion_rate_pct)} (${serverSummary.scheduling.completed} completed, ${serverSummary.scheduling.cancelled} cancelled)`, module: 'M6' },
     { name: 'Queue / patient flow', value: serverSummary.patient_flow.total_visits, note: `${serverSummary.patient_flow.served_from_queue} served in this period • ${serverSummary.patient_flow.current_waiting} waiting now (today's queue)`, module: 'M9–M10' },
-    { name: 'HMO processing', value: serverSummary.hmo.approved, note: `${peso.format(serverSummary.hmo.approved_amount_php)} approved coverage • ${serverSummary.hmo.pending} pending coordinator action`, module: 'M12' },
+    { name: 'HMO processing', value: serverSummary.hmo.approved, note: `${reportPeso(serverSummary.hmo.approved_amount_php)} approved coverage • ${serverSummary.hmo.pending} pending coordinator action`, module: 'M12' },
     { name: 'Automation health', value: rateText(serverSummary.automation.health_rate_pct), note: `${serverSummary.automation.total_actions} rule evaluations recorded (${serverSummary.automation.failed} failed); nothing is executed by this module`, module: 'M23' },
   ] : (isServerSession ? [] : clientMetrics)
 
@@ -638,6 +665,7 @@ export function AnalyticsPage({ activeBranch, store }) {
             <option>This Month</option>
             <option>This Year</option>
             <option>All Time</option>
+            {isServerSession && <option>Custom dates</option>}
           </select></label>
           <Button onClick={exportServerCsv} disabled={!canExport || exporting} variant="secondary">
             Export Report CSV
@@ -648,13 +676,28 @@ export function AnalyticsPage({ activeBranch, store }) {
         </div>
       </div>}
     />
+    {customDates && <div className="owner-report-date-range">
+      <div role="group" aria-label="Custom report dates" className="owner-report-controls">
+        <label>From date<input type="date" value={draftDates.from}
+          onChange={e => setDraftDates({ ...draftDates, from: e.target.value })}/></label>
+        <label>Through date<input type="date" value={draftDates.to}
+          onChange={e => setDraftDates({ ...draftDates, to: e.target.value })}/></label>
+        <Button variant="soft" disabled={!validDraft || !rangeDirty || !ownerSession || !validBranch}
+          onClick={() => setAppliedDates(draftDates)}>Apply dates</Button>
+      </div>
+      <p className="muted-copy" role="status">
+        {appliedDates ? `Showing ${dateFrom} through ${dateTo}. ` : 'Choose the days to include. '}
+        {!validDraft ? 'Enter two dates in order.' : rangeDirty ? 'Apply dates to update the report and enable exports.' : ''}
+      </p>
+    </div>}
     {exportNotice && <p role="status">{exportNotice}</p>}
     {exporting && <Button variant="ghost" onClick={cancelAnalyticsExport}>Cancel analytics export</Button>}
     {reportDenied || (isServerSession && !ownerSession) ? <Notice tone="warning">
       Report access is unavailable. Sign in with an active Owner account.
     </Notice> : <OwnerRevenueCharts
       key={JSON.stringify([store.session?.serverUserId, exportAuth])}
-      branchId={activeBranchId} branchName={activeBranch} period={period} serverSession={isServerSession} validBranch={validBranch}/>}
+      branchId={activeBranchId} branchName={activeBranch} period={reportPeriod} dateFrom={dateFrom} dateTo={dateTo}
+      validPeriod={validPeriod} serverSession={isServerSession} validBranch={validBranch}/>}
     {bothReportSectionsFailed ? <Notice tone="warning">
       The report figures could not be loaded. <Button variant="ghost" onClick={() => {
         summarySection.retry()
@@ -691,7 +734,7 @@ export function AnalyticsPage({ activeBranch, store }) {
             const waiting = isServer ? b.active_queue : branchCapacity(b.name, state).waiting
             const booked = isServer ? b.total_appointments : branchCapacity(b.name, state).booked
             const estimate = isServer ? b.estimated_wait_minutes : branchCapacity(b.name, state).estimate
-            const revenue = isServer ? peso.format(b.revenue_collected_php) : null
+            const revenue = isServer ? reportPeso(b.revenue_collected_php) : null
 
             return <div key={b.public_id || b.id}>
               <div className="bar-label">
