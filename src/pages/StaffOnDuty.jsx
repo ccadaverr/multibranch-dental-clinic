@@ -2,7 +2,7 @@ import React from 'react'
 import { RefreshButton, Card, Notice } from '../components.jsx'
 import { workSchedules } from '../api-client.js'
 import { clinicDate } from '../clock.js'
-import { dutyProjection } from '../work-hours-duty.js'
+import { dutyProjection, dutyRowsForSelection } from '../work-hours-duty.js'
 import { useVisibleRefresh } from '../use-visible-refresh.js'
 import '../stf07-on-duty.css'
 
@@ -56,7 +56,7 @@ function StaffDutySession({ session, activeBranch, getAuthGeneration }) {
   useVisibleRefresh(load, { active, intervalMs: 60000 })
 
   const duty = snapshot.duty?.date === day ? snapshot.duty : null
-  const rows = duty?.rows.filter(row => activeBranch === 'All Branches' || row.branch_name === activeBranch) || []
+  const rows = dutyRowsForSelection(duty, activeBranch)
   return <Card title="Dentists on duty today" subtitle="Based on branch hours, work schedules, closures and approved leave." className="stf07-duty top-gap"
     actions={active && <RefreshButton title="Refresh duty status" ariaLabel="Refresh duty status" onClick={load} loading={['loading', 'refreshing'].includes(snapshot.status)}/> }>
     {!active && <Notice tone="info">Sign in to the clinic server to verify today’s Dentist duty status.</Notice>}
@@ -64,7 +64,7 @@ function StaffDutySession({ session, activeBranch, getAuthGeneration }) {
     {active && ['forbidden', 'error'].includes(snapshot.status) && <Notice tone="warning">{snapshot.error}</Notice>}
     {active && duty && <>
       {snapshot.status === 'refreshing' && <p role="status">Refreshing duty status…</p>}
-      {!rows.length ? <p className="muted-copy" role="status">No Dentist duty rows were returned for the selected branch.</p> :
+      {rows === null ? <div role="alert"><Notice tone="warning">This branch name matches more than one branch. Duty status is unavailable for this selection.</Notice></div> : !rows.length ? <p className="muted-copy" role="status">No Dentist duty rows were returned for the selected branch.</p> :
         <ul className="stf07-duty-list">{rows.map(row => <li key={`${row.dentist_id}:${row.branch_id}`}>
           <div><b>{row.dentist_name}</b><small>{row.branch_name}</small></div>
           <div className="stf07-duty-status"><span className={`fd-badge ${row.on_duty_today ? 'is-ok' : 'is-muted'}`}>{row.on_duty_today ? 'On duty today' : 'Off duty'}</span>

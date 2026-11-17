@@ -1,0 +1,31 @@
+import assert from 'node:assert/strict'
+import {pathToFileURL} from 'node:url'
+const {chromium}=await import(pathToFileURL(process.argv[2]).href),base=process.argv[3]||'http://127.0.0.1:5198'
+const browser=await chromium.launch({channel:'chrome',headless:true})
+try{
+ const page=await browser.newPage({viewport:{width:390,height:900},timezoneId:'America/Los_Angeles'})
+ await page.route('**/*',r=>new URL(r.request().url()).origin===base?r.continue():r.abort())
+ await page.clock.install()
+ await page.goto(base+'/tests/stf07-duty-harness.html')
+ const panel=page.locator('.stf07-duty'),rows=panel.locator('li'),refresh=page.getByRole('button',{name:'Refresh duty status',exact:true})
+ await rows.nth(1).waitFor();assert.equal(await rows.count(),2)
+ await page.evaluate(()=>{window.stf07.mode='duplicate'})
+ await refresh.click();await page.getByRole('combobox',{name:'Branch view'}).selectOption('Fictional Main Branch')
+ await page.getByText('This branch name matches more than one branch.',{exact:false}).waitFor()
+ assert.equal(await rows.count(),0,'An ambiguous name never combines two branch identities')
+ await page.getByRole('combobox',{name:'Branch view'}).selectOption('All Branches');await rows.nth(1).waitFor()
+ await page.evaluate(()=>{window.stf07.mode='ready';window.stf07.setInstant('2026-10-29T15:59:59Z')})
+ await refresh.click();await panel.getByText(/Clinic date: 2026-10-29/).waitFor()
+ await page.evaluate(()=>window.stf07.setInstant('2026-10-29T16:00:01Z'))
+ await page.clock.runFor(15000)
+ await panel.getByText(/Clinic date: 2026-10-30/).waitFor()
+ assert.equal(await panel.getByText('Off duty',{exact:true}).count(),2,'Manila midnight replaces previous-day duty')
+ assert.equal(await panel.getByText('On duty today',{exact:true}).count(),0)
+ for(const width of [375,390,430,768,1024,1440]){await page.setViewportSize({width,height:900});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1))}
+ await page.evaluate(()=>{window.stf07.mode='error'});await refresh.click()
+ await panel.getByText('Duty status could not be verified. Try again.',{exact:true}).waitFor();assert.equal(await rows.count(),0)
+ await page.evaluate(()=>{window.stf07.mode='ready'});await refresh.click();await rows.nth(1).waitFor()
+ await page.evaluate(()=>{window.stf07.mode='forbidden'});await refresh.click()
+ await panel.getByText('You do not have access to Dentist duty status.',{exact:true}).waitFor();assert.equal(await rows.count(),0)
+ console.log('PASS Staff duty exact-branch refusal/recovery, Manila midnight, six widths and error/authorization clearing')
+}finally{await browser.close()}

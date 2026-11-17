@@ -24,3 +24,14 @@ export function dutyProjection(duty, today, scopes) {
   }
   return { date: duty.date, as_of: duty.as_of, rows }
 }
+
+// The shell's legacy selector supplies a display name. Resolve exactly one branch
+// before filtering; identical names must never combine separate branch records.
+export function dutyRowsForSelection(duty, selection) {
+  if (!Array.isArray(duty?.rows)) return []
+  if (selection === 'All Branches') return duty.rows
+  const matches = duty.rows.filter(row => row.branch_name === selection)
+  const ids = new Set(matches.map(row => row.branch_id))
+  if (ids.size > 1) return null
+  return ids.size === 1 ? duty.rows.filter(row => row.branch_id === matches[0].branch_id) : []
+}

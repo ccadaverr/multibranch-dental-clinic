@@ -13,10 +13,12 @@ window.fetch = async () => {
   window.stf07.calls++
   if (window.stf07.mode === 'forbidden') return { ok: false, status: 403, json: async () => ({ message: 'Forbidden' }) }
   if (window.stf07.mode === 'error') return { ok: false, status: 500, json: async () => ({ message: 'Unavailable' }) }
-  const rows = window.stf07.mode === 'empty' ? [] : [
+  let rows = window.stf07.mode === 'empty' ? [] : [
     { dentist_id: 'd1', dentist_name: 'Dr. Fictional Long Name', branch_id: 'b1', branch_name: 'Fictional Main Branch', on_duty_today: true, working_now: true, working_minutes: 420, estimated:false },
     { dentist_id: 'd1', dentist_name: 'Dr. Fictional Long Name', branch_id: 'b2', branch_name: 'Fictional Secondary Branch', on_duty_today: false, working_now: false, working_minutes: 0, estimated:false },
   ]
+  if (window.stf07.mode === 'duplicate') rows[1].branch_name = rows[0].branch_name
+  if (clinicNow().date === '2026-10-30') rows = rows.map(row => ({...row,on_duty_today:false,working_now:false,working_minutes:0}))
   return { ok: true, status: 200, json: async () => ({ data: { duty: { date: clinicNow().date, as_of: clinicNow().timestamp, rows } } }) }
 }
 
