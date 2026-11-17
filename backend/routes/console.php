@@ -42,7 +42,9 @@ Artisan::command('automations:run {--only=* : run only these automation keys}', 
     return collect($results)->contains(fn ($r) => isset($r['error'])) ? 1 : 0;
 })->purpose('Run the scheduled automations that are due now');
 
-\Illuminate\Support\Facades\Schedule::command('automations:run')->everyMinute()->withoutOverlapping();
+if (! \App\Support\SyntheticRuntime::active()) {
+    \Illuminate\Support\Facades\Schedule::command('automations:run')->everyMinute()->withoutOverlapping();
+}
 
 // Demo database only: make one appointment's reminder (and/or one invoice's next overdue reminder, or today's Owner summary) due
 // now and send it at once, so the panel can watch it arrive. Refuses any other database.
@@ -74,7 +76,11 @@ Artisan::command('intake:expire', function () {
     }
     $this->info("$n registration(s) expired.");
 })->purpose('Expire unconfirmed counter registrations from earlier days');
-\Illuminate\Support\Facades\Schedule::command('intake:expire')->hourly()->withoutOverlapping();
+if (! \App\Support\SyntheticRuntime::active()) {
+    \Illuminate\Support\Facades\Schedule::command('intake:expire')->hourly()->withoutOverlapping();
+}
 
 // Section 22.3: release pending appointments whose 15-minute checkout hold has expired.
-\Illuminate\Support\Facades\Schedule::command('appointments:release-expired-holds')->everyMinute()->withoutOverlapping();
+if (! \App\Support\SyntheticRuntime::active()) {
+    \Illuminate\Support\Facades\Schedule::command('appointments:release-expired-holds')->everyMinute()->withoutOverlapping();
+}

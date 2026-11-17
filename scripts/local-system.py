@@ -318,6 +318,9 @@ def main():
     elif args.action in ['worker', 'scheduler']:
         if args.profile != 'demo':
             raise ValueError('Background services run only against the owned demo database.')
+        marker = runtime / 'synthetic-runtime'
+        if not marker.is_file() or marker.is_symlink() or marker.read_text().strip() != c['cluster_id']:
+            raise ValueError('Use synthetic-demo-runtime.py; unrestricted background processing on existing profiles is refused.')
         os.chdir(ROOT / 'backend')
         command = ['queue:work', '--queue=mail,default', '--sleep=1', '--tries=1', '--timeout=60'] if args.action == 'worker' else ['schedule:work']
         os.execve(c['php'], [c['php'], 'artisan', *command, '--no-interaction'], environment(c, runtime, 'demo'))

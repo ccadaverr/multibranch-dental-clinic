@@ -81,19 +81,23 @@ class DemoCheck extends Command
 
     private function processes(): void
     {
+        $synthetic = \App\Support\SyntheticRuntime::active();
+        $ownedLocal = getenv('DENTALOPS_LOCAL_TARGET') !== false;
         $ps = (string) @shell_exec('ps -axo command 2>/dev/null');
         $running = fn (string $pattern) => (bool) preg_match($pattern, $ps);
         $http = function (string $url): ?int {
             try { return Http::timeout(4)->get($url)->status(); } catch (\Throwable) { return null; }
         };
         $api = rtrim((string) config('app.url'), '/');
-        ($code = $http("$api/up")) === 200 ? $this->result('PASS', "API answers at $api") : $this->result('FAIL', "API at $api/up answered ".($code ?? 'nothing'), 'Start it: scripts/demo-start.sh (or scripts/payment-test.sh api).');
+        $code = $http("$api/up");
+        $bound = ! $ownedLocal || ! $synthetic || \App\Support\SyntheticRuntime::serviceRunning('api');
+        $code === 200 && $bound ? $this->result('PASS', "API answers at $api") : $this->result('FAIL', "API at $api/up answered ".($code ?? 'nothing').($bound ? '' : ' but its process does not belong to this target'), 'Start the API for the exact checked target.');
         $frontend = rtrim((string) config('app.frontend_url'), '/');
         ($code = $http($frontend)) === 200 ? $this->result('PASS', "Frontend answers at $frontend") : $this->result('FAIL', "Frontend at $frontend answered ".($code ?? 'nothing'), 'Start it: scripts/demo-start.sh (or npm run dev).');
-        $running('/artisan queue:work/') ? $this->result('PASS', 'Queue worker running') : $this->result('FAIL', 'Queue worker is DOWN: emails are not sent',
+        ($ownedLocal ? \App\Support\SyntheticRuntime::serviceRunning('worker') : $running('/artisan queue:work/')) ? $this->result('PASS', $synthetic ? 'Target-bound synthetic mail worker running' : 'Queue worker running') : $this->result('FAIL', 'Queue worker is DOWN: emails are not sent',
             'Fix: scripts/demo-start.sh (or, next to a running demo: cd backend && DB_DATABASE=dental_clinic_demo CACHE_STORE=file php artisan queue:work --queue=mail,default).');
         // The scheduled automations (reminders, no-shows, overdue invoices, summary) and email retries run only with the scheduler.
-        $running('/artisan schedule:(work|run)/') ? $this->result('PASS', 'Scheduler running (automations, retries and due emails)') : $this->result('FAIL', 'No scheduler', 'Reminders and the other automations do not run without it: scripts/demo-start.sh starts `php artisan schedule:work`.');
+        ($ownedLocal ? \App\Support\SyntheticRuntime::serviceRunning('scheduler') : $running('/artisan schedule:(work|run)/')) ? $this->result('PASS', $synthetic ? 'Target-bound synthetic mail scheduler running; other automations excluded' : 'Scheduler running (automations, retries and due emails)') : $this->result('FAIL', 'No scheduler', 'Reminders and the other automations do not run without it: scripts/demo-start.sh starts `php artisan schedule:work`.');
         if (config('broadcasting.default') === 'reverb') {
             $host = (string) config('reverb.servers.reverb.host', '127.0.0.1');
             $port = (int) config('reverb.servers.reverb.port', 8080);
@@ -322,8 +326,12 @@ class DemoCheck extends Command
         $leak->isEmpty() ? $this->result('PASS', "No unverified HMO shown publicly ($unverified waiting for the Owner to verify)")
             : $this->result('FAIL', 'Unverified HMO shown publicly: '.$leak->implode(', '), 'Only verified HMOs may appear on the website, FAQ and assistant.');
         $stale = $rows->filter(fn ($r) => ! \App\Services\Automations\AutomationCatalog::isPolicy($r->key) && $r->enabled && (! $r->last_run_at || \Carbon\CarbonImmutable::parse($r->last_run_at)->lt(now()->subMinutes(3))))->keys();
-        $stale->isEmpty() ? $this->result('PASS', 'Automations ran in the last 3 minutes')
-            : $this->result('FAIL', 'Automations not run recently: '.$stale->implode(', '), 'Start the scheduler (scripts/demo-start.sh), or run once: php artisan automations:run.');
+        if (\App\Support\SyntheticRuntime::active()) {
+            $this->result('WARN', 'Synthetic schedule runs mail only; clinical and financial automations are not accepted by this check.');
+        } else {
+            $stale->isEmpty() ? $this->result('PASS', 'Automations ran in the last 3 minutes')
+                : $this->result('FAIL', 'Automations not run recently: '.$stale->implode(', '), 'Start the scheduler (scripts/demo-start.sh), or run once: php artisan automations:run.');
+        }
         $timeout = max(60, (int) config('clinic.mail_processing_timeout_seconds', 600));
         $stuck = DB::table('mail_dispatches')->where(fn ($q) => $q->where('status', 'processing')->where('locked_at', '<', now()->subSeconds($timeout)->toIso8601String()))
             ->orWhere(fn ($q) => $q->whereIn('status', ['pending', 'retry_scheduled'])->where(fn ($t) => $t->whereNull('next_attempt_at')->orWhere('next_attempt_at', '<', now()->subMinutes(10)->toIso8601String()))
