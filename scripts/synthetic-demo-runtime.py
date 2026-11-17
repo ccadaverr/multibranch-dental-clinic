@@ -48,7 +48,7 @@ def empty_source(c, root):
         raise ValueError('The test source contains records; nothing was reset or copied.')
 
 
-def prepare(source, api_port, frontend_url, capture_port):
+def prepare(source, api_port, frontend_url, capture_port, reference_data_only=False):
     c, root = local.target(source)
     # Snapshot the empty transactional schema only, never the populated demo or historical job tables.
     with (root / 'dental_clinic_test.lock').open('a') as lock:
@@ -84,7 +84,10 @@ def prepare(source, api_port, frontend_url, capture_port):
         private(runtime/'synthetic-config.json', {'api_port':api_port,'frontend_url':frontend_url,'capture_port':capture_port,
                                                 'source_cluster':c['cluster_id'],'schema_entries':87})
         with (runtime/'logs/seed.log').open('w') as log:
-            for seeder in ['DatabaseSeeder', 'DemoClinicSeeder']:
+            seeders = ['DatabaseSeeder']
+            if not reference_data_only:
+                seeders.append('DemoClinicSeeder')
+            for seeder in seeders:
                 subprocess.run([new['php'],'artisan','db:seed','--class='+seeder,'--no-interaction'], cwd=local.ROOT/'backend',
                                env=local.environment(new,runtime,'demo'), stdout=log, stderr=log, check=True)
         print('Prepared NEW synthetic target:', manifest, flush=True)
@@ -186,6 +189,7 @@ def main():
     p.add_argument('--api-port',type=port_number,default=8104)
     p.add_argument('--capture-port',type=port_number,default=1027)
     p.add_argument('--frontend-url',default='http://127.0.0.1:5198')
+    p.add_argument('--reference-data-only', action='store_true', help='Prepare accounts and reference data without the populated demo scenarios.')
     for name in ['run','check','stop']:
         p=sub.add_parser(name);p.add_argument('--target',required=True)
         if name=='run':p.add_argument('--seconds',type=int,default=0)
@@ -196,7 +200,7 @@ def main():
         url=urlsplit(args.frontend_url)
         if url.scheme!='http' or url.hostname not in ['127.0.0.1','localhost','host.docker.internal'] or url.username or url.password:
             raise ValueError('Only explicit local development frontend URLs are permitted.')
-        prepare(args.source,args.api_port,args.frontend_url,args.capture_port)
+        prepare(args.source,args.api_port,args.frontend_url,args.capture_port,args.reference_data_only)
     elif args.action=='run':run(args.target,args.seconds)
     elif args.action=='stop':
         c,root=owned(args.target)

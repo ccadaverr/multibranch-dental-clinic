@@ -85,7 +85,12 @@ test('Dentist archive branch authorization uses the assigned ID even when anothe
   assert.doesNotMatch(html, /APT-b/)
 })
 test('ARC-02 13: Owner keeps clinic-wide archive oversight with no Staff scopes', async () => {
-  const html = await render(fixture('owner', []))
+  const store = fixture('owner', [])
+  const pending = await render(store)
+  assert.match(pending, /Settled Invoices &amp; Receipts</)
+  assert.doesNotMatch(pending, /Settled Invoices &amp; Receipts \(\d+\)/)
+  store.session.serverUserId = null
+  const html = await render(store)
   assert.match(html, /APT-a/); assert.match(html, /APT-b/)
   assert.match(html, /Settled Invoices &amp; Receipts \(2\)/)
   assert.doesNotMatch(html, /No authorized archive branches|PRIVATE MEDICINE/)

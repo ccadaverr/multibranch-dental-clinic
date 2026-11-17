@@ -45,7 +45,7 @@ try {
   const q=page.locator('article.enc-queue-row').filter({hasText:fixture.patientCode}).first();await q.waitFor()
   const call=q.getByRole('button',{name:'Call and open encounter',exact:true})
   if(await call.count()) await response(page,'/api/queue/'+state.visit.queue.id+'/call',()=>call.click())
-  else await q.getByRole('button',{name:'Review encounter',exact:true}).click()
+  else await q.getByRole('button',{name:'Open encounter',exact:true}).click()
   const beforeStart=await get(page,'/api/visits/'+state.visit.id)
   assert.equal(beforeStart.body.data.status,'Checked In');assert.equal(beforeStart.body.data.queue.status,'Called')
   await page.getByRole('button',{name:'Add performed procedure',exact:true}).click()

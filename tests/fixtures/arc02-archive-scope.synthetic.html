@@ -26,7 +26,9 @@ const initial = {
   prescriptions: ['a','b'].map(id => ({ ...record(id), id: `rx-${id}`, number: `RX-${id}`, status: 'Issued', lines: [{ medicine: `PRIVATE MEDICINE ${id}` }] })),
   invoices: ['a','b'].map(id => ({ ...record(id), id: `invoice-${id}`, invoiceNumber: `INV-${id}`, receiptNumber: `RCPT-${id}`, status: 'Paid', total: 100 })),
 }
-const actor = (role, scopes = ['a']) => ({ userId: role, serverUserId: `server-${role}`, role, active: true, branchId: 'a', branchScopes: scopes, dentistId: 'dentist' })
+// Owner invoices in this fixture are the supplied offline projection. The live
+// presentation probe covers authenticated, server-backed invoice discovery.
+const actor = (role, scopes = ['a']) => ({ userId: role, serverUserId: role === 'owner' ? null : `server-${role}`, role, active: true, branchId: 'a', branchScopes: scopes, dentistId: 'dentist' })
 function Fixture() {
   const [state, setState] = useState(initial), [session, setSession] = useState(actor('staff')), [activeBranch, setActiveBranch] = useState('All Branches')
   const [appointmentsStatus, setAppointmentsStatus] = useState()
