@@ -1,0 +1,24 @@
+/* Scope operational roster hierarchy without changing shared or clinical styles. */
+.staff-roster-operations { display: grid; gap: var(--space-5); }
+.staff-roster-duty, .staff-roster-review, .staff-roster-collection {
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow-wrap: anywhere;
+}
+.staff-roster-duty { background: var(--surface-2); }
+.staff-roster-operations h3, .staff-roster-collection h3 { margin: 0 0 var(--space-3); color: var(--ink); }
+.staff-roster-guidance { color: var(--muted); line-height: 1.6; margin: 0 0 var(--space-4); }
+.staff-roster-review form > fieldset { display: grid; gap: var(--space-4); margin-top: var(--space-4); }
+.staff-roster-review fieldset fieldset { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: var(--space-3); min-width: 0; }
+.staff-roster-review legend { color: var(--ink); font-weight: var(--weight-strong); }
+.staff-roster-review .row-actions { margin-top: var(--space-4); display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.staff-roster-collection .fd-list > li { align-items: center; gap: var(--space-3); }
+.staff-roster-collection .fd-list .status { display: inline-flex; margin-top: var(--space-2); width: fit-content; }
+@media (max-width: 640px) {
+  .staff-roster-operations .st-pair, .staff-roster-collection .st-pair { grid-template-columns: minmax(0, 1fr); }
+  .staff-roster-operations button, .staff-roster-collection button { min-height: var(--control-height); }
+  .staff-roster-collection .fd-list > li { align-items: stretch; flex-direction: column; }
+}

@@ -4,6 +4,7 @@ import {staffRoster,staffRosterCommand,staffRosterHistory,staffDuty} from '../ap
 import {commandKey} from '../appointments-api.js'
 import {clinicDate} from '../clock.js'
 import {confirmedRoster,validRoster} from '../staff-roster-workflow.js'
+import '../staff-roster-operations.css'
 
 const message=r=>Object.values(r?.errors||{})[0]?.[0]||r?.message||'The schedule could not be confirmed.'
 const weekdays=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
@@ -76,15 +77,17 @@ export function StaffRosterWorkflow({staff,branches,role,canRequest,getAuthGener
     }catch{if(owns(key,observedAuth)&&ticket.generation===generation.current)setError('Schedule history could not be loaded.')}finally{if(historyPending.current===ticket)historyPending.current=false;if(owns(key,observedAuth)&&ticket.generation===generation.current)setHistoryBusy(false)}
   }
   const change=(k,v)=>setForm(f=>({...f,[k]:v}))
-  return <section className="st-gap" aria-label={`Staff roster for ${staff.name}`}>
+  return <section className="st-gap staff-roster-operations" aria-label={`Staff roster for ${staff.name}`}>
+    <div className="staff-roster-duty">
     <h3>Published Staff duty</h3>
     <div className="st-pair"><Field label="Duty branch"><select aria-label="Duty branch" value={branch} disabled={busy||uncertain} onChange={e=>setBranch(e.target.value)}>{branches.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></Field><Field label="Duty date"><input type="date" value={dutyDate} disabled={busy||uncertain} onChange={e=>setDutyDate(e.target.value)}/></Field></div>
     <RefreshButton title="Refresh Staff duty" ariaLabel="Refresh Staff duty" loading={dutyBusy} onClick={loadDuty}/>
     {dutyError&&<p role="alert">{dutyError}</p>}
     {dutyBusy?<p role="status">Loading published duty…</p>:duty&&<div role="region" aria-label="Effective Staff duty"><p><b>{duty.available?'Scheduled and available':'Unavailable / unscheduled'}</b> · {duty.date}</p>{duty.windows.map((w,i)=><p key={i}>{w.start_time}–{w.end_time} · Published revision {w.revision}</p>)}{duty.approved_leave.length>0&&<Notice>Approved leave applies to this date. Only the remaining available hours are shown.</Notice>}{!duty.windows.length&&<p>No effective working hours for this branch and date.</p>}</div>}
-    {editable&&<>
+    </div>
+    {editable&&<div className="staff-roster-review">
       <h3>{role==='owner'?'Staff roster approval and publication':'My schedule change request'}</h3>
-      <Notice>Saving records {role==='owner'?'a Draft':'a Pending request'}. Approval and publication are separate Owner actions. Current published duty remains effective while changes are reviewed.</Notice>
+      <p className="staff-roster-guidance">{role==='owner'?'Save draft → Approve → Publish':'Submit request → Owner review → Publication'}. Published duty stays effective until a new version is published.</p>
       <Field label="Schedule record date" hint="Choose the saved preparation date to review or revise that schedule."><input aria-label="Schedule record date" type="date" value={date} disabled={busy||uncertain} onChange={e=>setDate(e.target.value)}/></Field>
       <RefreshButton title="Reload roster for review" ariaLabel="Reload roster for review" loading={loading} disabled={busy||uncertain} onClick={load}/>
       {error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}
@@ -97,13 +100,13 @@ export function StaffRosterWorkflow({staff,branches,role,canRequest,getAuthGener
           {form.kind==='weekly'&&<><div className="st-pair"><Field label="Effective from"><input type="date" value={form.effective_from} onChange={e=>change('effective_from',e.target.value)} required/></Field><Field label="Effective through (inclusive)"><input type="date" min={form.effective_from} value={form.effective_until} onChange={e=>change('effective_until',e.target.value)} required/></Field></div><fieldset><legend>Recurring weekdays</legend>{weekdays.map((label,i)=><label className="au-check" key={label}><input type="checkbox" checked={form.weekdays.includes(i+1)} onChange={e=>change('weekdays',e.target.checked?[...form.weekdays,i+1].sort((a,b)=>a-b):form.weekdays.filter(d=>d!==i+1))}/>{label}</label>)}</fieldset></>}
           {form.kind!=='day_off'&&<div className="st-pair"><Field label="Scheduled start"><input type="time" value={form.start_time||''} onChange={e=>change('start_time',e.target.value)} required/></Field><Field label="Scheduled end"><input type="time" value={form.end_time||''} onChange={e=>change('end_time',e.target.value)} required/></Field></div>}
           {form.kind==='weekly'&&<fieldset><legend>Date exceptions in this version</legend>{form.exceptions.map((e,i)=><div key={i} className="st-gap"><Field label={`Exception ${i+1} date`}><input type="date" value={e.date} required onChange={v=>change('exceptions',form.exceptions.map((old,j)=>i===j?{...old,date:v.target.value}:old))}/></Field><Field label={`Exception ${i+1} type`}><select aria-label={`Exception ${i+1} type`} value={e.kind} onChange={v=>change('exceptions',form.exceptions.map((old,j)=>i===j?{...old,kind:v.target.value,start_time:null,end_time:null}:old))}><option value="day_off">Day off</option><option value="custom_hours">Custom hours</option></select></Field>{e.kind==='custom_hours'&&<div className="st-pair">{['start_time','end_time'].map(k=><Field key={k} label={`Exception ${i+1} ${k==='start_time'?'start':'end'}`}><input type="time" required value={e[k]||''} onChange={v=>change('exceptions',form.exceptions.map((old,j)=>i===j?{...old,[k]:v.target.value}:old))}/></Field>)}</div>}<Button variant="ghost" onClick={()=>change('exceptions',form.exceptions.filter((_,j)=>j!==i))}>Remove exception from draft</Button></div>)}<Button variant="soft" onClick={()=>change('exceptions',[...form.exceptions,{date:'',kind:'day_off',start_time:null,end_time:null}])}>Add date exception</Button></fieldset>}
-          <Button type="submit">{role==='owner'?'Save roster draft':'Submit schedule request'}</Button>
+          <Button type="submit" variant={row&&!dirty?'soft':'primary'} disabled={!!row&&!dirty}>{role==='owner'?'Save roster draft':'Submit schedule request'}</Button>
         </fieldset>
       </form>
       {dirty&&<p role="status">Unsaved changes. Save this version before approval or publication.</p>}
       <div className="row-actions">{role==='owner'&&['Draft','Pending'].includes(row?.status)&&<Button disabled={locked||conflict||dirty} onClick={()=>setConfirm('approve')}>Approve roster</Button>}{role==='owner'&&row?.status==='Approved'&&<Button disabled={locked||conflict||dirty} onClick={()=>setConfirm('publish')}>Publish approved roster</Button>}<Button variant="ghost" disabled={locked||historyBusy} onClick={()=>showHistory()}>Show roster history</Button></div>
       {history&&<div role="region" aria-label="Staff roster history"><ul>{history.map(h=><li key={h.id}>Revision {h.revision} · {h.draft.status} · {h.saved_at}{h.draft.publication_id&&` · Publication ${h.draft.publication_id}`}</li>)}</ul>{cursor&&<Button disabled={historyBusy} onClick={()=>showHistory(cursor)}>Load older roster history</Button>}</div>}
       <ConfirmDialog open={!!confirm} title={confirm==='approve'?'Approve this roster version?':'Publish the approved roster?'} confirmLabel={confirm==='approve'?'Approve roster':'Publish approved roster'} onCancel={()=>setConfirm(null)} onConfirm={()=>{const action=confirm;setConfirm(null);perform(action)}}><p>{confirm==='approve'?'Approval records your review. Duty changes only after a separate publication.':'Publication makes this exact approved version effective within its dates. Approved leave still overrides working hours. Clinical booking is unchanged.'}</p></ConfirmDialog>
-    </>}
+    </div>}
   </section>
 }

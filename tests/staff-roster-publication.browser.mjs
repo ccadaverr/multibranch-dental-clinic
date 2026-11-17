@@ -1,14 +1,17 @@
 import assert from 'node:assert/strict'
 import {execFileSync} from 'node:child_process'
 import {pathToFileURL} from 'node:url'
+import {mkdirSync} from 'node:fs'
 
-const container='dentalops-joevan-ops-20261115',target='/private/roster11b/target.json'
+const container=process.env.LOCAL_SYSTEM_CONTAINER||'dentalops-joevan-ops-20261115',target=process.env.LOCAL_SYSTEM_TARGET||'/private/roster11b/target.json'
 const run=(...args)=>execFileSync('docker',['exec',container,...args],{encoding:'utf8'})
 const status=JSON.parse(run('python3','scripts/local-system.py','--target',target,'--profile','demo','status'))
 assert.equal(status.classification,'owned isolated development');assert.equal(status.appliedMigrations,87)
-const password=run('cat','/private/roster11b/demo-login-password').trim()
+const manifest=JSON.parse(run('cat',target))
+const password=run('cat',manifest.runtime+'/demo-login-password').trim()
 const {chromium}=await import(pathToFileURL(process.argv[2]).href),browser=await chromium.launch({channel:'chrome',headless:true})
-const base='http://127.0.0.1:5195',api='http://127.0.0.1:8104',errors=[]
+const base=process.env.LOCAL_SYSTEM_BASE||'http://127.0.0.1:5195',api=process.env.LOCAL_SYSTEM_API||'http://127.0.0.1:8104',errors=[]
+for(const origin of [base,api])assert.equal(new URL(origin).hostname,'127.0.0.1')
 const contexts=[]
 async function signIn(email) {
   const c=await browser.newContext({viewport:{width:1440,height:1000}});contexts.push(c)
@@ -52,6 +55,7 @@ try {
   await owner.p.getByRole('button',{name:'Approve roster',exact:true}).click()
   await owner.p.getByRole('dialog').getByRole('button',{name:'Approve roster',exact:true}).click()
   await owner.p.getByText('Confirmed Approved, revision 2. Publish separately to change duty.',{exact:true}).waitFor()
+  assert.equal(await owner.p.getByRole('button',{name:'Save roster draft',exact:true}).isDisabled(),true,'Unchanged approved version is not resubmitted as a new draft')
   assert.equal((await read(owner.c,`/api/staff/${own.id}/duty?branch_ref=${own.branch.id}&date=${date}`)).data.available,false)
   let dropped=false,receipt;const commands=[]
   await owner.p.route('**/api/staff/*/roster/publish',async route=>{
@@ -77,7 +81,10 @@ try {
     if(hours)await duty.getByText(hours,{exact:true}).waitFor();else await duty.getByText('No effective working hours for this branch and date.',{exact:true}).waitFor()
   }
   const widths=[375,390,430,768,1024,1440]
-  for(const p of [owner.p,again.p])for(const width of widths){await p.setViewportSize({width,height:1000});assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'Workflow fits '+width)}
+  for(const [role,p] of [['owner',owner.p],['staff',again.p]])for(const width of widths){
+    await p.setViewportSize({width,height:1000});assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'Workflow fits '+width)
+    if(process.env.LOCAL_SYSTEM_EVIDENCE){mkdirSync(process.env.LOCAL_SYSTEM_EVIDENCE,{recursive:true});await p.screenshot({path:process.env.LOCAL_SYSTEM_EVIDENCE+'/'+role+'-'+width+'.png',fullPage:true})}
+  }
   await owner.p.getByRole('button',{name:'Audit Trail',exact:true}).click()
   await owner.p.getByLabel('Operational activity',{exact:true}).selectOption('staff_roster.published')
   await owner.p.getByLabel('Branch',{exact:true}).selectOption(own.branch.id)

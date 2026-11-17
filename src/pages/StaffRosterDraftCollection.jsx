@@ -1,5 +1,6 @@
 import React,{useEffect,useRef,useState} from 'react'
-import {Button,Field,Notice,RefreshButton} from '../components.jsx'
+import {Button,Field,Notice,RefreshButton,Status} from '../components.jsx'
+import '../staff-roster-operations.css'
 import {staffRosterDrafts,staffRosters} from '../api-client.js'
 import {clinicDate} from '../clock.js'
 import {validRosterDraft} from '../staff-roster-draft.js'
@@ -29,15 +30,15 @@ export function StaffRosterDraftCollection({branches,getAuthGeneration,disabled,
   }
   layout(()=>{live.current=true;pending.current=null;setSnapshot(null);setLoading(false);load();return()=>{live.current=false;generation.current++;pending.current=null}},[key])
   const shown=snapshot?.key===key?snapshot:null
-  return <section className="st-gap" aria-label={workflow?'Staff roster review by branch and date':'Unpublished Staff drafts by branch and date'}>
+  return <section className="st-gap staff-roster-collection" aria-label={workflow?'Staff roster review by branch and date':'Unpublished Staff drafts by branch and date'}>
     <h3>{workflow?'Staff schedules by branch and date':'Unpublished drafts by branch and date'}</h3>
     <Notice>{workflow?'Review current requests and roster versions here. Published Staff duty is shown separately; Draft, Pending and Approved changes do not replace it.':'Preparation records only. A missing draft does not mean no duty, and a saved draft does not mean approved or published duty.'}</Notice>
     <div className="st-pair"><Field label="Roster branch"><select aria-label="Roster branch" value={branch} disabled={disabled} onChange={e=>setBranch(e.target.value)}><option value="">Choose branch</option>{branches.map(b=><option key={b.id} value={b.id}>{b.name}{b.status==='Closed'?' (Closed)':''}</option>)}</select></Field>
       <Field label="Roster date"><input type="date" value={date} disabled={disabled} onChange={e=>setDate(e.target.value)}/></Field></div>
     <RefreshButton title={workflow?'Refresh Staff roster review':'Reload unpublished drafts'} ariaLabel={workflow?'Refresh Staff roster review':'Reload unpublished drafts'} loading={loading} disabled={disabled||!branch||!date} onClick={()=>load()}/>
-    {loading&&<p role="status">Loading unpublished drafts...</p>}
+    {loading&&<p role="status">{workflow?'Loading Staff schedules…':'Loading unpublished drafts…'}</p>}
     {error&&<p role="alert">{error}</p>}
-    {shown&&<>{shown.rows.length?<ul className="fd-list">{shown.rows.map(row=><li key={row.id}><div><b>{row.staff_name||'Staff member'}</b><span>{row.kind==='day_off'?'Day off':`${row.start_time}–${row.end_time}`} · Revision {row.revision} · {workflow?row.status:'Unpublished'}</span></div><Button variant="ghost" aria-label={`Review dated draft for ${row.staff_name||row.staff_ref}`} disabled={disabled||loading} onClick={()=>onReview(row.staff_ref,row.date)}>Review schedule</Button></li>)}</ul>:<p>No saved schedules for this branch and date. Review published duty separately.</p>}
-      {shown.cursor&&<Button variant="ghost" disabled={disabled||loading} onClick={()=>load(shown.cursor)}>Load older unpublished drafts</Button>}</>}
+    {shown&&<>{shown.rows.length?<ul className="fd-list">{shown.rows.map(row=><li key={row.id}><div><b>{row.staff_name||'Staff member'}</b><span>{row.kind==='day_off'?'Day off':`${row.start_time}–${row.end_time}`} · Revision {row.revision}</span><Status>{workflow?row.status:'Unpublished'}</Status></div><Button variant="ghost" aria-label={`Review dated draft for ${row.staff_name||row.staff_ref}`} disabled={disabled||loading} onClick={()=>onReview(row.staff_ref,row.date)}>Review schedule</Button></li>)}</ul>:<p>No saved schedules for this branch and date. Review published duty separately.</p>}
+      {shown.cursor&&<Button variant="ghost" disabled={disabled||loading} onClick={()=>load(shown.cursor)}>{workflow?'Load older schedules':'Load older unpublished drafts'}</Button>}</>}
   </section>
 }
