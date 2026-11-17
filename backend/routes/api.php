@@ -479,6 +479,8 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
     // changes are named commands (Idempotency-Key + expected_revision). Patients get only their own current queue state.
     Route::prefix('queue')->group(function () {
         Route::get('/mine', [QueueController::class, 'mine'])->middleware('role:patient');
+        Route::get('/{entryId}/order', [QueueController::class, 'order'])->middleware('role:staff,owner');
+        Route::post('/{entryId}/reorder', [QueueController::class, 'reorder'])->middleware('role:staff,owner');
         Route::get('/', [QueueController::class, 'index'])->middleware('role:staff,dentist,owner');
         Route::get('/{queueEntry}', [QueueController::class, 'show'])->middleware('role:staff,dentist,owner');
         Route::post('/{queueEntry}/priority', [QueueController::class, 'priority'])->middleware('role:staff,owner');

@@ -287,6 +287,7 @@ export function treatmentCommand(id, name, payload, key, beforeDispatch) { retur
 // M9 Patient Queue Management (entries are created only by M8 arrival). Raw calls only; src/queue-api.js owns mapping.
 export function listQueue(params) { return request(`/api/queue${query(params)}`) }
 export function myQueue() { return request('/api/queue/mine') }
+export function queueOrder(id) { return request(`/api/queue/${encodeURIComponent(id)}/order`) }
 export function queueCommand(id, name, payload, key, beforeDispatch) { return command(`/api/queue/${encodeURIComponent(id)}/${encodeURIComponent(name)}`, payload, key, beforeDispatch) }
 
 // M7 Patient assistant: the ONLY input is the message; the server derives everything else and holds the provider credential.

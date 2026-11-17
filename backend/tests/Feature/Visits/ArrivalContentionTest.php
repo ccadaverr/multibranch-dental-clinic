@@ -58,6 +58,43 @@ final class ArrivalContentionTest extends TestCase
    $winner=current(array_filter($results,fn($r)=>$r['status']===201));self::assertSame($visit->public_id,$winner['body']['data']['id']);self::assertSame($entry->public_id,$winner['body']['data']['queue']['id']);
    if($a)self::assertSame($visit->appointment_id===$a->id?'Checked In':'Confirmed',$a->fresh()->status);
   }
+  $this->branchFifoAndMoveContention($tokens);
+ }
+ private function branchFifoAndMoveContention(array $tokens):void{
+  $this->d['d2']->update(['shift_start'=>'00:00','shift_end'=>'23:59']);
+  [,$one]=$this->patient('PAT-FIFO-RACE-1');[,$two]=$this->patient('PAT-FIFO-RACE-2');
+  $requests=[];
+  foreach([[$one,'d1'],[$two,'d2']]as$n=>[$patient,$dentist])$requests[]=['path'=>'/api/visits/walk-in','payload'=>['patient_id'=>$patient->public_id,'branch_ref'=>'b1','service_ref'=>'svc1','dentist_ref'=>$dentist],'key'=>'fifo-arrival-'.$n];
+  $results=$this->branchLockedPair($tokens,$requests,'fifo');$statuses=array_column($results,'status');sort($statuses);self::assertSame([201,201],$statuses);
+  $visits=Visit::whereIn('patient_id',[$one->id,$two->id])->orderBy('arrived_at')->orderBy('id')->get();self::assertCount(2,$visits);
+  $order=app(\App\Services\Queue\QueueOrder::class);$date=ClinicClock::today();$branch=$this->b['b1']->id;
+  $rows=$order->eligible($branch,$date);$pair=$rows->whereIn('visit_id',$visits->pluck('id'))->values();
+  self::assertSame($visits->pluck('id')->all(),$pair->pluck('visit_id')->all(),'Cross-Dentist branch FIFO follows persisted arrival facts, never worker response order.');
+  self::assertSame(2,$pair->pluck('dentist_queue_id')->unique()->count());
+  $facts=$visits->mapWithKeys(fn($v)=>[$v->id,$v->getRawOriginal('arrived_at')])->all();
+  $history=\App\Models\QueueEntryHistory::orderBy('id')->get()->map->getRawOriginal()->all();
+  $snapshot=$order->snapshot($branch,$date);$anchor=$rows->first();$requests=[];
+  foreach($pair as$n=>$entry)$requests[]=['path'=>'/api/queue/'.$entry->public_id.'/reorder','payload'=>['expected_revision'=>1,'order_revision'=>$snapshot['revision'],'before_entry_id'=>$anchor->public_id,'reason'=>'Synthetic concurrent operational move'],'key'=>'fifo-move-'.$n];
+  $results=$this->branchLockedPair($tokens,$requests,'move');$statuses=array_column($results,'status');sort($statuses);self::assertSame([200,409],$statuses,'One reviewed order snapshot permits only one competing committed move.');
+  $winner=current(array_filter($results,fn($r)=>$r['status']===200));self::assertSame($winner['body']['data']['id'],$order->eligible($branch,$date)->first()->public_id);
+  self::assertSame(1,\App\Models\AuditLog::where('action','queue.reordered')->count());self::assertSame(1,\App\Models\QueueEntryHistory::where('event','queue.reordered')->count());
+  self::assertSame($facts,Visit::whereIn('id',$visits->pluck('id'))->get()->mapWithKeys(fn($v)=>[$v->id,$v->getRawOriginal('arrived_at')])->all());
+  self::assertSame($history,\App\Models\QueueEntryHistory::orderBy('id')->limit(count($history))->get()->map->getRawOriginal()->all());
+ }
+ private function branchLockedPair(array $tokens,array $requests,string $scenario):array{
+  $workers=[];$names=[];DB::beginTransaction();
+  try{
+   app(\App\Services\Queue\QueueOrder::class)->lock($this->b['b1']->id,ClinicClock::today());
+   foreach($requests as$n=>$request){$name='arrival_'.getmypid().'_'.$scenario.'_'.$n;$names[]=$name;
+    $worker=new Process([PHP_BINARY,base_path('tests/Support/arrival_worker.php')],base_path(),$this->workerEnvironment(),json_encode($request+['worker'=>$name,'token'=>$tokens[$n]],JSON_THROW_ON_ERROR),30);$worker->start();$workers[]=$worker;
+   }
+   $deadline=microtime(true)+10;$waiting=0;
+   do{DB::selectOne('select pg_stat_clear_snapshot()');$waiting=(int)DB::selectOne("select count(*) as n from pg_stat_activity where application_name in (?,?) and wait_event_type='Lock'",$names)->n;
+    if($waiting===2)break;foreach($workers as$worker)self::assertTrue($worker->isRunning(),'Independent '.$scenario.' worker exited before branch contention.');usleep(10000);
+   }while(microtime(true)<$deadline);
+   self::assertSame(2,$waiting,'Both '.$scenario.' requests must actually wait on PostgreSQL locks.');DB::commit();$results=[];
+   foreach($workers as$worker){self::assertSame(0,$worker->wait());$results[]=json_decode($worker->getOutput(),true,flags:JSON_THROW_ON_ERROR);}return $results;
+  }finally{if(DB::transactionLevel()>0)DB::rollBack();foreach($workers as$worker)if($worker->isRunning())$worker->stop();}
  }
  private function workerEnvironment():array{
   $pg=config('database.connections.pgsql');return ['APP_ENV'=>'testing','APP_KEY'=>config('app.key'),'DB_CONNECTION'=>'pgsql','DB_DATABASE'=>$pg['database'],'DB_HOST'=>$pg['host'],'DB_PORT'=>(string)$pg['port'],

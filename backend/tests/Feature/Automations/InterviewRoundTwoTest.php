@@ -202,7 +202,8 @@ class InterviewRoundTwoTest extends TestCase
         $this->assertEqualsCanonicalizing([$a->public_id, $b->public_id], array_column($today->json('data.late'), 'appointment_id'));
         $this->assertSame('on_my_way', collect($today->json('data.late'))->firstWhere('appointment_id', $a->public_id)['reply']);
 
-        // A arrives late (11:12) and C on time (11:13): C is ahead even though A came first (R2-07). Staff may restore A's place.
+        // Owner-approved arrival FIFO supersedes the historical R2-07 late-arrival demotion.
+        // A arrives late at 11:12, C at 11:13: A stays ahead. Clearing a late flag never rewrites arrival order.
         $this->at('2026-09-28 11:12');
         $this->postJson('/api/visits/check-in', ['appointment_id' => $a->public_id, 'expected_revision' => 1], ['Idempotency-Key' => 'ci-a'])->assertCreated();
         $this->at('2026-09-28 11:13');
@@ -211,7 +212,7 @@ class InterviewRoundTwoTest extends TestCase
         $entryC = QueueEntry::whereHas('visit', fn ($q) => $q->where('appointment_id', $c->id))->sole();
         $this->assertTrue($entryA->late_arrival);
         $positions = app(\App\Services\Queue\QueueService::class)->positions([$entryA->dentist_queue_id]);
-        $this->assertSame([1, 2], [$positions[$entryC->id], $positions[$entryA->id]]);
+        $this->assertSame([1, 2], [$positions[$entryA->id], $positions[$entryC->id]]);
         $this->postJson("/api/queue/{$entryA->public_id}/late-order", ['reason' => 'Called ahead, was parking', 'expected_revision' => $entryA->revision], ['Idempotency-Key' => 'late-a'])->assertOk();
         $positions = app(\App\Services\Queue\QueueService::class)->positions([$entryA->dentist_queue_id]);
         $this->assertSame([1, 2], [$positions[$entryA->id], $positions[$entryC->id]]);

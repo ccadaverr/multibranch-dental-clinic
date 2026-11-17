@@ -10,6 +10,13 @@ import { isTruncatedQueueResponse } from './queue-counts.js'
 /** Presentation phase: the real queue status, or — once Served — the Visit's status ("In Treatment" / "Completed"). */
 export const displayQueueStatus = entry => (entry?.status === 'Served' ? entry.visitStatus || 'Served' : entry?.status || '')
 
+// Operational branch order is server-computed across Dentists. Never alphabetize Dentists ahead of arrival order.
+export const compareBranchQueue = (a, b) => String(a.branch || a.branchId || '').localeCompare(String(b.branch || b.branchId || ''))
+  || (a.branchPosition ?? Number.MAX_SAFE_INTEGER) - (b.branchPosition ?? Number.MAX_SAFE_INTEGER)
+  || (a.position ?? Number.MAX_SAFE_INTEGER) - (b.position ?? Number.MAX_SAFE_INTEGER)
+  || String(a.arrivedAt || '').localeCompare(String(b.arrivedAt || ''))
+  || String(a.id || '').localeCompare(String(b.id || ''))
+
 /** Server queue row -> read-model entry. `patientIdFor` maps the Patient public id to the id the UI keys on. */
 export function mapQueueEntry(row, patientIdFor = id => id) {
   const arrivedAt = row.visit?.arrived_at ?? null
@@ -23,6 +30,7 @@ export function mapQueueEntry(row, patientIdFor = id => id) {
     lateArrival: !!row.late_arrival,
     queueNumber: row.queue_number,
     position: row.position ?? null,
+    branchPosition: row.branch_position ?? null,
     revision: row.revision,
     clinicDate: row.clinic_date,
     closedAt: row.closed_at,
@@ -72,12 +80,22 @@ const queueFailure = result => {
 }
 const commandResult = result => (result.ok ? { ok: true, row: result.data } : queueFailure(result))
 
+export async function loadQueueOrder(entry) {
+  const result = await api.queueOrder(entry.id)
+  return result.ok ? {ok:true, snapshot:result.data} : queueFailure(result)
+}
+
+export async function reorderQueue(entry, payload, key, beforeDispatch) {
+  const result = await api.queueCommand(entry.id, 'reorder', payload, key, beforeDispatch)
+  return result.ok ? {ok:true, row:result.data, receipt:result.meta?.queue_order} : queueFailure(result)
+}
+
 /** Named transitions: 'call' | 'ready' | 'away' | 'return'. */
 export async function transitionQueue(entry, name, key, beforeDispatch) {
   return commandResult(await api.queueCommand(entry.id, name, { expected_revision: entry.revision }, key, beforeDispatch))
 }
 
-/** F2: restore a late arrival's normal place in the queue (Staff override of R2-07), reason required. */
+/** Compatibility command: clear a late-arrival flag with a reason; arrival order stays unchanged. */
 export async function restoreQueueOrder(entry, reason, key) {
   return commandResult(await api.queueCommand(entry.id, 'late-order', { expected_revision: entry.revision, reason }, key))
 }

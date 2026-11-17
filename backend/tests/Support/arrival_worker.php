@@ -7,6 +7,6 @@ if(getenv('ARRIVAL_DISPOSABLE_POSTGRES_ACCEPTANCE')!=='1'||!preg_match('/\Aarriv
 $app=require __DIR__.'/../../bootstrap/app.php';$kernel=$app->make(Illuminate\Contracts\Http\Kernel::class);$kernel->bootstrap();
 \Tests\Support\ScratchDatabaseGuard::assertSafe($app);
 \Illuminate\Support\Facades\DB::selectOne("select set_config('application_name',?,false)",[$input['worker']]);
-if(!in_array($input['path'],['/api/visits/check-in','/api/visits/walk-in'],true))throw new RuntimeException('Invalid arrival test route.');
+if(!in_array($input['path'],['/api/visits/check-in','/api/visits/walk-in'],true)&&!preg_match('/\A\/api\/queue\/[a-zA-Z0-9]{26}\/reorder\z/',$input['path']))throw new RuntimeException('Invalid arrival test route.');
 $request=Illuminate\Http\Request::create($input['path'],'POST',[],[],[],['HTTP_AUTHORIZATION'=>'Bearer '.$input['token'],'HTTP_ACCEPT'=>'application/json','HTTP_IDEMPOTENCY_KEY'=>$input['key'],'CONTENT_TYPE'=>'application/json'],json_encode($input['payload'],JSON_THROW_ON_ERROR));
 $response=$kernel->handle($request);echo json_encode(['status'=>$response->getStatusCode(),'body'=>json_decode($response->getContent(),true)],JSON_THROW_ON_ERROR);$kernel->terminate($request,$response);

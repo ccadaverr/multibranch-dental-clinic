@@ -205,7 +205,24 @@ export function createAppointmentFlow({ getState, getSession, getActions, refres
       return { ok: true, row: result.row }
     },
 
-    // F2: restore a late arrival's normal place (Staff override of R2-07, reason required).
+    async queueOrderSnapshot(entry) {
+      return boundedEncounter(() => queue.loadQueueOrder(entry))
+    },
+
+    async queueReorder(entry, payload, key, isCurrent) {
+      if (!isCurrent()) return {ok:false,kind:'stale_context'}
+      let result
+      try { result = await boundedEncounter(() => queue.reorderQueue(entry, payload, key, isCurrent)) }
+      catch { return {ok:false,uncertain:true,message:'The queue move is unconfirmed. Retry this same move to retrieve its receipt.'} }
+      if (!isCurrent()) return {ok:false,kind:'stale_context'}
+      if (!result.ok) return afterServerCommand(result)
+      try { const refreshed=await boundedEncounter(refresh); if(refreshed?.ok===false)return {...result,warning:'Move recorded. Refresh the live queue to check its current order.'} }
+      catch { return {...result,warning:'Move recorded. Refresh the live queue to check its current order.'} }
+      if (!isCurrent()) return {ok:false,kind:'stale_context'}
+      return result
+    },
+
+    // Clear the late-arrival flag. Explicit queue movement uses the independently reviewed order snapshot.
     async queueRestoreOrder(entry, reason, key) {
       const result = await queue.restoreQueueOrder(entry, reason, key)
       if (!result.ok) return afterServerCommand(result)

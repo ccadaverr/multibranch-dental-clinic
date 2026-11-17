@@ -79,7 +79,7 @@ final class VisitService
             $current->update(['status' => 'Checked In', 'revision' => $current->revision + 1, 'updated_by_user_id' => $actor->id]);
             $this->appointments->record($current, $actor, 'appointment.checked_in', $from);
 
-            // R2-07: a patient more than the late limit past the start goes to the end of that Dentist's queue (F2 setting).
+            // The configured threshold records a late flag only. Owner-approved arrival FIFO does not demote late arrivals.
             $lateSettings = \App\Services\Automations\NoShowDetection::settings();
             $late = $lateSettings !== null && ClinicClock::now()->greaterThan(\Carbon\CarbonImmutable::instance($current->starts_at)->addMinutes((int) $lateSettings['late_minutes']));
             $visit = $this->open($actor, [

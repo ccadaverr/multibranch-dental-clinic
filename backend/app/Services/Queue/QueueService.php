@@ -16,6 +16,7 @@ use Closure;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 
 // M9 Patient Queue Management. The queue is anchored to the Visit and owns only queue state, number, order and position
 // (M10 owns wait estimates and capacity). QueueService never calls VisitService: M8 arrival and the M5 Treatment start
@@ -45,6 +46,7 @@ final class QueueService
         if ($visit->responsible_dentist_profile_id === null) {
             return null;
         }
+        app(QueueOrder::class)->lock($visit->branch_id, $visit->clinic_date->format('Y-m-d'));
         [$queueId, $number] = $this->allocate($visit->branch_id, $visit->responsible_dentist_profile_id, $visit->clinic_date->format('Y-m-d'));
         $entry = QueueEntry::create([
             'visit_id' => $visit->id, 'dentist_queue_id' => $queueId, 'queue_number' => $number, 'status' => 'Waiting', 'priority' => 'Normal', 'late_arrival' => $late,
@@ -100,6 +102,7 @@ final class QueueService
         if (! $entry) {
             throw VisitCommandException::rule('not_in_queue', 'This visit has no queue entry. Clinic review is required.', 'queue');
         }
+        app(QueueOrder::class)->lock($visit->branch_id, $visit->clinic_date->format('Y-m-d'));
         $this->assertVisitLink($entry, $visit, $requireToday);
 
         return $entry;
@@ -113,10 +116,10 @@ final class QueueService
 
         return $this->idempotent($actor, $key, 'queue.'.$command, $payload, function () use ($actor, $entry, $command, $expectedRevision, $from, $to, $event) {
             [$visit, $current] = $this->lock($entry);
+            $this->assertCurrent($current, $visit, $expectedRevision);
             if ($current->status === $to) {
                 return $current;
             }
-            $this->assertCurrent($current, $visit, $expectedRevision);
             if (! in_array($current->status, $from, true)) {
                 throw VisitCommandException::rule('invalid_transition', "A queue entry that is {$current->status} cannot move to {$to}.", 'status');
             }
@@ -160,10 +163,10 @@ final class QueueService
 
         return $this->idempotent($actor, $key, 'queue.priority', $payload, function () use ($actor, $entry, $priority, $persistedReason, $expectedRevision, $category, $verificationStatus) {
             [$visit, $current] = $this->lock($entry);
+            $this->assertCurrent($current, $visit, $expectedRevision);
             if ($current->priority === $priority && $current->priority_reason === $persistedReason) {
                 return $current;
             }
-            $this->assertCurrent($current, $visit, $expectedRevision);
             if (in_array($current->status, ['Called', 'Treatment Ready'], true)) {
                 throw VisitCommandException::rule('already_called', 'This patient has already been called and cannot be reordered by priority.', 'status');
             }
@@ -183,7 +186,7 @@ final class QueueService
     }
 
     /**
-     * F2: Staff restore a late arrival's normal place in the queue (an override of R2-07), with a required reason. Audited.
+     * Clear the late-arrival flag with a reason. This compatibility command never changes arrival order.
      */
     public function restoreOrder(User $actor, QueueEntry $entry, string $reason, int $expectedRevision, string $key): JsonResponse
     {
@@ -191,10 +194,10 @@ final class QueueService
 
         return $this->idempotent($actor, $key, 'queue.late_order', $payload, function () use ($actor, $entry, $reason, $expectedRevision) {
             [$visit, $current] = $this->lock($entry);
+            $this->assertCurrent($current, $visit, $expectedRevision);
             if (! $current->late_arrival) {
                 return $current;
             }
-            $this->assertCurrent($current, $visit, $expectedRevision);
             $current->update(['late_arrival' => false, 'revision' => $current->revision + 1, 'updated_by_user_id' => $actor->id]);
             $this->history($current, $actor, 'queue.late_order_restored', $current->status, $current->priority, $reason);
             app(\App\Services\Audit\AuditService::class)->recordAdministrative('queue.late_order_restored', $actor, $current, ['reason' => $reason]);
@@ -203,12 +206,65 @@ final class QueueService
         });
     }
 
+    public function reorder(User $actor, QueueEntry $entry, ?string $beforeId, string $reason, string $orderRevision, int $expectedRevision, string $key): JsonResponse
+    {
+        $payload = ['entry' => $entry->id, 'before_entry_id' => $beforeId, 'reason' => $reason, 'order_revision' => $orderRevision, 'expected_revision' => $expectedRevision];
+
+        return $this->idempotent($actor, $key, 'queue.reorder', $payload, function () use ($actor, $entry, $beforeId, $reason, $orderRevision, $expectedRevision) {
+            [$visit, $current] = $this->lock($entry);
+            $this->assertCurrent($current, $visit, $expectedRevision);
+            $order = app(QueueOrder::class);
+            $date = $visit->clinic_date->format('Y-m-d');
+            $snapshot = $order->snapshot($visit->branch_id, $date);
+            if (! hash_equals($snapshot['revision'], $orderRevision)) {
+                throw VisitCommandException::staleQueueEntry();
+            }
+            $rows = $snapshot['rows'];
+            if ($rows->count() > 500) {
+                throw VisitCommandException::rule('queue_too_large', 'This queue needs clinic review before reordering.', 'queue');
+            }
+            $before = $beforeId === null ? null : $rows->firstWhere('public_id', $beforeId);
+            if ($current->status !== 'Waiting' && $current->status !== 'In Queue') {
+                throw VisitCommandException::rule('already_called', 'Only waiting Patients can be moved.', 'status');
+            }
+            if ($beforeId !== null && (! $before || $before->id === $current->id || ! in_array($before->status, ['Waiting', 'In Queue'], true))) {
+                throw VisitCommandException::rule('invalid_queue_anchor', 'Choose another waiting Patient in this branch and day.', 'before_entry_id');
+            }
+            $ids = $rows->pluck('public_id')->all();
+            $from = array_search($current->public_id, $ids, true);
+            $ids = array_values(array_filter($ids, fn ($id) => $id !== $current->public_id));
+            $to = $beforeId === null ? count($ids) : array_search($beforeId, $ids, true);
+            array_splice($ids, $to, 0, [$current->public_id]);
+            // A waiting move must never push a Called/Ready Patient backward.
+            foreach ($rows as $index => $row) {
+                if (in_array($row->status, ['Called', 'Treatment Ready'], true) && array_search($row->public_id, $ids, true) > $index) {
+                    throw VisitCommandException::rule('already_called', 'Patients already called cannot be displaced.', 'before_entry_id');
+                }
+            }
+            if ($from === $to) {
+                return ['entry' => $current, 'receipt' => ['from_position' => $from + 1, 'to_position' => $to + 1, 'revision' => $snapshot['revision']]];
+            }
+            $current->update(['revision' => $current->revision + 1, 'updated_by_user_id' => $actor->id]);
+            $this->history($current, $actor, 'queue.reordered', $current->status, $current->priority, $reason);
+            app(\App\Services\Audit\AuditService::class)->record([
+                'action' => 'queue.reordered', 'category' => 'administrative', 'actor' => $actor,
+                'target' => $current, 'branch_id' => $visit->branch_id,
+                'payload' => ['version' => 1, 'clinic_date' => $date, 'before_entry_id' => $beforeId,
+                    'from_position' => $from + 1, 'to_position' => $to + 1, 'reason' => $reason,
+                    'entry_revision' => $current->revision, 'previous_order_revision' => $orderRevision],
+            ]);
+
+            return ['entry' => $current, 'receipt' => ['from_position' => $from + 1, 'to_position' => $to + 1,
+                'revision' => $order->snapshot($visit->branch_id, $date)['revision']]];
+        });
+    }
+
     /**
-     * Server-computed arrival FIFO positions within each Dentist queue at its branch.
+     * Server-computed arrival FIFO positions within each Dentist queue at its branch, with explicit audited moves.
      * In Queue / Waiting / Called / Treatment Ready retain a waiting position; exact Visit arrival time is first,
-     * with the queue's unique number as the stable equal-time tie-breaker. Scheduled classification, priority
+     * with the Visit's immutable id as the stable equal-time tie-breaker. Scheduled classification, priority
      * and late flags do not automatically move an arrival ahead. Served leaves this projection at treatment START.
-     * This existing projection partitions by Dentist queue; branch-wide cross-Dentist ordering is not established here.
+     * The additive branch_position is exposed only to operational Staff/Owner; position retains Dentist scope.
      *
      * @param  list<int>  $dentistQueueIds
      * @return array<int,int> queue_entries.id => position
@@ -218,18 +274,19 @@ final class QueueService
         if (! $dentistQueueIds) {
             return [];
         }
-        $placeholders = implode(',', array_fill(0, count($dentistQueueIds), '?'));
-        $rows = DB::select(
-            "SELECT q.id, ROW_NUMBER() OVER (
-                 PARTITION BY q.dentist_queue_id
-                 ORDER BY v.arrived_at ASC, q.queue_number ASC
-             ) AS position
-             FROM queue_entries q JOIN visits v ON v.id = q.visit_id
-             WHERE q.dentist_queue_id IN ({$placeholders}) AND q.status IN ('In Queue','Waiting','Called','Treatment Ready')",
-            array_values($dentistQueueIds)
-        );
+        $positions = [];
+        $contexts = DB::table('dentist_queues')->whereIn('id', $dentistQueueIds)->select('branch_id', 'clinic_date')->distinct()->get();
+        foreach ($contexts as $context) {
+            $counts = [];
+            foreach (app(QueueOrder::class)->eligible($context->branch_id, $context->clinic_date) as $entry) {
+                $counts[$entry->dentist_queue_id] = ($counts[$entry->dentist_queue_id] ?? 0) + 1;
+                if (in_array($entry->dentist_queue_id, $dentistQueueIds, true)) {
+                    $positions[$entry->id] = $counts[$entry->dentist_queue_id];
+                }
+            }
+        }
 
-        return collect($rows)->mapWithKeys(fn ($r) => [(int) $r->id => (int) $r->position])->all();
+        return $positions;
     }
 
     /** Attaches the server position to each entry (null for Temporarily Away / Served). */
@@ -239,6 +296,13 @@ final class QueueService
         $positions = $this->positions($entries->pluck('dentist_queue_id')->unique()->values()->all());
         foreach ($entries as $entry) {
             $entry->setAttribute('position', $positions[$entry->id] ?? null);
+        }
+        foreach ($entries->groupBy(fn ($e) => $e->dentistQueue->branch_id.':'.$e->dentistQueue->clinic_date->format('Y-m-d')) as $group) {
+            $queue = $group->first()->dentistQueue;
+            $branchPositions = app(QueueOrder::class)->eligible($queue->branch_id, $queue->clinic_date->format('Y-m-d'))->pluck('id')->flip();
+            foreach ($group as $entry) {
+                $entry->setAttribute('branch_position', $branchPositions->has($entry->id) ? $branchPositions[$entry->id] + 1 : null);
+            }
         }
 
         return $entries;
@@ -288,6 +352,7 @@ final class QueueService
             throw new VisitCommandException(409, 'conflict', 'The queue encounter changed. Reload before trying again.');
         }
         // Validate even same-target no-ops; a malformed or historical encounter is not a current success.
+        app(QueueOrder::class)->lock($visit->branch_id, $visit->clinic_date->format('Y-m-d'));
         $this->assertVisitLink($current, $visit, true);
         if ($visit->status !== 'Checked In' || $current->closed_at !== null
             || in_array($current->status, ['Served', 'Done', 'Cancelled', 'No-show'], true)) {
@@ -345,12 +410,24 @@ final class QueueService
 
     private function idempotent(User $actor, string $key, string $command, array $payload, Closure $work): JsonResponse
     {
-        return IdempotentCommand::run(
+        return DB::transaction(function () use ($actor, $key, $command, $payload, $work) {
+            // Authority precedes receipt replay, including service calls that bypass HTTP middleware.
+            $currentActor = User::whereKey($actor->id)->lock('FOR NO KEY UPDATE')->first();
+            abort_unless($currentActor && $currentActor->person && $currentActor->account_status === 'Active'
+                && $currentActor->auth_version === $actor->auth_version && $currentActor->role === $actor->role, 403);
+            $currentEntry = QueueEntry::findOrFail($payload['entry']);
+            Gate::forUser($currentActor)->authorize($command === 'queue.call' ? 'call' : 'operate', $currentEntry);
+
+            return IdempotentCommand::run(
             CommandKey::class, $actor, $key, $command, $payload,
             function () use ($work) {
-                $entry = $work()->fresh(self::RELATIONS);
+                $result = $work();
+                $entry = ($result instanceof QueueEntry ? $result : $result['entry'])->fresh(self::RELATIONS);
                 $this->withPositions([$entry]);
                 $body = (new QueueEntryResource($entry))->response()->getData(true);
+                if (is_array($result)) {
+                    $body['meta']['queue_order'] = $result['receipt'];
+                }
 
                 return [$body, 200];
             },
@@ -362,5 +439,6 @@ final class QueueService
             },
             self::ATTEMPTS,
         );
+        }, self::ATTEMPTS);
     }
 }

@@ -246,7 +246,10 @@ test('STF-14, STF-15, OWN-13: Live queue simplified with arrival FIFO and owner 
   assert.doesNotMatch(patientFlow, /q\.priority==='Urgent'/)
   assert.doesNotMatch(patientFlow, /q\.priority==='Priority'/)
   assert.doesNotMatch(logicJs, /priorityRank/)
-  assert.match(patientFlow, /Arrival order determines positions inside each dentist queue \(first-come, first-served\)\./)
+  // Sprint01 owner policy requires branch arrival FIFO across Dentists and explicit audited Staff moves.
+  assert.match(patientFlow, /Branch arrival order, with any recorded Staff moves/)
+  assert.match(patientFlow, /\.sort\(compareBranchQueue\)/)
+  assert.match(patientFlow, /Late arrival · arrival order retained/)
 
   // OWN-13: Owner live queue by branch has parity with staff queue
   assert.match(patientFlow, /aria-label="Filter queue details by branch"/)

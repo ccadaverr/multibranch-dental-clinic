@@ -1,9 +1,11 @@
 import { checkInActorKey, checkInAppointmentFor, checkInSelectionFor } from '../checkin-navigation.js'
+import { QueueOrderDialog } from './QueueOrderDialog.jsx'
 import { DentistQueue } from './DentistQueue.jsx'
 import React, { useEffect, useState, useRef } from 'react'
 import { Button, Card, Field, FilterBar, Icon, Modal, Notice, PageHeader, Progress, RefreshButton, SelectWithOther, Status, Table } from '../components.jsx'
 import { branchCapacity, dentistName, displayTime, patientName, queueWaitEstimate } from '../logic.js'
 import { commandKey } from '../appointments-api.js'
+import { compareBranchQueue } from '../queue-api.js'
 import { findPatientConversation } from '../messaging-api.js'
 import '../b4-queue.css'
 import { useVisibleRefresh } from '../use-visible-refresh.js'
@@ -368,7 +370,7 @@ function OperationalQueuePage({ role, activeBranch, store, setPage }) {
     if(role==='owner'&&activeBranch!=='All Branches'&&q.branch!==activeBranch)return false
     if(role==='staff'&&dentistFilter!=='All Dentists'&&q.dentistId!==dentistFilter)return false
     return matchesStatusFilter(q, statusFilter)
-  }).sort((a,b)=>String(a.branch||'').localeCompare(String(b.branch||''))||String(dentistName(a.dentistId,state.dentists)||'').localeCompare(String(dentistName(b.dentistId,state.dentists)||''))||(a.position||999)-(b.position||999)||(a.queueNumber||0)-(b.queueNumber||0))
+  }).sort(compareBranchQueue)
   // M9: every queue change is a server command (Idempotency-Key per attempt + expected revision); the server computes
   // numbers and positions. A second click while a command is in flight is ignored.
   const flow=store.appointmentFlow
@@ -414,13 +416,14 @@ function OperationalQueuePage({ role, activeBranch, store, setPage }) {
     if(!result.conversation)return toast('No accessible conversation for this patient at this branch. Ask the patient to start a message from their portal.','warning')
     setPage('messages',{conversationId:result.conversation.id,conversation:result.conversation,patientCode:entry.patientCode,patientPublicId:entry.patientPublicId,branchId:entry.branchId})
   }
+  const [orderEntry,setOrderEntry]=useState(null)
   const [restoreModalEntry, setRestoreModalEntry] = useState(null)
   const restore = entry => {
     setRestoreModalEntry(entry)
   }
   const submitRestore = (entry, reason) => {
     setRestoreModalEntry(null)
-    run(entry, 'Normal queue place restored.', key => flow.queueRestoreOrder(entry, reason.trim(), key))
+    run(entry, 'Late-arrival flag cleared. Arrival order is unchanged.', key => flow.queueRestoreOrder(entry, reason.trim(), key))
   }
   const operational=['staff','owner'].includes(role)
   const vis=useQueueVisibility(store)
@@ -428,7 +431,7 @@ function OperationalQueuePage({ role, activeBranch, store, setPage }) {
   useVisibleRefresh(flow?.refresh,{active:role!=='patient'})
   if (role==='patient') return <PatientQueuePage store={store} setPage={setPage}/>
   return <>
-    <PageHeader title={role==='dentist'?'My Patient Queue':'Patient Queue'} text="The clinic server keeps the queue: numbers, order and positions update for everyone. First-come, first-served arrival order decides positions inside each Dentist’s queue." aside={<RefreshButton onClick={()=>flow?.refresh()}/>}/>
+    <PageHeader title={role==='dentist'?'My Patient Queue':'Patient Queue'} text="Arrival order decides branch positions. Explicit Staff moves are recorded with a reason; Dentist queue numbers stay unchanged." aside={<RefreshButton onClick={()=>flow?.refresh()}/>}/>
     <FilterBar ariaLabel={role==='dentist'?'My queue filters':'Queue filters'} onClear={(dentistFilter!=='All Dentists'||statusFilter!=='Active')?()=>{setDentistFilter('All Dentists');setStatusFilter('Active')}:null}>
       <label>Branch <select value={activeBranch} disabled><option>{activeBranch}</option></select></label>
       {role!=='dentist'&&<label>Dentist <select value={dentistFilter} onChange={e=>setDentistFilter(e.target.value)}><option>All Dentists</option>{state.dentists.filter(d=>role==='owner'||d.branchIds.includes(session.branchId)).map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></label>}
@@ -448,15 +451,15 @@ function OperationalQueuePage({ role, activeBranch, store, setPage }) {
     {!demo&&<QueueStatusCounts store={store} activeBranch={role==='owner'?activeBranch:'All Branches'} vis={vis}/>}
     {operational&&!demo&&<SelfRegistered toast={toast} store={store} compact/>}
     {role==='staff'&&<Notice tone="info">A patient in the queue has already checked in. Marking them as having left or cancelling their visit isn’t available yet — the clinic still needs to decide how an admitted visit is closed. A patient who never arrived is marked No-show from Appointments.</Notice>}
-    <Card title="Live queue" subtitle="Arrival order determines positions inside each dentist queue (first-come, first-served)." className="top-gap queue-live-card">
+    <Card title="Live queue" subtitle="Branch arrival order, with any recorded Staff moves. Served means treatment has started." className="top-gap queue-live-card">
       <QueueTable rows={visible} onOpen={q=>setPage('patients',encounterContext(q))} nameOf={q=>q.patientName||patientName(q.patientId,state.patients)} columns={[
-        {key:'queueNumber',label:'Queue',render:q=><div className="queue-order"><b className="queue-number"><span className="sr-only">Queue number </span>{q.queueNumber||'—'}</b><span className="queue-secondary">Position {q.position?`#${q.position}`:'—'}</span></div>},
+        {key:'queueNumber',label:'Queue',render:q=><div className="queue-order"><b className="queue-number"><span className="sr-only">Queue number </span>{q.queueNumber||'—'}</b><span className="queue-secondary">Branch position {q.branchPosition?`#${q.branchPosition}`:'—'} · Dentist position {q.position?`#${q.position}`:'—'}</span></div>},
         {key:'patient',label:'Patient',render:q=><div className="queue-identity">
           <div>
             <button type="button" className="queue-patient-link" title="Click to open patient chart" aria-label={`Open chart for ${q.patientName||patientName(q.patientId,state.patients)}`} onClick={()=>setPage('patients',encounterContext(q))}><b>{q.patientName||patientName(q.patientId,state.patients)}</b></button>
           </div>
           <small className="queue-secondary queue-patient-meta">{q.patientCode&&<span>{q.patientCode}</span>}<span>{q.appointmentCode||(q.walkIn?'Walk-in visit':'Scheduled visit')}</span></small>
-          {q.lateArrival&&<span className="fd-badge is-late">Late arrival · queued last</span>}
+          {q.lateArrival&&<span className="fd-badge is-late">Late arrival · arrival order retained</span>}
         </div>},
         {key:'careTeam',label:'Dentist / Branch',render:q=><div className="queue-care-team"><b>{dentistName(q.dentistId,state.dentists)}</b><span className="queue-secondary">{q.branch}</span></div>},
         {key:'checkedIn',label:'Checked in',render:q=>displayTime(q.checkedIn)},
@@ -468,12 +471,14 @@ function OperationalQueuePage({ role, activeBranch, store, setPage }) {
           {role==='dentist'&&(['In Queue', 'Waiting', 'Called', 'Treatment Ready'].includes(q.status)||q.status==='Served'||q.visitStatus==='In Treatment')&&<Button size="sm" onClick={()=>setPage('treatment',encounterContext(q))}>{q.treatmentId?'Continue Treatment':'Open Treatment'}</Button>}
 
           {operational&&<>
-            {active(q)&&q.lateArrival&&<Button size="sm" variant="ghost" disabled={!!busy} onClick={()=>restore(q)}>Restore normal place</Button>}
+            {q.server&&['In Queue','Waiting'].includes(q.status)&&<Button size="sm" variant="soft" disabled={!!busy} onClick={()=>setOrderEntry(q)}>Move</Button>}
+            {active(q)&&q.lateArrival&&<Button size="sm" variant="ghost" disabled={!!busy} onClick={()=>restore(q)}>Clear late flag</Button>}
           </>}
         </div>}
 
       ]}/>
     </Card>
+    {orderEntry&&<QueueOrderDialog entry={orderEntry} store={store} onClose={()=>setOrderEntry(null)}/>}
     {restoreModalEntry&&<RestoreModal entry={restoreModalEntry} onClose={()=>setRestoreModalEntry(null)} onConfirm={submitRestore}/>}
   </>
 }
@@ -501,7 +506,7 @@ export function PriorityModal({ entry, onClose, onConfirm }) {
     <Modal open title="Assign Queue Priority" subtitle="Prioritize waiting queue position for eligible patients or urgent accommodation" onClose={onClose}>
       <form onSubmit={handleSubmit}>
         <Notice tone="info">
-          Operational priority reorders waiting entries (Urgent → Senior/PWD Priority → Normal, then arrival time). Patients already Called or Treatment Ready are never displaced. Do not record ID numbers or sensitive medical details here.
+          Priority records operational context. It does not change arrival order. An explicit queue move needs a separate reason and current-order review. Do not record ID numbers or sensitive medical details here.
         </Notice>
         <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <Field label="Priority Category" required>
@@ -552,13 +557,13 @@ export function RestoreModal({ entry, onClose, onConfirm }) {
     onConfirm(entry, reason.trim())
   }
   return (
-    <Modal open title="Restore Normal Queue Place" subtitle="Staff override of late arrival order" onClose={onClose}>
+    <Modal open title="Clear late-arrival flag" subtitle="Arrival time and queue order stay unchanged" onClose={onClose}>
       <form onSubmit={handleSubmit}>
-        <Field label="Reason for Restoring Queue Order" required hint="Required for audit and operational records.">
+        <Field label="Reason for clearing late flag" required hint="Required for audit and operational records.">
           <input
             type="text"
             required
-            placeholder="Reason for giving this late arrival their normal place..."
+            placeholder="Reason for clearing this late-arrival flag..."
             value={reason}
             onChange={e => setReason(e.target.value)}
             autoFocus
@@ -566,7 +571,7 @@ export function RestoreModal({ entry, onClose, onConfirm }) {
         </Field>
         <div className="row-actions" style={{ marginTop: '20px' }}>
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" variant="primary" disabled={!reason.trim()}>Restore Normal Place</Button>
+          <Button type="submit" variant="primary" disabled={!reason.trim()}>Clear late flag</Button>
         </div>
       </form>
     </Modal>
@@ -617,7 +622,7 @@ function BranchQueueDetailSection({ store, activeBranch, setPage }) {
     if (selectedBranchId !== 'All' && q.branchId !== selectedBranchId && q.branch !== selectedBranchId) return false
     if (activeBranch !== 'All Branches' && q.branch !== activeBranch) return false
     return matchesOwnerFilter(q, statusFilter)
-  }).sort((a, b) => (a.position || 999) - (b.position || 999) || (a.queueNumber || 0) - (b.queueNumber || 0))
+  }).sort(compareBranchQueue)
 
   return (
     <Card

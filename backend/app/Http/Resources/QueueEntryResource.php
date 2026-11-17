@@ -28,6 +28,7 @@ class QueueEntryResource extends JsonResource
             'late_arrival' => (bool) $this->late_arrival,
             'queue_number' => $this->queue_number,
             'position' => $this->getAttribute('position'),
+            'branch_position' => $this->when(in_array($request->user()?->role?->value, ['staff', 'owner'], true), $this->getAttribute('branch_position')),
             'revision' => $this->revision,
             'clinic_date' => $queue->clinic_date->format('Y-m-d'),
             'closed_at' => $iso($this->closed_at),

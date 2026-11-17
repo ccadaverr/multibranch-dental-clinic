@@ -19,8 +19,8 @@ use Illuminate\Validation\ValidationException;
  * no check-in, counted from the start time:
  *   + check_minutes   "Are you on your way?" in the app and by email, with "On my way" and "Reschedule" (the reply shows on
  *                     the Check-In page);
- *   + late_minutes    shown as Late on the Check-In page; a late patient who then checks in goes to the end of that Dentist's
- *                     queue (VisitService; Staff can restore the order with a reason);
+ *   + late_minutes    shown as Late on the Check-In page; this flag never changes recorded arrival FIFO.
+ *                     Explicit operational queue moves require a current-order review, reason and audit;
  *   + release_minutes automatic (default, R2-10): the appointment becomes No-show, the time is freed and offered (F3), and a
  *                     rebook email is sent; the front desk can undo it the same day. "ask": it is flagged as a possible
  *                     no-show and a person confirms (the existing No-show command) or undoes it — one flag per appointment,
