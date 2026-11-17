@@ -1,7 +1,9 @@
 import React, { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { ConfirmDialog, Icon, Modal } from '../components.jsx'
 import { Brand } from '../Brand.jsx'
-import { listNotifications, readAllNotifications, readNotification } from '../api-client.js'
+import { archiveNotification, listNotifications, readAllNotifications, readNotification } from '../api-client.js'
+import { groupNotificationsByDate } from '../notification-date-groups.js'
+import { clinicDate } from '../clock.js'
 import { useVisibleRefresh } from '../use-visible-refresh.js'
 import { ChunkBoundary, StartupLoading } from '../StartupLoading.jsx'
 import { AssistantLauncher } from './Assistant.jsx'
@@ -136,7 +138,7 @@ export function PatientPortal({ me, store, initialPage = 'home', initialContext 
     <div className="pp-body">
       <header className="pp-top">
         <h1 className="pp-top-title">{TITLES[page]}</h1>
-        <button ref={bellButton} type="button" className="pp-icon-btn pp-bell" aria-haspopup="dialog" aria-label={notes.unread ? `Notifications, ${notes.unread} unread` : 'Notifications'} aria-expanded={bell} onClick={() => setBell(b => !b)}>
+        <button ref={bellButton} type="button" className="pp-icon-btn pp-bell" aria-haspopup="dialog" aria-label={notes.unread ? `Notifications, ${notes.unread} unread` : 'Notifications'} aria-expanded={bell} onClick={() => { if (!bell && notes.olderLoaded && !notes.error) notes.reload(); setBell(!bell) }}>
           <Icon name="bell" size={22}/>{notes.unread > 0 && <span className="pp-badge-count" aria-hidden="true">{notes.unread > 9 ? '9+' : notes.unread}</span>}
         </button>
       </header>
@@ -212,39 +214,79 @@ export function patientNotificationSnapshot(result) {
   const items = result.data, unread = result.meta?.unread
   if (!Array.isArray(items) || items.length > 50 || !Number.isInteger(unread) || unread < 0 ||
       items.some(n => !n || typeof n.id !== 'string' || typeof n.read !== 'boolean' || typeof n.title !== 'string' || (n.body != null && typeof n.body !== 'string')) ||
-      new Set(items.map(n => n.id)).size !== items.length || unread < items.filter(n => !n.read).length) throw new Error('Notifications could not be loaded. Try again.')
-  return { items, unread }
+      new Set(items.map(n => n.id)).size !== items.length || (result.meta.collection !== 'archived' && unread < items.filter(n => !n.read).length)) throw new Error('Notifications could not be loaded. Try again.')
+  const { collection, archive_available: archiveAvailable, has_more: hasMore, next_before: nextBefore } = result.meta
+  if (collection === undefined && hasMore === undefined) return { items, unread }
+  if (!['active', 'archived'].includes(collection) || typeof archiveAvailable !== 'boolean' ||
+      (collection === 'archived' && !archiveAvailable) ||
+      items.some(n => n.archived !== (collection === 'archived') || (n.archived && !Number.isFinite(Date.parse(n.archived_at)))) ||
+      typeof hasMore !== 'boolean' || (hasMore ? !items.length || nextBefore !== items.at(-1).id : nextBefore !== null)) {
+    throw new Error('Notification history could not be confirmed. Retry notifications.')
+  }
+  return { items, unread, collection, archiveAvailable, nextBefore }
 }
 
 // One instance per authenticated account epoch. Pure controller permits deferred race tests
 // without timers, network access, or real account records.
 export function createPatientNotificationFeed(api) {
   let active = false, generation = 0, pending = null, listener = null
-  let state = { status: 'loading', items: [], unread: null, error: '', busy: false, refreshing: false, confirmed: false, failed: null }
+  const writes = ['read', 'all', 'archive']
+  let state = { collection: 'active', status: 'loading', items: [], unread: null, error: '', busy: false, refreshing: false, confirmed: false, failed: null }
   const emit = next => { state = next; listener?.(state) }
   const authorized=()=>!api.isCurrent || api.isCurrent()
   const run = async operation => {
-    if (!authorized() || !active || pending?.type === 'read' || pending?.type === 'all' || (operation.type === 'load' && pending)) return false
+    if (!authorized() || !active || writes.includes(pending?.type) || (['load', 'more', 'poll'].includes(operation.type) && pending)) return false
     if (operation.type === 'read' && !state.items.some(n => n.id === operation.id)) return false
     if (operation.type === 'read' && state.items.find(n => n.id === operation.id)?.read) return true
+    const collection = operation.collection || state.collection
+    const previous = state
+    if (operation.type === 'more' && !previous.nextBefore) return false
     const request = { ...operation, generation: ++generation }
     pending = request
-    emit({ ...state, error: '', failed: null, busy: operation.type !== 'load', refreshing: true })
+    emit({ ...state, collection, error: '', failed: null, busy: writes.includes(operation.type), refreshing: operation.type !== 'poll',
+      ...(collection !== previous.collection ? {items: [], confirmed: false, status: 'loading', nextBefore: null} : {}) })
     let result
     try {
       const owns=()=>active && generation===request.generation && authorized()
-      result = await (operation.type === 'read' ? api.read(operation.id, owns) : operation.type === 'all' ? api.readAll(owns) : api.list())
+      if (operation.type === 'read') result = await api.read(operation.id, owns, collection)
+      else if (operation.type === 'all') result = await api.readAll(owns)
+      else if (operation.type === 'archive') result = await api.archive(operation.id, owns)
+      else result = await api.list(operation.type === 'more' ? previous.nextBefore : undefined, collection)
       if (!active || generation !== request.generation) return false
       if(!authorized())throw new Error('Notifications are unavailable for this account.')
       const snapshot = patientNotificationSnapshot(result)
-      if(operation.type==='read' && !snapshot.items.some(n=>n.id===operation.id&&n.read) || operation.type==='all' && snapshot.items.some(n=>!n.read))throw new Error('Read status could not be confirmed. Retry or reload notifications.')
-      emit({ ...snapshot, status: 'ready', busy: false, refreshing: false, error: '', confirmed: true, failed: null })
+      if ((snapshot.collection || 'active') !== collection) throw new Error('Notification collection changed. Retry notifications.')
+      if (operation.type === 'read') {
+        const item = snapshot.items.find(n => n.id === operation.id)
+        if (item ? !item.read : result.meta?.read_id !== operation.id) throw new Error('Read status could not be confirmed. Retry or reload notifications.')
+      }
+      if (operation.type === 'all' && snapshot.items.some(n => !n.read)) throw new Error('Read status could not be confirmed. Retry or reload notifications.')
+      if (operation.type === 'archive') {
+        const receipt = result.meta?.archive_receipt
+        if (receipt?.id !== operation.id || receipt.archived !== true || typeof receipt.replayed !== 'boolean' ||
+            !Number.isFinite(Date.parse(receipt.archived_at)) || snapshot.items.some(n => n.id === operation.id)) {
+          throw new Error('Archival could not be confirmed. Retry the same archive.')
+        }
+      }
+      if (operation.type === 'poll') {
+        // Keep the user’s place in history while refreshing the inbox badge.
+        emit({ ...state, unread: snapshot.unread })
+        return true
+      }
+      if (operation.type === 'more') {
+        const ids = new Set(previous.items.map(n => n.id))
+        if (snapshot.nextBefore === undefined || snapshot.nextBefore === previous.nextBefore || snapshot.items.some(n => ids.has(n.id))) {
+          throw new Error('Notification history changed. Reload before loading older notifications.')
+        }
+        snapshot.items = [...previous.items, ...snapshot.items]
+      }
+      emit({ ...snapshot, collection, olderLoaded: operation.type === 'more', status: 'ready', busy: false, refreshing: false, error: '', confirmed: true, failed: null })
       return true
     } catch (error) {
       if (!active || generation !== request.generation) return false
       const denied = !authorized() || ['unauthenticated', 'forbidden'].includes(result?.kind)
       const retained = state.confirmed && !denied
-      emit({ ...state, ...(retained ? {} : { items: [], unread: null, confirmed: false }), status: retained ? 'ready' : 'error', busy: false, refreshing: false,
+      emit({ ...state, ...(retained ? {} : { items: [], unread: null, confirmed: false, nextBefore: null, olderLoaded: false, archiveAvailable: !denied && state.archiveAvailable }), status: retained ? 'ready' : 'error', busy: false, refreshing: false,
         error: error?.message || 'Notifications are unavailable. Try again.', failed: denied ? { type: 'load' } : operation })
       return false
     } finally { if (pending === request) pending = null }
@@ -255,9 +297,15 @@ export function createPatientNotificationFeed(api) {
     stop() { active = false; generation++; pending = null; listener = null },
     isActive: () => active && authorized(),
     reload: () => run({ type: 'load' }),
-    poll: () => state.failed && state.failed.type !== 'load' ? Promise.resolve(false) : run({ type: 'load' }),
+    poll: () => state.failed && !['load', 'poll'].includes(state.failed.type) ? Promise.resolve(false)
+      : run({ type: state.olderLoaded ? 'poll' : 'load' }),
+    more: () => run({ type: 'more' }),
+    select: collection => !state.archiveAvailable || !['active', 'archived'].includes(collection) || state.collection === collection
+      ? Promise.resolve(false) : run({ type: 'switch', collection }),
+    archive: id => state.collection === 'active' && state.archiveAvailable && state.items.some(n => n.id === id)
+      ? run({ type: 'archive', id }) : Promise.resolve(false),
     markRead: id => run({ type: 'read', id }),
-    markAll: () => run({ type: 'all' }),
+    markAll: () => state.collection === 'active' ? run({ type: 'all' }) : Promise.resolve(false),
     retry: () => run(state.failed || { type: 'load' }),
   }
 }
@@ -272,7 +320,7 @@ export function useNotifications(me, session, getAuthGeneration) {
   const [snapshot, setSnapshot] = useState(null)
   // A -> B -> A creates a fresh controller rather than reusing A's earlier epoch.
   const latest = useRef(null)
-  const feed = React.useMemo(() => createPatientNotificationFeed({ list: listNotifications, read: readNotification, readAll: readAllNotifications, isCurrent:()=>latest.current===feed && (!getAuthGeneration || auth===getAuthGeneration()) }), [identity, eligible, auth, getAuthGeneration])
+  const feed = React.useMemo(() => createPatientNotificationFeed({ list: listNotifications, read: readNotification, readAll: readAllNotifications, archive: archiveNotification, isCurrent:()=>latest.current===feed && (!getAuthGeneration || auth===getAuthGeneration()) }), [identity, eligible, auth, getAuthGeneration])
   latest.current = eligible ? feed : null
   useNotificationLayoutEffect(() => {
     if (!eligible) return undefined
@@ -283,11 +331,19 @@ export function useNotifications(me, session, getAuthGeneration) {
   const current = !eligible ? { status: 'error', items: [], unread: null, error: 'Notifications are unavailable for this account.', busy: false, refreshing: false }
     : snapshot?.feed === feed ? snapshot.value : feed.snapshot()
   return { ...current, identity, available: eligible, reload: () => feed.reload(), markRead: id => feed.markRead(id), markAll: () => feed.markAll(), retry: () => feed.retry(),
+    more: () => feed.more(), select: collection => feed.select(collection), archive: id => feed.archive(id),
     isCurrent: () => latest.current === feed && feed.isActive() }
 }
 
 export function NotificationPanel({ notes, onClose, onOpen, destination }) {
   const ref = useRef(null)
+  const focusOrigin = useRef(null)
+  useNotificationLayoutEffect(() => {
+    if (focusOrigin.current && !focusOrigin.current.isConnected) {
+      if (!ref.current?.contains(document.activeElement)) ref.current?.focus({ preventScroll: true })
+      focusOrigin.current = null
+    }
+  })
   useEffect(() => {
     const previous = document.activeElement
     ref.current?.focus()
@@ -312,21 +368,51 @@ export function NotificationPanel({ notes, onClose, onOpen, destination }) {
     if (minutes < 1440) return `${Math.round(minutes / 60)} h ago`
     return new Date(iso).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', timeZone: 'Asia/Manila' })
   }
+  const groups = groupNotificationsByDate(notes.items.map(n => ({ ...n, createdAt: n.created_at })), clinicDate())
+  const locked = notes.busy || notes.refreshing
+  const archived = notes.collection === 'archived'
+  const perform = (event, action) => {
+    focusOrigin.current = event.currentTarget
+    action()
+  }
   return <div className="pp-sheet-backdrop pp-notes-backdrop" onClick={onClose}>
     <section ref={ref} tabIndex={-1} className="pp-notes pp-pop" role="dialog" aria-modal="true" aria-labelledby="pp-notes-title" aria-busy={notes.busy || notes.refreshing} onClick={e => e.stopPropagation()}>
       <header><h2 id="pp-notes-title">Notifications</h2>
-        <button type="button" className="link-button" disabled={!notes.unread || notes.busy || notes.refreshing || !!notes.error} onClick={notes.markAll}>Mark all read</button>
+        <button type="button" className="link-button" disabled={archived || !notes.unread || locked || !!notes.error} onClick={notes.markAll}>Mark all read</button>
         <button type="button" className="pp-icon-btn" aria-label="Close notifications" onClick={onClose}><Icon name="x" size={20}/></button>
       </header>
-      <p role="status">{notes.busy ? 'Updating read status…' : notes.refreshing ? 'Loading notifications…' : notes.unread == null ? 'Unread count unavailable' : `${notes.unread} unread`}. Recent history: up to 50 notifications.</p>
-      {notes.error && <div className="pp-notes-empty" role="alert" tabIndex={0}>{notes.confirmed && 'Showing the last confirmed updates. '}{notes.error} <button type="button" className="link-button" disabled={!notes.available || notes.refreshing} onClick={notes.retry}>Retry {notes.failed?.type === 'read' ? 'mark read' : notes.failed?.type === 'all' ? 'mark all read' : 'notifications'}</button></div>}
+      <p className="pp-notes-status" role="status">{notes.busy ? 'Updating notification…' : notes.refreshing ? 'Loading notifications…' : notes.unread == null ? 'Unread count unavailable' : notes.unread + ' unread'}{notes.archiveAvailable === undefined && notes.nextBefore === undefined && ' · Recent history: up to 50 notifications.'}</p>
+      {notes.archiveAvailable && <div className="pp-notes-controls" role="group" aria-label="Notification collection">
+        <button type="button" className="link-button" aria-pressed={!archived} disabled={locked} onClick={() => notes.select('active')}>Inbox</button>
+        <button type="button" className="link-button" aria-pressed={archived} disabled={locked} onClick={() => notes.select('archived')}>Archived</button>
+      </div>}
+      {notes.error && <div className="pp-notes-empty" role="alert" tabIndex={0}>{notes.confirmed && 'Showing the last confirmed updates. '}{notes.error} <button type="button" className="link-button" disabled={!notes.available || notes.refreshing} onClick={event => perform(event, notes.retry)}>Retry {notes.failed?.type === 'read' ? 'mark read' : notes.failed?.type === 'all' ? 'mark all read' : notes.failed?.type === 'archive' ? 'archive' : notes.failed?.type === 'more' ? 'older notifications' : 'notifications'}</button></div>}
       {notes.status === 'loading' && <div className="pp-notes-empty" role="status">Loading…</div>}
-      {notes.status === 'ready' && !notes.error && !notes.items.length && <div className="pp-notes-empty"><Icon name="check" size={22}/><p>No recent notifications</p></div>}
-      <ul>{notes.items.map(n => <li key={n.id}>
-        <button type="button" className={`pp-nitem ${n.read ? '' : 'is-unread'}`} disabled={notes.busy || !!notes.error || (!destination(n) && n.read)} aria-label={`${destination(n) ? 'View update' : n.read ? 'No linked page' : 'Mark read'}: ${n.title}`} onClick={() => onOpen(n)}>
-          <span className="pp-nitem-dot" aria-hidden="true"/>
-          <span><b>{!n.read && <span className="sr-only">Unread: </span>}{n.title}</b>{n.body && <small>{n.body}</small>}<em>{when(n.created_at)}</em></span>
-        </button></li>)}</ul>
+      {notes.status === 'ready' && !notes.error && !notes.items.length && <div className="pp-notes-empty"><Icon name="check" size={22}/><p>{archived ? 'No archived notifications' : 'No recent notifications'}</p></div>}
+      <div className="pp-notes-history" role="region" aria-label="Notification history" tabIndex={0}>
+        {groups.map(group => <section key={group.key} aria-label={group.label}>
+          <h3>{group.label}</h3>
+          <ul>{group.items.map(n => {
+            const linked = destination(n)
+            const title = (linked ? 'View update' : n.read ? 'No linked page' : 'Mark read') + ': ' + n.title
+            const createdAt = Date.parse(n.created_at)
+            const localTime = Number.isFinite(createdAt) ? new Date(createdAt).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Manila' }) + ' (Manila)' : null
+            return <li key={n.id}>
+              <button type="button" className={'pp-nitem' + (n.read ? '' : ' is-unread')} disabled={notes.busy || !!notes.error || (!linked && n.read)} aria-label={title} onClick={() => onOpen(n)}>
+                <span className="pp-nitem-dot" aria-hidden="true"/>
+                <span><b>{!n.read && <span className="sr-only">Unread: </span>}{n.title}</b>{n.body && <small>{n.body}</small>}
+                  {localTime ? <time dateTime={n.created_at} title={localTime}>{when(n.created_at)}</time> : <span>Date unavailable</span>}
+                </span>
+              </button>
+              {notes.archiveAvailable && !archived && <button type="button" className="link-button pp-notes-archive" disabled={locked || !!notes.error}
+                aria-label={'Archive ' + n.title} onClick={event => perform(event, () => notes.archive(n.id))}>Archive</button>}
+            </li>
+          })}</ul>
+        </section>)}
+      </div>
+      {notes.nextBefore && !notes.error && <div className="pp-notes-controls"><button type="button" className="link-button" disabled={locked}
+        onClick={event => perform(event, notes.more)}>Load older notifications</button></div>}
+      {notes.failed?.type === 'more' && <div className="pp-notes-controls"><button type="button" className="link-button" disabled={locked} onClick={event => perform(event, notes.reload)}>Reload notifications</button></div>}
     </section>
   </div>
 }

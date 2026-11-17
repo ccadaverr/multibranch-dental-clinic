@@ -2,18 +2,24 @@
 import React from 'react'
 import {createRoot} from 'react-dom/client'
 import {Shell} from '/src/layout.jsx'
+import {PatientPortal} from '/src/patient/Portal.jsx'
 import {setClockSource} from '/src/clock.js'
 import '/src/styles.css'
 import '/src/foundation.css'
+import '/src/patient.css'
 import '/src/polish.css'
-const session={serverUserId:'synthetic-account',role:'staff',active:true,userId:'u1',branchId:'b1'}
-const state={persons:[{id:'p1'}],users:[{id:'u1',personId:'p1',name:'Synthetic Staff',role:'Staff',status:'Active',branchId:'b1',permissions:['all']}],staff:[{userId:'u1',personId:'p1',branchId:'b1'}],branches:[{id:'b1',name:'Synthetic branch'}],patients:[],dentists:[],appointments:[],queue:[],treatments:[],invoices:[],prescriptions:[],hmo:[],conversations:[],notifications:[]}
+import '/src/patient/portal.css'
+const role=new URLSearchParams(location.search).get('role')||'staff'
+const labels={staff:'Staff',owner:'Owner / Admin',dentist:'Dentist'}
+const session={serverUserId:'synthetic-account',role,active:true,userId:'u1',branchId:'b1',dentistId:'d1'}
+const state={persons:[{id:'p1'}],users:[{id:'u1',personId:'p1',name:'Synthetic '+role,role:labels[role],status:'Active',branchId:'b1',permissions:['all']}],staff:[{userId:'u1',personId:'p1',branchId:'b1'}],branches:[{id:'b1',name:'Synthetic branch'}],patients:[],dentists:[{id:'d1',userId:'u1',personId:'p1',branchIds:['b1']}],appointments:[],queue:[],treatments:[],invoices:[],prescriptions:[],hmo:[],conversations:[],notifications:[]}
 setClockSource(() => new Date('2026-11-15T16:05:00Z'))
-const rows=Array.from({length:120},(_,i)=>({id:'synthetic-'+String(120-i).padStart(3,'0'),title:'Synthetic notification '+(120-i),body:'Synthetic operational update',read:false,archived:false,archived_at:null,created_at:i===0?'2026-11-15T16:00:00Z':'2026-11-15T15:59:59Z'}))
+const rows=Array.from({length:120},(_,i)=>({id:'synthetic-'+String(120-i).padStart(3,'0'),title:'Synthetic notification '+(120-i),body:'Synthetic operational update',read:false,archived:false,archived_at:null,created_at:i===0?'2026-11-15T16:00:00Z':i<90?'2026-11-15T15:59:59Z':'2026-11-13T00:00:00Z'}))
 window.historyFixture={requests:[],failMore:false,rows}
 window.fetch=async(url,options={})=>{
  const target=new URL(url,location.href),path=target.pathname
  if(path==='/sanctum/csrf-cookie')return new Response(null,{status:204})
+ if(!path.startsWith('/api/notifications'))return Response.json({data:[],meta:{}})
  window.historyFixture.requests.push({path,query:target.search})
  const before=target.searchParams.get('before')
  if(before&&window.historyFixture.failMore)return Response.json({message:'Synthetic history unavailable'},{status:window.historyFixture.failMore===true?503:window.historyFixture.failMore})
@@ -31,5 +37,9 @@ window.fetch=async(url,options={})=>{
  const offset=before?rows.findIndex(row=>row.id===before)+1:0,selected=rows.slice(offset).filter(row=>row.archived===(collection==='archived')),page=selected.slice(0,50),more=selected.length>50
  return Response.json({data:page,meta:{unread:rows.filter(row=>!row.read&&!row.archived).length,collection,archive_available:true,has_more:more,next_before:more?page.at(-1).id:null,...(readId?{read_id:readId}:{}),...(archiveReceipt?{archive_receipt:archiveReceipt}:{})}})
 }
-createRoot(document.getElementById('root')).render(React.createElement(Shell,{role:'staff',page:'dashboard',setPage:()=>{},activeBranch:'Synthetic branch',setActiveBranch:()=>{},store:{state,session,actions:{},toast(){}}},React.createElement('p',null,'Synthetic notification history only')))
+const store={state,session,actions:{},toast(){}}
+const me={id:session.serverUserId,role:'patient',account_status:'Active',name:'Synthetic Patient',patient:{id:'patient-fixture'}}
+createRoot(document.getElementById('root')).render(role==='patient'
+ ? React.createElement(PatientPortal,{me,store})
+ : React.createElement(Shell,{role,page:'dashboard',setPage:()=>{},activeBranch:'Synthetic branch',setActiveBranch:()=>{},store},React.createElement('p',null,'Synthetic notification history only')))
 </script></body></html>

@@ -17,9 +17,9 @@ if ($identity->db !== 'dental_clinic_demo' || $identity->host !== $target['host'
 $ids = [];
 $run = getenv('DENTALOPS_LOCAL_OPERATIONS_RUN');
 if (! preg_match('/^[a-f0-9]{8}$/', (string) $run)) throw new RuntimeException('A fresh synthetic run identity is required.');
-foreach (['owner@example.test', 'staff.reception@example.test', 'dentist@example.test'] as $email) {
+foreach (['owner@example.test', 'staff.reception@example.test', 'dentist@example.test', 'patient@example.test'] as $email) {
     $user = User::where('email', $email)->firstOrFail();
-    app(NotificationCenter::class)->staffNotice($user, 'record_shared', 'Operations QA archive example '.$run, 'Synthetic operational acceptance only.', 'leave', null, 'ops-browser-'.$run.'-'.$user->public_id);
+    app(NotificationCenter::class)->staffNotice($user, 'record_shared', 'Operations QA archive example '.$run, 'Synthetic operational acceptance only.', $user->role->value === 'patient' ? 'visits' : 'leave', null, 'ops-browser-'.$run.'-'.$user->public_id);
     $ids[$user->role->value] = \App\Models\UserNotification::where('user_id', $user->id)->where('dedupe_key', 'ops-browser-'.$run.'-'.$user->public_id)->value('public_id');
 }
 echo json_encode(['synthetic' => true, 'run_id' => $run, 'notification_ids' => $ids], JSON_THROW_ON_ERROR);

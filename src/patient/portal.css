@@ -71,10 +71,21 @@ dialog.modal.pp-more-dialog::backdrop { background: rgba(15,32,48,.36); }
 
 /* Notifications */
 .pp-notes-backdrop { align-items: flex-start; justify-content: flex-end; background: rgba(15,32,48,.18); }
-.pp-notes { width: min(400px, 100%); max-height: min(560px, 100vh); margin: 64px 12px 0; display: flex; flex-direction: column; background: #fff; border: 1px solid var(--line); border-radius: 20px; box-shadow: var(--shadow-lg); outline: none; overflow: hidden; }
+.pp-notes { width: min(400px, 100%); max-height: min(560px, calc(100dvh - 76px)); margin: 64px 12px 0; display: flex; flex-direction: column; background: #fff; border: 1px solid var(--line); border-radius: 20px; box-shadow: var(--shadow-lg); outline: none; overflow: hidden; }
 .pp-notes header { display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 18px; border-bottom: 1px solid var(--line); }
 .pp-notes h2 { flex: 1; margin: 0; font-size: 1rem; color: var(--ink); }
-.pp-notes ul { list-style: none; margin: 0; padding: 6px; overflow-y: auto; }
+.pp-notes-history { min-height: 0; overflow: auto; padding: 0 6px; }
+.pp-notes-history:focus-visible { outline-offset: -3px; }
+.pp-notes-history h3 { margin: 8px 12px 4px; font-size: var(--font-sm); color: var(--muted); }
+.pp-notes ul { list-style: none; margin: 0; padding: 0; }
+.pp-notes li { display: flex; align-items: flex-start; min-width: 0; }
+.pp-notes .pp-nitem { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.pp-notes .pp-notes-archive { flex: none; margin: 0 4px; padding: 0 6px; }
+.pp-notes .link-button { min-height: var(--control-height); }
+.pp-notes .link-button[aria-pressed="true"] { font-weight: var(--weight-strong); text-decoration: underline; }
+.pp-notes-controls { display: flex; gap: 12px; flex-wrap: wrap; padding: 0 12px; }
+.pp-notes-status { margin: 8px 12px; font-size: var(--font-sm); }
+.pp-nitem time { font-size: var(--font-sm); color: var(--muted); }
 .pp-nitem { width: 100%; display: flex; gap: 12px; padding: 12px; border: 0; border-radius: 14px; background: none; text-align: left; color: var(--text); }
 .pp-nitem:hover { background: var(--surface-2); }
 .pp-nitem > span:last-child { display: grid; gap: 2px; }

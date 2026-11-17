@@ -205,3 +205,33 @@ test('GEN-10 Patient read checks the current auth lifetime at transport and resp
 test('GEN-10 Patient read-all forwards the same dispatch lifetime guard',async()=>{
  let valid=true,guard;const pending=deferred();const feed=createFeed({isCurrent:()=>valid,list:()=>Promise.resolve(response()),readAll:current=>{guard=current;return pending.promise}});await feed.start(()=>{});const reading=feed.markAll();assert.equal(guard(),true);valid=false;assert.equal(guard(),false);pending.resolve(response(true));assert.equal(await reading,false);assert.deepEqual(feed.snapshot().items,[]);assert.equal(feed.isActive(),false);feed.stop()
 })
+
+test('GEN-10 Patient load uses the server cursor and retains exact older records after refusal', async () => {
+  const items = [row(), {...row(), id: 'older'}]
+  let newNotice = false
+  const calls = []
+  const feed = createFeed({ list: async (before, collection) => {
+    calls.push([before, collection])
+    if (before && calls.length === 2) return { ok: false, message: 'Synthetic pagination failure' }
+    if (newNotice) return {ok:true,data:[{...items[0],id:'new',archived:false}],meta:{unread:3,collection:'active',archive_available:true,has_more:true,next_before:'new'}}
+    return before ? {ok:true,data:[{...items[1],archived:false}],meta:{unread:2,collection:'active',archive_available:true,has_more:false,next_before:null}}
+      : {ok:true,data:[{...items[0],archived:false}],meta:{unread:2,collection:'active',archive_available:true,has_more:true,next_before:'notice-a'}}
+  }})
+  await feed.start(() => {})
+  assert.equal(typeof feed.more, 'function', 'the Patient portal supports server pagination')
+  assert.equal(await feed.more(), false)
+  assert.deepEqual(feed.snapshot().items.map(n => n.id), ['notice-a'])
+  assert.equal(feed.snapshot().nextBefore, 'notice-a')
+  assert.match(feed.snapshot().error, /Synthetic pagination failure/)
+  assert.equal(await feed.retry(), true)
+  assert.deepEqual(calls, [[undefined,'active'],['notice-a','active'],['notice-a','active']])
+  assert.deepEqual(feed.snapshot().items.map(n=>n.id), ['notice-a','older'])
+  assert.equal(feed.snapshot().nextBefore, null)
+  newNotice = true
+  assert.equal(await feed.poll(), true)
+  assert.equal(feed.snapshot().unread, 3)
+  assert.deepEqual(feed.snapshot().items.map(n => n.id), ['notice-a', 'older'])
+  assert.equal(await feed.reload(), true)
+  assert.deepEqual(feed.snapshot().items.map(n => n.id), ['new'])
+  feed.stop()
+})

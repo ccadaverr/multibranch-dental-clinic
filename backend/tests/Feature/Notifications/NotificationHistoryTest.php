@@ -99,4 +99,25 @@ class NotificationHistoryTest extends TestCase
         $this->postJson('/api/notifications/read-all')->assertForbidden();
         $this->assertSame(0, UserNotification::whereNotNull('read_at')->count());
     }
+
+    public function test_read_commands_revalidate_the_actor_at_write_time(): void
+    {
+        $stale = $this->u['staffB1']->fresh();
+        $mine = UserNotification::where('user_id', $stale->id)->oldest('id')->firstOrFail();
+        $stale->fresh()->forceFill(['auth_version' => $stale->auth_version + 1])->save();
+        $controller = app(\App\Http\Controllers\NotificationController::class);
+        $request = \Illuminate\Http\Request::create('/api/notifications', 'POST');
+        $request->setUserResolver(fn () => $stale);
+
+        foreach ([fn () => $controller->read($request, $mine->public_id), fn () => $controller->readAll($request)] as $action) {
+            try {
+                $action();
+                $this->fail('A revoked session marked a notification read.');
+            } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+                $this->assertSame(403, $e->getStatusCode());
+            }
+        }
+        $this->assertSame(0, UserNotification::where('user_id', $stale->id)->whereNotNull('read_at')->count());
+    }
+
 }

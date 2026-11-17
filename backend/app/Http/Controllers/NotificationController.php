@@ -87,11 +87,12 @@ class NotificationController extends Controller
 
     public function read(Request $request, string $notification): JsonResponse
     {
-        $history = $this->prepareHistory($request, Schema::hasTable('notification_archives'));
         $id = strtolower($notification);
 
-        return DB::transaction(function () use ($request, $id, $history) {
-            $target = UserNotification::where('user_id', $request->user()->id)->where('public_id', $id);
+        return DB::transaction(function () use ($request, $id) {
+            $actor = $this->lockCurrentActor($request);
+            $history = $this->prepareHistory($request, Schema::hasTable('notification_archives'));
+            $target = UserNotification::where('user_id', $actor->id)->where('public_id', $id);
             $updated = (clone $target)->whereNull('read_at')->update(['read_at' => now()]);
             abort_if(! $updated && ! $target->exists(), 404);
 
@@ -101,11 +102,11 @@ class NotificationController extends Controller
 
     public function readAll(Request $request): JsonResponse
     {
-        $archival = Schema::hasTable('notification_archives');
-        $history = $this->prepareHistory($request, $archival);
-
-        return DB::transaction(function () use ($request, $history, $archival) {
-            UserNotification::where('user_id', $request->user()->id)->whereNull('read_at')
+        return DB::transaction(function () use ($request) {
+            $actor = $this->lockCurrentActor($request);
+            $archival = Schema::hasTable('notification_archives');
+            $history = $this->prepareHistory($request, $archival);
+            UserNotification::where('user_id', $actor->id)->whereNull('read_at')
                 ->when($archival, fn ($q) => $q->whereDoesntHave('archive'))->update(['read_at' => now()]);
 
             return $this->historyResponse($request, $history);
@@ -117,8 +118,7 @@ class NotificationController extends Controller
         if (! Schema::hasTable('notification_archives')) return $this->unavailable();
 
         return DB::transaction(function () use ($request, $notification) {
-            $actor = User::whereKey($request->user()->id)->lockForUpdate()->first();
-            abort_unless($actor && $actor->account_status === 'Active' && $actor->auth_version === $request->user()->auth_version, 403);
+            $actor = $this->lockCurrentActor($request);
             $history = $this->prepareHistory($request, true);
             $row = UserNotification::where('user_id', $actor->id)->where('public_id', strtolower($notification))->lockForUpdate()->firstOrFail();
             $archive = $row->archive;
@@ -133,6 +133,16 @@ class NotificationController extends Controller
                 'archived_at' => ClinicClock::local($archive->archived_at)->toIso8601String(), 'replayed' => $replayed,
             ]]);
         });
+    }
+
+    private function lockCurrentActor(Request $request): User
+    {
+        $original = $request->user();
+        $actor = User::whereKey($original->id)->lockForUpdate()->first();
+        abort_unless($actor && $actor->account_status === 'Active' &&
+            $actor->auth_version === $original->auth_version && $actor->role === $original->role, 403);
+
+        return $actor;
     }
 
     private function unavailable(): JsonResponse
