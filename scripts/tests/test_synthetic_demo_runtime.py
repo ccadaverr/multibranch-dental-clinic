@@ -3,12 +3,18 @@ import importlib.util
 from pathlib import Path
 import unittest
 from unittest.mock import patch
+from types import SimpleNamespace
 
 spec=importlib.util.spec_from_file_location('synthetic',Path(__file__).resolve().parents[1]/'synthetic-demo-runtime.py')
 runtime=importlib.util.module_from_spec(spec);spec.loader.exec_module(runtime)
 
 
 class SyntheticBoundaryTest(unittest.TestCase):
+    def test_missing_pdf_extension_refuses_before_runtime_files_or_services_are_started(self):
+        with patch.object(runtime,'owned',return_value=({'php':'/usr/bin/php8.3'},Path('/nonexistent/no-runtime-writes'))),patch.object(runtime.subprocess,'run',return_value=SimpleNamespace(returncode=1)) as process,self.assertRaisesRegex(RuntimeError,'Missing PHP GD'):
+            runtime.run('/unused/owned-target.json')
+        self.assertEqual(process.call_count,1)
+
     def test_nonempty_source_is_refused_without_reset_or_clone(self):
         files=[Path(str(i)+'.php') for i in range(87)]
         ledger='\n'.join(p.stem for p in files)

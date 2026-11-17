@@ -111,6 +111,10 @@ def start_ticks(pid):
 
 def run(manifest, seconds=0):
     c,root = owned(manifest)
+    # Old toolchain images can start HTTP successfully but fail every branded PDF at first use.
+    if subprocess.run([c['php'], '-r', "exit(extension_loaded('gd') ? 0 : 1);"], capture_output=True).returncode:
+        print('Synthetic runtime requires PHP GD for prescription and billing PDFs. Rebuild the documented toolchain image.', file=sys.stderr)
+        raise RuntimeError('Missing PHP GD; no runtime service was started.')
     # One supervisor per target. Lock survives child restarts; a second launcher cannot steal its services.
     lock=(root/'supervisor.lock').open('a')
     fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
