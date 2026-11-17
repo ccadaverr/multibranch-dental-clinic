@@ -15,6 +15,11 @@ $input = json_decode((string) fgets(STDIN), true, flags: JSON_THROW_ON_ERROR);
 if (! preg_match('/^rx_[a-z0-9_]+$/', $input['worker'] ?? '')) {
     throw new RuntimeException('Invalid worker name.');
 }
+// Explicit disposable-test process only: share the parent scenario clock, never an ambient production override.
+if (isset($input['test_time'])) {
+    \Carbon\Carbon::setTestNow(\Carbon\CarbonImmutable::parse($input['test_time']));
+    \Carbon\CarbonImmutable::setTestNow(\Carbon\CarbonImmutable::parse($input['test_time']));
+}
 $app = require __DIR__.'/../../bootstrap/app.php';
 $kernel = $app->make(Kernel::class);
 $kernel->bootstrap();

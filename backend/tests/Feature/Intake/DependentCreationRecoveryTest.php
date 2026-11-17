@@ -8,7 +8,7 @@ use Tests\Feature\Appointments\SchedulingFixture;
 use Tests\TestCase;
 final class DependentCreationRecoveryTest extends TestCase {
  use DatabaseTransactions,SchedulingFixture;
- protected function setUp():void{parent::setUp();$this->setUpSchedulingWorld();$this->p['A']->person->update(['date_of_birth'=>'1985-01-01']);$this->actingAsUser('patientA');}
+ protected function setUp():void{parent::setUp();$this->setUpSchedulingWorld();foreach(['A','B']as$key)$this->p[$key]->person->update(['date_of_birth'=>'1985-01-01']);$this->actingAsUser('patientA');}
  private function payload(array $patch=[]):array{return $patch+['first_name'=>'Synthetic','last_name'=>'Dependent','date_of_birth'=>'2016-02-02','relationship'=>'Other','relationship_other'=>'Niece','consent'=>true];}
  private function create(array $patch=[],string $key='dependent-original'){return $this->postJson('/api/me/dependents',$this->payload($patch),['Idempotency-Key'=>$key]);}
  public function test_same_command_recovers_one_patient_and_link_after_new_authenticated_session():void{
@@ -22,6 +22,13 @@ final class DependentCreationRecoveryTest extends TestCase {
   $this->actingAsUser('patientB');$this->getJson('/api/me/dependents/creation-receipt',['Idempotency-Key'=>'dependent-original'])->assertNotFound();$this->getJson('/api/me/dependents')->assertOk()->assertJsonCount(0,'data');
   $this->actingAsUser('patientA');PatientGuardian::sole()->update(['status'=>'ended','ended_at'=>now(),'ended_reason'=>'claimed_own_account']);
   $this->getJson('/api/me/dependents/creation-receipt',['Idempotency-Key'=>'dependent-original'])->assertNotFound();$this->create()->assertNotFound();self::assertSame(1,PatientGuardian::count());
+ }
+ public function test_a_minor_foreign_actor_is_refused_before_any_creation_receipt_can_be_disclosed():void{
+  $this->create()->assertCreated();$before=[Patient::count(),PatientGuardian::count(),AuditLog::count()];
+  $this->p['B']->person->update(['date_of_birth'=>'2016-01-01']);$this->actingAsUser('patientB');
+  $known=$this->getJson('/api/me/dependents/creation-receipt',['Idempotency-Key'=>'dependent-original'])->assertUnprocessable()->json();
+  $unknown=$this->getJson('/api/me/dependents/creation-receipt',['Idempotency-Key'=>'dependent-unknown'])->assertUnprocessable()->json();
+  self::assertSame($known,$unknown);self::assertSame($before,[Patient::count(),PatientGuardian::count(),AuditLog::count()]);
  }
  public function test_other_is_required_cleared_and_persisted_and_legacy_or_identity_overrides_are_refused():void{
   $this->create(['relationship_other'=>'  '])->assertUnprocessable()->assertJsonValidationErrors('relationship_other');

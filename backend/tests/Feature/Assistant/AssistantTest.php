@@ -26,8 +26,10 @@ class AssistantTest extends TestCase
     {
         parent::setUp();
         $this->setUpSchedulingWorld();
-        config(['assistant.api_key' => self::KEY, 'assistant.model' => 'test-model-1', 'assistant.rate_per_minute' => 1000, 'assistant.rate_per_hour' => 10000, 'assistant.daily_cap' => 40]);
+        // This mocked-provider suite must not inherit the owned runtime's knowledge-only setting.
+        config(['assistant.mode' => 'auto', 'assistant.api_key' => self::KEY, 'assistant.model' => 'test-model-1', 'assistant.rate_per_minute' => 1000, 'assistant.rate_per_hour' => 10000, 'assistant.daily_cap' => 40]);
         Http::swap(new Factory);
+        Http::preventStrayRequests();
         $this->logged = [];
         Event::listen(MessageLogged::class, fn (MessageLogged $e) => $this->logged[] = [$e->message, $e->context]);
     }

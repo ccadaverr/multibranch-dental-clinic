@@ -31,6 +31,13 @@ class GeminiAuthorizationTest extends TestCase
         });
         $app['config']->set('session.driver', 'array');
         $app['config']->set('cache.default', 'array');
+        // AppServiceProvider already resolved the limiter while bootstrapping. Changing cache.default
+        // cannot replace its captured DatabaseStore: that reused account42 quotas across these tests.
+        $original = $app->make(\Illuminate\Cache\RateLimiter::class);
+        $isolated = new \Illuminate\Cache\RateLimiter($app['cache']->store('array'));
+        $isolated->for('m7-assistant', $original->limiter('m7-assistant'));
+        $app->instance(\Illuminate\Cache\RateLimiter::class, $isolated);
+        \Illuminate\Support\Facades\RateLimiter::clearResolvedInstance(\Illuminate\Cache\RateLimiter::class);
         return $app;
     }
 
@@ -48,6 +55,13 @@ class GeminiAuthorizationTest extends TestCase
             'answer' => 'Please contact the clinic.', 'outcome' => 'fallback_standard', 'mode' => 'knowledge_fallback',
         ]);
         $this->app->instance(GeminiChatController::class, $controller);
+    }
+
+    public function test_limiter_uses_the_isolated_array_cache_and_cannot_reuse_database_quota(): void
+    {
+        $limiter = app(\Illuminate\Cache\RateLimiter::class);
+        $cache = (new \ReflectionProperty($limiter, 'cache'))->getValue($limiter);
+        $this->assertInstanceOf(\Illuminate\Cache\ArrayStore::class, $cache->getStore());
     }
 
     private function login(Role $role = Role::Patient, bool $profile = true, string $status = 'Active'): void

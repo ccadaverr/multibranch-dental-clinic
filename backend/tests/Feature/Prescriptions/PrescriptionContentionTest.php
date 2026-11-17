@@ -43,6 +43,8 @@ class PrescriptionContentionTest extends TestCase
     {
         $token = $this->u['dentist1']->createToken('synthetic-rx-races')->plainTextToken;
         foreach (['create_same', 'save_same', 'save_different', 'issue_same', 'issue_different', 'void_same', 'void_conflicting', 'issue_stale', 'branch_revoked', 'account_revoked'] as $index => $scenario) {
+            // Independent race scenarios have independent synthetic minutes. Keep the real 30/minute throttle active.
+            $this->travelTo(\Carbon\CarbonImmutable::parse('2026-09-28T10:00:00+08:00')->addMinutes($index));
             $this->actingAsUser('dentist1');
             $v = $index === 0 ? $this->visit() : $v;
             $create = ['visit_id' => $v->public_id, 'lines' => [['medicine' => 'Synthetic medicine '.$index]]];
@@ -79,7 +81,7 @@ class PrescriptionContentionTest extends TestCase
                         $payload['reason'] = 'Synthetic void B';
                     }
                     $same = in_array($scenario, ['create_same', 'save_same', 'issue_same', 'void_same', 'void_conflicting'], true);
-                    $proc = new Process([PHP_BINARY, base_path('tests/Support/prescription_worker.php')], base_path(), getenv(), json_encode(['worker' => $name, 'token' => $token, 'path' => $path, 'method' => $method, 'body' => $payload, 'key' => 'rx-race-'.$index.'-'.($same ? 0 : $n)]), 30);
+                    $proc = new Process([PHP_BINARY, base_path('tests/Support/prescription_worker.php')], base_path(), getenv(), json_encode(['worker' => $name, 'token' => $token, 'path' => $path, 'method' => $method, 'body' => $payload, 'key' => 'rx-race-'.$index.'-'.($same ? 0 : $n), 'test_time' => now()->toIso8601String()]), 30);
                     $proc->start();
                     $workers[] = $proc;
                 }
@@ -90,7 +92,9 @@ class PrescriptionContentionTest extends TestCase
                     if ($waiting === 2) {
                         break;
                     }foreach ($workers as $w) {
-                        self::assertTrue($w->isRunning(), 'Worker exited before real contention');
+                        // Report only scenario/status; never echo the secret-bearing worker input or a full trace.
+                        $early = json_decode($w->getOutput(), true);
+                        self::assertTrue($w->isRunning(), 'Worker exited before real contention: '.$scenario.' HTTP '.($early['status'] ?? 'no response').' exit '.($w->getExitCode() ?? 'running'));
                     }usleep(10000);
                 } while (microtime(true) < $deadline);
                 self::assertSame(2, $waiting, 'Both independent requests must wait on actual PostgreSQL locks.');

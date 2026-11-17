@@ -42,6 +42,21 @@ class PrescriptionTest extends TestCase
             ['medicine' => 'Mefenamic acid 500 mg', 'frequency' => 'as needed for pain']]]);
     }
 
+    public function test_real_prescription_quota_refuses_the_31st_request_without_writes_and_recovers_next_minute(): void
+    {
+        $visit = $this->visit();
+        for ($i = 0; $i < 30; $i++) {
+            $this->draft($visit)->assertCreated();
+        }
+        $before = [Prescription::count(), AuditLog::count(), DB::table('command_keys')->count()];
+        $this->draft($visit)->assertStatus(429);
+        $this->assertSame($before, [Prescription::count(), AuditLog::count(), DB::table('command_keys')->count()]);
+        $this->assertSame(30, Prescription::where('visit_id', $visit->id)->where('status', 'Draft')->count());
+        $this->travel(61)->seconds();
+        $this->draft($visit)->assertCreated();
+        $this->assertSame(31, Prescription::where('visit_id', $visit->id)->where('status', 'Draft')->count());
+    }
+
     public function test_only_a_dentist_at_the_branch_writes_issues_and_voids(): void
     {
         $visit = $this->visit();

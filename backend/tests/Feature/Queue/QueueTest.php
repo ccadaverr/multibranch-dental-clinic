@@ -432,7 +432,8 @@ class QueueTest extends TestCase
         $early = $visit('B', 'd1', 'Checked In', '09:10');
         $treating = $visit('C', 'd2', 'In Treatment', '09:00');
         DB::table('visit_history')->insert(['visit_id' => $treating->id, 'event' => 'visit.treatment_started', 'from_status' => 'Checked In', 'to_status' => 'In Treatment',
-            'revision' => 2, 'occurred_at' => CarbonImmutable::parse('2026-09-28 09:20', 'Asia/Manila')]);
+            // Query Builder bypasses VisitHistory's offset-aware model dateFormat.
+            'revision' => 2, 'occurred_at' => CarbonImmutable::parse('2026-09-28 09:20', 'Asia/Manila')->toIso8601String()]);
         $missing = $visit('D', 'd2', 'In Treatment', '09:05');
         $visit('A', 'd1', 'Completed', '08:00');
         [, $this->p['E']] = $this->patient('PAT-0005');

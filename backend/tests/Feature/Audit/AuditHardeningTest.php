@@ -63,7 +63,12 @@ class AuditHardeningTest extends TestCase
             DB::transaction(fn () => DB::statement('TRUNCATE audit_logs'));
             $this->fail('truncate should be refused');
         } catch (QueryException $e) {
-            $this->assertStringContainsString('append-only', $e->getMessage());
+            if ((string) $e->getCode() === '42501') {
+                // A restricted application role is refused before the append-only trigger runs.
+                $this->assertSame(0, (int) DB::scalar("SELECT has_table_privilege(current_user, 'audit_logs', 'TRUNCATE')"));
+            } else {
+                $this->assertStringContainsString('append-only', $e->getMessage());
+            }
         }
         $this->assertSame('test.original', $log->fresh()->action);
         $this->assertSame(1, AuditLog::count());
