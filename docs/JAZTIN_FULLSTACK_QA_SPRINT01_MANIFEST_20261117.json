@@ -1,0 +1,499 @@
+{
+  "date_manila": "2026-11-17",
+  "classification": "Clinical-branch candidates; not Windows integrated acceptance",
+  "branch": "feature/jaztin-fullstack-qa-20261117",
+  "starting_head": "fc9eb81392d78d688d980951e2780ba015e91f89",
+  "implementation_commit": "7e058701f05d49ff8577af2f1f9ffe23a56d4974",
+  "source_ancestors": {
+    "operations": "9409b59e769de29ec0e58ab238b11d40fee29b45",
+    "clinical": "407f0c6b74ce44a7d955d4b897e6100e2bd80a51"
+  },
+  "qa_totals_unchanged": {
+    "local_complete": 25,
+    "partial": 32,
+    "blocked": 11,
+    "integrated_pass": 9,
+    "integrated_pending": 59
+  },
+  "qa_ids_addressed": [
+    "GEN-02",
+    "GEN-04",
+    "GEN-09",
+    "GEN-13"
+  ],
+  "whole_qa_promotions": 0,
+  "original_rows_preserved": [
+    {
+      "original_id": "GEN-02",
+      "original_owner": "Celin",
+      "exact_criterion_and_tasks": "\"X\" appears everywhere clear-filter existed; clicking resets filters; no text \"Clear filters\" remains.<br>Original tasks: Find every \"Clear filters\" / \"Clear\" control across all dashboards; Replace each with an \"X\" icon button (shared component); Add tooltip/aria-label \"Clear filters\"; only show when a filter is active `FINALS-QA-REVISIONS.md:420`",
+      "responsible_domain": "Jaztin Clinical/Patient; Joevan shared-role partner",
+      "source_evidence": "src/components.jsx; src/pages/Scheduling.jsx",
+      "focused_test_evidence": "Prior scoped QA implementation reports, not rerun all-role coverage.",
+      "current_status": "Partial",
+      "remaining_requirements_and_next_action": "Reconcile remaining clear controls against active-filter behavior across all roles; retain X/aria naming.",
+      "integrated_acceptance": "Pending",
+      "integration_evidence": "PENDING: full original criterion not accepted on the combined candidate. Both exact sources are now available; passing subsets do not close this row.",
+      "local_acceptance": "Unfinished: only cited subsets accepted; original tasks remain incomplete.",
+      "blockers": "No additional policy/reproduction blocker established; all-role or item-specific acceptance/source reconciliation pending."
+    },
+    {
+      "original_id": "GEN-04",
+      "original_owner": "Celin",
+      "exact_criterion_and_tasks": "Search icon is aligned, not overlapping typed text, and identical on all dashboards.<br>Original tasks: Reproduce the search icon anomaly (alignment, overlap with text, size, clipping); Fix icon position/size inside every search input; make one shared search input component `FINALS-QA-REVISIONS.md:437`",
+      "responsible_domain": "Jaztin Clinical/Patient; Joevan shared-role partner",
+      "source_evidence": "Not yet verified. [Master](../FINALS-QA-REVISIONS.md) and [Celin tracker](../QA-CELIN.md)",
+      "focused_test_evidence": "Tracker/source review only; no item-specific runtime acceptance established by A9; Retain historical claim; do not promote based on checkbox or broad test count.",
+      "current_status": "Partial",
+      "remaining_requirements_and_next_action": "Verify shared SearchInput and role-specific filter alignment after shared-file integration.",
+      "integrated_acceptance": "Pending",
+      "integration_evidence": "PENDING: full original criterion not accepted on the combined candidate. Both exact sources are now available; passing subsets do not close this row.",
+      "local_acceptance": "Unfinished: only cited subsets accepted; original tasks remain incomplete.",
+      "blockers": "No additional policy/reproduction blocker established; all-role or item-specific acceptance/source reconciliation pending."
+    },
+    {
+      "original_id": "GEN-09",
+      "original_owner": "Richmon",
+      "exact_criterion_and_tasks": "Key flows (check-in, appointments, patient record, prescriptions) require measurably fewer clicks.<br>Original tasks: Map the most common user flows and count clicks for each; Reduce clicks (shortcuts, default selections, inline actions, fewer modals/steps); Record before/after click counts per flow `FINALS-QA-REVISIONS.md:821`",
+      "responsible_domain": "Jaztin Clinical/Patient; Joevan shared-role partner",
+      "source_evidence": "src/pages/EncounterCare.jsx; ClinicalHistory.jsx; EncounterPrescriptions.jsx; PrescriptionController.php; [Batch08](JAZTIN_CLINICAL_BATCH08_20261116.md)",
+      "focused_test_evidence": "Batch 03 queue 2\u21921; Batch 05 appointment\u2192receipt 2\u21921; Batch 06 one exact historical review, no invented baseline clicks. Batch08 adds exact encounter prescription review, Patient/Visit/branch validation and source-counted 2\u21921 detail navigation; browser evidence is in Batch08.",
+      "current_status": "Partial",
+      "remaining_requirements_and_next_action": "Finish common-flow map for Check-In, appointment creation/management and Patient record; count comparable actions at integrated HEAD. Prescription review subset 2\u21921 does not close prescribing or whole GEN-09.",
+      "integrated_acceptance": "Pending",
+      "integration_evidence": "PENDING: full original criterion not accepted on the combined candidate. Both exact sources are now available; passing subsets do not close this row.",
+      "local_acceptance": "Unfinished: only cited subsets accepted; original tasks remain incomplete.",
+      "blockers": "Full comparable common-flow map remains incomplete; no numeric target or measured time saving supplied."
+    },
+    {
+      "original_id": "GEN-13",
+      "original_owner": "Celin",
+      "exact_criterion_and_tasks": "No text refresh buttons remain; icon triggers refresh with visible loading state.<br>Original tasks: Replace every text \"Refresh\" button with a refresh icon button; Add tooltip + aria-label; show a spin/loading state while refreshing `FINALS-QA-REVISIONS.md:445`",
+      "responsible_domain": "Jaztin Clinical/Patient; Joevan shared-role partner",
+      "source_evidence": "Not yet verified. [Master](../FINALS-QA-REVISIONS.md) and [Celin tracker](../QA-CELIN.md)",
+      "focused_test_evidence": "Tracker/source review only; no item-specific runtime acceptance established by A9; Retain historical claim; do not promote based on checkbox or broad test count.",
+      "current_status": "Partial",
+      "remaining_requirements_and_next_action": "Finish global refresh-control coverage/loading evidence; single Check-In and clinical refresh subsets do not close global wording.",
+      "integrated_acceptance": "Pending",
+      "integration_evidence": "PENDING: full original criterion not accepted on the combined candidate. Both exact sources are now available; passing subsets do not close this row.",
+      "local_acceptance": "Unfinished: only cited subsets accepted; original tasks remain incomplete.",
+      "blockers": "No additional policy/reproduction blocker established; all-role or item-specific acceptance/source reconciliation pending."
+    }
+  ],
+  "source_files": [
+    {
+      "path": "backend/app/Http/Controllers/PrescriptionController.php",
+      "bytes": 24101,
+      "sha256": "5feba6a777ad1ab742a832d5680962f5c4577581fb345f49b2dab325c22605cb",
+      "sha256_lf": "5feba6a777ad1ab742a832d5680962f5c4577581fb345f49b2dab325c22605cb"
+    },
+    {
+      "path": "backend/tests/Feature/Prescriptions/PrescriptionSearchTest.php",
+      "bytes": 8454,
+      "sha256": "9ae14b013aa5b035d3839d0331a94358bd7042dece1130e97bcd8ab401bac65e",
+      "sha256_lf": "9ae14b013aa5b035d3839d0331a94358bd7042dece1130e97bcd8ab401bac65e"
+    },
+    {
+      "path": "docs/contracts/PRESCRIPTION_SEARCH_API_V1.md",
+      "bytes": 3251,
+      "sha256": "55a959aceda523a9384550f0415e5be4ab3f206232d4a354d548fd8941490023",
+      "sha256_lf": "55a959aceda523a9384550f0415e5be4ab3f206232d4a354d548fd8941490023"
+    },
+    {
+      "path": "src/pages/ClinicalHistory.jsx",
+      "bytes": 6410,
+      "sha256": "8337700212f05aa6e62bc6e6f247630d0d8637b62e6d9623bd664726713c07bc",
+      "sha256_lf": "8337700212f05aa6e62bc6e6f247630d0d8637b62e6d9623bd664726713c07bc"
+    },
+    {
+      "path": "src/pages/ServerPrescriptions.jsx",
+      "bytes": 42111,
+      "sha256": "ca4d6b6d248bdc873bc532dd674166fb64186f70845a56f12452f181d3157a99",
+      "sha256_lf": "ca4d6b6d248bdc873bc532dd674166fb64186f70845a56f12452f181d3157a99"
+    },
+    {
+      "path": "src/patient/Portal.jsx",
+      "bytes": 24299,
+      "sha256": "c5be27206860b67c4483f91aa821235f778d746390e2631b14e94c59af8e9ef8",
+      "sha256_lf": "c5be27206860b67c4483f91aa821235f778d746390e2631b14e94c59af8e9ef8"
+    },
+    {
+      "path": "src/patient/pages/Prescriptions.jsx",
+      "bytes": 4871,
+      "sha256": "8f4fe9f9ad175d5fa74183abca2c8913359a59c43f6c7d13abafd82e3e245caf",
+      "sha256_lf": "8f4fe9f9ad175d5fa74183abca2c8913359a59c43f6c7d13abafd82e3e245caf"
+    },
+    {
+      "path": "src/patient/pages/Teeth.jsx",
+      "bytes": 2859,
+      "sha256": "c8b0288743a05e336ea811d77748401e22e939acead7dcb3faa02c1c02f74557",
+      "sha256_lf": "c8b0288743a05e336ea811d77748401e22e939acead7dcb3faa02c1c02f74557"
+    },
+    {
+      "path": "src/patient/prescription-read.js",
+      "bytes": 2208,
+      "sha256": "058c10b7e06c536528c8f498cda339cb5b1f869c3d8fdf1f0064a4d2cff82f9c",
+      "sha256_lf": "058c10b7e06c536528c8f498cda339cb5b1f869c3d8fdf1f0064a4d2cff82f9c"
+    },
+    {
+      "path": "src/prescription-list.js",
+      "bytes": 2014,
+      "sha256": "abfc68105fac7b36777edb0302891f884666b76dea1b76a6cbd3748fab27d036",
+      "sha256_lf": "abfc68105fac7b36777edb0302891f884666b76dea1b76a6cbd3748fab27d036"
+    },
+    {
+      "path": "tests/local-prescription-search.browser.mjs",
+      "bytes": 12284,
+      "sha256": "90c2a4f9cf48f5d7ed673c51328f38d7996abf0129438cbbf4c168297314d6d4",
+      "sha256_lf": "90c2a4f9cf48f5d7ed673c51328f38d7996abf0129438cbbf4c168297314d6d4"
+    },
+    {
+      "path": "tests/m19-prescriptions.test.js",
+      "bytes": 6438,
+      "sha256": "6e4635f0d3a5f4540048faac4db788f9d048d76b9b994d535c21ce9670b69f69",
+      "sha256_lf": "6e4635f0d3a5f4540048faac4db788f9d048d76b9b994d535c21ce9670b69f69"
+    },
+    {
+      "path": "tests/prescription-list.test.js",
+      "bytes": 4892,
+      "sha256": "87851d5b914e809dec7d56e18c3a52acd707b5e580b964420705d0199e2603bd",
+      "sha256_lf": "87851d5b914e809dec7d56e18c3a52acd707b5e580b964420705d0199e2603bd"
+    }
+  ],
+  "manifest_scope": "All 13 paths changed across both implementation commits from the starting HEAD; final report/state/this manifest are handoff documentation and are not self-hashed. The private delivery manifest records final commit, complete patch checksum and all 16 final file hashes.",
+  "schema_change": false,
+  "held_migrations_executed": false,
+  "conversation_grant_cutover": false,
+  "push": false,
+  "merge": false,
+  "deployment": false,
+  "verification": {
+    "focused_postgresql": {
+      "tests": 18,
+      "assertions": 364,
+      "result": "PASS",
+      "log": "/private/tmp/jaztin-sprint01-compat-final-pg.log"
+    },
+    "frontend": {
+      "tests": 2010,
+      "pass": 2002,
+      "skip": 8,
+      "fail": 0,
+      "log": "/private/tmp/jaztin-sprint01-frontend-source-final.log"
+    },
+    "browser": {
+      "roles": [
+        "Dentist",
+        "Patient"
+      ],
+      "widths": [
+        375,
+        390,
+        430,
+        768,
+        1024,
+        1440
+      ],
+      "groups": 6,
+      "result": "PASS at first implementation commit; frontend unchanged by final backend compatibility correction",
+      "log": "/private/tmp/jaztin-sprint01-browser-source-final.log",
+      "source_commit": "483df50d1f2dda3a104aee6d662870b5d791d265"
+    },
+    "reviewed_backend": {
+      "classification": "RED; raw mixed-profile runs plus explicit requalification, no assertion weakened",
+      "raw_cohorts": [
+        {
+          "id": 0,
+          "tests": 567,
+          "assertions": 5393,
+          "failures": 16,
+          "errors": 2,
+          "skips": 0,
+          "log": "/private/tmp/jaztin-sprint01-cohort-0.log",
+          "sha256": "6cce6b36ae867bf49c1ba585c52a4b392e0ca896f0dc3d7de018585c03593826",
+          "explicit_paths": [
+            "tests/Feature/Payment/PayMongoPaymentTest.php",
+            "tests/Feature/Patients/PatientRecordTest.php",
+            "tests/Feature/Operations/OpsQa03ClinicalLinkIntegrityTest.php",
+            "tests/Feature/Followups/SelectedFollowupBookingTest.php",
+            "tests/Feature/Queue/QueueTest.php",
+            "tests/Feature/Pricing/PricingTest.php",
+            "tests/Feature/Appointments/AppointmentLifecycleTest.php",
+            "tests/Feature/Reference/ReferenceDataAuthorizationTest.php",
+            "tests/Feature/Treatments/ClinicalIntegrationAcceptanceTest.php",
+            "tests/Feature/Mail/EmailDesignTest.php",
+            "tests/Feature/Followups/FollowupExactReadbackTest.php",
+            "tests/Feature/Staffing/StaffRosterPublicationTest.php",
+            "tests/Feature/Charts/DentalChartTest.php",
+            "tests/Feature/UserManagementTest.php",
+            "tests/Feature/Followups/SelectedFollowupRecoveryTest.php",
+            "tests/Feature/Assistant/AssistantTest.php",
+            "tests/Feature/Auth/AuthenticationTest.php",
+            "tests/Feature/Identity/Scope04StaffScopeAtomicityTest.php",
+            "tests/Feature/Visits/ArrivalRecoveryTest.php",
+            "tests/Feature/Staffing/Scope03WorkScheduleProjectionTest.php",
+            "tests/Feature/Messaging/MessageSearchTest.php",
+            "tests/Feature/Automation/AutomationControlTest.php",
+            "tests/Feature/Treatments/EncounterRecoveryTest.php",
+            "tests/Feature/Reference/BranchHardeningTest.php",
+            "tests/Feature/Intake/DependentCreationRecoveryTest.php",
+            "tests/Feature/Audit/AuditTrailTest.php",
+            "tests/Feature/Reference/OwnerBranchAcceptanceTest.php",
+            "tests/Feature/Notifications/NotificationArchiveTest.php",
+            "tests/Feature/Billing/DemoUnpaidInvoiceSeederTest.php",
+            "tests/Feature/Reference/BranchReferenceResolverTest.php",
+            "tests/Feature/Notifications/NotificationHistoryTest.php",
+            "tests/Feature/Appointments/BookingIntegrationContractTest.php",
+            "tests/Feature/Reference/BranchCodeOptionsTest.php",
+            "tests/Feature/Appointments/BranchHoursTest.php",
+            "tests/Unit/PreflightConfigurationValidatorTest.php",
+            "tests/Feature/Staffing/PersonnelUpdateReadbackTest.php",
+            "tests/Feature/Mail/LocalCaptureTransportTest.php",
+            "tests/Feature/Audit/OperationalArchiveScopeTest.php",
+            "tests/Feature/Visits/Stf12WalkInAcceptanceTest.php",
+            "tests/Feature/Staffing/LeaveAuditAtomicityTest.php",
+            "tests/Feature/Identity/DemoStaffProfileSeederTest.php",
+            "tests/Unit/PreflightHandoffEvidenceTest.php",
+            "tests/Feature/Reference/ClosureFilterReadbackTest.php",
+            "tests/Feature/Inquiries/InquiryAssignmentReplayTest.php",
+            "tests/Feature/Billing/VisitSettlementJourneyTest.php",
+            "tests/Unit/SelectedFollowupRequestTest.php",
+            "tests/Unit/ScratchDatabaseGuardExceptionTest.php",
+            "tests/Unit/ScratchDatabaseGuardBoundaryTest.php",
+            "tests/Unit/StaffShiftValidationTest.php",
+            "tests/Unit/ExampleTest.php"
+          ]
+        },
+        {
+          "id": 1,
+          "tests": 433,
+          "assertions": 4560,
+          "failures": 23,
+          "errors": 2,
+          "skips": 1,
+          "log": "/private/tmp/jaztin-sprint01-cohort-1.log",
+          "sha256": "7eb999683ce1258d33708d4621891dbec946ccda5253e356f13be32bc2ac6dfb",
+          "explicit_paths": [
+            "tests/Feature/Auth/AccountRecoveryTest.php",
+            "tests/Feature/Appointments/AppointmentBookingTest.php",
+            "tests/Feature/Billing/BillingHardeningTest.php",
+            "tests/Feature/Treatments/TreatmentTest.php",
+            "tests/Feature/Automation/AutomationTruthfulnessTest.php",
+            "tests/Feature/Automations/AutomationsTest.php",
+            "tests/Feature/Payment/AppointmentBookingPaymentTest.php",
+            "tests/Feature/Audit/AuditHardeningTest.php",
+            "tests/Feature/Staffing/Hnd02HandoverCreateTest.php",
+            "tests/Feature/Inquiries/InquiryTest.php",
+            "tests/Feature/Billing/BillingTest.php",
+            "tests/Feature/Feedback/FeedbackTest.php",
+            "tests/Feature/Assistant/GeminiChatTest.php",
+            "tests/Feature/RbacTest.php",
+            "tests/Feature/Automations/InterviewRoundTwoTest.php",
+            "tests/Feature/Staffing/Hnd03CreationAuthorizationTest.php",
+            "tests/Feature/Identity/StaffP0BranchScopePreservationTest.php",
+            "tests/Feature/Reference/ReferenceDataMutationTest.php",
+            "tests/Feature/Audit/AuditEmittersTest.php",
+            "tests/Feature/Staffing/Scope01WorkScheduleVisibilityTest.php",
+            "tests/Feature/Identity/Scope05StaffScopeAuditTest.php",
+            "tests/Feature/Auth/EmailVerificationTest.php",
+            "tests/Feature/Staffing/WorkSchedulesTest.php",
+            "tests/Feature/Prescriptions/PrescriptionTest.php",
+            "tests/Feature/Charts/ChartBe01AuditAtomicityTest.php",
+            "tests/Feature/Staffing/StaffRosterDraftTest.php",
+            "tests/Feature/Staffing/LeaveRecoveryTest.php",
+            "tests/Feature/Prescriptions/PrescriptionSearchTest.php",
+            "tests/Feature/Followups/Follow03RevisionResponseTest.php",
+            "tests/Feature/Staffing/HandoverTest.php",
+            "tests/Feature/Prescriptions/PrescriptionRecoveryTest.php",
+            "tests/Feature/Identity/StaffShiftRecoveryTest.php",
+            "tests/Feature/Staffing/OnDutyStatusTest.php",
+            "tests/Feature/Mail/ClinicMailerTest.php",
+            "tests/Feature/Appointments/AppointmentEmailTest.php",
+            "tests/Feature/Treatments/HistoricalTreatmentReadTest.php",
+            "tests/Feature/Staffing/LeaveCollectionScopeTest.php",
+            "tests/Feature/Followups/FollowupTest.php",
+            "tests/Feature/Appointments/BookingSessionAcceptanceTest.php",
+            "tests/Feature/Reference/PublicBranchesTest.php",
+            "tests/Feature/Audit/OperationalArchiveActivityTest.php",
+            "tests/Feature/Visits/ClinicalArrivalOrderingTest.php",
+            "tests/Feature/Staffing/LeaveRecoveryCapabilityTest.php",
+            "tests/Feature/LocalInfrastructureCheckTest.php",
+            "tests/Feature/Console/DemoCheckTest.php",
+            "tests/Feature/Analytics/AnalyticsComparisonTest.php",
+            "tests/Unit/SelectedFollowupBookingTest.php",
+            "tests/Unit/GeminiScratchGuardTest.php",
+            "tests/Unit/StaffShiftRevisionTest.php"
+          ]
+        },
+        {
+          "id": 2,
+          "tests": 508,
+          "assertions": 5618,
+          "failures": 44,
+          "errors": 31,
+          "skips": 2,
+          "log": "/private/tmp/jaztin-sprint01-cohort-2.log",
+          "sha256": "2edd3b80e98f95f8f8eeb94cdda6cb5ed790cac6920fda6f2004526d6c1e7956",
+          "explicit_paths": [
+            "tests/Feature/Intake/IntakeTest.php",
+            "tests/Feature/Documents/DocumentManagementTest.php",
+            "tests/Feature/Visits/VisitTest.php",
+            "tests/Feature/Auth/RegistrationTest.php",
+            "tests/Feature/Analytics/AnalyticsCorrectionsTest.php",
+            "tests/Feature/Auth/ProductionHardeningTest.php",
+            "tests/Feature/Messaging/MessagingTest.php",
+            "tests/Feature/Appointments/AppointmentAuthorizationTest.php",
+            "tests/Feature/Visits/VisitReadPrivacyTest.php",
+            "tests/Feature/Messaging/MessagingRealtimeTest.php",
+            "tests/Feature/Identity/EmployeeInvitationTest.php",
+            "tests/Feature/Analytics/OwnerDashboardEvidenceTest.php",
+            "tests/Feature/Analytics/AnalyticsTest.php",
+            "tests/Feature/Hmo/HmoTest.php",
+            "tests/Feature/Assistant/GeminiAuthorizationTest.php",
+            "tests/Feature/Mail/MailOutboxTest.php",
+            "tests/Feature/Charts/ChartCommandRecoveryTest.php",
+            "tests/Feature/Operations/Batch4ServerRulesTest.php",
+            "tests/Feature/Assistant/AssistantKnowledgeTest.php",
+            "tests/Feature/Staffing/Hnd01HandoverTransitionTest.php",
+            "tests/Feature/Identity/Scope02StaffDirectoryVisibilityTest.php",
+            "tests/Feature/Appointments/AppointmentReadPrivacyTest.php",
+            "tests/Feature/Reference/ReferenceDataSeedIdentityTest.php",
+            "tests/Feature/Patients/ProfileSaveRecoveryTest.php",
+            "tests/Feature/Billing/BillingDocumentDownloadTest.php",
+            "tests/Feature/Staffing/LeaveTest.php",
+            "tests/Feature/Settings/BrandingSettingsTest.php",
+            "tests/Feature/Payment/RefundIntegrationAcceptanceTest.php",
+            "tests/Feature/Appointments/PatientPortalApiTest.php",
+            "tests/Feature/Reference/PublicContentPublicationTest.php",
+            "tests/Feature/Payment/Fin02PreCreditRefundTest.php",
+            "tests/Feature/Appointments/PatientBookingContractTest.php",
+            "tests/Feature/Reference/ReferenceDataResourceContractTest.php",
+            "tests/Feature/Intake/IdVerificationAtomicityTest.php",
+            "tests/Feature/Billing/DemoClinicSeederTest.php",
+            "tests/Feature/Staffing/WorkforceSelfAccessTest.php",
+            "tests/Feature/Notifications/NotificationIntegrationTest.php",
+            "tests/Feature/Billing/PatientReceiptNavigationTest.php",
+            "tests/Unit/ScratchDatabaseGuardRejectionTest.php",
+            "tests/Feature/Staffing/StaffRosterDraftCollectionTest.php",
+            "tests/Feature/Mail/QueuedLocalCaptureTest.php",
+            "tests/Unit/SelectedFollowupIdempotencyTest.php",
+            "tests/Feature/Staffing/StaffRosterDraftCapabilityTest.php",
+            "tests/Feature/Queue/PreservationMigrationTest.php",
+            "tests/Feature/ExampleTest.php",
+            "tests/Feature/Archives/ArchivesIsolationTest.php",
+            "tests/Unit/IsolatedDatabaseGuardTest.php",
+            "tests/Unit/QueueMigrationRollbackSafetyTest.php",
+            "tests/Unit/FollowupReadbackRouteTest.php"
+          ]
+        }
+      ],
+      "raw_totals": {
+        "tests": 1508,
+        "assertions": 15571,
+        "failures": 83,
+        "errors": 35,
+        "skips": 3
+      },
+      "pure_unit_requalification": {
+        "tests": 252,
+        "assertions": 1193,
+        "result": "PASS",
+        "database_connection": false,
+        "log": "/private/tmp/jaztin-sprint01-unit-final.log"
+      },
+      "actual_loopback_capture_requalification": {
+        "tests": 5,
+        "assertions": 52,
+        "result": "PASS",
+        "log": "/private/tmp/jaztin-sprint01-capture-tests.log",
+        "scope": "Fresh clone; verified zero committed jobs/patients/dispatches before fixture worker calls; no historical jobs or external delivery"
+      },
+      "qualified_distinct_coverage": {
+        "feature": 1269,
+        "unit": 252,
+        "total": 1521,
+        "passing": 1491,
+        "failures": 26,
+        "errors": 1,
+        "skips": 3,
+        "note": "Combined distinct coverage after using correct profiles; not one single all-green suite. Raw failures remain visible."
+      },
+      "retained_original_failed_or_error_cases": [
+        "Tests\\Feature\\Automation\\AutomationControlTest::test_unauthenticated_cannot_access_automation_endpoints",
+        "Tests\\Feature\\Automation\\AutomationControlTest::test_staff_and_dentist_and_patient_are_forbidden_from_automation",
+        "Tests\\Feature\\Automation\\AutomationControlTest::test_owner_can_view_automation_rules_and_snapshot",
+        "Tests\\Feature\\Automation\\AutomationControlTest::test_owner_can_trigger_manual_evaluation_and_audit_is_created",
+        "Tests\\Feature\\Automation\\AutomationControlTest::test_csv_export_neutralizes_formula_injection",
+        "Tests\\Feature\\Feedback\\FeedbackTest::test_submitted_feedback_is_immutable_and_nothing_can_erase_it",
+        "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_the_api_marks_every_action_row_as_evaluation_only_and_keeps_historical_text_unchanged",
+        "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_refuses_clinical_flags_and_every_foreign_field",
+        "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_validates_each_rule_observation",
+        "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_the_manual_message_says_evaluated_not_executed_and_the_event_stores_no_email",
+        "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_only_the_owner_may_dispatch_and_authorization_precedes_validation",
+        "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_is_rate_limited",
+        "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_audit_events_carry_no_event_body_and_the_csv_marks_evaluation_only",
+        "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_legacy_descriptions_are_qualified_inside_the_csv_cell_and_in_the_exception_projection",
+        "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_repeated_manual_dispatches_are_independent_evaluations_with_no_idempotency_contract",
+        "Tests\\Feature\\Automation\\AutomationTruthfulnessTest::test_manual_dispatch_refuses_unexpected_top_level_fields_too",
+        "Tests\\Feature\\Feedback\\FeedbackTest::test_the_feature_is_patient_only_and_owner_staff_dentist_and_guests_are_all_refused_everywhere",
+        "Tests\\Feature\\Feedback\\FeedbackTest::test_owner_can_review_feedback_with_filters",
+        "Tests\\Feature\\Feedback\\FeedbackTest::test_a_patient_submits_free_text_about_their_own_completed_visit_and_the_record_is_minimal_and_server_derived",
+        "Tests\\Feature\\Feedback\\FeedbackTest::test_only_the_patients_own_completed_visits_are_eligible_and_every_other_case_is_one_indistinguishable_refusal",
+        "Tests\\Feature\\Feedback\\FeedbackTest::test_the_text_is_bounded_free_data_and_every_authority_or_policy_field_is_refused",
+        "Tests\\Feature\\Feedback\\FeedbackTest::test_submission_is_idempotent_a_new_key_is_a_separate_submission_and_no_uniqueness_is_invented",
+        "Tests\\Feature\\Feedback\\FeedbackTest::test_a_patient_reads_only_their_own_feedback_newest_first_with_a_cursor_that_reveals_nothing_about_others",
+        "Tests\\Feature\\Feedback\\FeedbackTest::test_m26_is_a_foundation_only_no_rating_category_status_reply_publication_marketing_or_other_module_side_effect",
+        "Tests\\Feature\\Feedback\\FeedbackTest::test_submission_is_rate_limited_per_account_and_explains_itself",
+        "Tests\\Feature\\Feedback\\FeedbackTest::test_patient_can_submit_1_to_5_star_rating_and_low_ratings_auto_create_followup_task",
+        "Tests\\Feature\\Feedback\\FeedbackTest::test_owner_can_review_patient_feedback_with_branch_and_dentist_filters"
+      ],
+      "new_remaining_feature_failure_cases": [],
+      "excluded_files_note": "41 separately gated migration/reset/contention lanes and two queue-specific suites excluded; full reviewed cohort, not every backend file.",
+      "source_commit": "483df50d1f2dda3a104aee6d662870b5d791d265",
+      "final_narrow_compatibility_requalification": {
+        "source_commit": "7e058701f05d49ff8577af2f1f9ffe23a56d4974",
+        "tests": 18,
+        "assertions": 364,
+        "result": "PASS",
+        "change": "Preserve existing displayed Dr. Dentist-name matching; positive exact Dentist and branch query assertions added after broad cohorts. No frontend, authorization, schema or clinical write changed."
+      }
+    },
+    "python_safety": {
+      "tests": 45,
+      "result": "PASS",
+      "warnings": "Existing ResourceWarnings retained"
+    },
+    "php_format_and_syntax": "PASS on both changed PHP files",
+    "smoke": "PASS, 17 groups; branding hashes preserved",
+    "build": "PASS; existing large-chunk warning retained",
+    "predefense_local_only": {
+      "fail": 6,
+      "warn": 6,
+      "log": "/private/tmp/jaztin-sprint01-predefense-final.log",
+      "production_acceptance": false
+    },
+    "postflight": {
+      "all_five_new_test_targets_empty_after_rollback": true,
+      "test_counts_per_target": {
+        "patients": 0,
+        "jobs": 0,
+        "dispatches": 0
+      },
+      "browser_demo_jobs_left_untouched": 2,
+      "private_snapshots_taken": true,
+      "owned_api_ui_capture_and_five_clusters_stopped": true,
+      "nothing_deleted": true
+    }
+  },
+  "authoritative_ledger_sha256": "9e3650a343474fc165b1bffe0d6b0ad1907451ddc83962d3506b1c845f5388e9",
+  "toolchain": {
+    "PHP": "8.3.30",
+    "PostgreSQL": "18.6",
+    "Node": "22.19.0",
+    "timezone": "Asia/Manila"
+  },
+  "implementation_commits": [
+    "483df50d1f2dda3a104aee6d662870b5d791d265",
+    "7e058701f05d49ff8577af2f1f9ffe23a56d4974"
+  ]
+}
