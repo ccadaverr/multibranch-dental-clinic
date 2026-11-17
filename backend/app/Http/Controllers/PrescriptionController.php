@@ -18,6 +18,7 @@ use App\Services\Mail\MailOutbox;
 use App\Services\Notifications\NotificationCenter;
 use App\Support\ClinicClock;
 use App\Support\IdempotentCommand;
+use App\Support\PrescriptionSession;
 use Closure;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -55,8 +56,9 @@ class PrescriptionController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $data = $request->validate(['patient_id' => ['nullable', 'string', 'max:40'], 'visit_id' => ['nullable', 'string', 'max:40'], 'status' => ['nullable', 'in:Draft,Issued,Void']]);
-        $q = Prescription::with(['patient.person', 'branch', 'dentist.person', 'visit'])->orderByDesc('id')->limit(200)
+        $data = $request->validate(['patient_id' => ['nullable', 'string', 'max:40'], 'visit_id' => ['nullable', 'string', 'max:40'], 'status' => ['nullable', 'in:Draft,Issued,Void'],
+            'q' => ['nullable', 'string', 'max:120'], 'page' => ['sometimes', 'integer', 'min:1', 'max:100000'], 'per_page' => ['sometimes', 'integer', 'min:1', 'max:100']]);
+        $q = Prescription::with(['patient.person', 'branch', 'dentist.person', 'visit'])->orderByDesc('id')
             ->when($data['patient_id'] ?? null, fn ($q, $p) => $q->whereIn('patient_id', Patient::select('id')->where('public_id', $p)))
             ->when($data['visit_id'] ?? null, fn ($q, $v) => $q->whereIn('visit_id', Visit::select('id')->where('public_id', $v)))
             ->when($data['status'] ?? null, fn ($q, $s) => $q->where('status', $s));
@@ -67,16 +69,41 @@ class PrescriptionController extends Controller
             default => abort(403),
         };
 
-        return response()->json(['data' => $q->get()->map(fn (Prescription $p) => $this->view($p, $user, false))->values()])->header('Cache-Control', 'private, no-store');
+        // Search only fields this role can read. The new Owner text search
+        // never matches Patient names or clinical text.
+        $search = trim($data['q'] ?? '');
+        if ($search !== '') {
+            $like = '%'.str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $search).'%';
+            $q->where(function ($q) use ($like, $user) {
+                $q->where('number', 'ilike', $like)
+                    ->orWhereHas('branch', fn ($b) => $b->where('name', 'ilike', $like))
+                    ->orWhereHas('dentist.person', fn ($p) => $p->whereRaw("concat('Dr. ', concat_ws(' ', first_name, last_name)) ILIKE ?", [$like]));
+                if ($user->role->value !== 'owner') {
+                    $q->orWhereHas('patient.person', fn ($p) => $p->whereRaw("concat_ws(' ', first_name, last_name) ILIKE ?", [$like]));
+                }
+            });
+        }
+
+        // Explicit paging is additive: existing exact-encounter callers keep
+        // their bounded legacy response until they opt into the paged contract.
+        if (isset($data['page']) || isset($data['per_page'])) {
+            $page = $q->paginate($data['per_page'] ?? 20, ['*'], 'page', $data['page'] ?? 1);
+
+            return response()->json(['data' => $page->getCollection()->map(fn (Prescription $p) => $this->view($p, $user, false))->values(),
+                'meta' => ['current_page' => $page->currentPage(), 'last_page' => $page->lastPage(), 'per_page' => $page->perPage(), 'total' => $page->total()]])
+                ->header('Cache-Control', 'private, no-store');
+        }
+
+        return response()->json(['data' => $q->limit(200)->get()->map(fn (Prescription $p) => $this->view($p, $user, false))->values()])->header('Cache-Control', 'private, no-store');
     }
 
     /** Patient (and guardian): their own issued and void prescriptions, read-only. */
     public function mine(Request $request): JsonResponse
     {
         $ids = Guardianship::patientIdsFor($request->user());
-        $rows = Prescription::whereIn('patient_id', $ids)->whereIn('status', ['Issued', 'Void'])->with(['patient.person', 'branch', 'dentist.person', 'lines'])->orderByDesc('issued_at')->get();
+        $rows = Prescription::whereIn('patient_id', $ids)->whereIn('status', ['Issued', 'Void'])->with(['patient.person', 'branch', 'dentist.person', 'visit', 'lines'])->orderByDesc('issued_at')->orderByDesc('id')->get();
 
-        return response()->json(['data' => $rows->map(fn (Prescription $p) => $this->view($p, $request->user(), true))->values()]);
+        return response()->json(['data' => $rows->map(fn (Prescription $p) => $this->view($p, $request->user(), true))->values()])->header('Cache-Control', 'private, no-store');
     }
 
     /** Dentist: visits at their branches in the last 30 days, to write a prescription for (with the allergy reminder). */
@@ -249,7 +276,7 @@ class PrescriptionController extends Controller
     /** The dentist's own optional license number for prescriptions (never prefilled). */
     public function license(Request $request): JsonResponse
     {
-        \App\Support\PrescriptionSession::assertCurrent($request);
+        PrescriptionSession::assertCurrent($request);
         $data = $request->validate(['rx_license_no' => ['nullable', 'string', 'max:40', 'regex:/^[A-Za-z0-9 .\\/-]*$/']]);
         $me = $this->me($request->user());
         abort_unless($me, 403);
@@ -262,7 +289,7 @@ class PrescriptionController extends Controller
     /** Reauthorize even a replay. Clinical responses are encrypted inside the existing generic journal. */
     private function command(Request $request, string $name, array $payload, int $branchId, Closure $work): JsonResponse
     {
-        \App\Support\PrescriptionSession::assertCurrent($request);
+        PrescriptionSession::assertCurrent($request);
         $key = $this->idempotencyKey($request);
         $actor = $request->user();
 

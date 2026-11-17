@@ -1,8 +1,8 @@
 // Actual Patient booking: existing endpoints and existing pay-at-clinic policy only; no external checkout.
 import assert from 'node:assert/strict'
 import {readFileSync,writeFileSync,existsSync} from 'node:fs'
-const {browser,login,get,api,evidence,target}=await import('./local-visit-support.mjs')
-const f=JSON.parse(readFileSync(target.runtime+'/visit-fixture.json','utf8'))
+const {browser,login,get,api,evidence,target,privateRead}=await import('./local-visit-support.mjs')
+const f=JSON.parse(privateRead(target.runtime+'/visit-fixture.json'))
 const file=evidence+'/journey.json',state=existsSync(file)?JSON.parse(readFileSync(file,'utf8')):{groups:[]}
 const save=()=>writeFileSync(file,JSON.stringify(state,null,2)),pass=name=>{if(!state.groups.includes(name))state.groups.push(name);save();console.log('PASS '+name)}
 state.accepted=false;save();let page
@@ -13,8 +13,8 @@ try{
   const options=await page.evaluate(async args=>(await import('/src/api-client.js')).bookingOptions(args),{branch_ref:f.branch,service_ref:f.service,date})
   assert.equal(options.ok,true);assert.equal(options.data.pay_at_clinic_available,true,'Existing policy must authorize synthetic at-clinic booking')
   await page.getByRole('button',{name:'Book',exact:true}).click()
-  await page.getByRole('searchbox',{name:'Search services',exact:true}).fill('Oral Prophylaxis')
-  await page.locator('button.pp-option').filter({hasText:'Oral Prophylaxis'}).click()
+  await page.getByRole('searchbox',{name:'Search services',exact:true}).fill(f.serviceName)
+  await page.locator('button.pp-option').filter({hasText:f.serviceName}).click()
   await page.locator('button.pp-branch').filter({hasText:'Synthetic Sprint 02'}).click()
   await page.locator('.pp-cal-day.is-available').first().click()
   await page.locator('button.pp-chip:not([disabled])').first().click()
@@ -33,7 +33,9 @@ try{
  const fresh=await login('sprint02.patient@example.test',390);page=fresh.page;await patient.context.close()
  await page.getByRole('button',{name:/^(My visits|Visits)$/}).first().click();await page.locator('#visit-'+state.booked.id).waitFor()
  pass('new authenticated Patient session reads the exact persisted appointment and current status')
- const other=await login('patient@example.test',390);assert.equal((await get(other.page,'/api/appointments/'+state.booked.id)).status,403);await other.context.close();pass('other Patient denied the resulting appointment')
+ // The integrated read contract deliberately hides existence from foreign Patients.
+ const other=await login('patient@example.test',390),denied=await get(other.page,'/api/appointments/'+state.booked.id),absent=await get(other.page,'/api/appointments/01aaaaaaaaaaaaaaaaaaaaaaaa')
+ assert.equal(denied.status,404);assert.deepEqual(denied,absent);await other.context.close();pass('other Patient receives the same 404 response as an absent appointment')
  for(const width of [375,390,430,768,1024,1440]){await page.setViewportSize({width,height:1000});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true,'overflow at '+width);await page.screenshot({path:evidence+'/patient-appointment-'+width+'.png',fullPage:true})}
  pass('Patient appointment readback fits six widths');state.accepted=true;save()
 }catch(e){if(page){writeFileSync(evidence+'/failure-text.txt',await page.locator('body').innerText());await page.screenshot({path:evidence+'/failure.png',fullPage:true})}throw e}finally{await browser.close()}

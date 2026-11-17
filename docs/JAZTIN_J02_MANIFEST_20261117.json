@@ -1,0 +1,138 @@
+{
+  "base_head": "877bf180bea9ec4e38e3173f9ab374f11de40895",
+  "implementation_head": "849ca40088215488fe9bd144903363197ab50e69",
+  "branch": "feature/jaztin-fullstack-qa-20261117",
+  "scope": "Clinical-branch candidates; authoritative integration acceptance unchanged",
+  "excluded_self": "docs/JAZTIN_J02_MANIFEST_20261117.json",
+  "api_changes": [],
+  "schema_changes": [],
+  "qa_ids_advanced": [
+    "GEN-08",
+    "GEN-13"
+  ],
+  "qa_regression_only": [
+    "DEN-01"
+  ],
+  "files": [
+    {
+      "path": "backend/tests/Feature/Billing/PatientHomeReadTest.php",
+      "bytes": 5325,
+      "sha256": "9db0d510d75e07dbc0b3f8d3fb74bf4bba6fe05e4b096552f73dfee41d74d7a7",
+      "lf_sha256": "9db0d510d75e07dbc0b3f8d3fb74bf4bba6fe05e4b096552f73dfee41d74d7a7"
+    },
+    {
+      "path": "docs/JAZTIN_J02_SPRINT_20261117.md",
+      "bytes": 17202,
+      "sha256": "82b29c4325e2012556621fd95bf03d97de3873fefb798d582c66897b20e541c2",
+      "lf_sha256": "82b29c4325e2012556621fd95bf03d97de3873fefb798d582c66897b20e541c2"
+    },
+    {
+      "path": "docs/JAZTIN_J02_UX_CONTRACT_20261117.md",
+      "bytes": 6099,
+      "sha256": "cfce82d18d0e9d3a6281f1efa0f5b758742227b56b3b7374e0e36d07964c3bfb",
+      "lf_sha256": "cfce82d18d0e9d3a6281f1efa0f5b758742227b56b3b7374e0e36d07964c3bfb"
+    },
+    {
+      "path": "src/clinical-care-experience.css",
+      "bytes": 5960,
+      "sha256": "7a419289e635ae2f98d311e7ca02174114f5c0c36b42dd817df605dacb558301",
+      "lf_sha256": "7a419289e635ae2f98d311e7ca02174114f5c0c36b42dd817df605dacb558301"
+    },
+    {
+      "path": "src/encounter-care-read.js",
+      "bytes": 1138,
+      "sha256": "85771e60365791d1b8e79d445c9621c534deead9efd3fe66444295dd19ce24be",
+      "lf_sha256": "85771e60365791d1b8e79d445c9621c534deead9efd3fe66444295dd19ce24be"
+    },
+    {
+      "path": "src/pages/EncounterCare.jsx",
+      "bytes": 4980,
+      "sha256": "f9a46ef8b8307c083291f34fa4c10af418a2802a38d8b44dbfc7be14f85f67c3",
+      "lf_sha256": "f9a46ef8b8307c083291f34fa4c10af418a2802a38d8b44dbfc7be14f85f67c3"
+    },
+    {
+      "path": "src/pages/EncounterWorkspace.jsx",
+      "bytes": 19929,
+      "sha256": "eff7d6161fe78a9f2a774ad4302d1d973105b0952b2bc7726962f9dc9ada300e",
+      "lf_sha256": "eff7d6161fe78a9f2a774ad4302d1d973105b0952b2bc7726962f9dc9ada300e"
+    },
+    {
+      "path": "src/pages/ServerPrescriptions.jsx",
+      "bytes": 42713,
+      "sha256": "c5ad884c68e0ec48b99bd0cf5a8def8af515d44cb7a8364ae2dc52a23e7a9442",
+      "lf_sha256": "c5ad884c68e0ec48b99bd0cf5a8def8af515d44cb7a8364ae2dc52a23e7a9442"
+    },
+    {
+      "path": "src/patient/Portal.jsx",
+      "bytes": 24509,
+      "sha256": "778214da9555b3d525e0cb09c63730ee9a3540945b801b536beee0c1dab724d9",
+      "lf_sha256": "778214da9555b3d525e0cb09c63730ee9a3540945b801b536beee0c1dab724d9"
+    },
+    {
+      "path": "src/patient/care-experience.css",
+      "bytes": 6539,
+      "sha256": "c96bb1c1bc65c3b73e1f72ba139a86490431812c25a78fdf3205944c4755306f",
+      "lf_sha256": "c96bb1c1bc65c3b73e1f72ba139a86490431812c25a78fdf3205944c4755306f"
+    },
+    {
+      "path": "src/patient/home-read.js",
+      "bytes": 3624,
+      "sha256": "66a47a5f3a77c81294b690d3bc591f9bdfcef2414db4f2e78da1c32d7e2613ad",
+      "lf_sha256": "66a47a5f3a77c81294b690d3bc591f9bdfcef2414db4f2e78da1c32d7e2613ad"
+    },
+    {
+      "path": "src/patient/pages/Family.jsx",
+      "bytes": 10565,
+      "sha256": "154b74326f05c2759e32427c5fe889d8d454bcf4e5c2a6c45d8f71a7cf3ab04d",
+      "lf_sha256": "154b74326f05c2759e32427c5fe889d8d454bcf4e5c2a6c45d8f71a7cf3ab04d"
+    },
+    {
+      "path": "src/patient/pages/Home.jsx",
+      "bytes": 6690,
+      "sha256": "9df683d94fbc16394e0990ff3515a0072fd201b1587ef7202448be627c206291",
+      "lf_sha256": "9df683d94fbc16394e0990ff3515a0072fd201b1587ef7202448be627c206291"
+    },
+    {
+      "path": "tests/j02-billing-layout.browser.mjs",
+      "bytes": 960,
+      "sha256": "a423adae478887e98769979167166535fbde09ef4e4287d3b4a74bf44a3c85f6",
+      "lf_sha256": "a423adae478887e98769979167166535fbde09ef4e4287d3b4a74bf44a3c85f6"
+    },
+    {
+      "path": "tests/j02-care-read.test.js",
+      "bytes": 5123,
+      "sha256": "13112f42e2cbea38e53ef073690ea209ebefb21d9def963e4a7ea5d61c15dd22",
+      "lf_sha256": "13112f42e2cbea38e53ef073690ea209ebefb21d9def963e4a7ea5d61c15dd22"
+    },
+    {
+      "path": "tests/j02-clinical-patient.browser.mjs",
+      "bytes": 8913,
+      "sha256": "df707751615e14e31a694dded39083ee5bc7bbe5175f17f843459bfa0306167a",
+      "lf_sha256": "df707751615e14e31a694dded39083ee5bc7bbe5175f17f843459bfa0306167a"
+    },
+    {
+      "path": "tests/j02-family.browser.mjs",
+      "bytes": 5078,
+      "sha256": "9bf02abfb2b619af911baa3576fbe7c53d086385ace73bea894dbbe26d6ff11c",
+      "lf_sha256": "9bf02abfb2b619af911baa3576fbe7c53d086385ace73bea894dbbe26d6ff11c"
+    },
+    {
+      "path": "tests/j02-prepare.browser.mjs",
+      "bytes": 8808,
+      "sha256": "1508e2e61f9d2a4139a34e6f020b6235411aecd87eefb09ddc6cef28d3c8947e",
+      "lf_sha256": "1508e2e61f9d2a4139a34e6f020b6235411aecd87eefb09ddc6cef28d3c8947e"
+    },
+    {
+      "path": "tests/local-patient-booking.browser.mjs",
+      "bytes": 4746,
+      "sha256": "280b0bed092494ea7f6eb9cc5a05396c8811471e3ce4b4a814f06f9f38d16b4b",
+      "lf_sha256": "280b0bed092494ea7f6eb9cc5a05396c8811471e3ce4b4a814f06f9f38d16b4b"
+    },
+    {
+      "path": "tests/local-prescription-search.browser.mjs",
+      "bytes": 12468,
+      "sha256": "43295d7e6552e34189b89fc9dd282a5f4dbc62290cfb08a60d569574c9594ef0",
+      "lf_sha256": "43295d7e6552e34189b89fc9dd282a5f4dbc62290cfb08a60d569574c9594ef0"
+    }
+  ]
+}

@@ -9,6 +9,7 @@ import { useVisibleRefresh } from '../use-visible-refresh.js'
 import { useQueueVisibility } from './QueueCounts.jsx'
 import { EncounterCare } from './EncounterCare.jsx'
 import '../encounter-workspace.css'
+import '../clinical-care-experience.css'
 
 // The editable Treatment form, derived from the server record (or empty before treatment starts). Unsaved changes live
 // only in React memory; there are no browser Treatment drafts.
@@ -42,7 +43,9 @@ function EncounterEditor({ store, context, setPage }) {
   const [saving, setSaving] = useState(false), [problem, setProblem] = useState(null)
   const [confirmCompleteOpen, setConfirmCompleteOpen] = useState(false), [reloadOpen, setReloadOpen] = useState(false)
   const [notice, setNotice] = useState('')
-  const gate = useRef(commandGate(commandKey)), live = useRef(true)
+  const gate = useRef(commandGate(commandKey)), live = useRef(true),workspace=useRef(null)
+  const [topOffset,setTopOffset]=useState(76)
+  useEffect(()=>{const top=document.querySelector('.topbar');if(!top||typeof ResizeObserver==='undefined')return;const update=()=>setTopOffset(Math.ceil(top.getBoundingClientRect().height));update();const observer=new ResizeObserver(update);observer.observe(top);return()=>observer.disconnect()},[])
   useEffect(()=>{live.current=true;return()=>{live.current=false}},[])
   const [refreshing, setRefreshing] = useState(false), [refreshError, setRefreshError] = useState('')
   const refreshPending = useRef(false), refreshOwner = useRef('')
@@ -84,6 +87,7 @@ function EncounterEditor({ store, context, setPage }) {
   const readOnly = base?.status==='Completed' || !encounter.ok || !!treatment && !encounter.editable
   const canStart = encounter.ok && encounter.canStart
   const followupReasonMissing = missingFollowupReason(form)
+  const started=!!(base||treatment),finalized=base?.status==='Completed'||treatment?.status==='Completed'
   const run=async(mode, retry=false)=>{
     if (!encounter.ok || gate.current.pending || !fresh || (!retry && (newer || readOnly || mode==='start'&&!canStart || mode==='complete'&&dirty))) return
     setSaving(true);setProblem(null);setNotice('')
@@ -110,10 +114,11 @@ function EncounterEditor({ store, context, setPage }) {
   const {patient,record,visit}=encounter
   const navContext=encounterContextFor(treatment||queueEntry)
   const performedServices=state.services.filter(s=>s.status==='Active'&&state.branchServices.some(bs=>bs.branchId===record.branchId&&bs.serviceId===s.id&&bs.active!==false)&&state.dentistServiceAssignments.some(a=>a.dentistId===session.dentistId&&a.serviceId===s.id&&a.isAuthorized!==false))
-  return <div className="enc-workspace">
+  return <div ref={workspace} className="enc-workspace clinical-experience" style={{'--clinical-top-offset':`${topOffset}px`}}>
     <div className="enc-breadcrumb"><Button variant="ghost" size="sm" onClick={()=>setPage('queue')}>My Queue</Button><span> / Encounter</span></div>
-    <header className="enc-header"><div><p className="enc-eyebrow">{patient.patientCode || 'Patient encounter'}{queueEntry?.queueNumber!=null?` / Queue ${queueEntry.queueNumber}`:''}</p><h1>{patient.name}</h1><p>{state.branches.find(b=>b.id===record.branchId)?.name} · {treatment?.dentistName||dentist?.name} · {visit.clinicDate}</p></div><Status>{base?.status==='Completed'?'Completed':treatment?.status||visit.status}</Status></header>
+    <header className="enc-header"><div><p className="enc-eyebrow">{patient.patientCode || 'Patient encounter'}{queueEntry?.queueNumber!=null?` / Queue ${queueEntry.queueNumber}`:''}</p><h1>{patient.name}</h1><p>{state.branches.find(b=>b.id===record.branchId)?.name} · {treatment?.dentistName||dentist?.name} · {visit.clinicDate}</p><p className="enc-visit-reference">Visit {visit.id}</p></div><Status>{base?.status==='Completed'?'Completed':treatment?.status||visit.status}</Status></header>
     <dl className="enc-identity"><div><dt>Visit</dt><dd>{visit.walkIn?'Walk-in':'Appointment'}{record.appointmentId?' · '+(state.appointments.find(a=>a.id===record.appointmentId)?.code||'Scheduled'):''}<small className="block-muted">{visit.id}</small></dd></div><div><dt>Requested service</dt><dd>{state.services.find(s=>s.id===(queueEntry?.serviceId||treatment?.requestedServiceId))?.name||'Not available'}</dd></div><div><dt>Documentation</dt><dd>{base?`Revision ${base.revision}`:'Not started'}{dirty?' · Unsaved changes':''}{base&&<small className="block-muted">Encounter {base.id}</small>}</dd></div></dl>
+    <ol className="enc-steps" aria-label="Encounter progress"><li data-current={!started} aria-current={!started?'step':undefined}><span>1</span><div><b>Document care</b><small>{started?'Treatment started':'Ready when the Patient is called'}</small></div></li><li data-current={started&&!finalized} aria-current={started&&!finalized?'step':undefined}><span>2</span><div><b>Review and save</b><small>{dirty?'Unsaved changes':base?`Saved revision ${base.revision}`:'Not saved yet'}</small></div></li><li data-current={finalized} aria-current={finalized?'step':undefined}><span>3</span><div><b>Complete encounter</b><small>{finalized?'Finalized · read-only':'Requires your confirmation'}</small></div></li></ol>
     {refreshError&&<p role="alert">{refreshError}</p>}
     {!fresh&&<Notice tone="warning">The encounter could not be verified as current. Your text is retained; commands are paused. <RefreshButton title="Refresh encounter" ariaLabel="Refresh encounter" loading={refreshing} onClick={refreshEncounter}/></Notice>}
     {problem&&<Notice tone="warning" title="Command not confirmed">{problem.message}{gate.current.retry&&<><p>Retry sends the same command and documentation. Review the latest record before starting a different command.</p><Button disabled={saving||!fresh} onClick={()=>run(gate.current.retry.mode,true)}>Retry same command</Button><RefreshButton title="Check server record" ariaLabel="Check server record" loading={refreshing} onClick={refreshEncounter}/><Button variant="ghost" onClick={()=>setReloadOpen(true)}>Review latest record</Button></>}</Notice>}
@@ -123,6 +128,7 @@ function EncounterEditor({ store, context, setPage }) {
       {(base?.status==='Completed'||treatment?.status==='Completed')&&<Notice>This encounter is complete and read-only. Completed-record amendment is not available here.</Notice>}
       {newer&&<Notice tone="warning" title="A newer version was saved">{dirty?'Your unsaved text is retained below; it is not the latest clinic record.':'The clinic record changed after this revision was opened.'} Review the latest version before continuing. <Button size="sm" variant="soft" onClick={()=>setReloadOpen(true)}>Review latest record</Button></Notice>}
       <fieldset disabled={readOnly||saving||!!gate.current.retry} style={{border:0,padding:0,margin:0,minWidth:0}}><div className="form-grid one-col">
+        <div className="enc-doc-section"><h3>Performed care</h3>
         <Notice>Confirm the procedures actually performed. The booked service is visit context only.</Notice>
         {form.procedures.map((p,index)=><div className="form-grid" key={p.id||`new-${index}`}>
           <Field label={`Procedure ${index+1}`} required><select value={p.serviceId||''} onChange={e=>line(index,'serviceId',e.target.value)}><option value="">Select performed procedure</option>{performedServices.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}{p.serviceId&&!performedServices.some(s=>s.id===p.serviceId)&&<option value={p.serviceId}>{treatment?.procedures.find(x=>x.id===p.id)?.serviceName||p.serviceId}</option>}</select></Field>
@@ -131,11 +137,13 @@ function EncounterEditor({ store, context, setPage }) {
           <Button variant="ghost" onClick={()=>setForm({...form,procedures:form.procedures.filter((_,i)=>i!==index)})}>Remove procedure {index+1}</Button>
         </div>)}
         <Button variant="ghost" onClick={()=>setForm({...form,procedures:[...form.procedures,{serviceId:'',quantity:1,notes:''}]})}>Add performed procedure</Button>
+        </div><div className="enc-doc-section"><h3>Clinical documentation</h3>
         <Field label="Chief complaint"><textarea aria-label="Chief complaint" value={form.complaint} onChange={e=>setForm({...form,complaint:e.target.value})}/></Field>
         <Field label="Treatment plan"><textarea aria-label="Treatment plan" value={form.plan} onChange={e=>setForm({...form,plan:e.target.value})}/></Field>
         <Field label="Procedure / treatment performed"><textarea aria-label="Procedure / treatment performed" value={form.procedure} onChange={e=>setForm({...form,procedure:e.target.value})}/></Field>
         <Field label="Assigned assistant" hint="From the dentist profile when treatment started"><input value={form.assistant} readOnly/></Field>
         <Field label="Clinical notes"><textarea aria-label="Clinical notes" value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})}/></Field>
+        </div><div className="enc-doc-section"><h3>Next care</h3>
         <div className="check-pair"><label><input type="checkbox" checked={form.prescriptionRequired} onChange={e=>setForm({...form,prescriptionRequired:e.target.checked})}/> Dentist indicates prescription required</label><label><input type="checkbox" checked={form.followupRequired} onChange={e=>setForm({...form,followupRequired:e.target.checked})}/> Dentist indicates follow-up required</label></div>
         {form.followupRequired&&<div className="form-grid">
           <Field label="Recommended follow-up date"><input type="date" value={form.followupDate} onChange={e=>setForm({...form,followupDate:e.target.value})}/></Field>
@@ -163,10 +171,12 @@ function EncounterEditor({ store, context, setPage }) {
           )}
           <SelectionDetailsNotice available={store.session?.selectionDetailsAvailable}/><Field label="Recommended interval"><input value={form.followupInterval} placeholder="e.g. 1 week, 2 weeks" onChange={e=>setForm({...form,followupInterval:e.target.value})}/></Field>
         </div>}
-        {!readOnly&&<div className="form-actions">
+        </div>
+        {!readOnly&&<div className="form-actions enc-command-bar">
+          <p role="status">{saving?'Saving…':dirty?'Your changes are not saved yet.':newer?'A newer record is available.':base?`Saved revision ${base.revision}. Review before completing.`:'Starting treatment requires your action.'}</p>
           {!treatment?<Button disabled={saving||!canStart||followupReasonMissing||!fresh} onClick={()=>run('start')}>Start Treatment</Button>:<>
-            <Button variant="ghost" disabled={saving||!dirty||newer||followupReasonMissing||!fresh} onClick={()=>run('save')}>Save Treatment Progress</Button>
-            <Button disabled={saving||dirty||newer||followupReasonMissing||!fresh} onClick={()=>setConfirmCompleteOpen(true)}>Complete Treatment</Button></>}
+            <Button variant={dirty?'primary':'ghost'} disabled={saving||!dirty||newer||followupReasonMissing||!fresh} onClick={()=>run('save')}>Save Treatment Progress</Button>
+            <Button variant={dirty?'soft':'primary'} disabled={saving||dirty||newer||followupReasonMissing||!fresh} onClick={()=>setConfirmCompleteOpen(true)}>Complete Treatment</Button></>}
         </div>}
         {!treatment&&queueEntry&&!canStart&&<Notice>Treatment can start once this patient is Called or Ready for treatment.</Notice>}
         {dirty&&!readOnly&&treatment&&<small className="block-muted">Unsaved changes — they are kept only on this screen until you save.</small>}

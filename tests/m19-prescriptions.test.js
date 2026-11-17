@@ -73,7 +73,7 @@ test('M19: Other selection retains custom values and sends only clinical line fi
 
 test('M19: the patient sees issued prescriptions read-only with a PDF, and a void one is marked', () => {
   const page = read('src/patient/pages/Prescriptions.jsx')
-  assert.match(page, /myPrescriptions\(\)/); assert.match(page, /downloadPrescriptionPdf\(p\.id, p\.number\)/)
+  assert.match(page, /myPrescriptions\(\)/); assert.match(page, /downloadPrescriptionPdf\(p\.id,\s*p\.number,\{isCurrent:/)
   assert.match(page, /VOID — do not use/)
   assert.doesNotMatch(page, /updatePrescription|issuePrescription|voidPrescription/)
   assert.match(read('src/patient/Portal.jsx'), /\['prescriptions', 'file', 'Prescriptions'\]/)

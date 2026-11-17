@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Button, Field, SelectWithOther } from '../../components.jsx'
+import { Button, Field, SelectWithOther, RefreshButton } from '../../components.jsx'
 import { inviteToClaim, myDependents } from '../../api-client.js'
 
 import {ErrorState,Skeleton} from '../ui.jsx'
@@ -19,7 +19,7 @@ export function Family({session,getAuthGeneration}) {
   const [form, setForm] = useState({ first_name: '', last_name: '', date_of_birth: '', relationship: 'Child', relationship_other: '', consent: false })
   const [inviting, setInviting] = useState(null), [inviteEmail, setInviteEmail] = useState('')
   const [loadError,setLoadError]=useState(''),[attempt,setAttempt]=useState(0),[capable,setCapable]=useState(false),[uncertain,setUncertain]=useState(false)
-  const alive=useRef(false),latest=useRef(null),flight=useRef(false),command=useRef(null),recovery=useRef(null)
+  const alive=useRef(false),latest=useRef(null),flight=useRef(false),command=useRef(null),recovery=useRef(null),addButton=useRef(null)
   const generation=getAuthGeneration?.(),owner=JSON.stringify([session?.serverUserId,session?.patientPublicId,generation]);latest.current=owner
   const owns=()=>alive.current&&latest.current===owner&&session?.active===true&&session?.role==='patient'&&(!getAuthGeneration||generation!=null&&getAuthGeneration()===generation)
   useEffect(()=>{alive.current=true;return()=>{alive.current=false}},[])
@@ -35,6 +35,11 @@ export function Family({session,getAuthGeneration}) {
     return()=>{current=false}
   },[attempt,owner])
   const reload=()=>setAttempt(a=>a+1)
+  const cancelAdding=()=>{
+    if(busy||uncertain||flight.current||command.current)return
+    setAdding(false);setNote('');setForm({first_name:'',last_name:'',date_of_birth:'',relationship:'Child',relationship_other:'',consent:false})
+    requestAnimationFrame(()=>{if(owns())addButton.current?.focus()})
+  }
   const finish=async r=>{
     if(!owns())return
     if(r.verified){
@@ -68,28 +73,29 @@ export function Family({session,getAuthGeneration}) {
     const outcome = r.data?.status === 'transport_accepted' ? `A one-time link was emailed to ${inviteEmail}. It works once and expires.` : `${r.data?.message || 'The email was not sent.'} Check the email address and try again.`
     setNote(`${outcome} You keep managing ${d.first_name}’s record until they activate their own account.`)
   }
-  if(loadError)return <ErrorState text={loadError} onRetry={reload}/>
-  if(!rows)return <Skeleton lines={4} label="Loading Family records"/>
-  return <section className="pp-card pp-fade" aria-labelledby="pp-family">
-    <p className="pp-eyebrow" id="pp-family">Family</p>
+  const frame=content=><><header className="care-family-head"><div><h1>Family</h1><p>Manage the people in your care.</p></div><RefreshButton title="Reload Family" ariaLabel="Reload Family" loading={!rows&&!loadError} disabled={busy} onClick={reload}/></header>{content}</>
+  if(loadError)return frame(<ErrorState text={loadError} onRetry={reload}/>)
+  if(!rows)return frame(<Skeleton lines={4} label="Loading Family records"/>)
+  return frame(<section className="pp-card pp-fade" aria-labelledby="pp-family">
+    <h2 id="pp-family">People in your care</h2>
     <p className="pp-hint">Children or others in your care. You can book, get reminders and pay for them. They need no ID or email; your ID is the one checked at the clinic.</p>
     {!capable&&<p role="status">Adding dependents is unavailable until this server supports safe creation and recovery. Saved Family records remain readable.</p>}
-    {uncertain&&<div role="alert"><p>{note}</p><Button disabled={busy} onClick={()=>recover(true)}>{busy?'Recovering…':'Recover dependent creation'}</Button>{command.current?.intent&&<Button disabled={busy} onClick={()=>recover(false)}>Retry same creation</Button>}<Button variant="ghost" disabled={busy} onClick={reload}>Reload Family</Button></div>}
+    {uncertain&&<div role="alert"><p>{note}</p><Button disabled={busy} onClick={()=>recover(true)}>{busy?'Recovering…':'Recover dependent creation'}</Button>{command.current?.intent&&<Button disabled={busy} onClick={()=>recover(false)}>Retry same creation</Button>}</div>}
     {rows.length > 0 && <ul className="pp-family-list">{rows.map(d => <li key={d.id}><span><b>{d.name}</b> · {d.code} · {d.relationship}{d.relationship_other ? ` (${d.relationship_other})` : ''}{d.age !== null && d.age !== undefined ? ` · ${d.age} years old` : ''}</span>
       {!d.minor && !d.has_account && inviting !== d.id && <button type="button" className="link-button" onClick={() => { setInviting(d.id); setInviteEmail(''); setNote('') }}>Invite to their own account</button>}
       {inviting === d.id && <form className="pp-family-invite" onSubmit={e => invite(e, d)}>
         <Field label={`${d.first_name}’s own email`} hint="We email a one-time link there. Only they can then set the password."><input type="email" autoComplete="off" required value={inviteEmail} onChange={e => setInviteEmail(e.target.value)}/></Field>
         <div className="pp-row-actions"><Button type="submit" size="sm" disabled={busy || !inviteEmail}>{busy ? 'Sending…' : 'Send the link'}</Button><button type="button" className="link-button" onClick={() => setInviting(null)}>Cancel</button></div>
       </form>}</li>)}</ul>}
-    {adding ? <form onSubmit={add} className="pp-form"><fieldset disabled={busy||uncertain} style={{border:0,padding:0,margin:0,minWidth:0}}>
+    {adding ? <form onSubmit={add} className="pp-form care-family-form"><h2>Add a family member</h2><fieldset disabled={busy||uncertain} style={{border:0,padding:0,margin:0,minWidth:0}}>
       <Field label="First name" required><input value={form.first_name} onChange={e => setForm(f => ({ ...f, first_name: e.target.value }))}/></Field>
       <Field label="Last name" required><input value={form.last_name} onChange={e => setForm(f => ({ ...f, last_name: e.target.value }))}/></Field>
       <Field label="Date of birth" required><input type="date" value={form.date_of_birth} onChange={e => setForm(f => ({ ...f, date_of_birth: e.target.value }))}/></Field>
       <SelectWithOther label="Relationship" required value={form.relationship} onChange={v => setForm(f => ({ ...f, relationship: v }))} options={['Child', 'Daughter', 'Son', 'Grandchild', 'Ward', 'Parent', 'Other']} otherValue={form.relationship_other} onOtherChange={v => setForm(f => ({ ...f, relationship_other: v }))} placeholder="e.g., Niece, Nephew, Cousin"/>
       <label className="au-check"><input type="checkbox" checked={form.consent} onChange={e => setForm(f => ({ ...f, consent: e.target.checked }))}/> <span>I am their parent or guardian and agree that the clinic keeps their details for their dental care (<a href="#privacy" target="_blank" rel="noreferrer">Privacy Policy</a>).</span></label>
-      <Button type="submit" size="lg" disabled={busy || !form.consent || (form.relationship === 'Other' && !(form.relationship_other || '').trim())}>{busy ? 'Saving…' : 'Add to my family'}</Button>
-    </fieldset></form> : <Button size="lg" variant="soft" disabled={!capable||busy||uncertain} onClick={() => setAdding(true)}>Add a child or dependent</Button>}
+      <div className="form-actions"><Button type="submit" size="lg" disabled={busy || !form.consent || (form.relationship === 'Other' && !(form.relationship_other || '').trim())}>{busy ? 'Saving…' : 'Add to my family'}</Button><Button variant="ghost" disabled={busy||uncertain} onClick={cancelAdding}>Cancel</Button></div>
+    </fieldset></form> : <Button ref={addButton} size="lg" variant="soft" disabled={!capable||busy||uncertain} onClick={() => setAdding(true)}>Add a child or dependent</Button>}
     {note && !uncertain && <p className="pp-hint" role="status">{note}</p>}
-  </section>
+  </section>)
 }
 

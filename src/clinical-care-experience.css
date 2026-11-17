@@ -1,0 +1,67 @@
+/* Clinical content only; reuse the existing font and shared GEN-12 controls. */
+.clinical-experience { --care-line:#dce5e9; --care-ink:#193747; --care-muted:#536b78; --care-soft:#f3f7f8; color:var(--care-ink); font-size:15px; line-height:1.55; }
+.clinical-experience :is(h1,h2,h3) { font-weight:600; letter-spacing:-.02em; }
+.clinical-experience :is(input,select,textarea) { font-family:inherit; font-size:15px; }
+.clinical-experience :is(.card,.enc-documentation) { box-shadow:none; border-color:var(--care-line); border-radius:14px; }
+.clinical-experience .enc-header { position:sticky; top:calc(var(--clinical-top-offset,76px) + 8px); z-index:12; padding:16px 20px; border:1px solid var(--care-line); border-radius:12px; background:#fff; box-shadow:0 3px 8px #19374708; }
+.clinical-experience .enc-header h1 { font-size:clamp(22px,2.3vw,29px); margin:4px 0 7px; line-height:1.25; }
+.clinical-experience .enc-header p { font-size:14px; line-height:1.45; overflow-wrap:anywhere; }
+.clinical-experience .enc-header .enc-visit-reference { margin-top:6px; font-size:13px; font-variant-numeric:tabular-nums; color:var(--care-muted); }
+.clinical-experience .enc-identity { padding:20px 4px; gap:18px 32px; font-variant-numeric:tabular-nums; }
+.clinical-experience .enc-identity small { margin-top:4px; overflow-wrap:anywhere; }
+.enc-steps { list-style:none; padding:0; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin:4px 0 24px; }
+.enc-steps li { display:flex; align-items:start; gap:10px; padding:14px; border:1px solid var(--care-line); border-radius:10px; background:white; }
+.enc-steps li>span { width:26px; height:26px; flex-shrink:0; display:grid; place-items:center; border-radius:50%; background:var(--care-soft); font-size:13px; font-weight:600; }
+.enc-steps li[data-current="true"] { border-color:#77a5af; background:#f3f9fa; }
+.enc-steps li[data-current="true"]>span { background:#176a79; color:white; }
+.enc-steps b { display:block; font-size:14px; font-weight:600; }
+.enc-steps small { display:block; line-height:1.45; margin-top:4px; }
+.clinical-experience .enc-layout { gap:24px; grid-template-columns:minmax(0,1.7fr) minmax(280px,1fr); }
+.enc-doc-section { display:grid; gap:16px; min-width:0; padding-bottom:24px; border-bottom:1px solid var(--care-line); }
+.enc-doc-section:last-child { border-bottom:0; }
+.enc-doc-section>h3 { margin:0; font-size:16px; }
+.enc-doc-section .notice { margin:0; font-size:14px; }
+.enc-doc-section .field { margin:0; }
+.clinical-experience .enc-documentation h2 { margin-bottom:24px; }
+.clinical-experience .enc-command-bar { gap:12px; padding-top:8px; border-top:0; }
+.enc-command-bar>p { flex-basis:100%; margin:0 0 4px; color:var(--care-muted); font-size:14px; }
+.clinical-experience .enc-care { border:1px solid var(--care-line); border-radius:14px; background:white; padding:22px; }
+.clinical-experience .enc-care .notice { font-size:14px; }
+.clinical-experience .enc-care h2 { font-size:18px; }
+.clinical-experience .enc-care .enc-care-links { display:grid; grid-template-columns:1fr; gap:8px; }
+.enc-section-heading { display:flex; justify-content:space-between; align-items:start; gap:12px; }
+.enc-section-heading>h2 { margin-top:6px; }
+.clinical-experience .fd-list>li { padding:16px 0; align-items:center; border-color:var(--care-line); }
+.clinical-experience .fd-list>li>div:first-child { min-width:0; overflow-wrap:anywhere; }
+.clinical-experience .fd-list>li b { font-size:15px; font-weight:600; }
+.clinical-experience .fd-list>li span { font-size:14px; line-height:1.5; }
+.clinical-experience .filter-bar { background:var(--care-soft); border:1px solid var(--care-line); border-radius:12px; }
+.clinical-experience .rx-compose { margin:20px 0; border:1px solid var(--care-line); border-radius:14px; background:white; }
+.rx-compose>summary { min-height:60px; display:flex; align-items:center; gap:14px; padding:16px 20px; cursor:pointer; font-weight:600; list-style:none; }
+.rx-compose>summary::before { content:'+'; font-size:24px; font-weight:400; color:#176a79; }
+.rx-compose[open]>summary::before { content:'−'; }
+.rx-compose>summary:focus-visible { outline:3px solid #176a79; outline-offset:3px; }
+.rx-compose>summary small { display:block; color:var(--care-muted); font-size:13px; font-weight:400; }
+.rx-compose>.card { margin:0; border:0; border-top:1px solid var(--care-line); border-radius:0 0 14px 14px; }
+@media(max-width:1050px) { .clinical-experience .enc-layout { grid-template-columns:1fr; }.enc-steps { gap:8px; }.enc-steps li { padding:12px; gap:8px; } }
+@media(max-width:600px) {
+  .clinical-experience .enc-header { top:var(--clinical-top-offset,76px); padding:14px 16px; display:block; }
+  .clinical-experience .enc-header>div { min-width:0; }
+  .clinical-experience .enc-header h1 { font-size:22px; }
+  .clinical-experience .enc-header .enc-eyebrow { padding-right:110px; }
+  .clinical-experience .enc-header>.status { position:absolute; right:14px; top:14px; }
+  .clinical-experience .enc-identity { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+  .clinical-experience .enc-identity>div:last-child { grid-column:1/-1; }
+  /* The exact Visit ID is already always visible in the sticky identity header. */
+  .clinical-experience .enc-identity>div:first-child small { display:none; }
+  .clinical-experience .enc-care { padding:18px; }
+  .enc-steps { gap:6px; }
+  .enc-steps li { padding:10px; flex-direction:column; gap:6px; }
+  .enc-steps b { font-size:13px; }
+  .enc-steps small { margin-top:4px; font-size:12px; }
+  .enc-steps li:not([data-current="true"]) small { display:none; }
+  .enc-doc-section { padding-bottom:20px; }
+  .rx-compose>summary { padding:14px 16px; }
+}
+@media(prefers-reduced-motion:reduce) { .clinical-experience * { scroll-behavior:auto!important; transition:none!important; animation:none!important; } }
+@media(max-width:600px) { .clinical-experience :is(input,select,textarea) { font-size:16px; } }

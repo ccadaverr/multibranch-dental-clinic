@@ -6,8 +6,10 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Button, Card, ConfirmDialog, Field, FilterBar, Modal, Notice, PageHeader, RefreshButton } from '../components.jsx'
 import { createPrescription, downloadPrescriptionPdf, issuePrescription, listPrescriptions, prescription, prescriptionVisits, savePrescriptionLicense, updatePrescription, voidPrescription } from '../api-client.js'
 import { commandKey } from '../appointments-api.js'
+import { readPrescriptionPage } from '../prescription-list.js'
 import { runPrescriptionWrite } from '../prescription-command.js'
 import '../dentist-clinical.css'
+import '../clinical-care-experience.css'
 
 const firstError = r => (r.kind === 'validation' ? Object.values(r.errors || {})[0]?.[0] || r.message : r.message) || 'That did not work.'
 const day = d => d ? new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : ''
@@ -60,17 +62,29 @@ export function PrescriptionsServerPage(props) {
 }
 function PrescriptionsBody({ store, role, context, setPage }) {
   const toast = store?.toast || (() => {})
-  const [rows, setRows] = useState(null), [error, setError] = useState(''), [openId, setOpenId] = useState(null), [writing, setWriting] = useState(null)
-  const [query, setQuery] = useState(''), [statusFilter, setStatusFilter] = useState('all')
+  const [result, setResult] = useState(null), [openId, setOpenId] = useState(null), [writing, setWriting] = useState(null)
+  const [query, setQuery] = useState(''), [statusFilter, setStatusFilter] = useState('all'), [page, setPageNumber] = useState(1)
+  const changeQuery = value => { setQuery(value); setPageNumber(1) }
+  const changeStatus = value => { setStatusFilter(value); setPageNumber(1) }
+  const readQuery = {page, per_page:20, ...(query.trim() ? {q:query.trim()} : {}), ...(statusFilter !== 'all' ? {status:statusFilter} : {}),
+    ...(context?.visitId ? {visit_id:context.visitId, patient_id:context.patientPublicId||context.patientId} : {})}
+  const scope = JSON.stringify(readQuery)
+  const actor = clinicalSessionKey(store.session), auth = store.getAuthGeneration?.()
+  const latest = useRef(); latest.current = {scope, actor, auth, store}
+  const owns = () => listLive.current && latest.current.scope === scope && latest.current.actor === actor &&
+    latest.current.auth === auth && latest.current.store.getAuthGeneration?.() === auth
+  const current = result?.scope === scope && result?.actor === actor && result?.auth === auth ? result : null
+  const rows = current?.rows ?? null, error = current?.error || '', loading = !current || current.loading, meta = current?.meta
   // Invalidate UI completions synchronously when selection changes. The server
   // command still finishes for its original prescription, even after unmount.
   const editorGeneration = useRef(0)
-  const editorLeave = useRef(null)
+  const editorLeave = useRef(null),compose=useRef(null)
   const generation = editorGeneration.current
   const applyDraft = id => {
     if(id===writing)return
     editorGeneration.current++
     setWriting(id)
+    if(id&&compose.current){compose.current.open=true;compose.current.querySelector('summary')?.focus();compose.current.scrollIntoView({block:'start'})}
   }
   const selectDraft = (id, closeDetail = false) => {
     if (id === writing) { if (closeDetail) setOpenId(null); return }
@@ -80,56 +94,53 @@ function PrescriptionsBody({ store, role, context, setPage }) {
   }
   const listLive=useRef(false), listSerial=useRef(0)
   const load = async () => {
+    if (!owns()) return false
     const ticket=++listSerial.current
-    let r; try { r=await listPrescriptions() } catch {r={ok:false,message:'Prescriptions could not be loaded.'}}
-    if(!listLive.current || ticket!==listSerial.current)return
-    if(r.ok && Array.isArray(r.data)){setRows(r.data);setError('')}else setError(r.message || 'Prescriptions could not be loaded.')
+    setResult({scope, actor, auth, rows:null, loading:true, error:''})
+    const r = await readPrescriptionPage(listPrescriptions, readQuery, role)
+    if (!owns() || ticket!==listSerial.current) return false
+    setResult({scope, actor, auth, rows:r.ok?r.data:null, meta:r.meta, loading:false,
+      error:r.ok?'':r.message || 'Prescriptions could not be loaded. Reload to try again.'})
+    return r.ok
   }
-  useEffect(() => { listLive.current=true;load();return()=>{listLive.current=false;listSerial.current++} }, [])
+  useEffect(() => { listLive.current=true;return()=>{listLive.current=false;listSerial.current++} }, [])
+  useEffect(() => {
+    // Coalesce search input; explicit reload remains immediate.
+    const timer=setTimeout(load, query.trim()?250:0)
+    return()=>{clearTimeout(timer);listSerial.current++}
+  }, [scope])
   const dentist = role === 'dentist', owner = role === 'owner'
-  const filteredRows = (rows || []).filter(p => {
-    if(context?.visitId&&(p.visit!==context.visitId||p.patient?.id!==(context.patientPublicId||context.patientId)))return false
-    if (statusFilter !== 'all' && p.status !== statusFilter) return false
-    if (!query.trim()) return true
-    const q = query.toLowerCase()
-    return (
-      (p.number || '').toLowerCase().includes(q) ||
-      (p.patient?.name || '').toLowerCase().includes(q) ||
-      (p.dentist || '').toLowerCase().includes(q) ||
-      (p.branch || '').toLowerCase().includes(q)
-    )
-  })
-  return <div className="st-page dentist-prescriptions">
+  const filteredRows = rows || []
+  return <div className={`st-page dentist-prescriptions${dentist?' clinical-experience':''}`}>
     {context?.returnEncounter&&<Button variant="ghost" onClick={()=>setPage('treatment',context.returnEncounter)}>Return to encounter</Button>}
     {context?.visitId&&<Notice>Prescriptions for this encounter. A Draft has not been issued.</Notice>}
     <PageHeader kicker={owner ? 'Administration' : 'Clinical'} title="Prescriptions"
       text={owner ? 'Prescriptions issued at the clinic: number, date, dentist and branch. The medicines are visible only to the dentists, the branch front desk and the patient.'
         : dentist ? 'Write a prescription for a recent visit. Issuing locks it; a mistake is voided with a reason and a new one is issued. There is no drug list and no interaction check: you decide what to prescribe.'
-          : 'Prescriptions issued at your branch, to view and print. Only a dentist writes or changes them.'}/>
-    {dentist && <WriteCard selectionDetailsAvailable={store.session?.selectionDetailsAvailable===true} key={writing || 'new'} clinicalContext={store.session?.clinicalContext} getAuthGeneration={store.getAuthGeneration} context={context} toast={toast} onDone={id => { load(); setOpenId(id) }} editing={writing} onEdited={() => applyDraft(null)} leaveRef={editorLeave} isCurrent={() => editorGeneration.current===generation}/>}
-    {dentist && <LicenseCard toast={toast} clinicalContext={store.session?.clinicalContext} getAuthGeneration={store.getAuthGeneration}/>}
+          : 'Prescriptions issued at your branch, to view and print. Only a dentist writes or changes them.'}
+      aside={<RefreshButton title="Reload prescriptions" ariaLabel="Reload prescriptions" loading={loading} onClick={load}/>}/>
+    {dentist && <details ref={compose} className="rx-compose" open={!!context?.visitId||!!writing}><summary><span>Write a prescription<small>Saved drafts stay private until issued.</small></span></summary><WriteCard selectionDetailsAvailable={store.session?.selectionDetailsAvailable===true} key={writing || 'new'} clinicalContext={store.session?.clinicalContext} getAuthGeneration={store.getAuthGeneration} context={context} toast={toast} onDone={id => { load(); setOpenId(id) }} editing={writing} onEdited={() => applyDraft(null)} leaveRef={editorLeave} isCurrent={() => editorGeneration.current===generation}/></details>}
+    {dentist && <details className="rx-compose rx-settings"><summary><span>Prescription settings<small>Your optional license number</small></span></summary><LicenseCard toast={toast} clinicalContext={store.session?.clinicalContext} getAuthGeneration={store.getAuthGeneration}/></details>}
     {error && <Notice tone="warning" title="Unavailable">{error}</Notice>}
     <Card title={owner ? 'Issued prescriptions' : 'Prescriptions'}>
-      {rows && rows.length > 0 && (
-        <FilterBar
+      <FilterBar
           className="st-filters"
           ariaLabel="Filter prescriptions"
           search={query}
-          onSearchChange={setQuery}
-          searchPlaceholder="Search by number, patient, dentist, or branch…"
-          onClear={(query || statusFilter !== 'all') ? () => { setQuery(''); setStatusFilter('all') } : null}
+          onSearchChange={changeQuery}
+          searchPlaceholder={owner ? "Search by number, dentist, or branch…" : "Search by number, patient, dentist, or branch…"}
+          onClear={(query || statusFilter !== 'all') ? () => { changeQuery(''); changeStatus('all') } : null}
         >
           <Field label="Status">
-            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+            <select value={statusFilter} onChange={e => changeStatus(e.target.value)}>
               <option value="all">All statuses</option>
               <option value="Issued">Issued</option>
-              <option value="Draft">Draft</option>
+              {dentist && <option value="Draft">Draft</option>}
               <option value="Void">Void</option>
             </select>
           </Field>
-        </FilterBar>
-      )}
-      {!rows ? <p className="au-muted" role="status">Loading…</p> : !filteredRows.length ? <p className="au-muted">No prescriptions found.</p>
+      </FilterBar>
+      {loading ? <p className="au-muted" role="status">Loading prescriptions…</p> : error ? <Button variant="soft" onClick={load}>Retry prescriptions</Button> : !filteredRows.length ? <p className="au-muted">No prescriptions found.</p>
         : <ul className="fd-list">{filteredRows.map(p => <li key={p.id}>
           <div><b>{p.number || 'Draft'}{p.patient ? ` · ${p.patient.name}` : ''}</b>
             <span><span className={`fd-badge ${TONE[p.status]}`}>{p.status === 'Void' ? 'VOID' : p.status}</span> · {p.date ? day(p.date) : 'not issued'} · {p.dentist} · {p.branch}</span></div>
@@ -138,6 +149,11 @@ function PrescriptionsBody({ store, role, context, setPage }) {
             <Button size="sm" variant={owner ? 'soft' : 'ghost'} onClick={() => setOpenId(p.id)}>{owner ? 'View record' : 'Open'}</Button>
           </div>
         </li>)}</ul>}
+      {meta && (meta.last_page > 1 || page > 1) && <nav className="row-actions" aria-label="Prescription pages">
+        <Button variant="soft" disabled={loading || page<=1} onClick={()=>setPageNumber(p=>Math.max(1,Math.min(meta.last_page,p-1)))}>Newer prescriptions</Button>
+        <span role="status">Page {meta.current_page} of {meta.last_page} · {meta.total} prescriptions</span>
+        <Button variant="soft" disabled={loading || page>=meta.last_page} onClick={()=>setPageNumber(p=>p+1)}>Older prescriptions</Button>
+      </nav>}
     </Card>
     {openId && <PrescriptionDialog id={openId} clinicalContext={store.session?.clinicalContext} getAuthGeneration={store.getAuthGeneration} toast={toast} onClose={() => setOpenId(null)} onChanged={load} onEdit={dentist ? id => selectDraft(id, true) : undefined}/>}
   </div>
