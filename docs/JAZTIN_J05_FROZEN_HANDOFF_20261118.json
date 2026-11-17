@@ -1,0 +1,336 @@
+{
+  "base_published_j02": "53b0e2e1cea0a1c4db1c498eb80b8fb3e81d77da",
+  "frozen_j05": "613a85a508fa7a93ad4842c5f568d5a91d8db878",
+  "j03_j05_commits": [
+    "21a22b56d1f286f4e46b528509fa1f2f885a28ab fix(patient): verify document ownership and preserve upload recovery",
+    "ed029a87362b6ef2f48069d7c79a079d190aa34e feat(patient): clarify saved care and receipt workflows",
+    "53aa0f4635eaa1790b57a5a7a766e478807583c4 docs(clinical): freeze J03 records acceptance and handoff",
+    "9cc8b9cda90b23726dc1d2bd6269a26caa0fef2d fix(clinical): verify chart projections and make finding entry explicit",
+    "ee80c20cad1f1ec895610cbd9d881ff6c40d86c7 feat(clinical): review saved charts inline without leaving treatment drafts",
+    "295dc8bad18199a699f8fa310be790a7b513a0f7 docs(clinical): freeze J04 acceptance evidence and integration manifest",
+    "15dec2e0ddaca8a75b675da467bec1e45c0efae6 feat(clinical): discover older care and review exact history beside retained drafts",
+    "613a85a508fa7a93ad4842c5f568d5a91d8db878 docs(clinical): freeze J05 history acceptance and integration manifest"
+  ],
+  "cumulative_files": [
+    {
+      "path": "backend/app/Http/Controllers/DocumentController.php",
+      "bytes": 14917,
+      "sha256": "4a11edadcd3474de5dddbd298f2d16c714fa6205dcfd5d2514dd7bc902ac78f9",
+      "lf_sha256": "4a11edadcd3474de5dddbd298f2d16c714fa6205dcfd5d2514dd7bc902ac78f9"
+    },
+    {
+      "path": "backend/app/Services/Document/DocumentStorageService.php",
+      "bytes": 17165,
+      "sha256": "f6597d45445d801fb758ebb3bb2977bc8ea2a5e3a7d8b6b3ad0a028309ca58b9",
+      "lf_sha256": "f6597d45445d801fb758ebb3bb2977bc8ea2a5e3a7d8b6b3ad0a028309ca58b9"
+    },
+    {
+      "path": "backend/config/cors.php",
+      "bytes": 1303,
+      "sha256": "56936f6ead0943ae67e9a1ede185da33675a990e7d17cc673d9cad11abe0d925",
+      "lf_sha256": "56936f6ead0943ae67e9a1ede185da33675a990e7d17cc673d9cad11abe0d925"
+    },
+    {
+      "path": "backend/tests/Feature/Charts/ChartWorkspaceReadbackTest.php",
+      "bytes": 4220,
+      "sha256": "671880f4ccf01c764940db147c79d538f4796ad738a71ff0ffd30a6b13bc9f25",
+      "lf_sha256": "671880f4ccf01c764940db147c79d538f4796ad738a71ff0ffd30a6b13bc9f25"
+    },
+    {
+      "path": "backend/tests/Feature/Documents/PatientDocumentLibraryTest.php",
+      "bytes": 5381,
+      "sha256": "c7e4f92ceec1fc3d64445336b0100f8b675fbaa28f745954ae161eac5f06107f",
+      "lf_sha256": "c7e4f92ceec1fc3d64445336b0100f8b675fbaa28f745954ae161eac5f06107f"
+    },
+    {
+      "path": "backend/tests/Feature/Treatments/HistoryDiscoveryPaginationTest.php",
+      "bytes": 3073,
+      "sha256": "b3c28b49e695fe7365f4c1b0d46b42b4d31519f2b70d240a3e6bbb952b238cc8",
+      "lf_sha256": "b3c28b49e695fe7365f4c1b0d46b42b4d31519f2b70d240a3e6bbb952b238cc8"
+    },
+    {
+      "path": "backend/tests/Support/j05_history_fixture.php",
+      "bytes": 4592,
+      "sha256": "f7108fccefcbe5993a2f8f3d48e54dea86c78da4022147ceeee37657dfba6674",
+      "lf_sha256": "f7108fccefcbe5993a2f8f3d48e54dea86c78da4022147ceeee37657dfba6674"
+    },
+    {
+      "path": "docs/JAZTIN_J03_MANIFEST_20261117.json",
+      "bytes": 4770,
+      "sha256": "f226fb2400532b6848d488ed981f76a1c2e855a45991933382e81362c525d13e",
+      "lf_sha256": "f226fb2400532b6848d488ed981f76a1c2e855a45991933382e81362c525d13e"
+    },
+    {
+      "path": "docs/JAZTIN_J03_SPRINT_20261117.md",
+      "bytes": 19883,
+      "sha256": "5e4a73fd20603e32eaedab43edfc8a5de9c4a451e754577615714d17553dc6ab",
+      "lf_sha256": "5e4a73fd20603e32eaedab43edfc8a5de9c4a451e754577615714d17553dc6ab"
+    },
+    {
+      "path": "docs/JAZTIN_J04_MANIFEST_20261117.json",
+      "bytes": 8576,
+      "sha256": "820a4373a9a74f8f4c47bb6acee94072d5a5e0b9efb9f20c4a0d5d279dcb7e24",
+      "lf_sha256": "820a4373a9a74f8f4c47bb6acee94072d5a5e0b9efb9f20c4a0d5d279dcb7e24"
+    },
+    {
+      "path": "docs/JAZTIN_J04_SPRINT_20261117.md",
+      "bytes": 23701,
+      "sha256": "4330770992a9713f4b7e053ec4de41debe0f13e8fedf0820450ad51a9fffdafc",
+      "lf_sha256": "4330770992a9713f4b7e053ec4de41debe0f13e8fedf0820450ad51a9fffdafc"
+    },
+    {
+      "path": "docs/JAZTIN_J05_MANIFEST_20261118.json",
+      "bytes": 8477,
+      "sha256": "0cd2c3a65e337048a22eff67960c564dbae66fe0230cf599873dc5be6dead865",
+      "lf_sha256": "0cd2c3a65e337048a22eff67960c564dbae66fe0230cf599873dc5be6dead865"
+    },
+    {
+      "path": "docs/JAZTIN_J05_SPRINT_20261118.md",
+      "bytes": 17334,
+      "sha256": "034ad80001082db794d16a4760369c2670e5202c52720838cb52c2de8bddb4b6",
+      "lf_sha256": "034ad80001082db794d16a4760369c2670e5202c52720838cb52c2de8bddb4b6"
+    },
+    {
+      "path": "src/api-client.js",
+      "bytes": 56064,
+      "sha256": "4c31bf84c7a4c133882bbfb707b7862c74adfefc55b1bdbad1801308d288f553",
+      "lf_sha256": "4c31bf84c7a4c133882bbfb707b7862c74adfefc55b1bdbad1801308d288f553"
+    },
+    {
+      "path": "src/chart-command.js",
+      "bytes": 3961,
+      "sha256": "455282f15ddf19693d29d0d8ada7181b245fd9a89c171b795640a31664cfebe0",
+      "lf_sha256": "455282f15ddf19693d29d0d8ada7181b245fd9a89c171b795640a31664cfebe0"
+    },
+    {
+      "path": "src/chart-experience.css",
+      "bytes": 5402,
+      "sha256": "0c080cd9f2210e07fe7670644e5fe1f0a3aad46f924522e2d23e5465d13ccb9f",
+      "lf_sha256": "0c080cd9f2210e07fe7670644e5fe1f0a3aad46f924522e2d23e5465d13ccb9f"
+    },
+    {
+      "path": "src/chart-read.js",
+      "bytes": 5171,
+      "sha256": "67222a2a1ed69b2154790d07f145b573dcb10eb954d05145db7419288f9644b2",
+      "lf_sha256": "67222a2a1ed69b2154790d07f145b573dcb10eb954d05145db7419288f9644b2"
+    },
+    {
+      "path": "src/components/odontogram/ChartSummary.jsx",
+      "bytes": 2769,
+      "sha256": "de6212a7df242c918e83a05813e6d1290e3027e0360baeb8d3cc869b7e5c94a9",
+      "lf_sha256": "de6212a7df242c918e83a05813e6d1290e3027e0360baeb8d3cc869b7e5c94a9"
+    },
+    {
+      "path": "src/components/odontogram/Odontogram.jsx",
+      "bytes": 16649,
+      "sha256": "718fcafdc8de643d44985098c4822efa55d82d45366995de23f8c5f0a2a2da4c",
+      "lf_sha256": "718fcafdc8de643d44985098c4822efa55d82d45366995de23f8c5f0a2a2da4c"
+    },
+    {
+      "path": "src/components/odontogram/ToothHistory.jsx",
+      "bytes": 2512,
+      "sha256": "35f7f34e3785015bdc5b835abdb3f8e362c03d8d1a203ff34da1386f328b94e3",
+      "lf_sha256": "35f7f34e3785015bdc5b835abdb3f8e362c03d8d1a203ff34da1386f328b94e3"
+    },
+    {
+      "path": "src/components/odontogram/ToothTimeline.jsx",
+      "bytes": 9577,
+      "sha256": "906c27d6c587a0b02f4e8fa02ac0956dd28de709648c80edeb2f1cd39debe530",
+      "lf_sha256": "906c27d6c587a0b02f4e8fa02ac0956dd28de709648c80edeb2f1cd39debe530"
+    },
+    {
+      "path": "src/components/odontogram/odontogram.css",
+      "bytes": 9015,
+      "sha256": "08c2617cd8b4f19ee6575a1e754c5915166335d51ea5f325bc0b68d6d9b3e47b",
+      "lf_sha256": "08c2617cd8b4f19ee6575a1e754c5915166335d51ea5f325bc0b68d6d9b3e47b"
+    },
+    {
+      "path": "src/documents-api.js",
+      "bytes": 6556,
+      "sha256": "0df75811c6ae62fdca036cde244dcfd0f8cd2965408b7a1f79faa9b84aa655ff",
+      "lf_sha256": "0df75811c6ae62fdca036cde244dcfd0f8cd2965408b7a1f79faa9b84aa655ff"
+    },
+    {
+      "path": "src/history-experience.css",
+      "bytes": 3173,
+      "sha256": "fe681ef84b1104aed8dac55cf2b06e211e1b70c39807436ef3bc3764da23c7f7",
+      "lf_sha256": "fe681ef84b1104aed8dac55cf2b06e211e1b70c39807436ef3bc3764da23c7f7"
+    },
+    {
+      "path": "src/history-read.js",
+      "bytes": 2496,
+      "sha256": "82cf824375d9047ccc556bbb5020ed8cf43c7eba513e6e3d02979b626d869d06",
+      "lf_sha256": "82cf824375d9047ccc556bbb5020ed8cf43c7eba513e6e3d02979b626d869d06"
+    },
+    {
+      "path": "src/pages/ClinicalHistory.jsx",
+      "bytes": 7114,
+      "sha256": "b03712da19bc271e635319b49f3405a641c58560467112242e049d62dca6ec38",
+      "lf_sha256": "b03712da19bc271e635319b49f3405a641c58560467112242e049d62dca6ec38"
+    },
+    {
+      "path": "src/pages/DentalChart.jsx",
+      "bytes": 19795,
+      "sha256": "447eb9b2d6c62a6cb4cdff8e9bf16a3a5b320391260238962b8eac5fb429c908",
+      "lf_sha256": "447eb9b2d6c62a6cb4cdff8e9bf16a3a5b320391260238962b8eac5fb429c908"
+    },
+    {
+      "path": "src/pages/EncounterCare.jsx",
+      "bytes": 6118,
+      "sha256": "16f2cf39531c1372b344f346abac5e750e47d34d9738b80bb14938fa36860dc5",
+      "lf_sha256": "16f2cf39531c1372b344f346abac5e750e47d34d9738b80bb14938fa36860dc5"
+    },
+    {
+      "path": "src/pages/PatientMe.jsx",
+      "bytes": 17479,
+      "sha256": "cc5c7b48965ffff8b3c401f87e8baec01505b7e535a6f7c23571a16818e4cdf7",
+      "lf_sha256": "cc5c7b48965ffff8b3c401f87e8baec01505b7e535a6f7c23571a16818e4cdf7"
+    },
+    {
+      "path": "src/patient/care-experience.css",
+      "bytes": 7867,
+      "sha256": "85df2f1b7bdc828b54b9bf513da04fd9d45da8f16ae747f146b49d4e98b5cbb1",
+      "lf_sha256": "85df2f1b7bdc828b54b9bf513da04fd9d45da8f16ae747f146b49d4e98b5cbb1"
+    },
+    {
+      "path": "src/patient/document-experience.css",
+      "bytes": 3112,
+      "sha256": "490e1ec437ce6379852d3a9fa8c3f3f3fdcc8260e405b0226a6e7fb1e2397808",
+      "lf_sha256": "490e1ec437ce6379852d3a9fa8c3f3f3fdcc8260e405b0226a6e7fb1e2397808"
+    },
+    {
+      "path": "src/patient/document-workflow.js",
+      "bytes": 3974,
+      "sha256": "62b4c3ebfa682d46ffef62f880622278f5ccf8bcde55c16463aaabfb01bda143",
+      "lf_sha256": "62b4c3ebfa682d46ffef62f880622278f5ccf8bcde55c16463aaabfb01bda143"
+    },
+    {
+      "path": "src/patient/pages/Archives.jsx",
+      "bytes": 14020,
+      "sha256": "41a7efce860e6662839b33762b3d1f87166d220c0d371e339bb048661997b572",
+      "lf_sha256": "41a7efce860e6662839b33762b3d1f87166d220c0d371e339bb048661997b572"
+    },
+    {
+      "path": "tests/chart-command.test.js",
+      "bytes": 5356,
+      "sha256": "32b0c7a8120db874d125120cb995766690ce7f2a7e51bb2cbccaf1bf4360c47b",
+      "lf_sha256": "32b0c7a8120db874d125120cb995766690ce7f2a7e51bb2cbccaf1bf4360c47b"
+    },
+    {
+      "path": "tests/chart-recovery.browser.mjs",
+      "bytes": 2974,
+      "sha256": "7dfb38cc471705244a953ce20134c9013b102adf1ef0022aa877e599f5cb56ca",
+      "lf_sha256": "7dfb38cc471705244a953ce20134c9013b102adf1ef0022aa877e599f5cb56ca"
+    },
+    {
+      "path": "tests/j03-document-download.test.js",
+      "bytes": 2168,
+      "sha256": "c8581d6c91beb3e934bbc7c3ee83f2afb275c4f0e224e0a688ed1f5386cd1a03",
+      "lf_sha256": "c8581d6c91beb3e934bbc7c3ee83f2afb275c4f0e224e0a688ed1f5386cd1a03"
+    },
+    {
+      "path": "tests/j03-document-workflow.test.js",
+      "bytes": 6032,
+      "sha256": "c8edc642549b97112144bc17929f5464aecc00319d8dc73b32f64411af2a70ac",
+      "lf_sha256": "c8edc642549b97112144bc17929f5464aecc00319d8dc73b32f64411af2a70ac"
+    },
+    {
+      "path": "tests/j03-patient-records.browser.mjs",
+      "bytes": 15185,
+      "sha256": "f3ad92f8b12f5559581a765a49397841439b8af00787a3d7029996fe8ba3c6ce",
+      "lf_sha256": "f3ad92f8b12f5559581a765a49397841439b8af00787a3d7029996fe8ba3c6ce"
+    },
+    {
+      "path": "tests/j03-records-layout.browser.mjs",
+      "bytes": 6181,
+      "sha256": "1e1781e229c03a8861bee3338a583ffde7303daf6801818016cdf7ce12219b04",
+      "lf_sha256": "1e1781e229c03a8861bee3338a583ffde7303daf6801818016cdf7ce12219b04"
+    },
+    {
+      "path": "tests/j04-chart-read.test.js",
+      "bytes": 4655,
+      "sha256": "7bb35b65ccf23934fceb3bcb690b8e600f5a445693913dba3cfe0d599b3c8961",
+      "lf_sha256": "7bb35b65ccf23934fceb3bcb690b8e600f5a445693913dba3cfe0d599b3c8961"
+    },
+    {
+      "path": "tests/j04-chart-readonly.browser.mjs",
+      "bytes": 5630,
+      "sha256": "58a9efc6025be3eb16766ee9d61c23b9c5a1139434a261833335edd871dd8478",
+      "lf_sha256": "58a9efc6025be3eb16766ee9d61c23b9c5a1139434a261833335edd871dd8478"
+    },
+    {
+      "path": "tests/j04-clinical-workspace.browser.mjs",
+      "bytes": 17391,
+      "sha256": "7f7d928166d87f0acb4f0d2f1dc0e393920109e3df2dadd7a55d261a11163b62",
+      "lf_sha256": "7f7d928166d87f0acb4f0d2f1dc0e393920109e3df2dadd7a55d261a11163b62"
+    },
+    {
+      "path": "tests/j05-history-layout.browser.mjs",
+      "bytes": 4013,
+      "sha256": "abe34f82b68779b131a4facd80eedfd41c54de07361e3fa65da4a8d7f3cc4e73",
+      "lf_sha256": "abe34f82b68779b131a4facd80eedfd41c54de07361e3fa65da4a8d7f3cc4e73"
+    },
+    {
+      "path": "tests/j05-history-read.test.js",
+      "bytes": 3052,
+      "sha256": "40771e4dd5376ae5ecdba1fd5ce7ad737dfb4b58614ca6ba1bc75c7086c97cf5",
+      "lf_sha256": "40771e4dd5376ae5ecdba1fd5ce7ad737dfb4b58614ca6ba1bc75c7086c97cf5"
+    },
+    {
+      "path": "tests/j05-history-workspace.browser.mjs",
+      "bytes": 11811,
+      "sha256": "f8ec1e8a47ba2dc4effaca6bb4a1d411bf47c65968931a119f73ce80649e1637",
+      "lf_sha256": "f8ec1e8a47ba2dc4effaca6bb4a1d411bf47c65968931a119f73ce80649e1637"
+    },
+    {
+      "path": "tests/local-chart.browser.mjs",
+      "bytes": 9867,
+      "sha256": "8735c349b61a09cc2a912efcfd4e1001d064e8fe5545f54b0941a32f40d4fcd2",
+      "lf_sha256": "8735c349b61a09cc2a912efcfd4e1001d064e8fe5545f54b0941a32f40d4fcd2"
+    },
+    {
+      "path": "tests/m10-dental-chart.test.js",
+      "bytes": 2291,
+      "sha256": "07a7bdb233aa944233c8dde4d11ef8441ed22c47ff99d9bc476f75c76cede7ce",
+      "lf_sha256": "07a7bdb233aa944233c8dde4d11ef8441ed22c47ff99d9bc476f75c76cede7ce"
+    },
+    {
+      "path": "tests/m14-documents.test.js",
+      "bytes": 4867,
+      "sha256": "72057ea8962da0152b967475d57c29a99f57d9f8d22039918d51e81867d39a18",
+      "lf_sha256": "72057ea8962da0152b967475d57c29a99f57d9f8d22039918d51e81867d39a18"
+    }
+  ],
+  "archive": "/private/tmp/jaztin-j05-delivery-20261118/dentalops-jaztin-j05-613a85a.zip",
+  "archive_sha256": "e76379b448fdc119de91b4cec8c3d2c54a7a3a10cb8888f28bb6ece460168e11",
+  "publication": "Local only; no GitHub publication authorized. Prior J02 remote checkpoint is not evidence Joevan received J03\u2013J05.",
+  "shared_contract_files": [
+    "src/api-client.js",
+    "backend/config/cors.php"
+  ],
+  "domain_shared_components": [
+    "src/components/odontogram/ChartSummary.jsx",
+    "src/components/odontogram/Odontogram.jsx",
+    "src/components/odontogram/ToothHistory.jsx",
+    "src/components/odontogram/ToothTimeline.jsx",
+    "src/components/odontogram/odontogram.css"
+  ],
+  "api_contract": "J03 optional document cursor pagination, Patient identity metadata, immutable upload/retraction context, guarded download identity/digest. J04/J05 add no route/API/CORS/schema changes.",
+  "cors_contract": "J03 appends X-Document-Id to exposed headers only. Preserve later Windows headers, explicit credentialed origins and Sanctum controls; merge semantically.",
+  "integration": "Review eight ordered commits on a separate review branch against current Windows source. Apply cumulative patch once if J03\u2013J05 absent, or J05-only lane after J03/J04. Do not replace newer files wholesale. Re-run relevant PostgreSQL, frontend, persisted/browser and six-width checks. No migrations or grants.",
+  "api_related_files": [
+    "backend/app/Http/Controllers/DocumentController.php",
+    "backend/app/Services/Document/DocumentStorageService.php",
+    "src/api-client.js",
+    "src/documents-api.js"
+  ],
+  "clinical_shared_view_files": [
+    "src/pages/DentalChart.jsx",
+    "src/pages/ClinicalHistory.jsx",
+    "src/pages/EncounterCare.jsx",
+    "src/chart-command.js"
+  ],
+  "verification_addendum": "J06 found a test-only J05 fixture bootstrap alias/import-order defect after Pint. The frozen J05 bytes are unchanged; apply J06 tests/Support/j05_history_fixture.php correction before fixture reproduction. Actual corrected fixture execution passed on a new verified synthetic target. This is not an API/schema/production change.",
+  "local_tag": "jaztin-j05-frozen-20261118",
+  "j06_test_fixture_correction_commit": "16a6473041c7f93f01f10fe6b56ac1afdec27219"
+}
