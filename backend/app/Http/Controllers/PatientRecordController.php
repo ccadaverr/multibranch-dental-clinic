@@ -34,9 +34,19 @@ class PatientRecordController extends Controller
     use ReadsIdempotencyKey;
     private const INDEX_LIMIT = 100;
 
-    public function show(Request $request, Patient $patient): JsonResponse
+    private function readablePatient(Request $request, string $id): Patient
     {
-        Gate::authorize('view', $patient);
+        // Dentists use encounter APIs. Generic Patient identity reads are unavailable for that role.
+        abort_if($request->user()->role->value === 'dentist', 403);
+        $patient = Patient::where('public_id', strtolower($id))->first();
+        abort_unless($patient && Gate::forUser($request->user())->allows('view', $patient), 404, 'Patient not found.');
+
+        return $patient;
+    }
+
+    public function show(Request $request, string $patient): JsonResponse
+    {
+        $patient = $this->readablePatient($request, $patient);
 
         return response()->json(['data' => new PatientRecordResource($patient->load(['person.user', 'preferredBranch']))])->header('Cache-Control', 'private, no-store');
     }
@@ -113,9 +123,9 @@ class PatientRecordController extends Controller
             'meta' => ['unchanged' => $record->revision === (int) $data['expected_revision']]], 200];
     }
 
-    public function records(Request $request, Patient $patient): JsonResponse
+    public function records(Request $request, string $patient): JsonResponse
     {
-        Gate::authorize('view', $patient);
+        $patient = $this->readablePatient($request, $patient);
         $user = $request->user();
         $local = fn ($instant) => $instant ? ClinicClock::local($instant)->toIso8601String() : null;
         $limit = self::INDEX_LIMIT;

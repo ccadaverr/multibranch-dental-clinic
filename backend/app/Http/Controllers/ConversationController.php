@@ -154,18 +154,27 @@ class ConversationController extends Controller
         return response()->json(['data' => ['conversations' => $rows->count(), 'open' => $rows->where('status', 'Open')->count(), 'unread_conversations' => $rows->filter(fn ($c) => (int) $c->unread_count > 0)->count()]]);
     }
 
-    public function show(Request $request, Conversation $conversation): ConversationResource
+    private function readableConversation(Request $request, string $id): Conversation
     {
-        abort_unless($conversation->accessibleTo($request->user()), 403);
+        abort_if($request->user()->role->value === 'owner', 403);
+        $conversation = Conversation::visibleTo($request->user())->where('public_id', strtolower($id))->first();
+        abort_unless($conversation, 404, 'Conversation not found.');
+
+        return $conversation;
+    }
+
+    public function show(Request $request, string $conversation): ConversationResource
+    {
+        $conversation = $this->readableConversation($request, $conversation);
         $conversation = $this->summaries($request->user())->with(['patient.person', 'branch', 'participants.user.person', 'assignee.person'])->findOrFail($conversation->id);
 
         return new ConversationResource($conversation);
     }
 
     /** Messages newest first (keyset by serial id — a deterministic order, the cursor is the oldest message public id returned). */
-    public function messages(Request $request, Conversation $conversation): JsonResponse
+    public function messages(Request $request, string $conversation): JsonResponse
     {
-        abort_unless($conversation->accessibleTo($request->user()), 403);
+        $conversation = $this->readableConversation($request, $conversation);
         Presence::touch($request->user());
         $v = $request->validate(['per_page' => ['nullable', 'integer', 'min:1', 'max:'.self::MAX_PER_PAGE], 'cursor' => ['nullable', 'string', 'size:26'], 'after' => ['nullable', 'string', 'size:26', 'prohibits:cursor,q'], 'q' => ['nullable', 'string', 'max:120']]);
         $per = (int) ($v['per_page'] ?? 30);

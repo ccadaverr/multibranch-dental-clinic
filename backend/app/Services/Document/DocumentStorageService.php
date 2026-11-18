@@ -3,6 +3,7 @@
 namespace App\Services\Document;
 
 use App\Enums\Role;
+use App\Models\Appointment;
 use App\Models\Branch;
 use App\Models\Document;
 use App\Models\HmoCase;
@@ -39,16 +40,36 @@ class DocumentStorageService
 
     public function __construct(private readonly TextExtractionService $extractor, private readonly AuditService $audit) {}
 
-    public function store(User $actor, UploadedFile $file, array $attributes): Document
+    public function uploadTarget(User $actor, array $attributes): array
     {
-        $mime = $this->validateFile($file);
-
+        if ($actor->role === Role::Staff && ! UserBranchScope::where('user_id', $actor->id)->exists()) {
+            throw new DocumentException(403, 'forbidden', 'Staff without an authorization branch scope cannot upload documents.');
+        }
+        if ($actor->role === Role::Staff && empty($attributes['branch_id']) && empty($attributes['visit_id']) && empty($attributes['hmo_case_id'])) {
+            throw new DocumentException(422, 'branch_required', 'Choose the branch (or the visit) this document belongs to.');
+        }
+        if ($actor->role === Role::Dentist && empty($attributes['visit_id'])) {
+            throw new DocumentException(403, 'forbidden', 'A Dentist may add a document only to a visit they are responsible for.');
+        }
+        $branch = ! empty($attributes['branch_id']) ? $this->resolveBranch($actor, $attributes['branch_id']) : null;
         $patient = $this->resolvePatient($actor, $attributes['patient_id'] ?? null);
         $visit = ! empty($attributes['visit_id']) ? $this->resolveVisit($actor, $attributes['visit_id'], $patient) : null;
         $hmoCase = ! empty($attributes['hmo_case_id']) ? $this->resolveHmoCase($actor, $attributes['hmo_case_id'], $patient) : null;
-        $branch = ! empty($attributes['branch_id']) ? $this->resolveBranch($actor, $attributes['branch_id']) : ($visit?->branch);
+        $branch ??= $visit?->branch ?? $hmoCase?->branch;
+        if (($visit && $visit->branch_id !== $branch?->id) || ($hmoCase && $hmoCase->branch_id !== $branch?->id)
+            || ($visit && $hmoCase && $hmoCase->visit_id !== $visit->id)) {
+            throw new DocumentException(422, 'document_context_mismatch', 'The document records must belong to the same branch and visit.');
+        }
         $this->authorizeUpload($actor, $patient, $visit, $branch);
 
+
+        return [$patient, $visit, $hmoCase, $branch];
+    }
+
+    public function store(User $actor, UploadedFile $file, array $attributes, array $target): Document
+    {
+        [$patient, $visit, $hmoCase, $branch] = $target;
+        $mime = $this->validateFile($file);
         $category = $attributes['category'] ?? 'other';
         if (! in_array($category, Document::CATEGORIES, true)) {
             throw new DocumentException(422, 'invalid_document_category', "Category '{$category}' is not supported.", ['allowed' => Document::CATEGORIES]);
@@ -247,7 +268,9 @@ class DocumentStorageService
             throw new DocumentException(422, 'patient_required', 'patient_id is required.');
         }
         // M4 identity contract: a Patient is named by public_id only (never patient_code or the bigint id).
-        $patient = Str::isUlid($patientId) ? Patient::where('public_id', strtolower($patientId))->first() : null;
+        $patient = Str::isUlid($patientId) ? Patient::where('public_id', strtolower($patientId))
+            ->when($actor->role === Role::Dentist, fn ($q) => $q->whereIn('id', Visit::visibleTo($actor)->select('patient_id')))
+            ->first() : null;
 
         return $patient ?? throw new DocumentException(404, 'patient_not_found', 'Specified patient does not exist.');
     }
@@ -259,12 +282,12 @@ class DocumentStorageService
         if (! $visit) {
             throw new DocumentException(404, 'visit_not_found', 'Specified visit does not exist.');
         }
+        if (($actor->role === Role::Patient && $visit->patient_id !== $patient->id)
+            || ($actor->role !== Role::Patient && ! Visit::visibleTo($actor)->whereKey($visit->id)->exists())) {
+            throw new DocumentException(404, 'visit_not_found', 'Specified visit does not exist.');
+        }
         if ($visit->patient_id !== $patient->id) {
             throw new DocumentException(422, 'visit_patient_mismatch', 'The visit does not belong to the specified patient.');
-        }
-        // Staff/Dentist must be able to read that Visit under its own policy; a Patient may link only their own.
-        if ($actor->role !== Role::Patient && ! Visit::visibleTo($actor)->whereKey($visit->id)->exists()) {
-            throw new DocumentException(403, 'forbidden', 'You do not have access to this visit.');
         }
 
         return $visit;
@@ -273,14 +296,11 @@ class DocumentStorageService
     private function resolveHmoCase(User $actor, string $caseId, Patient $patient): HmoCase
     {
         $case = Str::isUlid($caseId) ? HmoCase::where('public_id', strtolower($caseId))->first() : null;
-        if (! $case) {
+        if (! $case || ($actor->role === Role::Patient ? $case->patient_id !== $patient->id : ! HmoCase::visibleTo($actor)->whereKey($case->id)->exists())) {
             throw new DocumentException(404, 'hmo_case_not_found', 'Specified HMO case does not exist.');
         }
         if ($case->patient_id !== $patient->id) {
             throw new DocumentException(422, 'hmo_patient_mismatch', 'The HMO case does not belong to the specified patient.');
-        }
-        if ($actor->role !== Role::Patient && ! HmoCase::visibleTo($actor)->whereKey($case->id)->exists()) {
-            throw new DocumentException(403, 'forbidden', 'You do not have access to this HMO case.');
         }
 
         return $case;
@@ -307,19 +327,17 @@ class DocumentStorageService
             case Role::Patient:
                 return;
             case Role::Staff:
-                if (! UserBranchScope::where('user_id', $actor->id)->exists()) {
-                    throw new DocumentException(403, 'forbidden', 'Staff without an authorization branch scope cannot upload documents.');
-                }
                 if (! $branch) {
                     throw new DocumentException(422, 'branch_required', 'Choose the branch (or the visit) this document belongs to.');
                 }
 
-                return;
-            case Role::Dentist:
-                if (! $visit) {
-                    throw new DocumentException(403, 'forbidden', 'A Dentist may add a document only to a visit they are responsible for.');
+                if (! $visit && ! Appointment::visibleTo($actor)->where('patient_id', $patient->id)->where('branch_id', $branch->id)->exists()
+                    && ! Visit::visibleTo($actor)->where('patient_id', $patient->id)->where('branch_id', $branch->id)->exists()) {
+                    throw new DocumentException(404, 'patient_not_found', 'Specified patient does not exist.');
                 }
 
+                return;
+            case Role::Dentist:
                 return;
             default:
                 throw new DocumentException(403, 'forbidden', 'You are not authorized to upload documents.');

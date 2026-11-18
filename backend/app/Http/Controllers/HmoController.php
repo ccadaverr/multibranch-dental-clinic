@@ -147,9 +147,12 @@ class HmoController extends Controller
     }
 
     /** The M12 financial gate for a Visit (read-only; M11 calls HmoFinancialGate internally). */
-    public function gate(Request $request, Visit $visit): JsonResponse
+    public function gate(Request $request, string $visit): JsonResponse
     {
-        $this->assertCanOperateOrRead($request->user(), $visit);
+        $user = $request->user();
+        $this->assertStaffOrOwner($user);
+        $visit = Visit::visibleTo($user)->where('public_id', strtolower($visit))->first();
+        abort_unless($visit, 404, 'Visit not found.');
 
         return response()->json(['data' => $this->gate->forVisit($visit)]);
     }
@@ -276,8 +279,4 @@ class HmoController extends Controller
         abort_unless($user->role === Role::Owner || $user->role === Role::Staff, 403, 'Forbidden.');
     }
 
-    private function assertCanOperateOrRead(User $user, Visit $visit): void
-    {
-        abort_unless($user->role === Role::Owner || ($user->role === Role::Staff && $this->staffScope($user, $visit->branch_id)), 403, 'Forbidden.');
-    }
 }

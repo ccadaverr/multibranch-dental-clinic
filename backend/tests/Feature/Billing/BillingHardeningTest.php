@@ -446,7 +446,7 @@ class BillingHardeningTest extends TestCase
         // Staff of another branch, and Staff with no scope.
         foreach (['staffB2', 'staffNone'] as $who) {
             $this->actingAsUser($who);
-            $this->getJson($show)->assertForbidden();
+            $this->getJson($show)->assertNotFound();
             $this->getJson('/api/invoices')->assertStatus($who === 'staffNone' ? 200 : 200)->assertJsonCount(0, 'data');
             $this->postJson("{$show}/payment", ['expected_revision' => 3, 'method' => 'Cash'], ['Idempotency-Key' => $this->key()])->assertForbidden();
             $this->postJson("{$show}/review", ['expected_revision' => 3], ['Idempotency-Key' => $this->key()])->assertForbidden();
@@ -465,7 +465,7 @@ class BillingHardeningTest extends TestCase
         $this->actingAsUser('staffB1');
         $this->postJson("/api/invoices/{$invoice->public_id}/payment", ['expected_revision' => 3, 'method' => 'Cash'], ['Idempotency-Key' => $this->key()])->assertOk();
         $this->actingAsUser('patientB');
-        $this->getJson("/api/invoices/{$invoice->public_id}")->assertForbidden();
+        $this->getJson("/api/invoices/{$invoice->public_id}")->assertNotFound();
         $this->assertCount(0, $this->getJson('/api/invoices/mine')->assertOk()->json('data'));
         $this->assertCount(0, $this->getJson('/api/receipts/mine')->assertOk()->json('data'));
         $this->actingAsUser('patientA');

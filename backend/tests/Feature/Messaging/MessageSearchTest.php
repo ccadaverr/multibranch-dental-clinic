@@ -56,7 +56,7 @@ class MessageSearchTest extends TestCase
         foreach (['staffB2', 'staffNone', 'patientB', 'dentist2', 'dentist3'] as $who) {
             $this->actingAsUser($who);
             $this->getJson('/api/conversations?q=needle')->assertOk()->assertJsonCount(0, 'data');
-            $this->getJson("/api/conversations/{$c->public_id}/messages?q=needle")->assertForbidden();
+            $this->getJson("/api/conversations/{$c->public_id}/messages?q=needle")->assertNotFound();
         }
         $this->actingAsUser('owner');
         $this->getJson('/api/conversations?q=needle')->assertForbidden();

@@ -430,7 +430,7 @@ class HmoTest extends TestCase
         $this->getJson("/api/visits/{$visit->public_id}/hmo-gate")->assertOk();
         foreach (['staffB2', 'dentist1', 'patientA'] as $who) {
             $this->actingAsUser($who);
-            $this->getJson("/api/visits/{$visit->public_id}/hmo-gate")->assertForbidden();
+            $this->getJson("/api/visits/{$visit->public_id}/hmo-gate")->assertStatus($who === 'staffB2' ? 404 : 403);
         }
         // The gate is reachable from the Treatment (M11's path: Treatment → Visit → case).
         $this->assertSame('approved', app(HmoFinancialGate::class)->forTreatment($visit->fresh()->treatment)['coverage_status']);

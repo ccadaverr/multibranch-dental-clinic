@@ -141,7 +141,7 @@ class MessagingRealtimeTest extends TestCase
         }
         foreach (['staffB2', 'staffNone', 'dentist1', 'patientB', 'owner'] as $who) {
             $this->actingAsUser($who);
-            $who === 'owner' ? $this->getJson("/api/conversations/{$id}")->assertForbidden() : $this->getJson("/api/conversations/{$id}")->assertForbidden();
+            $this->getJson("/api/conversations/{$id}")->assertStatus($who === 'owner' ? 403 : 404);
             $this->send($id, $who)->assertForbidden();
         }
         $this->send($id, 'staffBoth', 'Hi, this is the front desk')->assertCreated();
@@ -164,7 +164,7 @@ class MessagingRealtimeTest extends TestCase
     {
         $id = $this->start()->json('data.conversation.id');
         $this->actingAsUser('dentist1');
-        $this->getJson("/api/conversations/{$id}")->assertForbidden();
+        $this->getJson("/api/conversations/{$id}")->assertNotFound();
         $this->actingAsUser('patientA');
         $this->postJson("/api/conversations/{$id}/participants", ['dentist_id' => $this->u['dentist1']->public_id])->assertForbidden();
         $this->actingAsUser('staffB1');
@@ -172,7 +172,7 @@ class MessagingRealtimeTest extends TestCase
         $this->postJson("/api/conversations/{$id}/participants", ['dentist_id' => $this->u['dentist1']->public_id])->assertConflict()->assertJsonPath('code', 'conversation_grants_unavailable');
         $this->send($id, 'dentist1', 'Unassigned Dentist')->assertForbidden();
         $this->actingAsUser('dentist2');
-        $this->getJson("/api/conversations/{$id}")->assertForbidden();
+        $this->getJson("/api/conversations/{$id}")->assertNotFound();
         $this->assertSame(0, AuditLog::where('action', 'conversation.participant_added')->count());
         $this->assertFalse(ConversationParticipant::where('conversation_id', Conversation::where('public_id', $id)->value('id'))->where('user_id', $this->u['dentist1']->id)->exists());
     }

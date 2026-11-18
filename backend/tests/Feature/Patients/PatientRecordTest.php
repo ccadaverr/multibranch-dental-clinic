@@ -61,7 +61,7 @@ class PatientRecordTest extends TestCase
         $this->getJson('/api/patients/'.$this->p['A']->id.'/consents')->assertNotFound();
         $this->getJson('/api/patients/'.$this->p['A']->patient_code.'/consents')->assertNotFound();
         $this->getJson('/api/patients/'.$this->p['A']->id.'/hmo-membership')->assertNotFound();
-        $this->getJson($this->url('A', '/consents'))->assertForbidden(); // a ULID resolves, but Staff need a scoped record of this Patient (M14)
+        $this->getJson($this->url('A', '/consents'))->assertNotFound(); // Staff need a scoped record of this Patient (M14)
         $this->relate();
         $this->getJson($this->url('A', '/consents'))->assertOk();
     }
@@ -112,10 +112,10 @@ class PatientRecordTest extends TestCase
     {
         $this->actingAsUser('patientA');
         $this->getJson($this->url('A'))->assertOk()->assertJsonPath('data.profile_access', 'full');
-        $this->getJson($this->url('B'))->assertForbidden();
+        $this->getJson($this->url('B'))->assertNotFound();
 
         $this->actingAsUser('staffNone');
-        $this->getJson($this->url('A'))->assertForbidden();
+        $this->getJson($this->url('A'))->assertNotFound();
 
         // No record of A in any branch yet: scoped Staff and the Owner reach only the identity tier (the directory fields).
         foreach (['staffB1', 'staffB2', 'staffBoth', 'owner'] as $who) {
@@ -180,8 +180,8 @@ class PatientRecordTest extends TestCase
         $this->actingAsUser('patientB');
         $this->getJson($this->url('B'))->assertOk()->assertJsonPath('data.code', 'PAT-0002');
         foreach (['A'] as $other) {
-            $this->getJson($this->url($other))->assertForbidden();
-            $this->getJson($this->url($other, '/records'))->assertForbidden();
+            $this->getJson($this->url($other))->assertNotFound();
+            $this->getJson($this->url($other, '/records'))->assertNotFound();
         }
     }
 
@@ -358,7 +358,7 @@ class PatientRecordTest extends TestCase
         $this->actingAsUser('patientA');
         $this->assertCount(2, $this->getJson($this->url('A', '/records'))->json('data.appointments'));
         $this->actingAsUser('staffNone');
-        $this->getJson($this->url('A', '/records'))->assertForbidden();
+        $this->getJson($this->url('A', '/records'))->assertNotFound();
     }
 
     public function test_internal_ids_never_appear_in_the_record_index(): void
@@ -386,7 +386,9 @@ class PatientRecordTest extends TestCase
             $this->postJson('/api/documents', ['file' => $file(), 'patient_id' => $bad, 'branch_id' => 'b1', 'category' => 'consent_document'])
                 ->assertStatus(404);
         }
-        $this->postJson('/api/documents', ['file' => $file(), 'patient_id' => $this->p['A']->public_id, 'branch_id' => 'b1', 'category' => 'consent_document'])->assertCreated();
+        $this->relate();
+        $this->postJson('/api/documents', ['file' => $file(), 'patient_id' => $this->p['A']->public_id, 'branch_id' => 'b1', 'category' => 'consent_document'],
+            ['Idempotency-Key' => 'scoped-patient-document'])->assertCreated();
     }
 
     public function test_changing_a_staff_members_assigned_branch_enforces_updated_scope_server_side(): void

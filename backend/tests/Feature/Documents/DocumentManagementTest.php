@@ -51,6 +51,10 @@ class DocumentManagementTest extends TestCase
             $fields += ['other_description' => 'Synthetic document description'];
         }
 
+        if (auth()->user()?->role === \App\Enums\Role::Staff) {
+            $headers += ['Idempotency-Key' => 'doc-fixture-'.(++$this->keys)];
+        }
+
         return $this->postJson('/api/documents', $fields + ['file' => $file ?? $this->pdf()], $headers);
     }
 
@@ -67,6 +71,9 @@ class DocumentManagementTest extends TestCase
     private function staffDoc(string $patient = 'A', string $branch = 'b1', array $extra = []): array
     {
         $this->actingAsUser('staffB1');
+        if (! \App\Models\Appointment::where('patient_id', $this->p[$patient]->id)->where('branch_id', $this->b[$branch]->id)->exists()) {
+            $this->existing($patient, 'd1', $branch, 'svc1', '2026-09-30', '08:30');
+        }
 
         return $this->upload(['patient_id' => $this->p[$patient]->public_id, 'branch_id' => $branch] + $extra)->assertCreated()->json('data');
     }
@@ -99,7 +106,7 @@ class DocumentManagementTest extends TestCase
         $this->assertSame($body['other_description'], $row->metadata['other_description']);
         $this->getJson('/api/documents/mine')->assertOk()->assertJsonPath('data.0.other_description', $body['other_description']);
         $this->actingAsUser('patientB');
-        $this->getJson('/api/documents/'.$saved)->assertForbidden();
+        $this->getJson('/api/documents/'.$saved)->assertNotFound();
         $this->actingAsUser('owner');
         $this->getJson('/api/documents/'.$saved)->assertForbidden();
     }
@@ -124,12 +131,13 @@ class DocumentManagementTest extends TestCase
     public function test_other_description_is_scoped_and_legacy_uploads_are_not_relabelled(): void
     {
         $this->actingAsUser('staffB1');
+        $this->existing('A', 'd1', 'b1', 'svc1', '2026-09-30', '08:30');
         $fields = ['patient_id' => $this->p['A']->public_id, 'branch_id' => 'b1', 'other_description' => 'School clearance'];
         $headers = ['Idempotency-Key' => 'gen07-staff-document'];
         $id = $this->upload($fields, headers: $headers)->assertCreated()->json('data.id');
         $this->getJson('/api/documents/'.$id)->assertOk()->assertJsonPath('data.other_description', 'School clearance');
         $this->actingAsUser('staffB2');
-        $this->getJson('/api/documents/'.$id)->assertForbidden();
+        $this->getJson('/api/documents/'.$id)->assertNotFound();
         $this->upload($fields)->assertForbidden();
 
         $this->actingAsUser('staffB1');
@@ -205,6 +213,7 @@ class DocumentManagementTest extends TestCase
             $this->upload(['patient_id' => $this->p['A']->public_id, 'branch_id' => 'b1', $field => 'x'])->assertStatus(422)->assertJsonValidationErrors($field);
         }
         $this->upload(['patient_id' => $this->p['A']->public_id, 'branch_id' => 'b1', 'metadata' => ['storage_path' => '/etc/passwd']])->assertStatus(422);
+        $this->existing('A', 'd1', 'b1', 'svc1', '2026-09-30', '08:30');
         $this->upload(['patient_id' => $this->p['A']->public_id, 'branch_id' => 'b1', 'metadata' => ['provider' => 'Maxicare', 'member_number' => 'M-1']])->assertCreated();
         $this->assertSame(1, Document::count());
     }
@@ -233,11 +242,51 @@ class DocumentManagementTest extends TestCase
 
     // ---- who may upload / read ------------------------------------------------------------------------------------
 
+    public function test_staff_upload_requires_exact_patient_branch_and_replays_only_under_current_authority(): void
+    {
+        $this->existing('A', 'd1', 'b1', 'svc1', '2026-09-30', '08:30');
+        $this->existing('B', 'd3', 'b2', 'svc1', '2026-09-30', '08:30');
+        $fields = ['patient_id' => $this->p['A']->public_id, 'branch_id' => 'b1', 'category' => 'valid_id'];
+        $this->actingAsUser('staffB1');
+        $unknown = '01ARZ3NDEKTSV4RRFFQ69G5FAV';
+        $foreign = $this->upload(array_replace($fields, ['patient_id' => $this->p['B']->public_id]))->assertNotFound();
+        $missing = $this->upload(array_replace($fields, ['patient_id' => $unknown]))->assertNotFound();
+        $this->assertSame($missing->json(), $foreign->json());
+        $this->postJson('/api/documents', $fields + ['file' => $this->pdf()])->assertUnprocessable()->assertJsonValidationErrors('idempotency_key');
+        $headers = ['Idempotency-Key' => 'staff-document-exact'];
+        $id = $this->upload($fields, headers: $headers)->assertCreated()->json('data.id');
+        $this->upload($fields, headers: $headers)->assertCreated()->assertJsonPath('data.id', $id);
+        $this->getJson('/api/documents/'.$id)->assertOk()->assertJsonPath('data.patient.id', $this->p['A']->public_id);
+        $this->assertCount(1, Storage::disk('local')->allFiles());
+        $this->actingAsUser('staffB2');
+        foreach (['', '/download'] as $suffix) {
+            $private = $this->getJson('/api/documents/'.$id.$suffix)->assertNotFound();
+            $absent = $this->getJson('/api/documents/'.$unknown.$suffix)->assertNotFound();
+            $this->assertSame($absent->json('message'), $private->json('message'));
+        }
+        $this->actingAsUser('staffB1');
+        $this->u['staffB1']->fresh()->update(['account_status' => 'Suspended']);
+        $this->upload($fields, headers: $headers)->assertForbidden();
+        $this->assertSame(1, Document::count());
+        $this->assertCount(1, Storage::disk('local')->allFiles());
+    }
+
+    public function test_an_authorized_staff_member_cannot_relabel_a_visit_to_another_branch(): void
+    {
+        $visit = $this->walkIn();
+        $this->actingAsUser('staffBoth');
+        $this->upload(['patient_id' => $this->p['A']->public_id, 'visit_id' => $visit->public_id, 'branch_id' => 'b2'])
+            ->assertUnprocessable()->assertJsonPath('code', 'document_context_mismatch');
+        $this->assertSame(0, Document::count());
+        $this->assertSame([], Storage::disk('local')->allFiles());
+    }
+
     public function test_staff_upload_needs_a_scoped_branch_or_visit(): void
     {
         $this->actingAsUser('staffB1');
         $this->upload(['patient_id' => $this->p['A']->public_id])->assertStatus(422)->assertJsonPath('code', 'branch_required');
         $this->upload(['patient_id' => $this->p['A']->public_id, 'branch_id' => 'b2'])->assertStatus(403);
+        $this->existing('A', 'd1', 'b1', 'svc1', '2026-09-30', '08:30');
         $this->upload(['patient_id' => $this->p['A']->public_id, 'branch_id' => 'b1'])->assertCreated()->assertJsonPath('data.branch.id', 'b1');
         $this->actingAsUser('staffNone');
         $this->upload(['patient_id' => $this->p['A']->public_id, 'branch_id' => 'b1'])->assertStatus(403);
@@ -251,11 +300,11 @@ class DocumentManagementTest extends TestCase
         $this->getJson("/api/documents/{$doc['id']}")->assertOk();
         $this->getJson('/api/documents')->assertOk()->assertJsonCount(1, 'data');
         $this->actingAsUser('staffB2');
-        $this->getJson("/api/documents/{$doc['id']}")->assertForbidden();
-        $this->get("/api/documents/{$doc['id']}/download")->assertForbidden();
+        $this->getJson("/api/documents/{$doc['id']}")->assertNotFound();
+        $this->get("/api/documents/{$doc['id']}/download")->assertNotFound();
         $this->getJson('/api/documents')->assertOk()->assertJsonCount(0, 'data');
         $this->actingAsUser('staffNone');
-        $this->getJson("/api/documents/{$doc['id']}")->assertForbidden();
+        $this->getJson("/api/documents/{$doc['id']}")->assertNotFound();
         $this->getJson('/api/documents')->assertOk()->assertJsonCount(0, 'data');
     }
 
@@ -264,13 +313,13 @@ class DocumentManagementTest extends TestCase
         $this->actingAsUser('patientA');
         $own = $this->upload()->assertCreated()->json('data'); // no branch, no visit
         $this->actingAsUser('staffNone');
-        $this->getJson("/api/documents/{$own['id']}")->assertForbidden(); // the old rule exposed every branchless document to any Staff
+        $this->getJson("/api/documents/{$own['id']}")->assertNotFound(); // the old rule exposed every branchless document to any Staff
         $this->actingAsUser('staffB1');
-        $this->getJson("/api/documents/{$own['id']}")->assertForbidden(); // no appointment/visit of A in b1 yet
+        $this->getJson("/api/documents/{$own['id']}")->assertNotFound(); // no appointment/visit of A in b1 yet
         $this->existing('A', 'd1', 'b1', 'svc1', '2026-09-30', '10:00');
         $this->getJson("/api/documents/{$own['id']}")->assertOk();
         $this->actingAsUser('staffB2');
-        $this->getJson("/api/documents/{$own['id']}")->assertForbidden();
+        $this->getJson("/api/documents/{$own['id']}")->assertNotFound();
     }
 
     public function test_dentist_documents_are_tied_to_visits_they_are_responsible_for(): void
@@ -282,10 +331,10 @@ class DocumentManagementTest extends TestCase
         $this->actingAsUser('dentist1');
         $this->getJson("/api/documents/{$linked['id']}")->assertOk();
         $this->assertSame([$linked['id']], array_column($this->getJson('/api/documents')->assertOk()->json('data'), 'id'));
-        $this->getJson("/api/documents/{$unlinked['id']}")->assertForbidden(); // having seen the Patient on some visit is not enough
+        $this->getJson("/api/documents/{$unlinked['id']}")->assertNotFound(); // having seen the Patient on some visit is not enough
         $this->actingAsUser('dentist2');
-        $this->getJson("/api/documents/{$linked['id']}")->assertForbidden();
-        $this->get("/api/documents/{$linked['id']}/download")->assertForbidden();
+        $this->getJson("/api/documents/{$linked['id']}")->assertNotFound();
+        $this->get("/api/documents/{$linked['id']}/download")->assertNotFound();
     }
 
     public function test_a_dentist_may_add_a_document_only_to_a_visit_they_are_responsible_for(): void
@@ -295,7 +344,7 @@ class DocumentManagementTest extends TestCase
         $this->upload(['patient_id' => $this->p['A']->public_id])->assertForbidden();
         $this->upload(['patient_id' => $this->p['A']->public_id, 'visit_id' => $visit->public_id])->assertCreated();
         $this->actingAsUser('dentist2');
-        $this->upload(['patient_id' => $this->p['A']->public_id, 'visit_id' => $visit->public_id])->assertForbidden();
+        $this->upload(['patient_id' => $this->p['A']->public_id, 'visit_id' => $visit->public_id])->assertNotFound();
         $this->assertSame(1, Document::count());
     }
 
@@ -315,8 +364,8 @@ class DocumentManagementTest extends TestCase
         $this->actingAsUser('patientB');
         $docB = $this->upload()->assertCreated()->json('data');
         $this->actingAsUser('patientA');
-        $this->getJson("/api/documents/{$docB['id']}")->assertForbidden();
-        $this->get("/api/documents/{$docB['id']}/download")->assertForbidden();
+        $this->getJson("/api/documents/{$docB['id']}")->assertNotFound();
+        $this->get("/api/documents/{$docB['id']}/download")->assertNotFound();
         $this->assertCount(0, $this->getJson('/api/documents/mine')->assertOk()->json('data'));
         $this->getJson('/api/documents?patient_id='.$this->p['B']->public_id)->assertForbidden(); // the Staff/Dentist listing is not for Patients
     }
@@ -541,7 +590,7 @@ class DocumentManagementTest extends TestCase
         $this->getJson("/api/documents?hmo_case_id={$caseId}")->assertOk()->assertJsonCount(1, 'data');
         $this->upload(['patient_id' => $this->p['B']->public_id, 'branch_id' => 'b1', 'hmo_case_id' => $caseId])->assertStatus(422)->assertJsonPath('code', 'hmo_patient_mismatch');
         $this->actingAsUser('staffB2');
-        $this->upload(['patient_id' => $this->p['A']->public_id, 'branch_id' => 'b2', 'hmo_case_id' => $caseId])->assertForbidden();
+        $this->upload(['patient_id' => $this->p['A']->public_id, 'branch_id' => 'b2', 'hmo_case_id' => $caseId])->assertNotFound();
     }
 
     // ---- consent records ------------------------------------------------------------------------------------------
@@ -552,11 +601,11 @@ class DocumentManagementTest extends TestCase
         $this->actingAsUser('patientA');
         $this->postJson($url, ['consent_type' => 'general_treatment'])->assertCreated();
         $this->actingAsUser('patientB');
-        $this->getJson($url)->assertForbidden();
+        $this->getJson($url)->assertNotFound();
         $this->postJson($url, ['consent_type' => 'data_privacy'])->assertForbidden();
         foreach (['dentist1', 'owner', 'staffNone', 'staffB1'] as $who) { // staffB1: no appointment/visit of A in b1 yet
             $this->actingAsUser($who);
-            $this->getJson($url)->assertForbidden();
+            $this->getJson($url)->assertStatus(in_array($who, ['dentist1', 'owner'], true) ? 403 : 404);
             $this->postJson($url, ['consent_type' => 'data_privacy'])->assertForbidden();
         }
         $this->existing('A', 'd1', 'b1', 'svc1', '2026-09-30', '10:00');
@@ -564,7 +613,7 @@ class DocumentManagementTest extends TestCase
         $this->getJson($url)->assertOk()->assertJsonCount(1, 'data');
         $this->postJson($url, ['consent_type' => 'data_privacy'])->assertCreated();
         $this->actingAsUser('staffB2');
-        $this->getJson($url)->assertForbidden();
+        $this->getJson($url)->assertNotFound();
     }
 
     public function test_consent_lifecycle_duplicates_links_and_forged_fields(): void

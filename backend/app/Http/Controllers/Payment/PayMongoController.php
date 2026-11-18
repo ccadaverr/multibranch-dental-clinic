@@ -34,12 +34,12 @@ class PayMongoController extends Controller
     }
 
     /** GET /api/invoices/{invoice}/payment-options — what the Review and Pay page needs: accepted methods and the address prefill. */
-    public function options(Request $request, Invoice $invoice): JsonResponse
+    public function options(Request $request, string $invoice): JsonResponse
     {
         $user = $request->user();
-        if (! $this->mayPay($user, $invoice)) {
-            return response()->json(['message' => 'You are not authorized to pay for this invoice.'], 403);
-        }
+        abort_unless(in_array($user->role, [Role::Patient, Role::Staff], true), 403);
+        $invoice = Invoice::visibleTo($user)->where('public_id', strtolower($invoice))->first();
+        abort_unless($invoice && $this->mayPay($user, $invoice), 404, 'Invoice not found.');
         $patient = $invoice->patient()->with('person')->first();
         $saved = is_array($patient?->billing_address) ? array_intersect_key($patient->billing_address, array_flip(PayMongoService::ADDRESS_KEYS)) : null;
         // Without a saved address, the free-text profile address is offered as line 1 for the Patient to complete (never sent unseen).

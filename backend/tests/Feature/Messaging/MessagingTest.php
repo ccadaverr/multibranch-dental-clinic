@@ -93,8 +93,8 @@ class MessagingTest extends TestCase
         // whose scope covers the branch — staffBoth here — is the branch front desk and may read and reply; see MessagingRoutingTest.)
         foreach (['patientB', 'staffB2', 'staffNone', 'dentist1', 'dentist2'] as $who) {
             $this->actingAsUser($who);
-            $this->getJson("/api/conversations/{$c->public_id}")->assertForbidden();
-            $this->getJson("/api/conversations/{$c->public_id}/messages")->assertForbidden();
+            $this->getJson("/api/conversations/{$c->public_id}")->assertNotFound();
+            $this->getJson("/api/conversations/{$c->public_id}/messages")->assertNotFound();
             $this->assertSame([], $this->getJson('/api/conversations')->assertOk()->json('data'));
             $this->send($c, $who)->assertForbidden();
         }
@@ -102,7 +102,7 @@ class MessagingTest extends TestCase
         $other = $this->conversation('B', 'b2', ['patientB', 'staffB1', 'dentist1']);
         foreach (['staffB1', 'dentist1'] as $who) {
             $this->actingAsUser($who);
-            $this->getJson("/api/conversations/{$other->public_id}")->assertForbidden();
+            $this->getJson("/api/conversations/{$other->public_id}")->assertNotFound();
             $this->assertNotContains($other->public_id, array_column($this->getJson('/api/conversations')->json('data'), 'id'));
         }
         $this->actingAsUser('patientA');
@@ -117,7 +117,7 @@ class MessagingTest extends TestCase
         }
         // Removing a Staff member's branch authorization ends access at once.
         DB::table('user_branch_scopes')->where('user_id', $this->u['staffB1']->id)->delete();
-        $this->getJson("/api/conversations/{$c->public_id}")->assertForbidden();
+        $this->getJson("/api/conversations/{$c->public_id}")->assertNotFound();
         $this->send($c, 'staffB1')->assertForbidden();
     }
 

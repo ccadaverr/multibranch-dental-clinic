@@ -105,6 +105,8 @@ class DocumentController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        abort_if($request->user()->role === Role::Owner, 403);
+
         return \App\Support\CommandActor::run($request->user(), function ($actor) use ($request) {
             $user = $actor;
             $forbidden = array_fill_keys(self::CLIENT_CONTROLLED_FORBIDDEN, ['prohibited']);
@@ -128,11 +130,11 @@ class DocumentController extends Controller
                 $attributes['metadata']['other_description'] = $request->string('other_description')->trim()->toString();
             }
             $file = $request->file('file');
-            $key = $this->idempotencyKey($request);
-
             try {
+                $target = $this->storage->uploadTarget($user, $attributes);
+                $key = $this->idempotencyKey($request, $user->role === Role::Staff);
                 if ($key === null) {
-                    $doc = $this->storage->store($user, $file, $attributes);
+                    $doc = $this->storage->store($user, $file, $attributes, $target);
 
                     return response()->json(['data' => (new DocumentResource($doc))->detailed()->resolve($request)], 201);
                 }
@@ -142,7 +144,7 @@ class DocumentController extends Controller
                 $fingerprint = $attributes + ['file_sha256' => hash_file('sha256', $file->getRealPath())];
 
                 $response = IdempotentCommand::run(CommandKey::class, $user, $key, 'document.upload', $fingerprint,
-                    fn () => [['data' => (new DocumentResource($this->storage->store($user, $file, $attributes)))->detailed()->resolve($request)], 201],
+                    fn () => [['data' => (new DocumentResource($this->storage->store($user, $file, $attributes, $target)))->detailed()->resolve($request)], 201],
                     fn () => new DocumentException(409, 'idempotency_key_reused', 'This Idempotency-Key was already used for a different upload.'));
 
                 if ($response->headers->get('Idempotent-Replayed') === 'true') {
@@ -158,17 +160,27 @@ class DocumentController extends Controller
         });
     }
 
-    public function show(Request $request, Document $document): JsonResponse
+    private function readableDocument(Request $request, string $id): Document
     {
-        abort_unless(Document::visibleTo($request->user())->whereKey($document->id)->exists(), 403);
+        abort_if($request->user()->role === Role::Owner, 403);
+        $document = Document::visibleTo($request->user())->where('public_id', strtolower($id))->first();
+        abort_unless($document, 404, 'Document not found.');
+
+        return $document;
+    }
+
+    public function show(Request $request, string $document): JsonResponse
+    {
+        $document = $this->readableDocument($request, $document);
 
         return response()->json([
             'data' => (new DocumentResource($document->load(['patient.person', 'visit', 'hmoCase', 'branch', 'uploadedBy.person', 'extractions'])))->detailed()->resolve($request),
         ]);
     }
 
-    public function download(Request $request, Document $document): StreamedResponse|JsonResponse
+    public function download(Request $request, string $document): StreamedResponse|JsonResponse
     {
+        $document = $this->readableDocument($request, $document);
         try {
             return $this->storage->download($request->user(), $document);
         } catch (DocumentException $e) {
@@ -190,20 +202,26 @@ class DocumentController extends Controller
     // ---- consent records ------------------------------------------------------------------------------------------------
 
     /** Patient: own. Staff: only when they may read that Patient's full profile (M4 boundary). Dentist/Owner: refused. */
-    private function authorizeConsent(Request $request, Patient $patient): void
+    private function mayManageConsent(Request $request, Patient $patient): bool
     {
         $user = $request->user();
-        $allowed = match ($user->role) {
+        return match ($user->role) {
             Role::Patient => $user->patient?->id === $patient->id,
             Role::Staff => Gate::forUser($user)->allows('viewProfile', $patient),
             default => false,
         };
-        abort_unless($allowed, 403, 'You are not authorized to manage this patient\'s consents.');
     }
 
-    public function consents(Request $request, Patient $patient): JsonResponse
+    private function authorizeConsent(Request $request, Patient $patient): void
     {
-        $this->authorizeConsent($request, $patient);
+        abort_unless($this->mayManageConsent($request, $patient), 403, 'You are not authorized to manage this patient\'s consents.');
+    }
+
+    public function consents(Request $request, string $patient): JsonResponse
+    {
+        abort_unless(in_array($request->user()->role, [Role::Patient, Role::Staff], true), 403);
+        $patient = Patient::where('public_id', strtolower($patient))->first();
+        abort_unless($patient && $this->mayManageConsent($request, $patient), 404, 'Patient not found.');
         $consents = PatientConsent::where('patient_id', $patient->id)->with(['patient', 'document', 'recordedBy.person'])->latest('id')->get();
 
         return response()->json(['data' => PatientConsentResource::collection($consents)]);

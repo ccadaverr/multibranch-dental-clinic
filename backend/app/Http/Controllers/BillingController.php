@@ -29,7 +29,19 @@ class BillingController extends Controller { use ReadsIdempotencyKey;
  }
  /** Patient's own receipts, newest first, keyset-paged like the invoice lists (cursor = last receipt public id; never an internal id). */
  public function receiptsMine(Request $r){abort_unless($r->user()->role===Role::Patient&&$r->user()->patient,403);$v=$r->validate(['per_page'=>['nullable','integer','min:1','max:'.self::MAX_PER_PAGE],'cursor'=>['nullable','string','size:26']]);$per=(int)($v['per_page']??50);$q=Receipt::whereHas('invoice',fn($i)=>$i->whereIn('patient_id',\App\Services\Intake\Guardianship::patientIdsFor($r->user())));if(!empty($v['cursor']))$q->where('id','<',Receipt::select('id')->where('public_id',strtolower($v['cursor']))->whereHas('invoice',fn($i)=>$i->whereIn('patient_id',\App\Services\Intake\Guardianship::patientIdsFor($r->user())))->limit(1));$rows=$q->with('invoice')->orderByDesc('id')->limit($per+1)->get();$more=$rows->count()>$per;$page=$rows->take($per)->values();return response()->json(['data'=>ReceiptResource::collection($page)->resolve($r),'meta'=>['per_page'=>$per,'next_cursor'=>$more?$page->last()->public_id:null]]);}
- public function show(Request $r,Invoice $invoice){abort_unless(Invoice::visibleTo($r->user())->whereKey($invoice->id)->exists(),403);if($invoice->status!=='Paid'){try{app(\App\Services\Payment\PayMongoService::class)->syncSessionForInvoice($invoice);$invoice->refresh();}catch(\Throwable){}}return new InvoiceResource($invoice->load(['lines.servicePrice','treatment','visit','patient.person','branch','payment','receipt','histories']));}
+ public function show(Request $r, string $invoice): InvoiceResource
+ {
+    $invoice = Invoice::visibleTo($r->user())->where('public_id', strtolower($invoice))->first();
+    abort_unless($invoice, 404, 'Invoice not found.');
+    if ($invoice->status !== 'Paid') {
+        try {
+            app(\App\Services\Payment\PayMongoService::class)->syncSessionForInvoice($invoice);
+            $invoice->refresh();
+        } catch (\Throwable) {}
+    }
+
+    return new InvoiceResource($invoice->load(['lines.servicePrice', 'treatment', 'visit', 'patient.person', 'branch', 'payment', 'receipt', 'histories']));
+ }
  public function create(Request $r,Treatment $treatment){$key=$this->idempotencyKey($r,true);$r->validate($this->forbidden()); try{return $this->command($r,$key,'billing.draft',['treatment'=>$treatment->public_id],fn()=>[$this->billing->createDraft($r->user(),$treatment),201],fn($row)=>(new InvoiceResource($row->load(['lines.servicePrice','treatment','visit','patient.person','branch','payment','receipt','histories'])))->response($r)->getData(true));}catch(BillingException $e){return $this->fail($e);}}
  public function review(Request $r,Invoice $invoice){$key=$this->idempotencyKey($r,true);$v=$r->validate($this->forbidden()+['expected_revision'=>['required','integer','min:1']]);try{return $this->command($r,$key,'billing.review',['invoice'=>$invoice->public_id,'expected_revision'=>(int)$v['expected_revision']],fn()=>[$this->billing->transition($r->user(),$invoice,'Review',(int)$v['expected_revision']),200],fn($row)=>(new InvoiceResource($row->load(['lines.servicePrice','histories'])))->response($r)->getData(true));}catch(BillingException $e){return $this->fail($e);}}
  public function discount(Request $r,Invoice $invoice){$key=$this->idempotencyKey($r,true);$v=$r->validate($this->forbidden()+['expected_revision'=>['required','integer','min:1'],'discount_type'=>['nullable','in:Senior Citizen,PWD'],'discount_id_number'=>['required_with:discount_type','nullable','string','max:50']]);$type=$v['discount_type']??null;$idNum=$v['discount_id_number']??null;try{return $this->command($r,$key,'billing.discount',['invoice'=>$invoice->public_id,'expected_revision'=>(int)$v['expected_revision'],'type'=>$type,'id_number'=>$idNum],fn()=>[$this->billing->applyDiscount($r->user(),$invoice,$type,$idNum,(int)$v['expected_revision']),200],fn($row)=>(new InvoiceResource($row->load(['lines.servicePrice','treatment','visit','patient.person','branch','payment','receipt','histories'])))->response($r)->getData(true));}catch(BillingException $e){return $this->fail($e);}}
