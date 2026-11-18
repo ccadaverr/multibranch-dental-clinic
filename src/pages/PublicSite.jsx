@@ -25,31 +25,6 @@ function useReveal() {
   })
 }
 
-/** A calm illustration drawn for this project (own work, docs/CREDITS.md): a phone with a booking calendar and a message. */
-function HeroIllustration() {
-  return <svg className="lp-hero-art" viewBox="0 0 440 400" width="440" height="400" role="img" aria-label="Illustration of booking a dental visit on a phone">
-    <defs>
-      <linearGradient id="lpSky" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#eaf3fd"/><stop offset="1" stopColor="#eaf5f2"/></linearGradient>
-      <linearGradient id="lpBrand" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#1865ac"/><stop offset="1" stopColor="#0c9b8e"/></linearGradient>
-    </defs>
-    <circle cx="230" cy="200" r="178" fill="url(#lpSky)"/>
-    <circle cx="370" cy="70" r="26" fill="#d9eef9"/><circle cx="70" cy="320" r="18" fill="#d6efe9"/>
-    <rect x="140" y="40" width="170" height="320" rx="28" fill="#ffffff" stroke="#cfe0ec" strokeWidth="3"/>
-    <rect x="156" y="66" width="138" height="34" rx="10" fill="url(#lpBrand)"/>
-    <circle cx="176" cy="83" r="9" fill="#ffffff" opacity=".9"/><rect x="192" y="77" width="72" height="12" rx="6" fill="#ffffff" opacity=".85"/>
-    {Array.from({ length: 4 }, (_, row) => Array.from({ length: 5 }, (_, col) => {
-      const on = (row === 1 && col === 2) || (row === 2 && col === 3)
-      return <rect key={`${row}-${col}`} x={160 + col * 26} y={116 + row * 26} width="20" height="20" rx="6" fill={on ? '#1865ac' : row === 3 && col > 2 ? '#f1f5f8' : '#eaf2fb'}/>
-    }))}
-    <rect x="160" y="226" width="130" height="30" rx="10" fill="#eaf5f2"/><rect x="172" y="237" width="64" height="8" rx="4" fill="#0c9b8e"/>
-    <rect x="160" y="266" width="62" height="26" rx="9" fill="#ffffff" stroke="#cfe0ec" strokeWidth="2"/><rect x="228" y="266" width="62" height="26" rx="9" fill="#1865ac"/>
-    <rect x="160" y="306" width="130" height="34" rx="12" fill="url(#lpBrand)"/><rect x="194" y="319" width="62" height="8" rx="4" fill="#ffffff"/>
-    <g transform="translate(286 232)"><rect width="128" height="62" rx="18" fill="#ffffff" stroke="#cfe0ec" strokeWidth="3"/><rect x="16" y="18" width="80" height="8" rx="4" fill="#9fb8cc"/><rect x="16" y="34" width="56" height="8" rx="4" fill="#cfdde8"/><path d="M28 60 l-10 18 l26 -18z" fill="#ffffff"/></g>
-    <g transform="translate(48 120)"><rect width="104" height="104" rx="26" fill="#ffffff" stroke="#cfe0ec" strokeWidth="3"/>
-      <path d="M52 30c-9-7-27-6-29 9-1 9 3 16 6 24 3 9 3 19 9 19 5 0 5-12 9-12h10c4 0 4 12 9 12 6 0 6-10 9-19 3-8 7-15 6-24-2-15-20-16-29-9z" fill="#eaf3fd" stroke="#1865ac" strokeWidth="3.5" strokeLinejoin="round"/></g>
-  </svg>
-}
-
 const STEPS = [
   ['user', 'Create your account', 'Sign up with your email. We send a 6-digit code to confirm it is yours.'],
   ['calendar', 'Book a visit', 'Choose a service, a branch near you and a time on the calendar. Only real open times are shown.'],
@@ -94,16 +69,18 @@ function Hero() {
   return <section id="home" className="lp-hero" aria-labelledby="lp-hero-title">
     <div className="lp-container lp-hero-grid">
       <div className="lp-hero-copy">
-        <p className="lp-eyebrow">Your next visit starts here</p>
         <h1 id="lp-hero-title">Dr. Dana E. Roxas <span>Dental Clinic</span></h1>
-        <p className="lp-lead">Choose your care. Find your branch. Book a time that works for you.</p>
+        <p className="lp-lead">Book a dental visit at your preferred branch.</p>
         <div className="lp-cta">
-          <a className="lp-btn lp-btn-primary lp-btn-lg" href="#create-account"><Icon name="plusCalendar" size={20}/>Book a visit</a>
-          <a className="lp-link" href="#branches"><Icon name="pin" size={20}/>See branches</a>
+          <a className="lp-btn lp-btn-primary lp-btn-lg" href="#create-account"><Icon name="plusCalendar" size={19}/>Book a visit</a>
+          <a className="lp-link" href="#sign-in">Sign in<Icon name="arrow" size={16}/></a>
         </div>
-        <p className="lp-hero-note"><Icon name="lock" size={16}/> Book online. Keep your visits, messages and payments together.</p>
       </div>
-      <div className="lp-hero-visual"><HeroIllustration/></div>
+      <nav className="lp-visit-directory" aria-label="Before your visit">
+        <h2>Before your visit</h2>
+        <a href="#branches"><Icon name="pin" size={20}/><span><b>Find a branch</b><small>Hours, contacts and directions</small></span><Icon name="chevron" size={16}/></a>
+        <a href="#services"><Icon name="tooth" size={20}/><span><b>Explore services</b><small>See what you can book</small></span><Icon name="chevron" size={16}/></a>
+      </nav>
     </div>
   </section>
 }
@@ -111,8 +88,8 @@ function Hero() {
 function HowItWorks() {
   return <section id="how-it-works" className="lp-section" aria-labelledby="lp-how-title">
     <div className="lp-container">
-      <div className="lp-heading lp-reveal"><p className="lp-eyebrow">How it works</p><h2 id="lp-how-title">From booking to receipt in four steps</h2></div>
-      <ol className="lp-steps">{STEPS.map(([icon, title, text], i) => <li key={title} className="lp-card lp-step lp-reveal">
+      <div className="lp-heading lp-reveal"><p className="lp-eyebrow">How it works</p><h2 id="lp-how-title">How to book a visit</h2></div>
+      <ol className="lp-steps">{STEPS.map(([icon, title, text], i) => <li key={title} className="lp-step lp-reveal">
         <span className="lp-step-icon" aria-hidden="true"><Icon name={icon} size={22}/></span>
         <span className="lp-step-number">Step {i + 1}</span><h3>{title}</h3><p>{text}</p>
       </li>)}</ol>

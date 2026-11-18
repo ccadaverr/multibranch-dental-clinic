@@ -41,7 +41,8 @@ test('NOTIF-01 server initial rendering shows loading, never local-demo content 
   const html = renderToStaticMarkup(React.createElement(NotificationPanel, { role: 'staff', store: { state: { ...state, notifications: [{ id: 'demo-secret', title: 'LOCAL DEMO TITLE', recipientUserId: 'u1', branchId: 'b1' }] }, session, actions: {}, toast() {} }, onClose() {}, setPage() {} }))
   assert.match(html, /Loading notifications/)
   assert.doesNotMatch(html, /LOCAL DEMO TITLE|No recent notifications\./)
-  assert.match(html, /50 records at a time/)
+  assert.match(html, /aria-busy="true"/)
+  assert.doesNotMatch(html, /50 records at a time/)
 })
 
 test('notification history accepts only a cursor matching the last returned row', () => {

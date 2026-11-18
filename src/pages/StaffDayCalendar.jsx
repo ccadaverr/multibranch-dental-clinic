@@ -608,7 +608,7 @@ function CalendarSession({ store, scopes, authorizationKey }) {
                   ? 'Refunded'
                   : selected.bookingPaymentStatus === 'forfeited'
                   ? 'Forfeited'
-                  : 'Unpaid'}
+                  : selected.bookingPaymentStatus === 'unpaid' ? 'Unpaid' : 'Payment status unavailable'}
               </span>
             </div>
             <div className="appt-detail-actions" style={{ display: 'flex', gap: '8px' }}>

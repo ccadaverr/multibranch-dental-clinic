@@ -1,6 +1,6 @@
 import {SelectionDetailsNotice} from '../selection-details.jsx'
 import React, { useEffect, useId, useRef, useState } from 'react'
-import { Button, Card, ConfirmDialog, Field, FilterBar, Modal, Notice, PageHeader, RefreshButton, SelectWithOther, Status, Table } from '../components.jsx'
+import { Button, Card, ConfirmDialog, Field, FilterBar, Icon, Modal, Notice, PageHeader, RefreshButton, SelectWithOther, Status, Table } from '../components.jsx'
 import { addMinutes, dateLabel, dentistName, displayTime, patientName } from '../logic.js'
 import { canAccessPage } from '../safeguards.js'
 import { checkInNavigationFor } from '../checkin-navigation.js'
@@ -337,11 +337,11 @@ function AppointmentManagement({ role, store, setPage, context }) {
         {key:'date',label:'Date & time',render:a=><div><b>{dateLabel(a.date)}</b><small className="block-muted">{displayTime(a.start)}–{displayTime(addMinutes(a.start,a.duration))}</small></div>},
         {key:'patient',label:'Patient',render:a=>a.patientName||patientName(a.patientId,state.patients)},
         {key:'service',label:'Service'},{key:'dentist',label:'Dentist',render:a=>a.dentistName||dentistName(a.dentistId,state.dentists)},
-        {key:'status',label:'Status',render:a=><div>
+        {key:'status',label:'Appointment status',render:a=><div className="appointment-state">
           <Status>{a.status}</Status>
           {a.cancellationCategory && <small className="block-muted" style={{overflowWrap:'anywhere'}}>{a.cancellationCategory}{a.cancellationDetail && ` — ${a.cancellationDetail}`}</small>}
-          <small className="block-muted">{a.bookingPaymentStatus==='paid'?`Deposit paid${a.bookingPaymentMethod?` (${a.bookingPaymentMethod})`:''}`:a.bookingPaymentStatus==='held'?'Held':a.bookingPaymentStatus==='refunded'?'Refunded':a.bookingPaymentStatus==='forfeited'?'Forfeited':'Unpaid'}</small>
         </div>},
+        {key:'bookingPaymentStatus',label:'Booking payment',render:a=><BookingPaymentBadge status={a.bookingPaymentStatus} method={a.bookingPaymentMethod}/>},
         {key:'actions',label:'Actions',render:a=><div className="row-actions">{checkInNavigationFor(store,a)&&<Button variant="primary" onClick={()=>{const checkIn=checkInNavigationFor(store,a);if(checkIn)setPage('checkin',{mode:'scheduled',checkIn})}}>Check in</Button>}{role==='staff'&&appointmentRecordPatient(a,state,session)&&<Button size="sm" variant="soft" onClick={()=>{const patient=appointmentRecordPatient(a,state,session);if(patient)setPage('patients',{patientId:patient.id})}}>Open Patient Record</Button>}{canSchedule(store,a.branchId)&&['Confirmed','Pending'].includes(a.status)&&<><Button size="sm" variant="soft" onClick={()=>openAction(setReschedule,a)}>Reschedule</Button><Button size="sm" variant="ghost" disabled={owner.busy} onClick={()=>openAction(setCancelling,a)}>Cancel</Button>{a.date===clinicDate()&&<Button size="sm" variant="ghost" disabled={owner.busy} onClick={()=>openAction(setMissed,a)}>No-show</Button>}</>}</div>}
       ]}/>
     </Card>
@@ -352,6 +352,19 @@ function AppointmentManagement({ role, store, setPage, context }) {
       {missed&&<p>{missed.appointmentNo} • today at {displayTime(missed.start)} • {missed.patientName}. Use this only when the patient did not arrive; no visit is created. A patient who has already checked in can’t be marked No-show.</p>}
     </ConfirmDialog>
   </>
+}
+
+const BOOKING_PAYMENT_LABELS = {
+  paid: ['Paid', 'paid'], unpaid: ['Unpaid', 'unpaid'], held: ['Awaiting payment', 'attention'],
+  refunded: ['Refunded', 'neutral'], forfeited: ['Forfeited', 'attention'],
+}
+
+function BookingPaymentBadge({ status, method }) {
+  const [label, tone] = BOOKING_PAYMENT_LABELS[status] ?? ['Unavailable', 'neutral']
+  return <div className="booking-payment">
+    <span className={`booking-payment-badge is-${tone}`}><Icon name="wallet" size={14}/>{label}</span>
+    {status === 'paid' && method && <small>{method}</small>}
+  </div>
 }
 
 export function StaffCancellationDialog({ selectionDetailsAvailable = false, appointment, operationKeys, onCancel, onConfirm }) {

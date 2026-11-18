@@ -15,6 +15,7 @@ import '/src/polish.css'
 import '/src/patient/portal.css'
 import '/src/landing.css'
 import '/src/automations.css'
+import '/src/clinic-workflows.css'
 setClockSource(()=>new Date('2026-11-12T10:00:00+08:00'))
 const P='01ARZ3NDEKTSV4RRFFQ69G5FAB', A='01ARZ3NDEKTSV4RRFFQ69G5FAW', B='01ARZ3NDEKTSV4RRFFQ69G5FAV', AP='01ARZ3NDEKTSV4RRFFQ69G5FAA'
 const make=(id,revision,due_on)=>({id,revision,due_on,status:'Open',can_book:true,can_contact:true,can_close:true,patient:{id:P,name:'Synthetic patient',code:'SYN-P'},branch:{id:'b1',name:'Synthetic branch'},service:{id:'svc1',name:'Synthetic service'},reason:'Synthetic follow-up',assignee:'Synthetic team',appointment:null})

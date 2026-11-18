@@ -60,6 +60,8 @@ export function CheckInPage({ store, context, setPage }) {
     }catch{if(arrivalLive.current&&arrivalAttempt.current===command){setArrivalPhase('unknown');setArrivalMessage('The arrival outcome could not be confirmed. Review recorded arrivals before another admission.')}}finally{arrivalSending.current=false}
   }
   const [mode,setMode]=useState(context?.mode||'scheduled')
+  const walkinPanel=useRef(null), walkinToggle=useRef(null)
+  useEffect(()=>{if(mode==='walkin')walkinPanel.current?.focus({preventScroll:true})},[mode])
   const today=clinicDate()
   useEffect(()=>{ flow?.searchPatients?.('') }, [])
   // Today's server appointments awaiting arrival (no Visit yet), sorted chronologically earliest first.
@@ -305,7 +307,7 @@ export function CheckInPage({ store, context, setPage }) {
       </Notice>}
     </div>
     <div className="checkin-shell">
-      <div className="checkin-mode"><button disabled={arrivalLocked||cancelling||cancelUncertain} className={mode==='scheduled'?'active':''} onClick={()=>setMode('scheduled')}><Icon name="calendar" size={18}/>Scheduled arrivals</button><button disabled={arrivalLocked||cancelling||cancelUncertain} className={mode==='walkin'?'active':''} onClick={()=>setMode('walkin')}><Icon name="user" size={18}/>Walk-in admission</button></div>
+      <div className="checkin-mode"><button disabled={arrivalLocked||cancelling||cancelUncertain} aria-pressed={mode==='scheduled'} className={mode==='scheduled'?'active':''} onClick={()=>setMode('scheduled')}><Icon name="calendar" size={18}/>Scheduled arrivals</button><button disabled={arrivalLocked||cancelling||cancelUncertain} aria-pressed={mode==='walkin'} aria-controls="walkin-admission-panel" ref={walkinToggle} className={mode==='walkin'?'active':''} onClick={()=>setMode('walkin')}><Icon name="user" size={18}/>Walk-in admission</button></div>
       {mode==='scheduled'?<Card className="checkin-focus-card" title="Scheduled arrivals" subtitle="Select the patient who has arrived (earliest first).">
         {arrivalProblem&&<Notice tone="warning">{arrivalProblem}</Notice>}
         {selectionContext&&!contextualAppointment&&<Notice tone="warning">The selected appointment changed or is no longer eligible. Refresh and explicitly select the current appointment; no patient was substituted.</Notice>}
@@ -320,7 +322,7 @@ export function CheckInPage({ store, context, setPage }) {
               <Button onClick={checkScheduled} disabled={busy || cancelling || cancelUncertain || arrivalLocked} icon="checkin">{busy ? 'Recording…' : 'Confirm arrival'}</Button>
               <Button variant="ghost" onClick={() => { cancelKey.current = commandKey(); setCancelModalOpen(true) }} disabled={busy || cancelling || cancelUncertain || arrivalLocked}>Cancel appointment</Button>
             </div>
-          </div></div>:<Notice>Select an appointment to check the patient in.</Notice>}
+          </div></div>:<p className="clinic-inline-help">Select an appointment to check the patient in.</p>}
         {selectedAppointment?.patientPublicId&&session?.role==='staff'&&<IdCheck patientId={selectedAppointment.patientPublicId} toast={toast} getAuthGeneration={store.getAuthGeneration}/>}
         {cancelModalOpen && selectedAppointment && (
           <Modal open title={`Cancel appointment: ${patientName(selectedAppointment.patientId, state.patients)}`} onClose={() => !cancelling && setCancelModalOpen(false)}>
@@ -362,7 +364,14 @@ export function CheckInPage({ store, context, setPage }) {
         {notQueued.length>0&&<div className="top-gap"><Notice tone="info" title="Checked in, not in a queue">These visits have no responsible Dentist yet, so they are not in a Dentist’s queue and treatment can’t start. Assigning a Dentist later isn’t available yet.</Notice>
           {notQueued.map(v=><div className="clinical-history" key={v.id}><div><b>{v.patientName||patientName(v.patientId,state.patients)}</b><p>{v.walkIn?'Walk-in':v.appointmentCode} • arrived {displayTime(v.checkedIn)} • No Dentist assigned</p></div></div>)}
         </div>}
-      </Card>:<Card title="Walk-in admission" subtitle="Find an existing patient or register a new walk-in patient, then select branch, service and dentist."><fieldset className="form-grid" disabled={arrivalLocked} style={{border:0,padding:0,margin:0,minWidth:0}}>
+      </Card>:null}
+      <div id="walkin-admission-panel" className="walkin-panel-transition" ref={walkinPanel} tabIndex={-1} role="region" aria-label="Walk-in admission form" hidden={mode!=='walkin'} inert={mode!=='walkin'}
+        onKeyDown={event=>{
+          if(event.key!=='Escape'||arrivalLocked||cancelling||cancelUncertain||registerBusy||registerUncertain||patientMenuOpen)return
+          event.preventDefault()
+          setMode('scheduled')
+          walkinToggle.current?.focus()
+        }}><Card className="walkin-admission-panel" title="Walk-in admission"><fieldset className="form-grid" disabled={arrivalLocked} style={{border:0,padding:0,margin:0,minWidth:0}}>
         <div className="span-2" style={{ display: 'flex', gap: '16px', marginBottom: '8px' }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: !registering ? 'bold' : 'normal' }}>
             <input type="radio" name="walkinType" checked={!registering} disabled={registerBusy || registerUncertain} onChange={()=>setRegistering(false)}/> Existing registered patient
@@ -402,8 +411,8 @@ export function CheckInPage({ store, context, setPage }) {
             {upcomingAppt?` Scheduled appointment shown: ${displayTime(upcomingAppt.start)} (${upcomingAppt.service}). Queue order follows recorded arrivals and authorized queue controls; this does not reserve appointment time.`:' No pending or confirmed appointments are shown for this Dentist today.'}
           </Notice></div>
         })()}
-        <div className="span-2 walkin-action"><Notice tone="info">The clinic server checks branch hours, the service and the Dentist’s shift. A walk-in does not reserve Dentist appointment time.</Notice><Button disabled={!canWalkIn} onClick={checkWalkin} icon="checkin">{walking?'Admitting…':'Admit walk-in to queue'}</Button></div>
-      </fieldset></Card>}
+        <div className="span-2 walkin-action"><p className="clinic-inline-help">Admission checks branch and Dentist availability. A walk-in does not reserve Dentist appointment time.</p><Button disabled={!canWalkIn} onClick={checkWalkin} icon="checkin">{walking?'Admitting…':'Admit walk-in to queue'}</Button></div>
+      </fieldset></Card></div>
     </div>
     <RecordedArrivals store={store}/>
     <PossibleNoShows toast={toast} onChanged={()=>flow?.refresh()}/>

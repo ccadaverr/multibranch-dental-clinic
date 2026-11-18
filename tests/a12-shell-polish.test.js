@@ -49,13 +49,13 @@ test('A12 notification rendering preserves scope, unread semantics, guarded dest
   store.state.notifications=[note('own',{title:'<script>fictional</script>'}),note('read',{read:true}),note('other',{recipientUserId:'u-owner'}),note('denied',{action:{page:'users'}})]
   const html=render(NotificationPanel,{role:'staff',store,onClose:()=>{},setPage:()=>{}})
   assert.match(html,/2 unread/)
-  assert.match(html,/Showing 3 of 3/)
+  assert.doesNotMatch(html,/Showing 3 of 3/)
   assert.match(html,/role="region" aria-label="Notification history" tabindex="0" aria-busy="false"/)
   assert.equal((html.match(/notification-unread-label/g)||[]).length,2)
   assert.equal((html.match(/>View update<\/button>/g)||[]).length,2)
   assert.match(html,/&lt;script&gt;fictional&lt;\/script&gt;/)
   assert.doesNotMatch(html,/>Fictional update other</)
-  assert.match(html,/aria-pressed="false"/)
+  assert.doesNotMatch(html,/>View all \(3\)/)
 })
 
 test('A12 empty notification state describes this workspace without claiming server synchronization',()=>{

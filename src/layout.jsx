@@ -21,7 +21,7 @@ const useLayoutEffectSafe=typeof window==='undefined'?React.useEffect:React.useL
 
 const NAV_ICONS={
   dashboard:'home',book:'plusCalendar',appointments:'calendar',calendar:'calendar',schedule:'calendar',checkin:'checkin',queue:'queue',capacity:'activity',
-  patients:'users',treatment:'tooth',billing:'receipt',hmo:'shield',inquiries:'message',messages:'message',prescriptions:'pill',followups:'followup',
+  patients:'users',chart:'dentalChart',handovers:'handover',schedules:'clock',leave:'leave',audit:'file',treatment:'tooth',billing:'receipt',hmo:'shield',inquiries:'message',messages:'message',prescriptions:'pill',followups:'followup',
   branches:'building',team:'users',analytics:'chart',users:'shield',pricing:'receipt',automations:'clock',archives:'archive',branding:'sparkles',assistant:'robot',closures:'calendar',hmos:'shield',wording:'mail',engagement:'sparkles',loyalty:'gift',me:'user'
 }
 
@@ -111,6 +111,14 @@ export function serverNotificationDestination(state, session, notification) {
   if (!session?.serverUserId || !notification?.target || typeof notification.target !== 'object') return null
   const page = { visits: 'appointments', billing: 'billing', messages: 'messages', book: 'book', handovers: 'handovers', leave: 'leave' }[notification.target.page]
   return page && canAccessPage(state, session, page) ? { page, context: null } : null
+}
+
+const notificationTime = new Intl.DateTimeFormat('en-PH', {
+  timeZone: 'Asia/Manila', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+})
+function notificationTimestamp(value) {
+  const stamp = value ? Date.parse(value) : NaN
+  return Number.isFinite(stamp) ? notificationTime.format(stamp) : 'Date unavailable'
 }
 
 export function notificationFeedKey(session, auth) {
@@ -267,17 +275,37 @@ function NotificationPanelContent({role,store,onClose,setPage,serverFeed}){
     if(current){setPage(current.page,current.context);onClose()}
   }
   const updating=busy||(server&&feed.busy)
-  return <Modal open title="Notifications" subtitle={server?'Your updates and notification history':'Your updates and reminders'} onClose={onClose} className="notification-dialog a12-notifications"><div className="notification-popover">
-    <div className="notification-summary"><span>{unread===null?'Unread count unavailable':unread?`${unread} unread`:'No unread updates'}</span><span role="status">{loading?'Loading notifications…':updating?(feed.pendingLabel||'Updating read status…'):feedError?'Notifications unavailable':`Showing ${visible.length} of ${items.length}${server?' recent records':''}`}</span></div>
-    <div className="notification-toolbar"><button type="button" onClick={()=>perform(()=>server?feed.markAll():actions.markAllNotificationsRead())} disabled={updating||loading||!!feedError||!unread||feed.collection==='archived'}>Mark my notifications read</button><button type="button" disabled={loading||!!feedError} aria-pressed={all} onClick={()=>setAll(v=>!v)}>{all?'Recent only':server?`Show loaded history (${items.length})`:`View all (${items.length})`}</button></div>
-    {server&&feedCurrent&&feed.archiveAvailable&&<div className="notification-toolbar" aria-label="Notification collection"><button type="button" disabled={updating||loading} aria-pressed={feed.collection==='active'} onClick={()=>{setFailure('');feed.changeCollection('active')}}>Inbox</button><button type="button" disabled={updating||loading} aria-pressed={feed.collection==='archived'} onClick={()=>{setFailure('');setAll(true);feed.changeCollection('archived')}}>Archived notifications</button></div>}
-    {server&&<p>History loads 50 records at a time. The unread count includes older notifications.</p>}
+  return <Modal open title="Notifications" onClose={onClose} className="notification-dialog a12-notifications clinic-notifications"><div className="notification-popover">
+    <div className="notification-controls">
+      {server&&feedCurrent&&feed.archiveAvailable&&<div className="notification-toolbar notification-collections" aria-label="Notification collection"><button type="button" disabled={updating||loading} aria-pressed={feed.collection==='active'} onClick={()=>{setFailure('');feed.changeCollection('active')}}>Inbox</button><button type="button" disabled={updating||loading} aria-pressed={feed.collection==='archived'} onClick={()=>{setFailure('');setAll(true);feed.changeCollection('archived')}}>Archived notifications</button></div>}
+      <div className="notification-bulk">
+        <div className="notification-summary">
+          <span>{unread===null?'Unread count unavailable':unread?`${unread} unread`:'No unread updates'}</span>
+          <span role="status">{loading?'Loading notifications…':updating?(feed.pendingLabel||'Updating read status…'):feedError?'Notifications unavailable':items.length>8?`Showing ${visible.length} of ${items.length} loaded`:''}</span>
+        </div>
+        <div className="notification-toolbar">
+          <button type="button" onClick={()=>perform(()=>server?feed.markAll():actions.markAllNotificationsRead())} disabled={updating||loading||!!feedError||!unread||feed.collection==='archived'}>Mark my notifications read</button>
+          {items.length>8&&<button type="button" disabled={loading||!!feedError} aria-pressed={all} onClick={()=>setAll(v=>!v)}>{all?'Recent only':server?`Show loaded history (${items.length})`:`View all (${items.length})`}</button>}
+        </div>
+      </div>
+    </div>
     {feedError&&<p className="notification-failure" role="alert" tabIndex={0}>{feedError} <button type="button" onClick={()=>{setFailure('');feed.refresh()}}>Retry notifications</button></p>}
     {feedError&&feed.failedArchive&&<div className="notification-toolbar"><button type="button" disabled={updating||loading} onClick={()=>perform(()=>feed.archive(feed.failedArchive),true)}>Retry archive</button></div>}
     {!feedError&&failure&&<p className="notification-failure" role="alert" tabIndex={0}><b>Notification change wasn’t confirmed.</b> {failure}</p>}
     <div ref={scrollRegion} className="notification-scroll" role="region" aria-label={server?'Recent notification history':'Notification history'} tabIndex={0} aria-busy={loading||updating}>{loading?<p role="status">Loading notifications…</p>:feedError?null:visible.length?dateGroups.map(group=><section key={group.key}>
       <h3 className="notification-date-heading">{group.label}</h3>
-      <ul className="notification-list">{group.items.map(n=><li className={`notification-row ${n.read?'':'unread'}`} key={n.id}><span className="notification-dot" aria-hidden="true"/><div><b>{!n.read&&<><span className="sr-only">Unread: </span><span className="notification-unread-label" aria-hidden="true">Unread</span></>}{n.title}</b><p>{n.body}</p><small>{n.createdAt||'Date unavailable'} • {n.legacy?'Historical demo record':n.channel}{n.archived&&` • Archived ${n.archivedAt}`}</small><div className="row-actions">{!n.read&&<button type="button" disabled={updating} onClick={()=>mark(n.id)}>Mark read</button>}{server&&feed.archiveAvailable&&feed.collection==='active'&&<button type="button" disabled={updating} aria-label={`Archive ${n.title}`} onClick={()=>perform(()=>feed.archive(n.id))}>Archive</button>}{destination(n)&&<button type="button" className="notification-view" disabled={updating} onClick={()=>open(n)}>View update</button>}</div></div></li>)}</ul>
+      <ul className="notification-list">{group.items.map(n=><li className={`notification-row ${n.read?'':'unread'}`} key={n.id}>
+        <div className="notification-content">
+          <b>{!n.read&&<span className="sr-only notification-unread-label">Unread: </span>}{n.title}</b>
+          {n.body?.length>125?<details className="notification-disclosure"><summary><span className="notification-preview">{n.body.slice(0,125).trim()}…</span><span className="notification-message-label">Message details</span></summary><p>{n.body}</p></details>:n.body&&<p>{n.body}</p>}
+          <small>{notificationTimestamp(n.createdAt)}{n.legacy?' · Historical demo record':''}{n.archived&&` · Archived ${notificationTimestamp(n.archivedAt)}`}</small>
+        </div>
+        <div className="row-actions">
+          {!n.read&&<button type="button" disabled={updating} onClick={()=>mark(n.id)}>Mark read</button>}
+          {server&&feed.archiveAvailable&&feed.collection==='active'&&<button type="button" disabled={updating} aria-label={`Archive ${n.title}`} onClick={()=>perform(()=>feed.archive(n.id))}>Archive</button>}
+          {destination(n)&&<button type="button" className="notification-view" disabled={updating} onClick={()=>open(n)}>View update</button>}
+        </div>
+      </li>)}</ul>
     </section>):<div className="notification-empty"><Icon name="bell" size={28}/><b>{server?'No recent notifications.':"You're all caught up."}</b><p>{server?'No records were returned for your account.':'No updates to show in this workspace.'}</p></div>}</div>
     {server&&feedCurrent&&!feedError&&feed.nextBefore&&<div className="notification-toolbar"><button type="button" disabled={updating||loading} onClick={async()=>{setAll(true);await perform(()=>feed.more())}}>Load older notifications</button></div>}
     {server&&feedCurrent&&feed.historyError&&<p role="alert" className="notification-failure">{feed.historyError} <button type="button" onClick={()=>perform(()=>feed.refresh())}>Refresh notifications</button></p>}

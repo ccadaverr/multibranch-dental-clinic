@@ -68,7 +68,7 @@ export function mapAppointment(row, patientIdFor = id => id) {
     cancellationCategory: row.cancellation_category ?? null,
     cancellationDetail: row.cancellation_detail ?? null,
     bookingFeePhp: row.booking_fee_php ?? null,
-    bookingPaymentStatus: row.booking_payment_status ?? 'unpaid',
+    bookingPaymentStatus: row.booking_payment_status ?? null,
     bookingPaymentMethod: row.booking_payment_method ?? null,
     bookingPaidAt: row.booking_paid_at ?? null,
     bookingHoldExpiresAt: row.booking_hold_expires_at ?? null,

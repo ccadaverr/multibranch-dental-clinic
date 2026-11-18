@@ -1,0 +1,122 @@
+/* Compact clinic workspaces share the existing surfaces, type and focus tokens. */
+.clinic-inline-help { margin: .5rem 0; color: var(--muted); font-size: .875rem; line-height: 1.45; }
+.appointment-state, .booking-payment { display: grid; justify-items: start; gap: .25rem; }
+.booking-payment small { color: var(--muted); font-size: .75rem; }
+.booking-payment-badge {
+  display: inline-flex; align-items: center; gap: .35rem; padding: .2rem .45rem;
+  border: 1px solid var(--line-strong); border-radius: .375rem; color: var(--ink);
+  font-size: .8125rem; font-weight: 650; line-height: 1.35;
+}
+.booking-payment-badge.is-paid { color: var(--green); border-color: var(--green); }
+.booking-payment-badge.is-unpaid { border-style: dashed; }
+.booking-payment-badge.is-attention { color: var(--warning-fg, #764900); border-color: currentColor; }
+
+.lp-site .lp-hero { background: var(--lp-mint, #f1f7f4); min-height: 0; padding: clamp(2.25rem, 5vw, 5rem) 0; border-bottom: 1px solid var(--lp-edge); }
+.lp-site .lp-hero-grid { grid-template-columns: minmax(0, 1fr); gap: clamp(1.75rem, 5vw, 4rem); padding-block: 0; }
+.lp-site .lp-hero h1 { max-width: none; font-size: clamp(2.1rem, 5vw, 3.9rem); line-height: 1.05; }
+.lp-site .lp-hero h1 span { font-size: .65em; margin-top: .2em; }
+.lp-site .lp-hero .lp-lead { margin: 0 0 1rem; font-size: clamp(1rem, 2vw, 1.18rem); }
+.lp-site .lp-hero .lp-link { min-height: 44px; }
+.lp-visit-directory { min-width: 0; }
+.lp-visit-directory h2 { font-size: 1rem; margin: 0 0 .25rem; }
+.lp-visit-directory a {
+  display: grid; grid-template-columns: 1.25rem minmax(0, 1fr) 1rem; gap: .75rem; align-items: center;
+  min-height: 3.75rem; padding-block: .5rem; border-bottom: 1px solid var(--lp-edge);
+  text-decoration: none; color: var(--lp-ink);
+}
+.lp-visit-directory a:hover b { text-decoration: underline; text-underline-offset: .18em; }
+.lp-visit-directory a > .icon { color: var(--lp-brand); }
+.lp-visit-directory small { display: block; color: var(--lp-muted); }
+.lp-site #how-it-works { padding-block: clamp(1.75rem, 4vw, 3.5rem); }
+.lp-site .lp-steps .lp-step { padding-block: .8rem; gap: .25rem .85rem; }
+@media (min-width: 760px) {
+  .lp-site .lp-hero-grid { grid-template-columns: minmax(0, 1fr) minmax(15rem, .52fr); }
+}
+
+.clinic-notifications .notification-controls { border-bottom: 1px solid var(--line); flex: none; }
+.clinic-notifications .notification-controls .notification-toolbar { padding-block: 0; border: 0; gap: .25rem; }
+.clinic-notifications .notification-controls .notification-toolbar button,
+.clinic-notifications .notification-row .row-actions button {
+  min-height: 40px; padding-block: .25rem; border: 1px solid transparent; border-radius: .4rem; background: transparent;
+}
+.clinic-notifications .notification-controls .notification-toolbar button:hover:not(:disabled),
+.clinic-notifications .notification-row .row-actions button:hover:not(:disabled) { background: var(--surface-2); }
+.clinic-notifications .notification-controls .notification-collections { justify-content: start; border-bottom: 1px solid var(--line); }
+.clinic-notifications .notification-collections button[aria-pressed=true] {
+  box-shadow: inset 0 -2px var(--brand); border-radius: 0; color: var(--brand-3); font-weight: 700;
+}
+.clinic-notifications .notification-bulk { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; padding-inline: .875rem; }
+.clinic-notifications .notification-bulk :is(.notification-summary, .notification-toolbar) { padding: 0; }
+.clinic-notifications .notification-summary { font-size: .8125rem; }
+.clinic-notifications .notification-row { display: grid; grid-template-columns: minmax(0,1fr) auto; padding-block: .625rem; gap: .45rem; border-inline-start: 3px solid transparent; }
+.clinic-notifications .notification-row.unread { background: var(--surface-2); border-inline-start-color: var(--brand); }
+.clinic-notifications .notification-row .row-actions { margin: 0; gap: 0; align-self: center; justify-content: end; }
+.clinic-notifications .notification-row .row-actions button { color: var(--brand-3); }
+.clinic-notifications .notification-disclosure { color: var(--text); font-size: .875rem; margin: .25rem 0; }
+.clinic-notifications .notification-disclosure summary { cursor: pointer; }
+.clinic-notifications .notification-message-label { display: inline-block; min-height: 36px; padding-top: .38rem; color: var(--brand-3); }
+.clinic-notifications .notification-preview { display: block; margin-bottom: .125rem; }
+.clinic-notifications .notification-disclosure[open] .notification-preview { display: none; }
+@media (max-width: 480px) {
+  .clinic-notifications .notification-row { grid-template-columns: minmax(0, 1fr); }
+  .clinic-notifications .notification-row .row-actions { justify-content: start; margin-inline-start: -.4rem; }
+}
+
+.walkin-panel-transition { opacity: 1; transform: none; transition: opacity 180ms ease-out, transform 180ms ease-out, display 180ms allow-discrete; }
+.walkin-panel-transition[hidden] { display: none; opacity: 0; transform: translateY(5px); }
+.walkin-panel-transition:focus { outline: none; }
+@starting-style { .walkin-panel-transition:not([hidden]) { opacity: 0; transform: translateY(5px); } }
+@media (prefers-reduced-motion: reduce) {
+  .walkin-panel-transition, .walkin-panel-transition[hidden] { transition: none; transform: none; }
+}
+
+.dentist-wording .wording-review { padding: clamp(.9rem, 2vw, 1.25rem); border-radius: var(--radius-sm); box-shadow: none; }
+.dentist-wording .wording-review .card-head { margin-bottom: .25rem; }
+.dentist-wording .wording-review .au-tpl-edit { grid-template-columns: minmax(0, 1fr); gap: .75rem; }
+.dentist-wording .wording-review .au-readonly-wording { gap: .75rem; padding: .75rem 0; border: 0; background: transparent; }
+.dentist-wording .wording-review .au-readonly-label { letter-spacing: normal; text-transform: none; }
+.dentist-wording .wording-review .au-readonly-value { font-size: 1rem; }
+.dentist-wording .wording-review .au-readonly-body { font-size: .9rem; line-height: 1.5; padding: .65rem .75rem; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); }
+.dentist-wording .wording-review .au-actions .btn { width: auto; min-height: 40px; padding: .4rem .7rem; font-size: .875rem; }
+.dentist-wording .wording-preview { margin: 0; padding: .6rem 0; border-top: 1px solid var(--line); min-width: 0; }
+.dentist-wording .wording-preview summary { cursor: pointer; display: list-item; width: fit-content; min-height: 40px; padding-block: .5rem; }
+.dentist-wording .wording-preview iframe { width: 100%; height: min(28rem, 62dvh); }
+
+.records-layout .dentist-record-list { padding: .875rem; border-radius: var(--radius-sm); box-shadow: none; }
+.dentist-record-list .search-input-wrap { max-width: none; margin: 0; padding: 0; border: 0; }
+.dentist-record-list .card-head { margin-bottom: .5rem; }
+.dentist-record-list .patient-list-scroll { display: block; margin-top: .5rem; }
+.dentist-record-list .patient-list-scroll button {
+  width: 100%; display: grid; grid-template-columns: auto minmax(0,1fr); gap: .55rem; align-items: center;
+  padding: .5rem; border: 0; border-bottom: 1px solid var(--line); border-inline-start: 2px solid transparent;
+  border-radius: 0; background: var(--surface); text-align: start; min-height: 44px;
+}
+.dentist-record-list .patient-list-scroll button:hover { background: var(--surface-2); }
+.dentist-record-list .patient-list-scroll button[aria-pressed=true] { border-inline-start-color: var(--brand); background: var(--surface-2); }
+.dentist-record-list .patient-list-scroll button b { font-size: .875rem; overflow-wrap: anywhere; }
+.dentist-record-list .patient-list-scroll button small { color: var(--muted); font-size: .75rem; font-variant-numeric: tabular-nums; }
+
+fieldset.tc-surfaces { display: flex; flex-wrap: wrap; gap: .375rem; min-width: 0; }
+fieldset.tc-surfaces legend { color: var(--ink); margin-bottom: .4rem; }
+fieldset.tc-surfaces label.au-check { min-height: 42px; margin: 0; padding: .35rem .55rem; border: 1px solid var(--line); border-radius: .4rem; cursor: pointer; color: var(--ink); }
+fieldset.tc-surfaces label.au-check:has(:checked) { border-color: var(--brand); background: var(--brand-soft); }
+fieldset.tc-surfaces label.au-check b { margin-inline-end: .125rem; }
+
+.archive-record-dialog { width: min(39rem, calc(100% - 1.5rem)); }
+.archive-record-dialog .modal-body { display: grid; gap: .75rem; }
+.archive-record-dialog :is(dl, dd, h3) { margin: 0; }
+.archive-record-dialog dl { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: .6rem 1rem; }
+.archive-record-dialog .archive-record-group { padding-top: .75rem; border-top: 1px solid var(--line); }
+.archive-record-dialog h3 { font-size: .875rem; margin-bottom: .375rem; }
+.archive-record-dialog dt { color: var(--muted); font-size: .8125rem; }
+.archive-record-dialog dd { overflow-wrap: anywhere; font-size: .875rem; font-variant-numeric: tabular-nums; }
+.archive-record-dialog code { user-select: text; }
+
+.audit-loaded-summary { margin-block: .75rem; padding: .85rem 1rem; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); }
+.audit-summary-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: .2rem .75rem; margin-bottom: .65rem; }
+.audit-summary-heading h2 { font-size: .95rem; margin: 0; }
+.audit-summary-heading p { font-size: .8125rem; color: var(--muted); margin: 0; }
+.audit-loaded-summary .owner-audit-counts { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); margin: 0; padding: 0; gap: .65rem; border: 0; }
+.audit-loaded-summary .owner-audit-counts > div { border-inline-start: 1px solid var(--line); padding-inline-start: .65rem; }
+.audit-loaded-summary .owner-audit-counts dd { font-size: 1.25rem; line-height: 1.25; }
+@media(max-width: 600px) { .audit-loaded-summary .owner-audit-counts { grid-template-columns: repeat(2,minmax(0,1fr)); } }
