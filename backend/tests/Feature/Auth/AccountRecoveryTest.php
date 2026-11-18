@@ -394,6 +394,14 @@ class AccountRecoveryTest extends TestCase
         ])->assertOk();
 
         $this->assertTrue(Hash::check('FreshPass123', $user->fresh()->password));
+        $acceptedVersion = $user->fresh()->auth_version;
+        $this->postJson('/api/password/reset', [
+            'reset_token' => $resetToken,
+            'password' => 'AnotherTest123',
+            'password_confirmation' => 'AnotherTest123',
+        ])->assertUnprocessable()->assertJsonPath('code', 'invalid_reset_token');
+        $this->assertSame($acceptedVersion, $user->fresh()->auth_version);
+        $this->assertTrue(Hash::check('FreshPass123', $user->fresh()->password));
         $this->postJson('/api/login', ['email' => $user->email, 'password' => 'FreshPass123'])->assertOk();
     }
 

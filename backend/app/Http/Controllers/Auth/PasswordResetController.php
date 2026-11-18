@@ -109,6 +109,7 @@ class PasswordResetController extends Controller
                 'user_id' => $user->id,
                 'email' => $user->email,
                 'purpose' => 'password_reset_token',
+                'auth_version' => $user->auth_version,
                 'expires_at' => now()->addMinutes(15)->timestamp,
             ]));
 
@@ -144,10 +145,15 @@ class PasswordResetController extends Controller
             }
 
             $userId = $payload['user_id'] ?? null;
-            $result = DB::transaction(function () use ($userId, $data) {
+            $result = DB::transaction(function () use ($userId, $data, $payload) {
                 $user = User::where('id', $userId)->lockForUpdate()->first();
                 if (! $user || $user->account_status !== 'Active') {
                     return ['failure' => ['account_inactive', 'Account is not active.']];
+                }
+
+                // A successful password change advances auth_version under this same account lock.
+                if (($payload['auth_version'] ?? null) !== $user->auth_version) {
+                    return ['failure' => ['invalid_reset_token', 'Your password reset session has expired or is invalid. Please request a new code.', 'reset_token']];
                 }
 
                 EmailVerificationOtp::where('user_id', $user->id)
