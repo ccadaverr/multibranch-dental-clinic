@@ -373,7 +373,7 @@ final class KnowledgeAssistant
     private function entries(): Collection
     {
         // F8: the HMO answer names only HMOs the clinic verified (none until the Owner confirms the list).
-        return $this->entries ??= AssistantAnswer::where('active', true)->get()->each(function (AssistantAnswer $e) {
+        return $this->entries ??= AssistantAnswer::where('active', true)->where('draft', false)->get()->each(function (AssistantAnswer $e) {
             if ($e->seed_key === 'hmo' && ($names = \App\Http\Controllers\AcceptedHmoController::publicNames())) $e->answer .= ' HMOs the clinic has confirmed: '.implode(', ', $names).'.';
         });
     }

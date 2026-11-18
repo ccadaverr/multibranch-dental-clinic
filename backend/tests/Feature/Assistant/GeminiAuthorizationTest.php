@@ -44,12 +44,13 @@ class GeminiAuthorizationTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        config(['services.gemini.api_key' => 'fake-gemini-test-key', 'services.gemini.model' => 'test-model', 'assistant.rate_per_minute' => 1000,
+        config(['assistant.mode' => 'auto', 'services.gemini.api_key' => 'fake-gemini-test-key', 'services.gemini.model' => 'test-model', 'assistant.rate_per_minute' => 1000,
             'assistant.rate_per_hour' => 10000]);
         Http::preventStrayRequests();
         $this->fake();
         // Public clinic context is independent of authorization, tested in GeminiChatTest.
-        $controller = Mockery::mock(GeminiChatController::class)->makePartial();
+        $controller = Mockery::mock(GeminiChatController::class)->makePartial()->shouldAllowMockingProtectedMethods();
+        $controller->shouldReceive('reserveQuestion')->andReturnNull(); // Durable quota is covered against PostgreSQL.
         $controller->shouldReceive('buildSystemPrompt')->andReturn('Test clinic public information only.');
         $controller->shouldReceive('fallbackAnswer')->andReturn([
             'answer' => 'Please contact the clinic.', 'outcome' => 'fallback_standard', 'mode' => 'knowledge_fallback',

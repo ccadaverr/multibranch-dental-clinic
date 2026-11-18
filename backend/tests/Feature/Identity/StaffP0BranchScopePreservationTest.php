@@ -78,6 +78,16 @@ class StaffP0BranchScopePreservationTest extends TestCase
         }
     }
 
+    public function test_unassignment_preserves_existing_access_without_granting_another_branch(): void
+    {
+        $before = $this->scopes();
+        $audits = $this->auditCount();
+        $this->patchJson('/api/staff/s-p0', \Tests\Support\StaffProfileCommand::body('s-p0', ['branch_ref' => null]))
+            ->assertOk()->assertJsonPath('data.branchId', null);
+        $this->assertSame($before, $this->scopes());
+        $this->assertSame($audits, $this->auditCount());
+    }
+
     public function test_repeated_null_assignment_preserves_scopes_without_approving_a_null_policy(): void
     {
         // Fixture bypasses the command: no assertion that null should grant any particular branches.

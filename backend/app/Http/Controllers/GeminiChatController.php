@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Enums\Role;
 use App\Models\Branch;
 use App\Models\Service;
+use App\Models\User;
+use App\Services\Assistant\AssistantService;
 use App\Services\Assistant\IntentGuard;
 use App\Services\Assistant\KnowledgeMatcher;
 use App\Support\Brand;
@@ -37,13 +39,14 @@ class GeminiChatController extends Controller
     public function chat(Request $request): JsonResponse
     {
         [$message, $history] = $this->validateChatInput($request);
+        $apiKey = config('assistant.mode') === 'knowledge' ? '' : (string) config('services.gemini.api_key');
+        if ($limited = $this->reserveQuestion($request->user(), $apiKey !== '')) return $limited;
 
         // Deterministic guard: emergency & medical diagnosis refusal
         if ($guard = $this->screenMessage($message)) {
             return response()->json(['data' => $guard]);
         }
 
-        $apiKey = (string) config('services.gemini.api_key');
         if ($apiKey === '') {
             return response()->json(['data' => $this->fallbackAnswer($message)]);
         }
@@ -63,6 +66,8 @@ class GeminiChatController extends Controller
     public function stream(Request $request): StreamedResponse|JsonResponse
     {
         [$message, $history] = $this->validateChatInput($request);
+        $apiKey = config('assistant.mode') === 'knowledge' ? '' : (string) config('services.gemini.api_key');
+        if ($limited = $this->reserveQuestion($request->user(), $apiKey !== '')) return $limited;
 
         // Deterministic guard: emergency & medical diagnosis refusal
         if ($guard = $this->screenMessage($message)) {
@@ -72,7 +77,6 @@ class GeminiChatController extends Controller
             }, 200, $this->sseHeaders());
         }
 
-        $apiKey = (string) config('services.gemini.api_key');
         if ($apiKey === '') {
             $fallback = $this->fallbackAnswer($message);
             return response()->stream(function () use ($fallback) {
@@ -146,6 +150,29 @@ class GeminiChatController extends Controller
         }, 200, $this->sseHeaders());
     }
 
+    protected function reserveQuestion(User $user, bool $usesProvider): ?JsonResponse
+    {
+        $accepted = DB::transaction(function () use ($user, $usesProvider) {
+            User::whereKey($user->id)->lockForUpdate()->firstOrFail();
+            if (AssistantService::usedToday($user) >= (int) config('assistant.daily_cap')) return false;
+
+            // Charge once before processing, even for a fallback, refusal or disconnected stream.
+            // Record no question, history, generated text or personal details.
+            DB::table('assistant_usage')->insert([
+                'user_id' => $user->id, 'clinic_date' => ClinicClock::today(),
+                'mode' => $usesProvider ? 'ai' : 'knowledge', 'outcome' => 'gemini_request',
+                'created_at' => now()->format('Y-m-d H:i:sP'),
+            ]);
+
+            return true;
+        });
+
+        return $accepted ? null : response()->json([
+            'message' => 'You have reached today?s limit for the assistant. You can still message the front desk.',
+            'code' => 'assistant_daily_cap',
+        ], 429);
+    }
+
     private function validateChatInput(Request $request): array
     {
         abort_unless($request->user()?->role === Role::Patient && $request->user()->patient !== null, 403);
@@ -203,30 +230,30 @@ class GeminiChatController extends Controller
         $brand = Brand::forEmail();
         $name = $brand['name'] ?: 'Dr. Dana E. Roxas Dental Clinic';
         $phone = $brand['phone'] ?: 'the clinic';
-        $email = $brand['email'] ?: 'contact@danaroxasdental.com';
+        $email = $brand['email'] ?: 'Ask the front desk for the clinic?s contact details.';
 
         // Branches
         try {
-            $branches = Branch::all();
+            $branches = Branch::where('status', 'Open')->get();
             $branchLines = [];
             foreach ($branches as $b) {
                 $branchLines[] = "- {$b->name}: {$b->address}" . ($b->phone ? " (Tel: {$b->phone})" : '');
             }
-            $branchStr = $branchLines ? implode("\n", $branchLines) : "- Guiguinto, Bulacan (Main Branch)";
+            $branchStr = $branchLines ? implode("\n", $branchLines) : "- Branch details are unavailable. Ask the front desk.";
         } catch (\Throwable) {
-            $branchStr = "- Guiguinto, Bulacan (Main Branch)";
+            $branchStr = "- Branch details are unavailable. Ask the front desk.";
         }
 
         // Services
         try {
-            $services = Service::all();
+            $services = Service::where('status', 'Active')->get();
             $serviceLines = [];
             foreach ($services as $s) {
                 $serviceLines[] = "- {$s->name}" . ($s->description ? ": {$s->description}" : '');
             }
-            $serviceStr = $serviceLines ? implode("\n", $serviceLines) : "- General Dentistry, Cleaning, Orthodontics, Consultations";
+            $serviceStr = $serviceLines ? implode("\n", $serviceLines) : "- Service details are unavailable. Ask the front desk.";
         } catch (\Throwable) {
-            $serviceStr = "- General Dentistry, Cleaning, Orthodontics, Consultations";
+            $serviceStr = "- Service details are unavailable. Ask the front desk.";
         }
 
         $clock = ClinicClock::now()->format('l, F j, Y g:i A');
@@ -354,7 +381,7 @@ PROMPT;
 
         try {
             $words = KnowledgeMatcher::canonical($message);
-            $answers = DB::table('assistant_answers')->where('active', true)->get();
+            $answers = DB::table('assistant_answers')->where('active', true)->where('draft', false)->get();
 
             $bestScore = 0.0;
             $bestAnswer = null;

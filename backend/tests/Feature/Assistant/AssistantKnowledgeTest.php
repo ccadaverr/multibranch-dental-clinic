@@ -124,6 +124,8 @@ class AssistantKnowledgeTest extends TestCase
 
     public function test_realistic_patient_questions_get_the_expected_answer_hand_off_or_refusal(): void
     {
+        // Exercise matching on approved fixtures without publishing the seeded drafts in the application.
+        AssistantAnswer::query()->update(['draft' => false]);
         $failures = [];
         foreach (self::questions() as $name => [$question, $outcome, $contains, $action]) {
             $r = $this->ask($question);
@@ -138,6 +140,15 @@ class AssistantKnowledgeTest extends TestCase
         $this->assertSame([], $failures, implode("\n", $failures));
         $this->assertGreaterThanOrEqual(40, count(self::questions()));
         Http::assertNothingSent(); // knowledge mode: nothing a Patient types leaves the server
+    }
+
+    public function test_patient_knowledge_mode_hides_draft_content(): void
+    {
+        $entry = AssistantAnswer::create(['question' => 'Cerulean verification fixture', 'answer' => 'Private synthetic draft text',
+            'keywords' => ['cerulean-check'], 'category' => 'other', 'active' => true, 'draft' => true, 'source' => 'owner']);
+        $this->assertStringNotContainsString($entry->answer, $this->ask('cerulean-check')['answer']);
+        $entry->update(['draft' => false]);
+        $this->assertSame($entry->answer, $this->ask('cerulean-check')['answer']);
     }
 
     public function test_a_price_question_never_states_a_price_and_an_unknown_fact_is_never_invented(): void

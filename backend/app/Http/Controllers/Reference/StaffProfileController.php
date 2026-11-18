@@ -24,6 +24,8 @@ class StaffProfileController extends Controller
         $user = $request->user();
         $rows = StaffProfile::with(['person', 'branch'])
             ->when($user->role->value === 'staff', fn ($q) => $q->whereIn('branch_id', UserBranchScope::select('branch_id')->where('user_id', $user->id)))
+            ->when($user->role->value === 'dentist', fn ($q) => $q->whereIn('branch_id',
+                $user->dentistProfile?->branches()->pluck('branches.id')->all() ?? []))
             ->orderBy('id')->get();
 
         // Keep the branch-scoped directory intact. The exact self identity is also
@@ -88,15 +90,13 @@ class StaffProfileController extends Controller
             // Section 3.5: synchronize only explicit, persisted assignment changes. Repeating the current
             // branch must preserve independently authorized account scopes, including an empty scope set.
             // UserBranchScopeController uses the same account lock, serializing replacements even for empty sets.
-            if ($request->has('branch_ref') && $current->wasChanged('branch_id') && $current->person_id) {
+            // Unassignment leaves the independently managed account scopes as they are.
+            if ($current->branch_id !== null && $current->wasChanged('branch_id') && $current->person_id) {
                 $linkedUser = \App\Models\User::where('person_id', $current->person_id)
                     ->where('role', \App\Enums\Role::Staff)
                     ->lockForUpdate()->first();
                 if ($linkedUser) {
-                    // Preserved legacy behavior, NOT an approved policy: null assignment grants all Open branches.
-                    $branchIds = $attributes['branch_id']
-                        ? [$attributes['branch_id']]
-                        : Branch::where('status', 'Open')->pluck('id')->all();
+                    $branchIds = [$current->branch_id];
                     UserBranchScope::where('user_id', $linkedUser->id)->whereNotIn('branch_id', $branchIds ?: [0])->delete();
                     foreach ($branchIds as $branchId) {
                         UserBranchScope::firstOrCreate(['user_id' => $linkedUser->id, 'branch_id' => $branchId]);

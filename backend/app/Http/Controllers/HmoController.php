@@ -7,6 +7,7 @@ use App\Http\Controllers\Concerns\ReadsIdempotencyKey;
 use App\Http\Resources\HmoCaseResource;
 use App\Http\Resources\HmoMembershipResource;
 use App\Http\Resources\PatientHmoCaseResource;
+use App\Models\Appointment;
 use App\Models\HmoCase;
 use App\Models\HmoCaseRequirement;
 use App\Models\Patient;
@@ -37,11 +38,17 @@ class HmoController extends Controller
 
     // ---- MEMBERSHIP ---------------------------------------------------------------------------------------------------
 
-    public function membership(Request $request, Patient $patient): JsonResponse
+    public function membership(Request $request, string $patient): JsonResponse
     {
-        $this->assertStaffOrOwner($request->user());
+        $user = $request->user();
+        $this->assertStaffOrOwner($user);
+        $record = Patient::where('public_id', $patient)->first();
+        abort_unless($record && ($user->role === Role::Owner
+            || Visit::visibleTo($user)->where('patient_id', $record->id)->exists()
+            || Appointment::visibleTo($user)->where('patient_id', $record->id)->exists()), 404);
 
-        return response()->json(['data' => $this->membershipBody($patient)]);
+        return response()->json(['data' => $this->membershipBody($record)])
+            ->header('Cache-Control', 'private, no-store');
     }
 
     // Membership MUTATION needs an authoritative operational context: a Visit in the Staff member's branch scope. The

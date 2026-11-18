@@ -84,10 +84,10 @@ class Scope02StaffDirectoryVisibilityTest extends TestCase
         ]], $this->directory('staffB2'));
     }
 
-    public function test_dentist_legacy_visibility_is_unchanged_pending_explicit_policy(): void
+    public function test_dentist_directory_is_limited_to_assigned_branches(): void
     {
-        // Characterize preservation only; this does not establish an approved cross-branch Dentist permission.
-        $this->assertSame(['s-z', 's-a', 's-third', 's-none'], array_column($this->directory('dentist1'), 'id'));
+        $this->assertSame(['s-z'], array_column($this->directory('dentist1'), 'id'));
+        $this->assertSame(['s-a'], array_column($this->directory('dentist3'), 'id'));
     }
 
     public function test_guests_and_patients_cannot_read_directory(): void

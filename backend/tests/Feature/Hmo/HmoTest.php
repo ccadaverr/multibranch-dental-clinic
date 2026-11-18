@@ -146,6 +146,21 @@ class HmoTest extends TestCase
         }
     }
 
+    public function test_membership_read_requires_an_in_scope_patient_or_owner(): void
+    {
+        $path = "/api/patients/{$this->p['A']->public_id}/hmo-membership";
+        $this->getJson($path)->assertUnauthorized();
+        $visit = $this->walkIn('A');
+        $this->membership(visit: $visit)->assertCreated();
+        $this->getJson($path)->assertOk()->assertJsonPath('data.active.member_number', 'M-000123');
+        foreach (['staffB2', 'staffNone'] as $who) {
+            $this->actingAsUser($who);
+            $this->getJson($path)->assertNotFound()->assertJsonMissingPath('data');
+        }
+        $this->actingAsUser('owner');
+        $this->getJson($path)->assertOk()->assertJsonCount(1, 'data.history');
+    }
+
     public function test_membership_mutation_requires_an_in_scope_visit_of_that_patient(): void
     {
         $aVisit = $this->walkIn('A');                                   // Patient A: operational context in Branch A (b1)

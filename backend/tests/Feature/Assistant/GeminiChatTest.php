@@ -24,6 +24,7 @@ class GeminiChatTest extends TestCase
         parent::setUp();
         $this->setUpSchedulingWorld();
         $this->actingAsUser('patientA');
+        Config::set('assistant.mode', 'auto');
         Config::set('services.gemini.api_key', self::FAKE_KEY);
         Config::set('services.gemini.model', 'gemini-1.5-flash');
         Http::preventStrayRequests();
@@ -128,6 +129,32 @@ class GeminiChatTest extends TestCase
             ->assertJsonPath('data.mode', 'knowledge_fallback');
 
         $this->assertStringContainsString('Dr. Dana E. Roxas Dental Clinic', $response->json('data.answer'));
+    }
+
+    public function test_knowledge_fallback_only_returns_active_approved_answers(): void
+    {
+        Config::set('services.gemini.api_key', '');
+        foreach ([[true, true, 'Unapproved fixture'], [false, false, 'Inactive fixture'], [true, false, 'Approved fixture']] as [$active, $draft, $answer]) {
+            \App\Models\AssistantAnswer::create(['question' => 'Synthetic verification topic', 'answer' => $answer,
+                'keywords' => ['cerulean-check'], 'category' => 'other', 'active' => $active, 'draft' => $draft, 'source' => 'owner']);
+        }
+        $result = $this->postJson('/api/gemini/chat', ['message' => 'cerulean-check'])->assertOk();
+        $this->assertStringContainsString('Approved fixture', $result->json('data.answer'));
+        $this->assertStringNotContainsString('Unapproved fixture', $result->getContent());
+        $this->assertStringNotContainsString('Inactive fixture', $result->getContent());
+    }
+
+    public function test_knowledge_mode_and_stream_share_the_patient_daily_cap(): void
+    {
+        Config::set('assistant.mode', 'knowledge');
+        Config::set('assistant.daily_cap', 1);
+        $body = ['message' => 'Synthetic request content'];
+        $this->postJson('/api/gemini/chat', $body)->assertOk()->assertJsonPath('data.mode', 'knowledge_fallback');
+        $this->postJson('/api/gemini/stream', $body)->assertTooManyRequests()->assertJsonPath('code', 'assistant_daily_cap');
+        $this->postJson('/api/assistant/messages', $body)->assertTooManyRequests()->assertJsonPath('code', 'assistant_daily_cap');
+        $usage = DB::table('assistant_usage')->where('user_id', $this->u['patientA']->id)->sole();
+        $this->assertStringNotContainsString($body['message'], json_encode($usage));
+        Http::assertNothingSent();
     }
 
     public function test_gemini_stream_returns_sse_stream(): void
@@ -240,6 +267,8 @@ class GeminiChatTest extends TestCase
 
     public function test_gemini_system_prompt_grounded_in_clinic_facts(): void
     {
+        $this->b['b2']->update(['status' => 'Closed', 'name' => 'Synthetic closed branch']);
+        $this->svc['svc2']->update(['status' => 'Inactive', 'name' => 'Synthetic inactive service']);
         $controller = new GeminiChatController();
         $prompt = $controller->buildSystemPrompt();
 
@@ -248,5 +277,7 @@ class GeminiChatTest extends TestCase
         $this->assertStringContainsString('PayMongo', $prompt);
         $this->assertStringContainsString('NEVER PROVIDE MEDICAL OR DENTAL DIAGNOSES', $prompt);
         $this->assertStringContainsString('Medical Disclaimer', $prompt);
+        $this->assertStringNotContainsString('Synthetic closed branch', $prompt);
+        $this->assertStringNotContainsString('Synthetic inactive service', $prompt);
     }
 }
