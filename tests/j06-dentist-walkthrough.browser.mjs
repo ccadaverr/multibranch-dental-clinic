@@ -1,0 +1,43 @@
+// New verified synthetic target only. J04/J05 prerequisite scenarios have already persisted their results.
+import assert from 'node:assert/strict'
+import {readFileSync,writeFileSync} from 'node:fs'
+import {browser,login,get,api,evidence,target} from './local-visit-support.mjs'
+const f=JSON.parse(readFileSync(target.runtime+'/visit-fixture.json','utf8')),previous=JSON.parse(readFileSync(process.env.J06_ACTIVE_FIXTURE||target.runtime+'/history-browser/j05-state.json','utf8')),old=JSON.parse(readFileSync(target.runtime+'/history-fixture.json','utf8'));assert.equal(previous.accepted,true)
+const widths=[375,390,430,768,1024,1440],longNote='Synthetic J06 long clinical documentation.\n'+('Synthetic observation retained exactly for presentation testing; no clinical advice or diagnosis. '.repeat(35)).trim()+'\nSynthetic fixture run '+Date.now()
+const groups=[],pass=text=>{groups.push(text);console.log('PASS '+text)}
+async function capture(page,name){for(const width of widths){await page.setViewportSize({width,height:1000});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await page.evaluate(()=>{window.scrollTo(0,0);return new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))});await page.screenshot({path:evidence+'/'+name+'-'+width+'.png',fullPage:true})}}
+let page
+try{
+ const dentist=await login('sprint02.dentist@example.test');page=dentist.page
+ await page.getByRole('button',{name:'My Queue',exact:true}).first().click();await page.getByRole('button',{name:'Continue treatment',exact:true}).first().click()
+ const notes=page.getByRole('textbox',{name:'Clinical notes',exact:true});await notes.fill(longNote)
+ const before=(await get(page,'/api/treatments/'+previous.treatment.id)).body.data;assert.equal(before.patient.id,f.patientId);assert.equal(before.visit.id,previous.visit.id)
+ const preview=page.locator('.enc-history-preview');await preview.locator(':scope > summary').click();await preview.getByText('Page 1 of 11',{exact:true}).waitFor()
+ assert.equal(await preview.locator('.history-choice').count(),20);await capture(page,'compact-browse')
+ const chosen=old.records[204],button=()=>preview.getByRole('button',{name:new RegExp('reference '+chosen.id+'$')})
+ await page.route(api+'/api/treatments/'+chosen.id,r=>r.abort('failed'),{times:1});await button().focus();await page.keyboard.press('Enter');await preview.getByRole('button',{name:'Retry encounter',exact:true}).waitFor();assert.equal(await preview.locator('.history-choice').count(),0);assert.equal(await notes.inputValue(),longNote)
+ await preview.getByRole('button',{name:'Back to encounter list',exact:true}).click();assert.equal(await button().evaluate(b=>document.activeElement===b),true);await preview.getByText('Page 1 of 11',{exact:true}).waitFor()
+ await button().click();const detail=preview.getByRole('region',{name:'Historical encounter',exact:true});await detail.waitFor();assert.match(await detail.innerText(),new RegExp(chosen.visitId));assert.equal(await preview.locator('.history-choice').count(),0);assert.equal(await detail.locator('textarea,input').count(),0)
+ await capture(page,'single-record');assert.deepEqual((await get(page,'/api/treatments/'+previous.treatment.id)).body.data,before)
+ await preview.getByRole('button',{name:'Return to treatment',exact:true}).click();assert.equal(await notes.evaluate(e=>e===document.activeElement),true);assert.equal(await notes.inputValue(),longNote);assert.equal(await preview.evaluate(e=>e.open),false)
+ pass('compact list/single-record modes, failed-read return, exact linked identity and treatment field/draft restoration at six widths')
+ const sent=[];page.on('request',r=>{if(new URL(r.url()).pathname==='/api/treatments/'+previous.treatment.id+'/document'&&r.method()==='POST')sent.push({key:r.headers()['idempotency-key'],body:r.postDataJSON()})})
+ await page.route(api+'/api/treatments/'+previous.treatment.id+'/document',async route=>{const r=await route.fetch();assert.equal(r.status(),200);assert.equal((await r.json()).data.clinical_notes,longNote);await route.abort('failed')},{times:1})
+ await page.getByRole('button',{name:'Save Treatment Progress',exact:true}).click();await page.getByRole('button',{name:'Retry same command',exact:true}).waitFor();assert.equal(await notes.inputValue(),longNote)
+ await page.getByRole('button',{name:'Retry same command',exact:true}).focus();await page.keyboard.press('Enter');await page.getByText(/Saved on the clinic server/).waitFor();assert.equal(sent.length,2);assert.deepEqual(sent[0],sent[1])
+ const saved=(await get(page,'/api/treatments/'+previous.treatment.id)).body.data;assert.equal(saved.revision,before.revision+1);assert.equal(saved.clinical_notes,longNote);assert.equal(saved.visit.id,before.visit.id)
+ pass('actual documentation commit/response loss, keyboard same-key retry and exact long-note revision/readback without duplicate save')
+ await page.getByRole('button',{name:'Open dental chart',exact:true}).click();await page.getByRole('combobox',{name:'Choose tooth',exact:true}).selectOption('16')
+ const chartBefore=(await get(page,'/api/patients/'+f.patientId+'/chart')).body.data,editor=page.getByRole('textbox',{name:/Note \(optional\)/});await editor.fill('Synthetic J06 retained tooth draft')
+ const tooth=page.getByRole('region',{name:'Recorded tooth history',exact:true});await tooth.getByRole('button',{name:'Older findings',exact:true}).click();await tooth.locator('.od-history-entry').first().locator('summary').click();await tooth.getByRole('button',{name:'Review linked encounter',exact:true}).click();const linked=page.getByRole('region',{name:'Linked encounter review',exact:true});await linked.getByRole('region',{name:'Historical encounter',exact:true}).waitFor()
+ await tooth.getByRole('button',{name:'Older findings',exact:true}).click();await linked.getByRole('button',{name:'Close encounter review',exact:true}).click();assert.equal(await page.getByRole('combobox',{name:'Choose tooth',exact:true}).evaluate(e=>document.activeElement===e),true);assert.equal(await editor.inputValue(),'Synthetic J06 retained tooth draft');assert.equal(await page.getByRole('combobox',{name:'Choose tooth',exact:true}).inputValue(),'16');assert.deepEqual((await get(page,'/api/patients/'+f.patientId+'/chart')).body.data,chartBefore)
+ pass('tooth-history paging while reviewing restores focus safely when the original link is unmounted; current findings/draft unchanged')
+ const review=await login('sprint02.dentist@example.test'),p2=review.page
+ await p2.getByRole('button',{name:'My Queue',exact:true}).first().click();await p2.getByRole('button',{name:'Continue treatment',exact:true}).first().click();assert.equal(await p2.getByRole('textbox',{name:'Clinical notes',exact:true}).inputValue(),longNote)
+ await p2.getByRole('button',{name:'Complete Treatment',exact:true}).click();await p2.getByRole('dialog').getByRole('button',{name:'Complete Treatment',exact:true}).click();await p2.getByText('Treatment completion confirmed by the clinic server.',{exact:true}).waitFor()
+ const completed=(await get(p2,'/api/treatments/'+saved.id)).body.data;writeFileSync(evidence+'/completed.json',JSON.stringify({patient:f.patientId,treatment:saved.id,visit:previous.visit.id,revision:completed.revision},null,2));assert.equal(completed.status,'Completed');assert.equal(completed.clinical_notes,longNote)
+ await p2.getByRole('button',{name:'All completed Patient encounters',exact:true}).click();await p2.getByRole('button',{name:new RegExp('reference '+saved.id+'$')}).click();const longDetail=p2.getByRole('region',{name:'Historical encounter',exact:true});await longDetail.waitFor();assert.equal(await longDetail.locator('textarea,input').count(),0);assert.equal(await longDetail.locator(':scope > dl').locator('dt').filter({hasText:'Clinical notes'}).locator('..').locator('dd').textContent(),longNote)
+ await capture(p2,'long-saved-record');assert.deepEqual((await get(p2,'/api/treatments/'+saved.id)).body.data,completed);assert.equal(await editor.inputValue(),'Synthetic J06 retained tooth draft')
+ pass('explicit completion confirmation and exact long historical documentation at six widths, immutable readback and independent finding draft retained')
+ writeFileSync(evidence+'/results.json',JSON.stringify({accepted:true,groups,widths,patient:f.patientId,visit:previous.visit.id,treatment:saved.id,revision:saved.revision},null,2))
+}catch(error){if(page&&!page.isClosed()){writeFileSync(evidence+'/failure-text.txt',await page.locator('body').innerText());await page.screenshot({path:evidence+'/failure.png',fullPage:true})}throw error}finally{await browser.close()}

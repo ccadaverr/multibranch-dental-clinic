@@ -8,8 +8,9 @@ let page
 const waitPost=async(page,path,work)=>{const awaited=page.waitForResponse(r=>r.url()===api+path&&r.request().method()!=='GET');await work();const r=await awaited;const body=await r.json();assert.ok(r.status()<300,JSON.stringify(body));return body.data}
 try {
  const dentist=await login('sprint02.dentist@example.test');page=dentist.page
- await page.getByRole('button',{name:'My Queue',exact:true}).first().click();await page.getByRole('combobox',{name:'Worklist',exact:true}).selectOption('history')
- await page.getByRole('button',{name:'View completed record',exact:true}).first().click()
+ await page.getByRole('button',{name:'My Queue',exact:true}).first().click()
+ if(process.env.LOCAL_SYSTEM_ACTIVE_PRESCRIPTION==='1')await page.getByRole('button',{name:'Continue treatment',exact:true}).first().click()
+ else {await page.getByRole('combobox',{name:'Worklist',exact:true}).selectOption('history');await page.getByRole('button',{name:'View completed record',exact:true}).first().click()}
  await page.getByRole('button',{name:'Open visit prescriptions',exact:true}).click()
  await page.getByRole('combobox',{name:/^Visit/}).waitFor()
  const selected=await page.getByRole('combobox',{name:/^Visit/}).inputValue();assert.ok(selected);state.visit=selected
@@ -51,8 +52,8 @@ try {
  const relogin=otherTab.waitForResponse(r=>r.url()===api+'/api/login'&&r.request().method()==='POST')
  await otherTab.getByRole('button',{name:'Sign in',exact:true}).click();assert.equal((await relogin).status(),200)
  let heldHeader=false
- page.on('request',r=>{if(r.url()===api+'/api/prescriptions/'+state.draft.id&&r.method()==='PUT')heldHeader=/^[a-f0-9]{64}$/.test(r.headers()['x-clinical-context']||'')})
- const refused=page.waitForResponse(r=>r.url()===api+'/api/prescriptions/'+state.draft.id&&r.request().method()==='PUT')
+ page.on('request',r=>{if(r.url()===api+'/api/prescriptions/'+state.draft.id+'/issue'&&r.method()==='POST')heldHeader=/^[a-f0-9]{64}$/.test(r.headers()['x-clinical-context']||'')})
+ const refused=page.waitForResponse(r=>r.url()===api+'/api/prescriptions/'+state.draft.id+'/issue'&&r.request().method()==='POST')
  await page.getByRole('button',{name:'Issue prescription',exact:true}).click()
  await page.getByRole('dialog',{name:'Issue and lock prescription?',exact:true}).getByRole('button',{name:'Issue prescription',exact:true}).click()
  assert.equal((await refused).status(),409);assert.equal(heldHeader,true)
@@ -72,7 +73,7 @@ try {
  page=patient.page;await page.getByRole('button',{name:'More',exact:true}).click();await page.getByRole('dialog',{name:'More',exact:true}).getByRole('button',{name:'Prescriptions',exact:true}).click()
  const patientRx=()=>page.locator('ul.pp-rx-list > li').filter({hasText:state.issued.number})
  await patientRx().getByText('Synthetic Sprint03 medicine',{exact:true}).waitFor()
- const download=page.waitForEvent('download');await patientRx().getByRole('button',{name:'Download PDF',exact:true}).click();await(await download).saveAs(evidence+'/issued.pdf')
+ const download=page.waitForEvent('download');await patientRx().getByRole('button',{name:/^Download PDF for /}).click();await(await download).saveAs(evidence+'/issued.pdf')
  assert.equal(readFileSync(evidence+'/issued.pdf').subarray(0,5).toString(),'%PDF-');await page.reload();await patientRx().getByText(state.issued.number,{exact:false}).waitFor();console.log('PASS own Patient issued prescription and actual PDF after reload')
  page=dentist.page;const dialog=page.getByRole('dialog');await dialog.getByRole('button',{name:'Void…',exact:true}).click();await dialog.getByRole('textbox',{name:'Reason for voiding',exact:true}).fill('Synthetic correction: demonstration prescription voided')
  const voidPath='/api/prescriptions/'+state.issued.id+'/void',voidRequests=[]
@@ -82,11 +83,15 @@ try {
  await dialog.getByRole('button',{name:'Retry same Void request',exact:true}).waitFor()
  state.voided=await waitPost(page,voidPath,()=>dialog.getByRole('button',{name:'Retry same Void request',exact:true}).click())
  assert.equal(voidRequests.length,2);assert.deepEqual(voidRequests[0],voidRequests[1]);save();assert.equal(state.voided.number,state.issued.number);assert.equal(state.voided.status,'Void')
- page=patient.page;await page.reload();await patientRx().getByText('VOID — do not use',{exact:true}).waitFor();const voidPdf=page.waitForEvent('download');await patientRx().getByRole('button',{name:'Download PDF',exact:true}).click();await(await voidPdf).saveAs(evidence+'/void.pdf')
+ page=patient.page;await page.reload();await patientRx().getByText('VOID — do not use',{exact:true}).waitFor();const voidPdf=page.waitForEvent('download');await patientRx().getByRole('button',{name:/^Download PDF for /}).click();await(await voidPdf).saveAs(evidence+'/void.pdf')
  console.log('PASS authorized Void preserves issued identity and Patient sees VOID with new PDF')
  // Existing correction contract: retain the Void record and explicitly write/issue a new prescription.
  page=dentist.page;await page.getByRole('dialog').getByRole('button',{name:'Close',exact:true}).click()
- await page.getByRole('combobox',{name:/^Visit/}).selectOption(state.visit)
+ const compose=page.locator('details.rx-compose').first()
+ if(!await compose.evaluate(el=>el.open)){await compose.locator(':scope > summary').focus();await page.keyboard.press('Enter')}
+ const correctionVisit=page.getByRole('combobox',{name:/^Visit/})
+ if(await correctionVisit.isDisabled())assert.equal(await correctionVisit.inputValue(),state.visit)
+ else await correctionVisit.selectOption(state.visit)
  await page.getByRole('combobox',{name:'Select medicine 1',exact:true}).selectOption('__other__')
  await page.getByRole('textbox',{name:'Specify medicine name',exact:true}).fill('Synthetic corrected medicine')
  state.correctedDraft=await waitPost(page,'/api/prescriptions',()=>page.getByRole('button',{name:'Save draft',exact:true}).click())

@@ -4,12 +4,17 @@ import { useClinicalProtection } from '../clinical-navigation.jsx'
 import { clinicalSessionKey, resolveEncounter } from '../encounter.js'
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Button, Card, ConfirmDialog, Field, FilterBar, Modal, Notice, PageHeader, RefreshButton } from '../components.jsx'
-import { createPrescription, downloadPrescriptionPdf, issuePrescription, listPrescriptions, prescription, prescriptionVisits, savePrescriptionLicense, updatePrescription, voidPrescription } from '../api-client.js'
+import { createPrescription, downloadPrescriptionPdf, issuePrescription, listPrescriptions, prescription, prescriptionVisits, getVisit, savePrescriptionLicense, updatePrescription, voidPrescription } from '../api-client.js'
 import { commandKey } from '../appointments-api.js'
 import { readPrescriptionPage } from '../prescription-list.js'
+import {readPrescriptionVisitOptions} from '../prescription-visit-read.js'
+import {prescriptionContextMatches} from '../prescription-readback.js'
+import {boundedClinicalRead} from '../clinical-history.js'
 import { runPrescriptionWrite } from '../prescription-command.js'
+import {createPrescriptionCatalog} from '../prescription-catalog.js'
 import '../dentist-clinical.css'
 import '../clinical-care-experience.css'
+import '../prescription-experience.css'
 
 const firstError = r => (r.kind === 'validation' ? Object.values(r.errors || {})[0]?.[0] || r.message : r.message) || 'That did not work.'
 const day = d => d ? new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : ''
@@ -58,10 +63,11 @@ export function PrescriptionsServerPage(props) {
   if(props.role==='dentist'&&!allowed)return <Notice>Clinical session unavailable. Prescription information is hidden.</Notice>
   const linked=props.context?.returnEncounter?resolveEncounter(props.store.state,props.store.session,props.context.returnEncounter):null
   if(linked&&!linked.ok)return <Notice>{linked.message}<Button onClick={()=>props.setPage('queue')}>My Queue</Button></Notice>
-  return <PrescriptionsBody key={JSON.stringify([clinicalSessionKey(props.store.session), props.store.getAuthGeneration?.(), props.context?.visitId||'all'])} {...props}/>
+  return <PrescriptionsBody key={JSON.stringify([clinicalSessionKey(props.store.session), props.store.getAuthGeneration?.(), props.context?.visitId||'all',props.context?.patientPublicId||props.context?.patientId,props.context?.branchId,props.context?.dentistId])} {...props}/>
 }
 function PrescriptionsBody({ store, role, context, setPage }) {
   const toast = store?.toast || (() => {})
+  const expectedContext=context?.visitId?{visitId:context.visitId,patientId:context.patientPublicId||context.patientId,branchId:context.branchId}:null
   const [result, setResult] = useState(null), [openId, setOpenId] = useState(null), [writing, setWriting] = useState(null)
   const [query, setQuery] = useState(''), [statusFilter, setStatusFilter] = useState('all'), [page, setPageNumber] = useState(1)
   const changeQuery = value => { setQuery(value); setPageNumber(1) }
@@ -93,6 +99,17 @@ function PrescriptionsBody({ store, role, context, setPage }) {
     else change()
   }
   const listLive=useRef(false), listSerial=useRef(0)
+  const [catalogRefresh,setCatalogRefresh]=useState(0),catalogHolder=useRef(null)
+  const catalogScope=JSON.stringify([actor,auth,context?.visitId,context?.patientPublicId||context?.patientId,context?.branchId,context?.dentistId])
+  if(catalogHolder.current?.scope!==catalogScope){
+    catalogHolder.current?.resource.invalidate()
+    let resource
+    resource=createPrescriptionCatalog(prescriptionVisits,()=>listLive.current&&catalogHolder.current?.resource===resource&&latest.current.actor===actor&&latest.current.store.getAuthGeneration?.()===auth)
+    catalogHolder.current={scope:catalogScope,resource}
+  }
+  const catalog=catalogHolder.current.resource
+  useEffect(()=>()=>catalog.invalidate(),[catalog])
+  const reloadCatalog=()=>{catalog.invalidate();setCatalogRefresh(n=>n+1)}
   const load = async () => {
     if (!owns()) return false
     const ticket=++listSerial.current
@@ -113,14 +130,14 @@ function PrescriptionsBody({ store, role, context, setPage }) {
   const filteredRows = rows || []
   return <div className={`st-page dentist-prescriptions${dentist?' clinical-experience':''}`}>
     {context?.returnEncounter&&<Button variant="ghost" onClick={()=>setPage('treatment',context.returnEncounter)}>Return to encounter</Button>}
-    {context?.visitId&&<Notice>Prescriptions for this encounter. A Draft has not been issued.</Notice>}
+    {context?.visitId&&(dentist?<p className="rx-scope-note">This encounter · Drafts stay private until issued</p>:<Notice>Prescriptions for this encounter. A Draft has not been issued.</Notice>)}
     <PageHeader kicker={owner ? 'Administration' : 'Clinical'} title="Prescriptions"
       text={owner ? 'Prescriptions issued at the clinic: number, date, dentist and branch. The medicines are visible only to the dentists, the branch front desk and the patient.'
-        : dentist ? 'Write a prescription for a recent visit. Issuing locks it; a mistake is voided with a reason and a new one is issued. There is no drug list and no interaction check: you decide what to prescribe.'
+        : dentist ? 'Write for an authorized Visit. Review medicines and allergies before issuing. Issuing locks the prescription; corrections require voiding and a new prescription. Medication decisions remain yours; interaction checks are not provided.'
           : 'Prescriptions issued at your branch, to view and print. Only a dentist writes or changes them.'}
-      aside={<RefreshButton title="Reload prescriptions" ariaLabel="Reload prescriptions" loading={loading} onClick={load}/>}/>
-    {dentist && <details ref={compose} className="rx-compose" open={!!context?.visitId||!!writing}><summary><span>Write a prescription<small>Saved drafts stay private until issued.</small></span></summary><WriteCard selectionDetailsAvailable={store.session?.selectionDetailsAvailable===true} key={writing || 'new'} clinicalContext={store.session?.clinicalContext} getAuthGeneration={store.getAuthGeneration} context={context} toast={toast} onDone={id => { load(); setOpenId(id) }} editing={writing} onEdited={() => applyDraft(null)} leaveRef={editorLeave} isCurrent={() => editorGeneration.current===generation}/></details>}
-    {dentist && <details className="rx-compose rx-settings"><summary><span>Prescription settings<small>Your optional license number</small></span></summary><LicenseCard toast={toast} clinicalContext={store.session?.clinicalContext} getAuthGeneration={store.getAuthGeneration}/></details>}
+      aside={<RefreshButton title="Reload prescriptions" ariaLabel="Reload prescriptions" loading={loading} onClick={()=>{reloadCatalog();return load()}}/>}/>
+    {dentist && <details ref={compose} className="rx-compose" open={!!context?.visitId||!!writing}><summary><span>Write a prescription<small>Saved drafts stay private until issued.</small></span></summary><WriteCard selectionDetailsAvailable={store.session?.selectionDetailsAvailable===true} key={writing || 'new'} catalogRead={catalog.read} catalogRefresh={catalogRefresh} onCatalogRetry={reloadCatalog} clinicalContext={store.session?.clinicalContext} getAuthGeneration={store.getAuthGeneration} context={context} toast={toast} onDone={id => { load(); setOpenId(id) }} editing={writing} onEdited={() => applyDraft(null)} leaveRef={editorLeave} isCurrent={() => editorGeneration.current===generation}/></details>}
+    {dentist && <details className="rx-compose rx-settings"><summary><span>Prescription settings<small>Your optional license number</small></span></summary><LicenseCard catalogRead={catalog.read} catalogRefresh={catalogRefresh} invalidateCatalog={catalog.invalidate} toast={toast} clinicalContext={store.session?.clinicalContext} getAuthGeneration={store.getAuthGeneration}/></details>}
     {error && <Notice tone="warning" title="Unavailable">{error}</Notice>}
     <Card title={owner ? 'Issued prescriptions' : 'Prescriptions'}>
       <FilterBar
@@ -155,11 +172,11 @@ function PrescriptionsBody({ store, role, context, setPage }) {
         <Button variant="soft" disabled={loading || page>=meta.last_page} onClick={()=>setPageNumber(p=>p+1)}>Older prescriptions</Button>
       </nav>}
     </Card>
-    {openId && <PrescriptionDialog id={openId} clinicalContext={store.session?.clinicalContext} getAuthGeneration={store.getAuthGeneration} toast={toast} onClose={() => setOpenId(null)} onChanged={load} onEdit={dentist ? id => selectDraft(id, true) : undefined}/>}
+    {openId && <PrescriptionDialog id={openId} expectedContext={expectedContext} clinicalContext={store.session?.clinicalContext} getAuthGeneration={store.getAuthGeneration} toast={toast} onClose={() => setOpenId(null)} onChanged={load} onEdit={dentist ? id => selectDraft(id, true) : undefined}/>}
   </div>
 }
 
-function WriteCard({ selectionDetailsAvailable = false, clinicalContext, toast, onDone, editing, onEdited, context, isCurrent, leaveRef, getAuthGeneration }) {
+function WriteCard({ selectionDetailsAvailable = false, clinicalContext, toast, onDone, editing, onEdited, context, isCurrent, leaveRef, getAuthGeneration, catalogRead=prescriptionVisits, catalogRefresh=0, onCatalogRetry }) {
   const mounted=useRef(true)
   const visitGeneration=useRef(0)
   const retryWrite=useRef(null), issueReview=useRef(null)
@@ -169,7 +186,10 @@ function WriteCard({ selectionDetailsAvailable = false, clinicalContext, toast, 
   const [lines, renderLines] = useState([{ ...EMPTY_LINE }]), [note, renderNote] = useState(''), [draft, setDraft] = useState(null)
   const [err, setErr] = useState(''), [busy, setBusy] = useState(''), [confirmIssue, setConfirmIssue] = useState(false)
   const [leaving, setLeaving] = useState(false)
-  const [visitError, setVisitError] = useState(''), [visitAttempt, setVisitAttempt] = useState(0)
+  const [visitError, setVisitError] = useState(''), [visitAttempt, setVisitAttempt] = useState(0),[draftAttempt,setDraftAttempt]=useState(0)
+  const [visitVerified,setVisitVerified]=useState(false),[visitLoading,setVisitLoading]=useState(true)
+  const visitScope=JSON.stringify([context?.visitId,context?.patientPublicId||context?.patientId,context?.branchId,context?.dentistId])
+  const currentVisitScope=useRef(visitScope);currentVisitScope.current=visitScope
   const form = useRef({lines, note}), cleanForm = useRef(draftSnapshot(form.current))
   useClinicalProtection(draftSnapshot(form.current) !== cleanForm.current, !!busy)
   const replaceForm = (nextLines, nextNote) => {
@@ -209,29 +229,32 @@ function WriteCard({ selectionDetailsAvailable = false, clinicalContext, toast, 
   }
   useEffect(() => {
     let live = true
-    setVisitError(''); setVisits(null)
+    setVisitError('');setVisitVerified(false);setVisitLoading(true)
+    const auth=getAuthGeneration?.(),owns=()=>live&&mounted.current&&isCurrent()&&currentVisitScope.current===visitScope&&(!getAuthGeneration||getAuthGeneration()===auth)
     const loadVisits = async () => {
-      let r
-      try { r = await prescriptionVisits() }
-      catch { r = {ok: false, message: 'Visits could not be loaded. Try again.'} }
-      if (!live) return
-      if (!r.ok) { setVisitError(firstError(r)); return }
-      setVisits(context?.visitId ? r.data.filter(v => v.id === context.visitId && v.patient?.id === (context.patientPublicId || context.patientId)) : r.data)
-      setMeta(r.meta || {})
+      if(!owns())return
+      const r=await readPrescriptionVisitOptions(catalogRead,getVisit,context,owns)
+      if(!owns())return
+      setVisitLoading(false)
+      if(!r?.ok){if(['unauthenticated','forbidden','not_found'].includes(r?.kind)){setVisits(null);setMeta({});setDraft(null)}setVisitError(firstError(r||{}));return}
+      setVisits(r.data);setMeta(r.meta||{});setVisitVerified(true)
     }
-    loadVisits()
+    // Effect replay is cleaned up before this microtask; obsolete mounts dispatch nothing.
+    Promise.resolve().then(loadVisits)
     return () => { live = false }
-  }, [visitAttempt])
+  }, [visitAttempt,visitScope,catalogRead,catalogRefresh])
   useEffect(() => {
     if (!editing) return
     let live=true
-    prescription(editing).then(r => {
-      if(!live)return
-      if (r.ok && r.data.id===editing && r.data.status==='Draft' && r.data.can_edit) { setDraft(r.data); setVisitId(r.data.visit); replaceForm(r.data.lines.map(l => ({ ...EMPTY_LINE, ...l, ...Object.fromEntries(CUSTOM_FIELDS.map(field => [`${field}Other`, l.value_origins?.[field] === 'other'])) })), r.data.note || '') }
+    const auth=getAuthGeneration?.()
+    boundedClinicalRead(()=>prescription(editing)).then(r => {
+      if(!live||!mounted.current||!isCurrent()||currentVisitScope.current!==visitScope||getAuthGeneration&&getAuthGeneration()!==auth)return
+      const expected=context?.visitId?{visitId:context.visitId,patientId:context.patientPublicId||context.patientId,branchId:context.branchId}:null
+      if (r.ok && (!expected||prescriptionContextMatches(r.data,expected)) && r.data.id===editing && r.data.status==='Draft' && r.data.can_edit) { setDraft(r.data); setVisitId(r.data.visit); replaceForm(r.data.lines.map(l => ({ ...EMPTY_LINE, ...l, ...Object.fromEntries(CUSTOM_FIELDS.map(field => [`${field}Other`, l.value_origins?.[field] === 'other'])) })), r.data.note || '') }
       else setErr(r.ok ? 'This prescription is no longer an editable draft.' : firstError(r))
     })
     return()=>{live=false}
-  }, [editing])
+  }, [editing,draftAttempt,visitScope])
   const visit = (visits || []).find(v => v.id === visitId)
   const set = (i, k, v, custom = false) => setLines(ls => ls.map((l, j) => j === i ? { ...l, [k]: v, ...(custom ? { [`${k}Other`]: true } : {}) } : l))
   const choose = (i, field, option) => setLines(ls => ls.map((l, j) => j === i ? chooseOption(l, field, option) : l))
@@ -249,13 +272,14 @@ function WriteCard({ selectionDetailsAvailable = false, clinicalContext, toast, 
       setVisitId(id); replaceForm([{ ...EMPTY_LINE }], ''); setErr(''); setBusy(''); setConfirmIssue(false)
     })
   }
-  const reset = () => { visitGeneration.current++; saving.current = null; retryWrite.current = null; setDraft(null); setVisitId(''); replaceForm([{ ...EMPTY_LINE }], ''); onEdited() }
+  const reset = () => { visitGeneration.current++; saving.current = null; retryWrite.current = null; setDraft(null); setVisitId(context?.visitId||''); replaceForm([{ ...EMPTY_LINE }], ''); onEdited() }
   const prepareIssue = () => {
     issueReview.current = {visitId, revision:draft?.revision || null, id:draft?.id || null, form:draftSnapshot(form.current)}
     setConfirmIssue(true)
   }
   const save = async (issue, retry = false) => {
     if (saving.current || retryWrite.current && !retry) return
+    if(!retry&&!visitVerified)return setErr('Verify the selected Visit before saving or issuing. Your entries are retained.')
     if (issue && !retry && issueReview.current && (issueReview.current.visitId !== visitId || issueReview.current.revision !== (draft?.revision || null) || issueReview.current.id !== (draft?.id || null) || issueReview.current.form !== draftSnapshot(form.current))) return setErr('This prescription changed after confirmation opened. Review and confirm the current draft.')
     if (missingCustomValue) return setErr('Specify the selected Other values before saving.')
     if (lines.some(l => !l.medicine.trim())) return setErr('Enter a medicine name for every line, or remove the empty line.')
@@ -291,18 +315,20 @@ function WriteCard({ selectionDetailsAvailable = false, clinicalContext, toast, 
     if (pendingLeave.current) pendingCompletion.current = complete
     else complete()
   }
-  if(editing&&!draft)return <Card title="Open prescription draft">{err?<Notice tone="warning" title="Draft unavailable">{err}</Notice>:<p role="status">Loading prescription draft…</p>}<Button variant="ghost" onClick={onEdited}>Cancel</Button></Card>
-  return <Card title={draft ? `Edit draft for ${draft.patient?.name}` : 'Write a prescription'}>
+  if(editing&&!draft)return <Card title="Open prescription draft">{err||visitError?<Notice tone="warning" title="Draft unavailable"><p role="alert">{err||visitError}</p></Notice>:<p role="status">Loading prescription draft…</p>}<Button variant="ghost" onClick={onEdited}>Cancel</Button>{err&&<Button variant="soft" onClick={()=>{setErr('');setDraftAttempt(n=>n+1)}}>Retry draft</Button>}{visitError&&<Button variant="soft" onClick={()=>{setErr('');setDraftAttempt(n=>n+1);if(onCatalogRetry)onCatalogRetry();else setVisitAttempt(n=>n+1)}}>Retry loading visits</Button>}</Card>
+  return <Card title={draft ? `Edit draft for ${draft.patient?.name}` : undefined}>
     <ConfirmDialog open={leaving} title="Leave this prescription?" cancelLabel="Stay" confirmLabel="Discard changes and continue" onCancel={stay} onConfirm={discard}>
       <p>Unsaved medicines and notes for {draft?.patient?.name || visit?.patient.name || 'this prescription'} will be discarded. A submitted request continues for its original Visit; its result is shown here only if you stay.</p>
     </ConfirmDialog>
-    {visitError ? <Notice tone="warning" title="Visits unavailable"><p role="alert">{visitError}</p><Button variant="soft" onClick={() => setVisitAttempt(a => a + 1)}>Retry loading visits</Button></Notice> : !visits ? <p className="au-muted" role="status">Loading visits…</p> : <form className="au-form" onSubmit={e => { e.preventDefault(); save(false) }}>
-    <SelectionDetailsNotice available={selectionDetailsAvailable}/>
-      {!visits.length && <p role="status">No eligible visits found.</p>}
-      {!draft && <Field label="Visit" required hint="Visits at your branches in the last 30 days."><select value={visitId} onChange={e => changeVisit(e.target.value)} required>
+    {visitError&&<Notice tone="warning" title="Visit verification required"><p role="alert">{visitError}</p><p>Your entries are retained. Verify the Visit before saving or issuing.</p><Button variant="soft" onClick={() => onCatalogRetry?onCatalogRetry():setVisitAttempt(a => a + 1)}>Retry loading visits</Button></Notice>}
+    {visitLoading&&<p className="au-muted" role="status">Verifying Visit details…</p>}
+    {(visits||draft)&&<form className="au-form" onSubmit={e => { e.preventDefault(); save(false) }}>
+      <SelectionDetailsNotice available={selectionDetailsAvailable}/>
+      {visits?.length===0 && <p role="status">No eligible visits found.</p>}
+      {context?.visitId&&(visit||draft)&&<section className="rx-encounter-identity" aria-label="Prescription Patient and Visit"><b>{draft?.patient?.name||visit?.patient.name}</b><p>Patient {draft?.patient?.id||visit?.patient.id} · Visit {context.visitId}</p><p>{draft?.branch||visit?.branch} · {draft?'Draft revision '+draft.revision:visit?.status}</p></section>}
+      {!draft && <Field label="Visit" required hint={visitVerified?(context?.visitId?'Verified encounter selection.':'Recent Visit suggestions at your branches (up to 100).'):'Visit verification is required.'}><select disabled={!!context?.visitId||!visitVerified} value={visitId} onChange={e => changeVisit(e.target.value)} required>
         <option value="">Choose a visit…</option>{visits.map(v => <option key={v.id} value={v.id}>{day(v.date)} · {v.patient.name}{v.patient.age !== null ? ` (${v.patient.age})` : ''} · {v.branch}</option>)}</select></Field>}
-      {(visit || draft) && <Notice tone="warning" title="Check allergies before prescribing">{meta.allergies?.length ? meta.allergies.join(', ') : meta.allergy_notice}</Notice>}
-      <datalist id="rx-common">{[...new Set([...(meta.common_medicines || []), ...COMMON_MEDICINE_NAMES])].map(m => <option key={m} value={m}/>)}</datalist>
+      {(visit || draft) && <Notice tone="warning" title="Check allergies before prescribing">{meta.allergies?.length ? meta.allergies.join(', ') : meta.allergy_notice||'Allergy information is unavailable. Verify allergies with the Patient before prescribing.'}</Notice>}
       {lines.map((l, i) => {
         const medicineCatalog = [...new Set([...(meta.common_medicines || []), ...COMMON_MEDICINE_NAMES])]
         const medSelect = selectedOption(l, 'medicine', medicineCatalog)
@@ -311,7 +337,7 @@ function WriteCard({ selectionDetailsAvailable = false, clinicalContext, toast, 
         const durationSelect = selectedOption(l, 'duration', COMMON_DURATIONS)
 
         return <fieldset key={i} className="rx-line" disabled={!!busy || !!retryWrite.current}><legend>Medicine {i + 1}</legend>
-          <Field label="Medicine" required hint="Choose standard medicine or Other to specify">
+          <Field label="Medicine" required>
             <select
               aria-label={`Select medicine ${i + 1}`}
               required
@@ -334,7 +360,7 @@ function WriteCard({ selectionDetailsAvailable = false, clinicalContext, toast, 
           )}
 
           <div className="st-pair">
-            <Field label="Dosage" hint="Choose standard dosage or Other">
+            <Field label="Dosage">
               <select
                 aria-label={`Select dosage ${i + 1}`}
                 value={dosageSelect}
@@ -349,7 +375,7 @@ function WriteCard({ selectionDetailsAvailable = false, clinicalContext, toast, 
                 <option value="__other__">Other (specify)</option>
               </select>
             </Field>
-            <Field label="Frequency" hint="Choose standard frequency or Other">
+            <Field label="Frequency">
               <select
                 aria-label={`Select frequency ${i + 1}`}
                 value={freqSelect}
@@ -379,7 +405,7 @@ function WriteCard({ selectionDetailsAvailable = false, clinicalContext, toast, 
             )}
           </div>
 
-          <Field label="Duration" hint="Choose standard treatment duration or Other">
+          <Field label="Duration">
             <select
               aria-label={`Select duration ${i + 1}`}
               value={durationSelect}
@@ -410,8 +436,9 @@ function WriteCard({ selectionDetailsAvailable = false, clinicalContext, toast, 
       {err && <p className="au-error" role="alert">{err}</p>}
       {retryWrite.current && <Notice tone="warning" title="Prescription result unconfirmed"><p>The original request is retained. Retry uses the same medicines, revision and request key.</p><Button disabled={!!busy} onClick={() => save(retryWrite.current.issue, true)}>Retry same prescription request</Button><Button variant="ghost" disabled={!!busy} onClick={() => window.location.reload()}>Reload prescriptions</Button></Notice>}
       <div className="ns-actions">
-        <Button type="submit" variant="soft" disabled={!!busy || !!retryWrite.current || (!draft && !visitId) || missingCustomValue || lines.some(l => !l.medicine.trim()) || !lines.some(l => l.medicine.trim())}>{busy === 'save' ? 'Saving…' : 'Save draft'}</Button>
-        <Button disabled={!!busy || !!retryWrite.current || (!draft && !visitId) || missingCustomValue || lines.some(l => !l.medicine.trim()) || !lines.some(l => l.medicine.trim())} onClick={prepareIssue}>{busy === 'issue' ? 'Issuing…' : 'Issue prescription'}</Button>
+        <Button type="submit" variant="soft" disabled={!visitVerified || !!busy || !!retryWrite.current || (!draft && !visitId) || missingCustomValue || lines.some(l => !l.medicine.trim()) || !lines.some(l => l.medicine.trim())}>{busy === 'save' ? 'Saving…' : 'Save draft'}</Button>
+        <Button disabled={!visitVerified || !!busy || !!retryWrite.current || (!draft && !visitId) || missingCustomValue || lines.some(l => !l.medicine.trim()) || !lines.some(l => l.medicine.trim())} onClick={prepareIssue}>{busy === 'issue' ? 'Issuing…' : 'Issue prescription'}</Button>
+        {draft&&err&&<Button variant="soft" disabled={!!busy||!!retryWrite.current} onClick={()=>requestLeave(()=>{setDraft(null);setErr('');setDraftAttempt(n=>n+1)})}>Reload draft</Button>}
         {draft && <Button variant="ghost" onClick={() => requestLeave(reset)}>Cancel</Button>}
       </div>
       <p className="au-muted">Issuing locks the prescription and gives it a number. It cannot be edited afterwards, only voided.</p>
@@ -430,15 +457,17 @@ function WriteCard({ selectionDetailsAvailable = false, clinicalContext, toast, 
   </Card>
 }
 
-function LicenseCard({ toast, getAuthGeneration, clinicalContext }) {
+function LicenseCard({ toast, getAuthGeneration, clinicalContext, catalogRead=prescriptionVisits, catalogRefresh=0, invalidateCatalog=()=>{} }) {
   const pending = useRef(false), live = useRef(false), auth = getAuthGeneration?.()
   const owns = () => live.current && (!getAuthGeneration || auth === getAuthGeneration())
   const [value, setValue] = useState(null), [busy, setBusy] = useState(false)
-  useEffect(() => { live.current = true; prescriptionVisits().then(r => owns() && r.ok && setValue(r.meta?.license_no || '')); return () => {live.current = false} }, [])
-  if (value === null) return null
+  const [error,setError]=useState(''),[attempt,setAttempt]=useState(0),edited=useRef(false)
+  useEffect(() => { let active=true;live.current=true;setError('');Promise.resolve().then(async()=>{if(!active||!owns())return;const r=await catalogRead();if(!active||!owns())return;if(!r?.ok)return setError(r?.message||'Prescription settings could not be loaded. Try again.');if(!edited.current)setValue(r.meta?.license_no||'')});return()=>{active=false;live.current=false} },[catalogRead,catalogRefresh,attempt])
+  if(error)return <Notice tone="warning" title="Prescription settings unavailable">{error}<Button variant="soft" onClick={()=>{invalidateCatalog();setAttempt(n=>n+1)}}>Retry prescription settings</Button></Notice>
+  if (value === null) return <p role="status">Loading prescription settings…</p>
   return <Card title="License number on my prescriptions" subtitle="Optional. Shown under your name on prescriptions you issue from now on. Never filled in for you.">
-    <form className="au-form rx-license-row" onSubmit={async e => { e.preventDefault(); if(pending.current || !owns()) return; pending.current = true; setBusy(true); let r; try {r = await savePrescriptionLicense(value.trim() || null, owns, clinicalContext)} catch {r = {ok:false,message:'The license update could not be confirmed.'}} pending.current = false; if(!owns()) return; setBusy(false); toast(r.ok ? 'Saved.' : firstError(r), r.ok ? 'success' : 'warning') }}>
-      <Field label="License number"><input value={value} maxLength={40} onChange={e => setValue(e.target.value)}/></Field>
+    <form className="au-form rx-license-row" onSubmit={async e => { e.preventDefault(); if(pending.current || !owns()) return; pending.current = true; setBusy(true); let r; try {r = await savePrescriptionLicense(value.trim() || null, owns, clinicalContext)} catch {r = {ok:false,message:'The license update could not be confirmed.'}} pending.current = false; if(!owns()) return; setBusy(false);if(r.ok){edited.current=false;invalidateCatalog()} toast(r.ok ? 'Saved.' : firstError(r), r.ok ? 'success' : 'warning') }}>
+      <Field label="License number"><input value={value} maxLength={40} onChange={e => {edited.current=true;setValue(e.target.value)}}/></Field>
       <div className="au-actions"><Button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button></div>
     </form>
   </Card>

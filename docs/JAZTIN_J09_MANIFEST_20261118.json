@@ -1,0 +1,595 @@
+{
+  "starting_j08": "39ba5ede70c17fcb27ff779511ca2aa92166daba",
+  "implementation_head": "e36cb63469d2a6ae5d08f2b786727d321fcf615d",
+  "branch": "feature/jaztin-j08-unslop-20261118",
+  "publication": "Preparation only; no push, PR, merge or deployment",
+  "publication_safety": "NOT CLEARED: owner must verify hosting Preview/branch/environment settings; historical Preview deployments exist and hooks are unverified",
+  "files": [
+    {
+      "path": "docs/JAZTIN_J09_PUBLICATION_PLAN_20261118.md",
+      "bytes": 6572,
+      "sha256": "2b4b0418e4d43be8a307eb5a0089a1bd47b8f9f9fd52ff791dc49d6416ab4266",
+      "lf_sha256": "2b4b0418e4d43be8a307eb5a0089a1bd47b8f9f9fd52ff791dc49d6416ab4266"
+    },
+    {
+      "path": "docs/JAZTIN_J09_SPRINT_20261118.md",
+      "bytes": 16917,
+      "sha256": "bf5ec48a0738d77715cd8b823fdf9d69db584a2b1db5fda14482f1fbe33a8cff",
+      "lf_sha256": "bf5ec48a0738d77715cd8b823fdf9d69db584a2b1db5fda14482f1fbe33a8cff"
+    },
+    {
+      "path": "src/pages/ServerPrescriptions.jsx",
+      "bytes": 47513,
+      "sha256": "43dc6b49ce0f0a26f4f89e99e9968ad763cf89cdaf8b9acb93ed0b5165fa1c0d",
+      "lf_sha256": "43dc6b49ce0f0a26f4f89e99e9968ad763cf89cdaf8b9acb93ed0b5165fa1c0d"
+    },
+    {
+      "path": "src/prescription-catalog.js",
+      "bytes": 1007,
+      "sha256": "fc395db4b3404428fdfcedd79785707b27aad7b0b4fab68972b93c7b3025044f",
+      "lf_sha256": "fc395db4b3404428fdfcedd79785707b27aad7b0b4fab68972b93c7b3025044f"
+    },
+    {
+      "path": "src/prescription-command.js",
+      "bytes": 4809,
+      "sha256": "636430b557c1f5c5333df51736f28e559445346286756057b93375bdafb03316",
+      "lf_sha256": "636430b557c1f5c5333df51736f28e559445346286756057b93375bdafb03316"
+    },
+    {
+      "path": "tests/j09-gen09-owned-flows.browser.mjs",
+      "bytes": 5124,
+      "sha256": "31dcacc6ebcdf454654f04d329c422253bac606a915cd904b80b09b8f63bb67e",
+      "lf_sha256": "31dcacc6ebcdf454654f04d329c422253bac606a915cd904b80b09b8f63bb67e"
+    },
+    {
+      "path": "tests/j09-prescription-command.test.js",
+      "bytes": 5581,
+      "sha256": "38bdd29ed7e56c8ee86a9f4e1cc521fa309bc2b1b0518fec12274958263f5978",
+      "lf_sha256": "38bdd29ed7e56c8ee86a9f4e1cc521fa309bc2b1b0518fec12274958263f5978"
+    },
+    {
+      "path": "tests/j09-prescription-layout.browser.mjs",
+      "bytes": 3858,
+      "sha256": "5ee0014685962f0f36d503841a768782d2b5e5a94b6fa0233b399fa459df5516",
+      "lf_sha256": "5ee0014685962f0f36d503841a768782d2b5e5a94b6fa0233b399fa459df5516"
+    },
+    {
+      "path": "tests/j09-prescription-reliability.browser.mjs",
+      "bytes": 12015,
+      "sha256": "b00714f15b8662ac65b7fe0c11187c00d773b5aab940ea48744e09a5a8663b55",
+      "lf_sha256": "b00714f15b8662ac65b7fe0c11187c00d773b5aab940ea48744e09a5a8663b55"
+    },
+    {
+      "path": "tests/local-prescription.browser.mjs",
+      "bytes": 11589,
+      "sha256": "f03ff586ca697756cc28ad9940b0c4603c3117138c4911776f14d06f0a60f5c0",
+      "lf_sha256": "f03ff586ca697756cc28ad9940b0c4603c3117138c4911776f14d06f0a60f5c0"
+    },
+    {
+      "path": "tests/m19-prescriptions.test.js",
+      "bytes": 6533,
+      "sha256": "f0ee45b20200ed828448f6f0547b11ad48c1ff402c1930a82f2f0bf7a33e5296",
+      "lf_sha256": "f0ee45b20200ed828448f6f0547b11ad48c1ff402c1930a82f2f0bf7a33e5296"
+    },
+    {
+      "path": "tests/yzh-clin-10-prescription-lifecycle.test.js",
+      "bytes": 12942,
+      "sha256": "9264057f40206cf1817f87ad1b511c061970beeb9b86e18a1f9dd9c40c417ed2",
+      "lf_sha256": "9264057f40206cf1817f87ad1b511c061970beeb9b86e18a1f9dd9c40c417ed2"
+    }
+  ],
+  "excluded_self": "docs/JAZTIN_J09_MANIFEST_20261118.json",
+  "j02_to_j08_history": {
+    "published_j02": "53b0e2e1cea0a1c4db1c498eb80b8fb3e81d77da",
+    "starting_j08": "39ba5ede70c17fcb27ff779511ca2aa92166daba",
+    "linear": true,
+    "checkpoints": {
+      "3": "53aa0f4635eaa1790b57a5a7a766e478807583c4",
+      "4": "295dc8bad18199a699f8fa310be790a7b513a0f7",
+      "5": "613a85a508fa7a93ad4842c5f568d5a91d8db878",
+      "6": "db1eda42170b58a41b596e896c0d460a1b3de4a7",
+      "7": "e4a3536d4d9fefd128f9d57c67176a5f391ecc2f",
+      "8": "39ba5ede70c17fcb27ff779511ca2aa92166daba"
+    },
+    "commits": [
+      {
+        "sha": "21a22b56d1f286f4e46b528509fa1f2f885a28ab",
+        "parent": "53b0e2e1cea0a1c4db1c498eb80b8fb3e81d77da"
+      },
+      {
+        "sha": "ed029a87362b6ef2f48069d7c79a079d190aa34e",
+        "parent": "21a22b56d1f286f4e46b528509fa1f2f885a28ab"
+      },
+      {
+        "sha": "53aa0f4635eaa1790b57a5a7a766e478807583c4",
+        "parent": "ed029a87362b6ef2f48069d7c79a079d190aa34e"
+      },
+      {
+        "sha": "9cc8b9cda90b23726dc1d2bd6269a26caa0fef2d",
+        "parent": "53aa0f4635eaa1790b57a5a7a766e478807583c4"
+      },
+      {
+        "sha": "ee80c20cad1f1ec895610cbd9d881ff6c40d86c7",
+        "parent": "9cc8b9cda90b23726dc1d2bd6269a26caa0fef2d"
+      },
+      {
+        "sha": "295dc8bad18199a699f8fa310be790a7b513a0f7",
+        "parent": "ee80c20cad1f1ec895610cbd9d881ff6c40d86c7"
+      },
+      {
+        "sha": "15dec2e0ddaca8a75b675da467bec1e45c0efae6",
+        "parent": "295dc8bad18199a699f8fa310be790a7b513a0f7"
+      },
+      {
+        "sha": "613a85a508fa7a93ad4842c5f568d5a91d8db878",
+        "parent": "15dec2e0ddaca8a75b675da467bec1e45c0efae6"
+      },
+      {
+        "sha": "16a6473041c7f93f01f10fe6b56ac1afdec27219",
+        "parent": "613a85a508fa7a93ad4842c5f568d5a91d8db878"
+      },
+      {
+        "sha": "a0068eac62a38ecdf8e4db325a6efb02f52c4db8",
+        "parent": "16a6473041c7f93f01f10fe6b56ac1afdec27219"
+      },
+      {
+        "sha": "db1eda42170b58a41b596e896c0d460a1b3de4a7",
+        "parent": "a0068eac62a38ecdf8e4db325a6efb02f52c4db8"
+      },
+      {
+        "sha": "ef16717957626edc3d0ae2495e7b451b19702a8f",
+        "parent": "db1eda42170b58a41b596e896c0d460a1b3de4a7"
+      },
+      {
+        "sha": "e4a3536d4d9fefd128f9d57c67176a5f391ecc2f",
+        "parent": "ef16717957626edc3d0ae2495e7b451b19702a8f"
+      },
+      {
+        "sha": "bbdefbb2a974eb54770d99156aef85d0e773a9d5",
+        "parent": "e4a3536d4d9fefd128f9d57c67176a5f391ecc2f"
+      },
+      {
+        "sha": "39ba5ede70c17fcb27ff779511ca2aa92166daba",
+        "parent": "bbdefbb2a974eb54770d99156aef85d0e773a9d5"
+      }
+    ],
+    "frozen_archives": [
+      {
+        "path": "/private/tmp/jaztin-j04-delivery-20261117/dentalops-jaztin-j04-295dc8b.zip",
+        "sha256": "c276d7fb7f582cd0490244f88ed4aa62d2e288d4d33fe15c1c617d402f74e28f"
+      },
+      {
+        "path": "/private/tmp/jaztin-j05-delivery-20261118/dentalops-jaztin-j05-613a85a.zip",
+        "sha256": "e76379b448fdc119de91b4cec8c3d2c54a7a3a10cb8888f28bb6ece460168e11"
+      },
+      {
+        "path": "/private/tmp/jaztin-j06-delivery-20261118/dentalops-jaztin-j06-db1eda4.zip",
+        "sha256": "65b2983387cab6958c451902dd5680ffa0272a2560162b6656fe01b89059dedc"
+      },
+      {
+        "path": "/private/tmp/jaztin-j07-delivery-20261118/dentalops-jaztin-j07-e4a3536.zip",
+        "sha256": "6457f91074e889d74b6b42dfe307c3b80dfe63e079d02958c01b2565e399b979"
+      },
+      {
+        "path": "/private/tmp/jaztin-j08-delivery-20261118/dentalops-jaztin-j08-39ba5ed.zip",
+        "sha256": "c12f6a4adbf83455d30c60aed25ffb77137b4173f403c0cf1355b5f7234d5288"
+      },
+      {
+        "path": "/private/tmp/jaztin-j03-delivery-20261117/clinical-patient-j03.zip",
+        "sha256": "eb8dbdc5d292563517ad5a254ca5bdfb30f7d1fc14b9592e59340c14e637eef0"
+      }
+    ],
+    "gen09_unchanged_components": [
+      {
+        "path": "src/patient/pages/Home.jsx",
+        "sha256": "7f83b3d4bcb4185b4774dcc3175de34e85b3fccdc098e7a2d2aff1bee1046f55"
+      },
+      {
+        "path": "src/patient/pages/Visits.jsx",
+        "sha256": "612fa85f4ae870316316e20c0d08d5fb24796269988027c4bb29e7d0d17712eb"
+      },
+      {
+        "path": "src/pages/Clinical.jsx",
+        "sha256": "2533b8b9d146021040d85b6cc6373ab289701d100f0f9ede7e173ee260539cb8"
+      }
+    ],
+    "j03_zip_source_verified_against_git": true
+  },
+  "github_read_only_preflight": {
+    "workflows": {
+      "total_count": 0,
+      "items": []
+    },
+    "deployments": [
+      {
+        "sha": "b0df61212df12126d1f22d97a32af803b8bc1558",
+        "ref": "b0df61212df12126d1f22d97a32af803b8bc1558",
+        "environment": "Preview",
+        "created_at": "2026-11-03T14:28:20Z"
+      },
+      {
+        "sha": "07bc0470aee63d8dba6b66d0490f04fb921cc8d7",
+        "ref": "07bc0470aee63d8dba6b66d0490f04fb921cc8d7",
+        "environment": "Preview",
+        "created_at": "2026-11-03T11:25:25Z"
+      },
+      {
+        "sha": "a6a0de5bf36c77a43d948b98f821940bac41df3d",
+        "ref": "a6a0de5bf36c77a43d948b98f821940bac41df3d",
+        "environment": "Preview",
+        "created_at": "2026-11-02T13:20:21Z"
+      },
+      {
+        "sha": "3322b8f3156dd6a1669677b216d3a561337346e6",
+        "ref": "3322b8f3156dd6a1669677b216d3a561337346e6",
+        "environment": "Preview",
+        "created_at": "2026-11-02T13:10:52Z"
+      },
+      {
+        "sha": "714a9a54b46e51c690ce698dde0b37fce8dfb14f",
+        "ref": "714a9a54b46e51c690ce698dde0b37fce8dfb14f",
+        "environment": "Preview",
+        "created_at": "2026-11-02T13:09:41Z"
+      },
+      {
+        "sha": "cc5e8f6925728e33f7aaa2d4ceffe9c070516f13",
+        "ref": "cc5e8f6925728e33f7aaa2d4ceffe9c070516f13",
+        "environment": "Preview",
+        "created_at": "2026-11-02T13:06:53Z"
+      },
+      {
+        "sha": "2b9c891b0195198c970169fc6b752cdc038176b0",
+        "ref": "2b9c891b0195198c970169fc6b752cdc038176b0",
+        "environment": "Preview",
+        "created_at": "2026-10-31T13:07:01Z"
+      },
+      {
+        "sha": "a4033148d873b612f67fb3524e320213a4a5206c",
+        "ref": "a4033148d873b612f67fb3524e320213a4a5206c",
+        "environment": "Preview",
+        "created_at": "2026-10-31T12:34:13Z"
+      },
+      {
+        "sha": "6b93754d425acdabb580ae463f36d0452eb456f7",
+        "ref": "6b93754d425acdabb580ae463f36d0452eb456f7",
+        "environment": "Preview",
+        "created_at": "2026-10-31T12:32:09Z"
+      },
+      {
+        "sha": "ba9bc975bf70f5458bc7fd0d0956390c0ddbde71",
+        "ref": "ba9bc975bf70f5458bc7fd0d0956390c0ddbde71",
+        "environment": "Preview",
+        "created_at": "2026-10-31T11:28:36Z"
+      },
+      {
+        "sha": "f8042d11a04c2b1ec26a10b443b80361edf28537",
+        "ref": "f8042d11a04c2b1ec26a10b443b80361edf28537",
+        "environment": "Preview",
+        "created_at": "2026-10-31T11:05:35Z"
+      },
+      {
+        "sha": "f0850c591bb1b3df0da6156076abed20192139d4",
+        "ref": "f0850c591bb1b3df0da6156076abed20192139d4",
+        "environment": "Preview",
+        "created_at": "2026-10-31T10:58:39Z"
+      },
+      {
+        "sha": "85a9552bf5544c73db6bde9f7b01792a5cf9cb0a",
+        "ref": "85a9552bf5544c73db6bde9f7b01792a5cf9cb0a",
+        "environment": "Preview",
+        "created_at": "2026-10-29T16:44:14Z"
+      },
+      {
+        "sha": "253cac0963601f756c36f4eea856a73193200a40",
+        "ref": "253cac0963601f756c36f4eea856a73193200a40",
+        "environment": "Preview",
+        "created_at": "2026-10-29T16:28:34Z"
+      },
+      {
+        "sha": "21118212ff7bf0d1a97b1e663cd1f54ad9dd0344",
+        "ref": "21118212ff7bf0d1a97b1e663cd1f54ad9dd0344",
+        "environment": "Preview",
+        "created_at": "2026-10-29T16:25:23Z"
+      },
+      {
+        "sha": "258302683394b037e85580c7a9d4cca8ba5be790",
+        "ref": "258302683394b037e85580c7a9d4cca8ba5be790",
+        "environment": "Preview",
+        "created_at": "2026-10-29T16:16:46Z"
+      },
+      {
+        "sha": "4c993244416ec9b0530e1d16acfb6c9e471fac9c",
+        "ref": "4c993244416ec9b0530e1d16acfb6c9e471fac9c",
+        "environment": "Preview",
+        "created_at": "2026-10-29T16:07:28Z"
+      },
+      {
+        "sha": "5dfa7dd063fa158c92258736fd4e37bbb348c731",
+        "ref": "5dfa7dd063fa158c92258736fd4e37bbb348c731",
+        "environment": "Preview",
+        "created_at": "2026-10-29T16:07:15Z"
+      },
+      {
+        "sha": "edcaa13ee92327151663a2db25298138de9350d0",
+        "ref": "edcaa13ee92327151663a2db25298138de9350d0",
+        "environment": "Preview",
+        "created_at": "2026-10-29T16:06:54Z"
+      },
+      {
+        "sha": "aa19d44d598d2488a0b597d01113f1ef22dc70cf",
+        "ref": "aa19d44d598d2488a0b597d01113f1ef22dc70cf",
+        "environment": "Preview",
+        "created_at": "2026-10-29T15:59:01Z"
+      }
+    ],
+    "hooks": {
+      "unverified": true,
+      "reason": "HTTP Error 401: Unauthorized"
+    },
+    "local_pre_push_hook_exists": false,
+    "custom_hooks_path_configured": false,
+    "remote": "https://github.com/ccadaverr/multibranch-dental-clinic.git",
+    "observed_remote": {
+      "main": "d972ebd9f20890593ce7b218fe7b28315b3b1221",
+      "feature/jaztin-fullstack-qa-20261117": "53b0e2e1cea0a1c4db1c498eb80b8fb3e81d77da",
+      "feature/jaztin-j08-unslop-20261118": null
+    }
+  },
+  "protected_unchanged": [
+    {
+      "path": "src/pages/DentalChart.jsx",
+      "sha256": "f3327d36b304ede592c610c83791cee13100b152e474ce5c9f1868f1b6ec2729"
+    },
+    {
+      "path": "src/api-client.js",
+      "sha256": "4c31bf84c7a4c133882bbfb707b7862c74adfefc55b1bdbad1801308d288f553"
+    },
+    {
+      "path": "src/components.jsx",
+      "sha256": "81f6d1f6c2d8f835bb1dd0451abfb5371a7104a6d61d022259377ed49f13efaa"
+    },
+    {
+      "path": "src/clinical-care-experience.css",
+      "sha256": "cce524f1c4a951fc16d8cb82afe2f7209b997152ac7d42fcc182210a583ae723"
+    },
+    {
+      "path": "src/patient/care-experience.css",
+      "sha256": "601c975e762e010206d3d1052ec2f4a722e3a906e10fa0e606a8c04ffb2ee83b"
+    },
+    {
+      "path": "src/patient/pages/Prescriptions.jsx",
+      "sha256": "1c4695cd3feaa6253db507e08b2412893a61aef76848e126ca53c859f5722ea5"
+    },
+    {
+      "path": "backend/app/Http/Controllers/PrescriptionController.php",
+      "sha256": "5feba6a777ad1ab742a832d5680962f5c4577581fb345f49b2dab325c22605cb"
+    },
+    {
+      "path": "backend/app/Http/Controllers/FollowupController.php",
+      "sha256": "575280af3705f7369c25bd2a5381060c3c7ae7e20ead504f151f6c07d7b6697e"
+    },
+    {
+      "path": "backend/app/Http/Controllers/HmoController.php",
+      "sha256": "5efc8741065a349914c2d5682bca90ad8a1416da45bd49bac2b4b53f3be00696"
+    },
+    {
+      "path": "backend/app/Http/Controllers/Reference/StaffProfileController.php",
+      "sha256": "9472d6e8066db98ae5452f1e9337db1e79e3ed4e77e119354e24826294e5222c"
+    },
+    {
+      "path": "backend/config/cors.php",
+      "sha256": "56936f6ead0943ae67e9a1ede185da33675a990e7d17cc673d9cad11abe0d925"
+    },
+    {
+      "path": "backend/docker/entrypoint.sh",
+      "sha256": "5ee79978981ef9f2b17d6d41e85d547c33fcfbbf544a06897592601a3d4eb7af"
+    },
+    {
+      "path": "vercel.json",
+      "sha256": "33760aa821885d8a168e23ffa2ef0ee9e26dd4615ba5f5cfe568df8e553b770f"
+    },
+    {
+      "path": "docs/INTEGRATION_QA_LEDGER_20261117.json",
+      "sha256": "9e3650a343474fc165b1bffe0d6b0ad1907451ddc83962d3506b1c845f5388e9"
+    }
+  ],
+  "backend_api_cors_schema_changes": false,
+  "held_migrations_executed_or_introduced": false,
+  "conversation_grants_installed": false,
+  "schema_evidence": {
+    "owned_target_port": 55547,
+    "selected_existing_migrations": 87,
+    "held_ledger_entries": 0,
+    "conversation_grant_tables": 0
+  },
+  "tests": {
+    "focused_passed": 96,
+    "frontend": {
+      "total": 2051,
+      "passed": 2043,
+      "skipped": 8,
+      "failed": 0
+    },
+    "postgres": {
+      "tests": 95,
+      "assertions": 2040,
+      "passed": true
+    },
+    "backend_unit": {
+      "tests": 252,
+      "assertions": 1193,
+      "notices": 30,
+      "passed": true
+    },
+    "smoke_groups_passed": 17,
+    "build_modules": 392,
+    "predefense": {
+      "failures": 6,
+      "warnings": 6,
+      "classification": "Environment/fixture/operational readiness; services intentionally inactive, sparse synthetic data, aged unsent outbox"
+    }
+  },
+  "measurements": {
+    "catalog_get_before": 4,
+    "catalog_get_after": 1,
+    "exact_visit_get_before": 2,
+    "exact_visit_get_after": 1,
+    "unchanged_draft_put_before": 1,
+    "unchanged_draft_put_after": 0,
+    "unchanged_draft_revision_before": [
+      1,
+      3
+    ],
+    "unchanged_draft_revision_after": [
+      1,
+      2
+    ],
+    "dirty_draft_update_issue_before_after": [
+      1,
+      1
+    ],
+    "blank_issue_activations_before_after": [
+      3,
+      3
+    ],
+    "saved_draft_issue_activations_before_after": [
+      2,
+      2
+    ],
+    "patient_cancel_activations_reference_repeat": [
+      3,
+      3
+    ],
+    "patient_cancel_reason_selections": 1,
+    "dentist_identity_summary_activations_reference_repeat": [
+      1,
+      1
+    ],
+    "no_global_click_reduction_claim": true
+  },
+  "qa": {
+    "GEN-09": "Owned comparative evidence advanced; original requirement remains Partial",
+    "whole_qa_promotions": 0,
+    "authoritative_ledger_totals": {
+      "Complete": 25,
+      "Partial": 32,
+      "Blocked": 11,
+      "reported_integrated_acceptances": 9
+    }
+  },
+  "known_security_dependencies": [
+    "RC-02: retain A13 chart authorization and 403 handling; J09 does not edit DentalChart.jsx",
+    "RA-03: current backend branch-wide modification/authorship remains unresolved here; A13 must enforce actual Dentist author/assignment on read/update/issue",
+    "RA-04: follow-up authorization/concurrency remains A13-owned"
+  ],
+  "private_evidence": [
+    {
+      "path": "/private/tmp/j09-focused-before.log",
+      "bytes": 4579,
+      "sha256": "ddf36eb5b64ceb21ce6bcf52fac2ef41f2c298673c0727695b41ea350371361c",
+      "lf_sha256": "ddf36eb5b64ceb21ce6bcf52fac2ef41f2c298673c0727695b41ea350371361c"
+    },
+    {
+      "path": "/private/tmp/j09-focused-accepted.log",
+      "bytes": 21363,
+      "sha256": "b2596b9b357fa5118a0ebafda94723bf8089e699046125a279511688c72d2c6c",
+      "lf_sha256": "b2596b9b357fa5118a0ebafda94723bf8089e699046125a279511688c72d2c6c"
+    },
+    {
+      "path": "/private/tmp/j09-frontend-accepted.log",
+      "bytes": 467327,
+      "sha256": "291b2b494708e1bd5eaa121d141870dd6abded3b36afeb50b585d50d0040725c",
+      "lf_sha256": "291b2b494708e1bd5eaa121d141870dd6abded3b36afeb50b585d50d0040725c"
+    },
+    {
+      "path": "/private/tmp/j09-backend.log",
+      "bytes": 432,
+      "sha256": "efe28653c91262e84955b1d086665eadedd731e548f8f10a8aa7de140978827d",
+      "lf_sha256": "efe28653c91262e84955b1d086665eadedd731e548f8f10a8aa7de140978827d"
+    },
+    {
+      "path": "/private/tmp/j09-backend-unit.log",
+      "bytes": 1020,
+      "sha256": "a3ca261db464c6ef09cefa228d3da02db69b6b264f29fa8cd44432baf877f812",
+      "lf_sha256": "a3ca261db464c6ef09cefa228d3da02db69b6b264f29fa8cd44432baf877f812"
+    },
+    {
+      "path": "/private/tmp/j09-before-final.log",
+      "bytes": 1664,
+      "sha256": "0004c9536ea4520eccd2286474035dd8302369b774a2e7ecfc414d267feba2b4",
+      "lf_sha256": "0004c9536ea4520eccd2286474035dd8302369b774a2e7ecfc414d267feba2b4"
+    },
+    {
+      "path": "/private/tmp/j09-after-confirmed.log",
+      "bytes": 1599,
+      "sha256": "b3c664b8425a32c4ffabcf5c99cbdb1281deae53d324be6156272c8f3e158649",
+      "lf_sha256": "b3c664b8425a32c4ffabcf5c99cbdb1281deae53d324be6156272c8f3e158649"
+    },
+    {
+      "path": "/private/tmp/j09-lifecycle.log",
+      "bytes": 551,
+      "sha256": "93284fa8d08b3c4bbb453b0673ca3d4838097de766707f4f010cd3e4ff249e3d",
+      "lf_sha256": "93284fa8d08b3c4bbb453b0673ca3d4838097de766707f4f010cd3e4ff249e3d"
+    },
+    {
+      "path": "/private/tmp/j09-gen09-final.log",
+      "bytes": 100,
+      "sha256": "bb793fc45deb19ff885c6b037dd876c32c90c362a21b76b5e9e09a6e076be89e",
+      "lf_sha256": "bb793fc45deb19ff885c6b037dd876c32c90c362a21b76b5e9e09a6e076be89e"
+    },
+    {
+      "path": "/private/tmp/j09-layout-accepted.log",
+      "bytes": 131,
+      "sha256": "5e0f0489f5c384f0ddd82f4a2d33fc54c3b879c3c1707c7e812ab64372684293",
+      "lf_sha256": "5e0f0489f5c384f0ddd82f4a2d33fc54c3b879c3c1707c7e812ab64372684293"
+    },
+    {
+      "path": "/private/tmp/j09-smoke-accepted.log",
+      "bytes": 2893,
+      "sha256": "c3769ed471bcdf2c2d0a2e72342343d138d4c1dcc5860fda0440d406066b331e",
+      "lf_sha256": "c3769ed471bcdf2c2d0a2e72342343d138d4c1dcc5860fda0440d406066b331e"
+    },
+    {
+      "path": "/private/tmp/j09-build-accepted.log",
+      "bytes": 7013,
+      "sha256": "549a4ec98589a10e974d2ab6229d80845e3a4549b59ce516ba154a5d5337cbcc",
+      "lf_sha256": "549a4ec98589a10e974d2ab6229d80845e3a4549b59ce516ba154a5d5337cbcc"
+    },
+    {
+      "path": "/private/tmp/j09-predefense-final.log",
+      "bytes": 2606,
+      "sha256": "7866a04a763f9c1e75916b3b770d693549648c25a38b34d46e15f208eb0f7f66",
+      "lf_sha256": "7866a04a763f9c1e75916b3b770d693549648c25a38b34d46e15f208eb0f7f66"
+    },
+    {
+      "path": "/private/tmp/jaztin-j09-20261118/reliability-browser/before-results.json",
+      "bytes": 7764,
+      "sha256": "9417383ca07a04d4284abf4e29ee1ff75c61a1544e4b2cf5feaaba01ef64c13b",
+      "lf_sha256": "9417383ca07a04d4284abf4e29ee1ff75c61a1544e4b2cf5feaaba01ef64c13b"
+    },
+    {
+      "path": "/private/tmp/jaztin-j09-20261118/reliability-browser/after-results.json",
+      "bytes": 6650,
+      "sha256": "1867c83fc70dce634db5787fbf98c5ea4abc3cb5056c566c7c42ef461eb08640",
+      "lf_sha256": "1867c83fc70dce634db5787fbf98c5ea4abc3cb5056c566c7c42ef461eb08640"
+    },
+    {
+      "path": "/private/tmp/jaztin-j09-20261118/lifecycle-browser/journey.json",
+      "bytes": 4657,
+      "sha256": "49950c5cd729a241e9bf0eaed10cc119dc21674224619f26672b9e70712bf112",
+      "lf_sha256": "49950c5cd729a241e9bf0eaed10cc119dc21674224619f26672b9e70712bf112"
+    },
+    {
+      "path": "/private/tmp/jaztin-j09-20261118/gen09-browser/measurements.json",
+      "bytes": 4937,
+      "sha256": "8e44aa07a19896e324671d695766ec3aeb1f423a59f6998b58033912660d8e75",
+      "lf_sha256": "8e44aa07a19896e324671d695766ec3aeb1f423a59f6998b58033912660d8e75"
+    },
+    {
+      "path": "/private/tmp/jaztin-j09-20261118/layout-browser/layout-results.json",
+      "bytes": 205,
+      "sha256": "7ceef2f1de78862f92930af2907ebf94c3afe6e21e0418c6efb958b02264dce6",
+      "lf_sha256": "7ceef2f1de78862f92930af2907ebf94c3afe6e21e0418c6efb958b02264dce6"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react'
 import './odontogram.css'
-import { ConfirmDialog } from '../../components.jsx'
+import { Button, ConfirmDialog } from '../../components.jsx'
 import {
   ADULT_FRONT_ROWS,
   ADULT_LOWER,
@@ -28,9 +28,11 @@ export function Odontogram({
   defaultView = 'top',
   recordingPending = false,
   onDirtyChange,
+  onReviewEncounter,
 }) {
+  const [enlarged,setEnlarged]=useState(false)
   const [view, setView] = useState(defaultView) // 'top' | 'front'
-  const [set, setSet] = useState('adult') // 'adult' | 'primary'
+  const [set, setSet] = useState(()=>PRIMARY_UPPER.includes(selected)||PRIMARY_LOWER.includes(selected)?'primary':'adult') // 'adult' | 'primary'
   const [pendingSelection, setPendingSelection] = useState(null)
   const pendingTarget = useRef(null), toothNodes = useRef(new Map()), restoreTooth = useRef(null)
   const [focusedTooth, setFocusedTooth] = useState(selected || ADULT_UPPER[0])
@@ -307,8 +309,10 @@ export function Odontogram({
               {visibleTeeth.map(t => <option key={t} value={t}>Tooth {toothLabel(t, numbering)} — {getToothFullName(t)}{numbering === 'universal' ? ` (FDI ${t})` : ''}</option>)}
             </select>
           </label>
+          <Button className="od-zoom-control" variant="ghost" aria-pressed={enlarged} onClick={()=>setEnlarged(v=>!v)}>{enlarged?'Fit chart':'Enlarge chart'}</Button>
+          {enlarged&&<p className="od-key-help">Scroll the enlarged diagram horizontally, or use Choose tooth.</p>}
           <p id={`${chartId}-keys`} className="od-key-help">Diagram: Left/Right moves between teeth; Up/Down changes arch; Home/End moves to first/last. Enter or Space opens details; Tab leaves the diagram.</p>
-          <div className="od-diagram" role="toolbar" aria-label="Tooth selection" aria-describedby={`${chartId}-keys`}>
+          <div className={`od-diagram${enlarged?' is-enlarged':''}`} role="toolbar" aria-label="Tooth selection" aria-describedby={`${chartId}-keys`}>
           {view === 'top' ? (
             <svg
               className="od-arch-svg"
@@ -321,8 +325,8 @@ export function Odontogram({
               <line x1="270" y1="30" x2="270" y2="470" className="od-crosshair" />
               <text x="50" y="242" className="od-crosshair-label">Right</text>
               <text x="470" y="242" className="od-crosshair-label" textAnchor="end">Left</text>
-              <text x="278" y="42" className="od-crosshair-label">Upper</text>
-              <text x="278" y="465" className="od-crosshair-label">Lower</text>
+              <text x="278" y="100" className="od-crosshair-label">Upper</text>
+              <text x="278" y="410" className="od-crosshair-label">Lower</text>
 
               {/* Upper Arch Teeth */}
               <g className="od-upper-arch" role="group" aria-label="Upper maxillary arch">
@@ -341,9 +345,8 @@ export function Odontogram({
           )}
           </div>
 
-          <div style={{ marginTop: '12px', fontSize: '12px', color: 'var(--muted, #64748b)' }}>
-            Numbering: <b>{numbering === 'universal' ? 'Universal' : 'FDI'}</b> · Teeth with findings highlighted in indigo.
-          </div>
+          <div className="chart-selection-strip"><span>Numbering: <b>{numbering==='universal'?'Universal':'FDI'}</b><small>Patient's right is shown on your left.</small></span><span aria-live="polite">{selected?<><b>Selected: Tooth {toothLabel(selected,numbering)}</b>{numbering==='universal'&&<small>FDI {selected}</small>}</>:'Choose a tooth to review findings'}</span></div>
+          <ul className="chart-legend" aria-label="Chart legend"><li><i/>No nonbaseline finding shown</li><li><i className="finding"/>Saved finding</li><li><i className="selected"/>Selected tooth</li></ul>
         </div>
 
         {/* Right Panel: Tooth Timeline (if selected) or Chart Summary (if none selected) */}
@@ -359,6 +362,7 @@ export function Odontogram({
               onBack={() => requestSelection(null)}
               canRecord={canRecord}
               onRecord={onRecord}
+              onReviewEncounter={onReviewEncounter}
               branches={branches}
               activeBranchId={activeBranchId}
             />

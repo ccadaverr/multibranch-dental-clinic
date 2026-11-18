@@ -95,12 +95,27 @@ class DocumentController extends Controller
         $user = $request->user();
         abort_unless($user->role === Role::Patient && $user->patient, 403, 'Only patients can access their personal document library.');
 
-        $rows = Document::where('patient_id', $user->patient->id)
+        $v = $request->validate(['per_page' => ['sometimes', 'integer', 'min:1', 'max:100'], 'cursor' => ['nullable', 'string', 'ulid']]);
+        $query = Document::where('patient_id', $user->patient->id)
             ->where('status', '!=', 'Retracted')
             ->with(['patient.person', 'visit', 'hmoCase', 'branch', 'uploadedBy.person', 'extractions'])
-            ->latest('id')->limit(100)->get();
+            ->latest('id');
+        if (! empty($v['cursor'])) {
+            $cursor = Document::where('patient_id', $user->patient->id)->where('public_id', strtolower($v['cursor']))->first();
+            abort_unless($cursor, 422, 'The document cursor could not be verified.');
+            $query->where('id', '<', $cursor->id);
+        }
+        // Opt-in keyset paging preserves the existing bounded legacy response.
+        $paged = $request->has('per_page') || $request->has('cursor');
+        $size = (int) ($v['per_page'] ?? 100);
+        $rows = $query->limit($size + ($paged ? 1 : 0))->get();
+        $more = $rows->count() > $size;
+        $rows = $rows->take($size)->values();
 
-        return response()->json(['data' => DocumentResource::collection($rows)]);
+        return response()->json(['data' => DocumentResource::collection($rows)] + ($paged ? ['meta' => [
+            'patient_id' => $user->patient->public_id,
+            'next_cursor' => $more ? $rows->last()->public_id : null,
+        ]] : []))->header('Cache-Control', 'private, no-store');
     }
 
     public function store(Request $request): JsonResponse
@@ -233,7 +248,7 @@ class DocumentController extends Controller
         abort_unless($user->role === Role::Patient && $user->patient, 403);
         $consents = PatientConsent::where('patient_id', $user->patient->id)->with(['patient', 'document', 'recordedBy.person'])->latest('id')->get();
 
-        return response()->json(['data' => PatientConsentResource::collection($consents)]);
+        return response()->json(['data' => PatientConsentResource::collection($consents)])->header('Cache-Control', 'private, no-store');
     }
 
     public function grantConsent(Request $request, Patient $patient): JsonResponse

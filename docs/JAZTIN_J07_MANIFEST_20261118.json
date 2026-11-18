@@ -1,0 +1,251 @@
+{
+  "base_j06_frozen": "db1eda42170b58a41b596e896c0d460a1b3de4a7",
+  "implementation_head": "ef16717957626edc3d0ae2495e7b451b19702a8f",
+  "branch": "feature/jaztin-fullstack-qa-20261117",
+  "publication": "Local only; no push, merge, deployment or Windows acceptance",
+  "qa": {
+    "GEN-08": {
+      "acceptance": "All dashboards share the same tokens and components with no visible style drift.",
+      "tasks": [
+        "Audit all dashboards for inconsistent colors, spacing, typography, radii, and components",
+        "Define shared design tokens (colors, spacing, type scale, radii) and shared components",
+        "Apply to Staff, Dentist, and Owner dashboards; publish a short style guide in the repo"
+      ],
+      "status": "Partial advance"
+    },
+    "GEN-13": {
+      "acceptance": "No text refresh buttons remain; icon triggers refresh with visible loading state.",
+      "tasks": [
+        "Replace every text \"Refresh\" button with a refresh icon button",
+        "Add tooltip + aria-label; show a spin/loading state while refreshing"
+      ],
+      "status": "Partial advance"
+    },
+    "DEN-06": {
+      "acceptance": "Medicine dropdown shows only medicine names.",
+      "tasks": [
+        "Remove the dosage text from the medicine dropdown options"
+      ],
+      "status": "Regression only"
+    },
+    "DEN-07": {
+      "acceptance": "Remove medicine is clearly red.",
+      "tasks": [
+        "Make the \"remove medicine\" control red (default and hover states)"
+      ],
+      "status": "Regression only"
+    },
+    "DEN-08": {
+      "acceptance": "Save button is correctly sized and aligned with the license number field.",
+      "tasks": [
+        "Fix the Save button size near the license number on My prescription",
+        "Match the standard button size from GEN-12"
+      ],
+      "status": "Regression only"
+    }
+  },
+  "authoritative_ledger_totals": {
+    "Complete": 25,
+    "Partial": 32,
+    "Blocked": 11,
+    "integrated_acceptances": 9
+  },
+  "whole_qa_promotions": 0,
+  "api_cors_schema_changes": false,
+  "existing_api_dependencies": [
+    "getVisit: exact authorized Visit with Patient/branch/status/revision",
+    "listPrescriptions: page/per_page and exact Patient/Visit filters",
+    "existing draft/issue/PDF endpoints and idempotency/CAS contracts"
+  ],
+  "excluded_self": "docs/JAZTIN_J07_MANIFEST_20261118.json",
+  "files": [
+    {
+      "path": "backend/tests/Feature/Prescriptions/PrescriptionEncounterReadTest.php",
+      "bytes": 3212,
+      "sha256": "bfdb624b3e272d9596c7dd364c0e0ba890268ef3d0ffa81140723dcb37852216",
+      "lf_sha256": "bfdb624b3e272d9596c7dd364c0e0ba890268ef3d0ffa81140723dcb37852216"
+    },
+    {
+      "path": "docs/JAZTIN_J06_FROZEN_HANDOFF_20261118.json",
+      "bytes": 15665,
+      "sha256": "e1fbfd202108fc80106fa876a12e947ac65fc9d47321e6711b44484900189965",
+      "lf_sha256": "e1fbfd202108fc80106fa876a12e947ac65fc9d47321e6711b44484900189965"
+    },
+    {
+      "path": "docs/JAZTIN_J07_SPRINT_20261118.md",
+      "bytes": 13230,
+      "sha256": "b5eab017c6914583a41664e2929dbf634c9d641fa119b1476a750508efe07d0a",
+      "lf_sha256": "b5eab017c6914583a41664e2929dbf634c9d641fa119b1476a750508efe07d0a"
+    },
+    {
+      "path": "src/clinical-care-experience.css",
+      "bytes": 6233,
+      "sha256": "cce524f1c4a951fc16d8cb82afe2f7209b997152ac7d42fcc182210a583ae723",
+      "lf_sha256": "cce524f1c4a951fc16d8cb82afe2f7209b997152ac7d42fcc182210a583ae723"
+    },
+    {
+      "path": "src/pages/EncounterCare.jsx",
+      "bytes": 7031,
+      "sha256": "d81dd22ef1151b40322cc2b3bf189dd8dfda38430e6c31e6ec1069be862201e3",
+      "lf_sha256": "d81dd22ef1151b40322cc2b3bf189dd8dfda38430e6c31e6ec1069be862201e3"
+    },
+    {
+      "path": "src/pages/EncounterPrescriptions.jsx",
+      "bytes": 2879,
+      "sha256": "9fc0b9aff9841df5b49a52e44dc576ff6fce2ad90fde347ce68c5c8e578c059d",
+      "lf_sha256": "9fc0b9aff9841df5b49a52e44dc576ff6fce2ad90fde347ce68c5c8e578c059d"
+    },
+    {
+      "path": "src/pages/ServerPrescriptions.jsx",
+      "bytes": 44021,
+      "sha256": "5c0b9d2c2118078791c711a65ddf6bc2e00da8a30d9dabe57889a8e0b81870b2",
+      "lf_sha256": "5c0b9d2c2118078791c711a65ddf6bc2e00da8a30d9dabe57889a8e0b81870b2"
+    },
+    {
+      "path": "src/prescription-readback.js",
+      "bytes": 1429,
+      "sha256": "229bd152e9cb943fa745439645080571dd09f4fd3f3d90cd87759296736ca508",
+      "lf_sha256": "229bd152e9cb943fa745439645080571dd09f4fd3f3d90cd87759296736ca508"
+    },
+    {
+      "path": "src/prescription-visit-read.js",
+      "bytes": 1974,
+      "sha256": "645192632b64acc85c11d576d908dc829870fcaf1b684dd3bd1905b885b0f1ed",
+      "lf_sha256": "645192632b64acc85c11d576d908dc829870fcaf1b684dd3bd1905b885b0f1ed"
+    },
+    {
+      "path": "tests/j07-clinical-prescription.browser.mjs",
+      "bytes": 13434,
+      "sha256": "04ea49082ba8df7e68112db83c0e048ad43b2188fb0da41fa6a8397e21f04dce",
+      "lf_sha256": "04ea49082ba8df7e68112db83c0e048ad43b2188fb0da41fa6a8397e21f04dce"
+    },
+    {
+      "path": "tests/j07-prescription-context.test.js",
+      "bytes": 3274,
+      "sha256": "ff7ac0df54e35b55aa66e646092e26cd3bd9f9e87c5aa87f3b3cce105c69e18b",
+      "lf_sha256": "ff7ac0df54e35b55aa66e646092e26cd3bd9f9e87c5aa87f3b3cce105c69e18b"
+    },
+    {
+      "path": "tests/j07-prescription-layout.browser.mjs",
+      "bytes": 2954,
+      "sha256": "8db3d2a24ec3497fde9b14f66d84b00fe514787362eab41bca7830e478907b25",
+      "lf_sha256": "8db3d2a24ec3497fde9b14f66d84b00fe514787362eab41bca7830e478907b25"
+    },
+    {
+      "path": "tests/prescription-readback.test.js",
+      "bytes": 2047,
+      "sha256": "e6485b726274a24bca9871b5d9ed889dbf2896c1cca8224ce1800b63b8ace111",
+      "lf_sha256": "e6485b726274a24bca9871b5d9ed889dbf2896c1cca8224ce1800b63b8ace111"
+    },
+    {
+      "path": "tests/yzh-clin-10-prescription-lifecycle.test.js",
+      "bytes": 12339,
+      "sha256": "c400ed65b75c9720c66f018bd301009fc24aedff39a2522bd778733868d9815d",
+      "lf_sha256": "c400ed65b75c9720c66f018bd301009fc24aedff39a2522bd778733868d9815d"
+    },
+    {
+      "path": "tests/yzh-clin-11-auth-lifecycle.test.js",
+      "bytes": 11548,
+      "sha256": "e6f95cac1471ab918d7969e3ac70398a9590df3793d236c29451be66d38a868a",
+      "lf_sha256": "e6f95cac1471ab918d7969e3ac70398a9590df3793d236c29451be66d38a868a"
+    }
+  ],
+  "private_evidence": [
+    {
+      "path": "/private/tmp/j07-focused-final.log",
+      "bytes": 4289,
+      "sha256": "c2553e2a021be5cf960da028f07eb9496818bbafb686f12dda71dee10d5c63d4",
+      "lf_sha256": "c2553e2a021be5cf960da028f07eb9496818bbafb686f12dda71dee10d5c63d4"
+    },
+    {
+      "path": "/private/tmp/j07-controller-focused.log",
+      "bytes": 16915,
+      "sha256": "8e4049ff07e7899fa525de453f12d1c32c9a7c33f550998cd27400ec0adba771",
+      "lf_sha256": "8e4049ff07e7899fa525de453f12d1c32c9a7c33f550998cd27400ec0adba771"
+    },
+    {
+      "path": "/private/tmp/j07-focused-pg.log",
+      "bytes": 350,
+      "sha256": "f5bf108f856fe8754f4d29b0f73f84bdaaaec8a34185e85aa24c81f441cc404b",
+      "lf_sha256": "f5bf108f856fe8754f4d29b0f73f84bdaaaec8a34185e85aa24c81f441cc404b"
+    },
+    {
+      "path": "/private/tmp/j07-backend-consolidated.log",
+      "bytes": 432,
+      "sha256": "adc0bde6ff752fea317e4bce285314596b3feacd2099cf06d258158a7e97e094",
+      "lf_sha256": "adc0bde6ff752fea317e4bce285314596b3feacd2099cf06d258158a7e97e094"
+    },
+    {
+      "path": "/private/tmp/j07-backend-unit.log",
+      "bytes": 99,
+      "sha256": "326e35e19ae4b9820d3c7fa7e46269ed57af7b49af26c9c8b187aa263cec4421",
+      "lf_sha256": "326e35e19ae4b9820d3c7fa7e46269ed57af7b49af26c9c8b187aa263cec4421"
+    },
+    {
+      "path": "/private/tmp/j07-frontend-final.log",
+      "bytes": 465096,
+      "sha256": "6297fd1df9fe252163bb576d255e13f9e445245c1aaca25f1078a1a53e954eb7",
+      "lf_sha256": "6297fd1df9fe252163bb576d255e13f9e445245c1aaca25f1078a1a53e954eb7"
+    },
+    {
+      "path": "/private/tmp/j07-j04-browser.log",
+      "bytes": 890,
+      "sha256": "38ec5ca0716188eff6f869c389a4830079b724d8d7bba6bdd53931dd18659b33",
+      "lf_sha256": "38ec5ca0716188eff6f869c389a4830079b724d8d7bba6bdd53931dd18659b33"
+    },
+    {
+      "path": "/private/tmp/j07-clinical-browser-final.log",
+      "bytes": 1300,
+      "sha256": "61b358e463167fe5061d2b94309da8fb95774a2a69efa47c7fe7764df2cc8360",
+      "lf_sha256": "61b358e463167fe5061d2b94309da8fb95774a2a69efa47c7fe7764df2cc8360"
+    },
+    {
+      "path": "/private/tmp/j07-patient-browser.log",
+      "bytes": 123,
+      "sha256": "4ae561e8a6ffad29e9a86238a38b06e1d525b4f231a09963b5e76874d188ba96",
+      "lf_sha256": "4ae561e8a6ffad29e9a86238a38b06e1d525b4f231a09963b5e76874d188ba96"
+    },
+    {
+      "path": "/private/tmp/j07-layout-browser.log",
+      "bytes": 132,
+      "sha256": "ded58b9ccc2837095d9a90cfc895be87df2768e277fa2da00852944169019a77",
+      "lf_sha256": "ded58b9ccc2837095d9a90cfc895be87df2768e277fa2da00852944169019a77"
+    },
+    {
+      "path": "/private/tmp/j07-smoke-final.log",
+      "bytes": 2893,
+      "sha256": "c3769ed471bcdf2c2d0a2e72342343d138d4c1dcc5860fda0440d406066b331e",
+      "lf_sha256": "c3769ed471bcdf2c2d0a2e72342343d138d4c1dcc5860fda0440d406066b331e"
+    },
+    {
+      "path": "/private/tmp/j07-build-final.log",
+      "bytes": 7013,
+      "sha256": "5c54f1b4e6f1a3af794b2480d8c6675dde2b5828df4aa9a7277474386c460bc2",
+      "lf_sha256": "5c54f1b4e6f1a3af794b2480d8c6675dde2b5828df4aa9a7277474386c460bc2"
+    },
+    {
+      "path": "/private/tmp/j07-pint-final.log",
+      "bytes": 33,
+      "sha256": "cd1a94fc2cf6a965b86e1a4809d6c7fb9148b1ee374e1010ed2ac96ff4876ec2",
+      "lf_sha256": "cd1a94fc2cf6a965b86e1a4809d6c7fb9148b1ee374e1010ed2ac96ff4876ec2"
+    },
+    {
+      "path": "/private/tmp/j07-predefense-final.log",
+      "bytes": 2493,
+      "sha256": "5f155b18aefd6fa90ed636d0789ef67e54656cee17fbe4ed6a8348ef016a0de3",
+      "lf_sha256": "5f155b18aefd6fa90ed636d0789ef67e54656cee17fbe4ed6a8348ef016a0de3"
+    },
+    {
+      "path": "/private/tmp/jaztin-j07-20261118/clinical-browser/journey.json",
+      "bytes": 4916,
+      "sha256": "6f279a2ccd908dfc315784b8fc185633a44a055e1e2f9b0503a92888121ecb94",
+      "lf_sha256": "6f279a2ccd908dfc315784b8fc185633a44a055e1e2f9b0503a92888121ecb94"
+    },
+    {
+      "path": "/private/tmp/jaztin-j07-20261118/clinical-browser/layout-results.json",
+      "bytes": 205,
+      "sha256": "a66bd3931c4168b926da01b79a87a9b6f156f8310d0f5c753a57e7625cf45024",
+      "lf_sha256": "a66bd3931c4168b926da01b79a87a9b6f156f8310d0f5c753a57e7625cf45024"
+    }
+  ]
+}

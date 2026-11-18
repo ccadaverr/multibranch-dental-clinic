@@ -67,3 +67,41 @@
 .pp-main .pp-invoice-head { align-items:flex-start; flex-wrap:wrap; }
 .pp-main .pp-invoice-head>div { flex:1; min-width:min(170px,100%); }
 .pp-main .pp-invoice-head>.pp-pill { flex-shrink:0; white-space:nowrap; }
+/* Saved Patient history; no shared table or control changes. */
+.history-list { list-style:none; padding:0; display:grid; gap:16px; }
+.history-record { padding:20px; overflow-wrap:anywhere; }
+.patient-history :is(.history-record,.pp-rx-list>li)>header { display:flex; align-items:start; justify-content:space-between; gap:16px; }
+.patient-history h2 { font-size:18px; margin:4px 0 8px; }
+.history-record p { margin:8px 0; }
+.history-amount { font-size:22px; font-weight:600; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.history-facts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; padding-block:16px; border-block:1px solid var(--care-edge); }
+.history-facts dt { font-size:13px; color:var(--care-muted); }.history-facts dd { margin:4px 0 0; font-variant-numeric:tabular-nums; }
+.history-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:16px; }
+.patient-history details { border-top:1px solid var(--care-edge); padding-top:12px; margin-top:16px; color:var(--care-muted); font-size:13px; }
+.patient-history details summary { min-height:32px; cursor:pointer; }.patient-history details p { overflow-wrap:anywhere; }
+@media(max-width:600px){.history-record { padding:18px; }.patient-history .history-record>header { flex-wrap:wrap; }.history-facts { grid-template-columns:1fr; }}
+/* J08 polish informed by Unslop, Damir Sokolovsky, CC BY 4.0.
+   Attribution and adaptations: docs/JAZTIN_J08_UNSLOP_20261118.md. */
+.care-home .care-heading { margin-bottom:16px; }
+.care-home .care-heading h1 { margin:4px 0 0; }
+.care-home :is(h1,h2,h3),.care-prescriptions :is(h1,h2,h3),.care-family-head h1,.care-family-person h3,.care-family-form h2 { letter-spacing:0; }
+.care-home .care-balance { padding:24px; }
+.care-family-person { flex:1; min-width:0; }
+.care-family-person h3 { margin:0 0 12px; font-size:16px; font-weight:600; }
+.care-family-person dl { display:flex; flex-wrap:wrap; gap:12px 24px; margin:0; }
+.care-family-person dt,.care-rx-facts dt { color:var(--care-muted); font-size:13px; }
+.care-family-person dd,.care-rx-facts dd { margin:4px 0 0; font-variant-numeric:tabular-nums; }
+.care-prescriptions .pp-rx-list { margin:0; gap:16px; }
+.pp-main .care-prescriptions .pp-rx-list>li+li { margin-top:0; }
+.care-prescriptions .pp-rx-list>li { display:block; }
+.care-prescriptions .pp-rx-list>li:not(.is-void) { background:#fff; }
+.care-rx-heading { display:flex; align-items:start; justify-content:space-between; gap:12px; }
+.care-rx-heading>div { min-width:0; }
+.care-prescriptions .care-rx-heading h2 { font-size:18px; margin:0 0 4px; }
+.care-rx-status { color:var(--care-muted); font-size:14px; flex-shrink:0; }
+.care-rx-facts { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; padding:16px 0; margin:16px 0; border-block:1px solid var(--care-edge); }
+.care-prescriptions .care-rx-medicines { gap:16px; padding-left:20px; margin:0 0 16px; }
+.care-rx-medicines b { font-weight:600; }
+.care-prescriptions .care-rx-medicines p { margin:4px 0 0; }
+.care-prescriptions .pp-rx-list>li>.pp-hint { margin:12px 0; }
+@media(max-width:600px) { .care-rx-facts { grid-template-columns:1fr; gap:12px; }.care-rx-heading { flex-wrap:wrap; }.care-rx-heading>.pp-void { flex-basis:100%; } }

@@ -1,7 +1,7 @@
 import React, {useEffect,useRef,useState} from 'react'
 import {Button,Icon,RefreshButton} from '../../components.jsx'
 import {listAppointments,myBillingInvoices,myDependents} from '../../api-client.js'
-import {dateLong,greeting,money,splitAppointments,time12,todayManila} from '../format.js'
+import {dateLong,money,splitAppointments,time12,todayManila} from '../format.js'
 import {EmptyState,ErrorState,Pill,Skeleton} from '../ui.jsx'
 import {readHomeAppointments,readHomeBalance} from '../home-read.js'
 import {JoinQueueCard} from '../../pages/JoinQueueCard.jsx'
@@ -27,10 +27,9 @@ export function HomePage({me,onNavigate,session,getAuthGeneration}) {
   const owns=()=>session?.active===true&&session?.role==='patient'&&!!session?.serverUserId&&!!patientId&&me?.patient?.id===patientId&&(!getAuthGeneration||generation!=null&&getAuthGeneration()===generation)
   const visits=useHomeRead(current=>owns()?readHomeAppointments(listAppointments,myDependents,patientId,current):Promise.resolve({ok:false}),owner,owns)
   const invoices=useHomeRead(current=>owns()?readHomeBalance(myBillingInvoices,myDependents,patientId,current):Promise.resolve({ok:false}),owner,owns)
-  const first=(me?.first_name||me?.name||'').split(' ')[0]
   const {upcoming}=splitAppointments(visits.data),next=upcoming[0]
   return <div className="pp-page pp-home care-home">
-    <header className="care-heading"><div><p>{greeting()}</p><h1>{first?`Hi, ${first}`:'Welcome'}</h1><span>Your appointments and dental care, in one place.</span></div><RefreshButton title="Reload home" ariaLabel="Reload home" loading={visits.status==='loading'||invoices.status==='loading'} onClick={()=>Promise.all([visits.reload(),invoices.reload()])}/></header>
+    <header className="care-heading"><div><p>{me?.patient?.name||me?.name||'Patient'}</p><h1>Your dental care</h1></div><RefreshButton title="Reload home" ariaLabel="Reload home" loading={visits.status==='loading'||invoices.status==='loading'} onClick={()=>Promise.all([visits.reload(),invoices.reload()])}/></header>
     <JoinQueueCard/>
     <div className="care-home-grid"><section className="care-next-section" aria-labelledby="pp-next-title">
       <div className="care-section-heading"><h2 id="pp-next-title">Your next visit</h2><Button variant="ghost" size="sm" onClick={()=>onNavigate('visits')}>All visits</Button></div>
@@ -46,7 +45,7 @@ export function HomePage({me,onNavigate,session,getAuthGeneration}) {
     </section><section className="care-attention" aria-labelledby="care-attention-title"><h2 id="care-attention-title">Your next steps</h2>
       {invoices.status==='loading'&&<Skeleton lines={2} label="Checking your invoices"/>}
       {invoices.status==='error'&&<ErrorState text={invoices.error} onRetry={invoices.reload}/>}
-      {invoices.status==='ready'&&<div className="pp-card care-balance"><Icon name="wallet" size={22}/><h3>{invoices.data.count?money(invoices.data.minor/100):'No issued balance'}</h3><p>{invoices.data.count?`${invoices.data.count} issued ${invoices.data.count===1?'invoice':'invoices'} for you and your family.`:'No issued invoices with an unpaid balance were returned.'}</p><Button variant="soft" onClick={()=>onNavigate('billing')}>Review billing</Button></div>}
+      {invoices.status==='ready'&&<div className="pp-card care-balance"><Icon name="wallet" size={22}/><h3>{invoices.data.count?money(invoices.data.minor/100):'No issued balance'}</h3><p>{invoices.data.count?`${invoices.data.count} issued ${invoices.data.count===1?'invoice':'invoices'} for you and your family.`:'No unpaid balance on issued invoices.'}</p><Button variant="soft" onClick={()=>onNavigate('billing')}>Review billing</Button></div>}
       {next&&<Button variant="ghost" icon="plusCalendar" onClick={()=>onNavigate('book')}>Book another visit</Button>}
     </section></div>
     <section className="care-library" aria-labelledby="care-library-title"><div className="care-section-heading"><div><h2 id="care-library-title">Your care records</h2><p>Saved records and people in your care.</p></div></div><nav className="care-link-grid" aria-label="Care records">

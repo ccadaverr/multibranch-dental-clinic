@@ -65,3 +65,5 @@
 }
 @media(prefers-reduced-motion:reduce) { .clinical-experience * { scroll-behavior:auto!important; transition:none!important; animation:none!important; } }
 @media(max-width:600px) { .clinical-experience :is(input,select,textarea) { font-size:16px; } }
+.clinical-experience .rx-encounter-identity {border-block:1px solid var(--care-line,#d8e3e5);padding:12px 0;margin:12px 0;font-size:15px;overflow-wrap:anywhere;}
+.clinical-experience .rx-encounter-identity p {margin:4px 0;font-size:14px;font-variant-numeric:tabular-nums;}

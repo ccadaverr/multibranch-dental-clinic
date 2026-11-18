@@ -31,5 +31,5 @@ test('M10: the record form starts fresh for each tooth (no surfaces carried over
   const timelineSrc = read('src/components/odontogram/ToothTimeline.jsx')
   assert.match(odSrc, /<ToothTimeline[\s\S]*tooth=\{selected\}/)
   assert.match(timelineSrc, /surfaces:\s*\[\]/)
-  assert.match(timelineSrc, /setF\(x => \(\{ \.\.\.x, surfaces: \[\], note: '' \}\)\)/)
+  assert.match(timelineSrc, /setF\(x => \(\{ \.\.\.x, status: '', surfaces: \[\], note: '' \}\)\)/)
 })

@@ -17,7 +17,7 @@ test('M19: prescriptions come from the clinic server; the browser mock and its s
 test('M19: dentist form shows the allergy check, has no drug database or interaction claims, and issuing is final', () => {
   const page = read('src/pages/ServerPrescriptions.jsx')
   assert.match(page, /title="Check allergies before prescribing"/)
-  assert.match(page, /There is no drug list and no interaction check/)
+  assert.match(page, /Medication decisions remain yours; interaction checks are not provided/)
   assert.doesNotMatch(page, /interaction warning|drug database|e-signature|digitally signed/i)
   assert.match(page, /Issuing locks the prescription and gives it a number\. It cannot be edited afterwards, only voided\./)
   assert.match(page, /voidPrescription\(id, submitted\.reason, submitted\.revision, submitted\.key, owns, clinicalContext\)/)
@@ -25,7 +25,8 @@ test('M19: dentist form shows the allergy check, has no drug database or interac
 
 test('M19 (4.4): medicine name autocomplete and Other free-text option exist with no dev-written dosing defaults', () => {
   const page = read('src/pages/ServerPrescriptions.jsx')
-  assert.match(page, /<datalist id="rx-common">/)
+  assert.match(page, /aria-label=\{`Select medicine \$\{i \+ 1\}`\}/)
+  assert.match(page, /medicineCatalog\.map\(name/)
   assert.match(page, /<option value="__other__">Other \(free-text entry\)<\/option>/)
   assert.doesNotMatch(page, /COMMON_PRESETS/)
   assert.doesNotMatch(page, /Every 8 hours|Every 4 to 6 hours|Every 12 hours|Maximum 4000mg/i)

@@ -1,0 +1,179 @@
+{
+  "base_j05_frozen": "613a85a508fa7a93ad4842c5f568d5a91d8db878",
+  "implementation_head": "a0068eac62a38ecdf8e4db325a6efb02f52c4db8",
+  "branch": "feature/jaztin-fullstack-qa-20261117",
+  "local_j05_tag": "jaztin-j05-frozen-20261118",
+  "j05_archive_sha256": "e76379b448fdc119de91b4cec8c3d2c54a7a3a10cb8888f28bb6ece460168e11",
+  "publication": "No J03\u2013J06 push; remote feature branch read at J02 checkpoint. No deployment or Windows acceptance.",
+  "implementation_commits": [
+    "16a6473041c7f93f01f10fe6b56ac1afdec27219",
+    "a0068eac62a38ecdf8e4db325a6efb02f52c4db8"
+  ],
+  "qa_partial_advanced": [
+    "GEN-08"
+  ],
+  "qa_regression_only": [
+    "GEN-13",
+    "STF-03",
+    "STF-05",
+    "DEN-04",
+    "DEN-05"
+  ],
+  "api_cors_schema_changes": false,
+  "scope": "Clinical only; original ledger unchanged, zero whole-QA promotion",
+  "excluded_self": "docs/JAZTIN_J06_MANIFEST_20261118.json",
+  "files": [
+    {
+      "path": "backend/tests/Support/j05_history_fixture.php",
+      "bytes": 4593,
+      "sha256": "f991514df932ee930588d0335be5561f6c7c596d5e0fdf6627411391d06b8363",
+      "lf_sha256": "f991514df932ee930588d0335be5561f6c7c596d5e0fdf6627411391d06b8363"
+    },
+    {
+      "path": "docs/JAZTIN_J05_FROZEN_HANDOFF_20261118.json",
+      "bytes": 15727,
+      "sha256": "076a54a77008c612379470ce3c3abc06708a44429b3fb86836d19925d650835c",
+      "lf_sha256": "076a54a77008c612379470ce3c3abc06708a44429b3fb86836d19925d650835c"
+    },
+    {
+      "path": "docs/JAZTIN_J06_SPRINT_20261118.md",
+      "bytes": 16670,
+      "sha256": "d7a62ec824054229714da52bff2bd3165d4200030fd80005c2923b89264bce2c",
+      "lf_sha256": "d7a62ec824054229714da52bff2bd3165d4200030fd80005c2923b89264bce2c"
+    },
+    {
+      "path": "src/components/odontogram/ToothHistory.jsx",
+      "bytes": 2535,
+      "sha256": "925525d009db00383b9b07b05c0623dd664ec65bd94f338dc344cc80915ae874",
+      "lf_sha256": "925525d009db00383b9b07b05c0623dd664ec65bd94f338dc344cc80915ae874"
+    },
+    {
+      "path": "src/history-experience.css",
+      "bytes": 4459,
+      "sha256": "d560cce540201dc5f94308786a2c208ab11c0e0eb77bd2fef77f0a9c05564cbf",
+      "lf_sha256": "d560cce540201dc5f94308786a2c208ab11c0e0eb77bd2fef77f0a9c05564cbf"
+    },
+    {
+      "path": "src/pages/ClinicalHistory.jsx",
+      "bytes": 7811,
+      "sha256": "6c75ad9a74a6a721fe043885a0ba7491120eff08a2ade1f1088d127dabe24238",
+      "lf_sha256": "6c75ad9a74a6a721fe043885a0ba7491120eff08a2ade1f1088d127dabe24238"
+    },
+    {
+      "path": "src/pages/DentalChart.jsx",
+      "bytes": 19971,
+      "sha256": "f3327d36b304ede592c610c83791cee13100b152e474ce5c9f1868f1b6ec2729",
+      "lf_sha256": "f3327d36b304ede592c610c83791cee13100b152e474ce5c9f1868f1b6ec2729"
+    },
+    {
+      "path": "src/pages/EncounterCare.jsx",
+      "bytes": 7121,
+      "sha256": "786ad111ed2b4c2929993854dfe59e220ef6feaf69c998fb082a47229933cdab",
+      "lf_sha256": "786ad111ed2b4c2929993854dfe59e220ef6feaf69c998fb082a47229933cdab"
+    },
+    {
+      "path": "tests/j05-history-workspace.browser.mjs",
+      "bytes": 11981,
+      "sha256": "a201e4fd5dfc6ef21c2734635d70ae6edd28ad81952f943c189d318a14de8ec6",
+      "lf_sha256": "a201e4fd5dfc6ef21c2734635d70ae6edd28ad81952f943c189d318a14de8ec6"
+    },
+    {
+      "path": "tests/j06-dentist-walkthrough.browser.mjs",
+      "bytes": 8642,
+      "sha256": "cdee23dc5b994d2c19c54b31ac7fa3ae93b813677c557c3d11237b4c42411171",
+      "lf_sha256": "cdee23dc5b994d2c19c54b31ac7fa3ae93b813677c557c3d11237b4c42411171"
+    }
+  ],
+  "private_evidence_hashes_only": [
+    {
+      "path": "/private/tmp/j06-focused.log",
+      "bytes": 6514,
+      "sha256": "54c57e14208102400796003b11d1640ed10dcf1a2f6d34195fd34babbd1fcecc",
+      "lf_sha256": "54c57e14208102400796003b11d1640ed10dcf1a2f6d34195fd34babbd1fcecc"
+    },
+    {
+      "path": "/private/tmp/j06-focused-pg.log",
+      "bytes": 349,
+      "sha256": "c556a47bb5c6b970683c31566b6c64282558d175e74a04f7df5730ae541ef53a",
+      "lf_sha256": "c556a47bb5c6b970683c31566b6c64282558d175e74a04f7df5730ae541ef53a"
+    },
+    {
+      "path": "/private/tmp/j06-frontend-final.log",
+      "bytes": 464578,
+      "sha256": "d678f91154c28e470f31e20c544e74e586afee2eaa8f17d61bfd3b19e5351445",
+      "lf_sha256": "d678f91154c28e470f31e20c544e74e586afee2eaa8f17d61bfd3b19e5351445"
+    },
+    {
+      "path": "/private/tmp/j06-backend-consolidated.log",
+      "bytes": 433,
+      "sha256": "7e41f86ae5737e1131ce4567b859187040ffee030526c377b6eaa540432cd15f",
+      "lf_sha256": "7e41f86ae5737e1131ce4567b859187040ffee030526c377b6eaa540432cd15f"
+    },
+    {
+      "path": "/private/tmp/j06-backend-unit.log",
+      "bytes": 99,
+      "sha256": "56921acd919be565d497179569d4c8e47c098ba60960a7d13a8e5131b4566577",
+      "lf_sha256": "56921acd919be565d497179569d4c8e47c098ba60960a7d13a8e5131b4566577"
+    },
+    {
+      "path": "/private/tmp/j06-j04-browser-accepted.log",
+      "bytes": 782,
+      "sha256": "0636378d730ef8cccc889ff99a9578dbb06ba447d8e29b6bf91bfb57a8d4592b",
+      "lf_sha256": "0636378d730ef8cccc889ff99a9578dbb06ba447d8e29b6bf91bfb57a8d4592b"
+    },
+    {
+      "path": "/private/tmp/j06-j05-browser-accepted.log",
+      "bytes": 369,
+      "sha256": "15c4ae504e148008e4901538b258f0968322035960221e480bf72f651f86454b",
+      "lf_sha256": "15c4ae504e148008e4901538b258f0968322035960221e480bf72f651f86454b"
+    },
+    {
+      "path": "/private/tmp/j06-demo-browser-final.log",
+      "bytes": 551,
+      "sha256": "d91b89d4f2aafa4dc2f454bc8a9b715fa9711a85960d1318997f22c2034e59cd",
+      "lf_sha256": "d91b89d4f2aafa4dc2f454bc8a9b715fa9711a85960d1318997f22c2034e59cd"
+    },
+    {
+      "path": "/private/tmp/j06-neighbor-browser.log",
+      "bytes": 283,
+      "sha256": "2886ce4161fb5fd491dcfd9b2876765aeb818b6bc76a788164250ee301b11d3b",
+      "lf_sha256": "2886ce4161fb5fd491dcfd9b2876765aeb818b6bc76a788164250ee301b11d3b"
+    },
+    {
+      "path": "/private/tmp/j06-build-final.log",
+      "bytes": 7013,
+      "sha256": "f0959135ae97c5df284c85f068a72f5e902500d535cd6a832bd924a81f89a880",
+      "lf_sha256": "f0959135ae97c5df284c85f068a72f5e902500d535cd6a832bd924a81f89a880"
+    },
+    {
+      "path": "/private/tmp/j06-smoke-final.log",
+      "bytes": 2893,
+      "sha256": "c3769ed471bcdf2c2d0a2e72342343d138d4c1dcc5860fda0440d406066b331e",
+      "lf_sha256": "c3769ed471bcdf2c2d0a2e72342343d138d4c1dcc5860fda0440d406066b331e"
+    },
+    {
+      "path": "/private/tmp/j06-predefense-final.log",
+      "bytes": 2339,
+      "sha256": "0b316fb628eb2461e05bf97de716891eb390835d658c3619426b4c72107ad342",
+      "lf_sha256": "0b316fb628eb2461e05bf97de716891eb390835d658c3619426b4c72107ad342"
+    },
+    {
+      "path": "/private/tmp/j06-pint.log",
+      "bytes": 33,
+      "sha256": "cd1a94fc2cf6a965b86e1a4809d6c7fb9148b1ee374e1010ed2ac96ff4876ec2",
+      "lf_sha256": "cd1a94fc2cf6a965b86e1a4809d6c7fb9148b1ee374e1010ed2ac96ff4876ec2"
+    },
+    {
+      "path": "/private/tmp/jaztin-j05-j06-20261118/demo-replay/results.json",
+      "bytes": 819,
+      "sha256": "1a32cc4b27d8708aedd44a0c1aa37b9e8116b494b0d78fd819fdd7790aec1547",
+      "lf_sha256": "1a32cc4b27d8708aedd44a0c1aa37b9e8116b494b0d78fd819fdd7790aec1547"
+    },
+    {
+      "path": "/private/tmp/jaztin-j05-j06-20261118/demo-replay/completed.json",
+      "bytes": 148,
+      "sha256": "28a88a2b299d0bab7e86bf5f8150e37b498555e7db1e8dab4bed55ab0857dc99",
+      "lf_sha256": "28a88a2b299d0bab7e86bf5f8150e37b498555e7db1e8dab4bed55ab0857dc99"
+    }
+  ]
+}

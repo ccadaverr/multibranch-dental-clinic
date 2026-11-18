@@ -17,7 +17,7 @@ export function chartReceiptMatches(result,patientId,payload,dentistId){
    (entry.treatment_id??null)===(proof.treatment_id??null)&&(entry.visit_id??null)===(proof.visit_id??null)&&
    JSON.stringify([...(entry.surfaces||[])].sort())===JSON.stringify([...new Set(payload.surfaces||[])].sort())
 }
-export function beginChartCommand({patientId,payload,dentistId,isCurrent,key=commandKey(),send=recordChartEntry,timeoutMs=30000}){
+export function beginChartCommand({patientId,payload,dentistId,isCurrent,key=commandKey(),send=recordChartEntry,verifyChart=()=>true,timeoutMs=30000}){
  const intent=Object.freeze({...structuredClone(payload),surfaces:Object.freeze([...(payload.surfaces||[])])});let pending=false,phase='idle',uncertain=false
  const unknown=()=>{uncertain=true;phase='unknown';return {ok:false,uncertain:true,outcome:phase,message:'This finding is unconfirmed and may already be saved. Retry the same finding or review the saved chart before another entry.'}}
  return {intent,get outcome(){return phase},async submit(){
@@ -28,7 +28,7 @@ export function beginChartCommand({patientId,payload,dentistId,isCurrent,key=com
    try{result=await Promise.race([Promise.resolve().then(()=>isCurrent()?send(patientId,intent,key,isCurrent):null),new Promise(resolve=>{timer=setTimeout(()=>resolve(null),timeoutMs)})])}catch{result=null}
    if(!isCurrent())return {ok:false,outcome:'obsolete',message:'The chart session changed. No result was adopted.'}
    if(!result?.ok){if(uncertain||!['validation','conflict','forbidden','not_found','unauthenticated','rate_limited','stale_context'].includes(result?.kind))return unknown();phase='refused';return {...result,outcome:phase}}
-   if(!chartReceiptMatches(result,patientId,intent,dentistId))return unknown()
+   if(!chartReceiptMatches(result,patientId,intent,dentistId)||!verifyChart(result.data))return unknown()
    phase='verified';return {...result,recovered:uncertain||result.data.write_contract.version!==2,outcome:phase,revision:result.meta.chart_receipt.revision,entryId:result.meta.chart_receipt.entry_id}
   }finally{clearTimeout(timer);pending=false}
  }}

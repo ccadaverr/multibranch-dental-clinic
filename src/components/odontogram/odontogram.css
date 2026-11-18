@@ -486,3 +486,11 @@
     text-align: center;
   }
 }
+/* The clinical wrapper enables the optional mobile magnification control. */
+.od-zoom-control { display:none; }
+
+/* Selection and legend stay usable in every read-only consumer too. */
+.chart-selection-strip { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; width:100%; margin-top:12px; padding-top:12px; border-top:1px solid var(--chart-edge,var(--line,#dce5e9)); font-size:14px; }
+.chart-selection-strip b { font-weight:600; }.chart-selection-strip small { display:block; font-size:13px; color:var(--chart-muted,var(--muted,#536b78)); }
+.chart-legend { display:flex; flex-wrap:wrap; gap:12px; font-size:13px; color:var(--chart-muted,var(--muted,#536b78)); margin:12px 0 0; padding:0; list-style:none; }
+.chart-legend li { display:flex; align-items:center; gap:6px; }.chart-legend i { width:12px; height:12px; border:1px solid #94a3b8; border-radius:3px; background:white; }.chart-legend .finding { background:#e0e7ff; border-color:#6366f1; }.chart-legend .selected { background:#ede9fe; border:2px solid #4338ca; }

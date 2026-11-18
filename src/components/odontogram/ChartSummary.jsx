@@ -30,14 +30,14 @@ export function ChartSummary({ data, onSelectTooth }) {
     <div className="od-summary-panel" aria-label="Dental chart overall summary">
       <div className="od-summary-header">
         <h4 className="od-summary-title">All findings ({totalFindings})</h4>
-        <p className="od-muted" style={{ margin: 0, fontSize: '12px' }}>
+        <p className="od-muted" style={{ margin: 0, fontSize: '14px' }}>
           Tap any tooth chip to view its history and details.
         </p>
       </div>
 
       {grouped.length === 0 ? (
         <div className="od-summary-empty">
-          <p className="od-muted">No findings recorded on this patient's chart yet.</p>
+          <p className="od-muted">No current nonbaseline findings. Select a tooth to review any recorded baseline or history.</p>
         </div>
       ) : (
         <div className="od-summary-groups">

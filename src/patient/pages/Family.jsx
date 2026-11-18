@@ -19,10 +19,11 @@ export function Family({session,getAuthGeneration}) {
   const [form, setForm] = useState({ first_name: '', last_name: '', date_of_birth: '', relationship: 'Child', relationship_other: '', consent: false })
   const [inviting, setInviting] = useState(null), [inviteEmail, setInviteEmail] = useState('')
   const [loadError,setLoadError]=useState(''),[attempt,setAttempt]=useState(0),[capable,setCapable]=useState(false),[uncertain,setUncertain]=useState(false)
-  const alive=useRef(false),latest=useRef(null),flight=useRef(false),command=useRef(null),recovery=useRef(null),addButton=useRef(null)
+  const alive=useRef(false),latest=useRef(null),flight=useRef(false),command=useRef(null),recovery=useRef(null),addButton=useRef(null),firstName=useRef(null)
   const generation=getAuthGeneration?.(),owner=JSON.stringify([session?.serverUserId,session?.patientPublicId,generation]);latest.current=owner
   const owns=()=>alive.current&&latest.current===owner&&session?.active===true&&session?.role==='patient'&&(!getAuthGeneration||generation!=null&&getAuthGeneration()===generation)
   useEffect(()=>{alive.current=true;return()=>{alive.current=false}},[])
+  useEffect(()=>{if(adding)firstName.current?.focus()},[adding])
   useEffect(()=>{
     let current=true;setRows(null);setLoadError('');setCapable(false)
     if(!owns()){setLoadError('Your Family session is unavailable. Sign in again.');return}
@@ -81,14 +82,14 @@ export function Family({session,getAuthGeneration}) {
     <p className="pp-hint">Children or others in your care. You can book, get reminders and pay for them. They need no ID or email; your ID is the one checked at the clinic.</p>
     {!capable&&<p role="status">Adding dependents is unavailable until this server supports safe creation and recovery. Saved Family records remain readable.</p>}
     {uncertain&&<div role="alert"><p>{note}</p><Button disabled={busy} onClick={()=>recover(true)}>{busy?'Recovering…':'Recover dependent creation'}</Button>{command.current?.intent&&<Button disabled={busy} onClick={()=>recover(false)}>Retry same creation</Button>}</div>}
-    {rows.length > 0 && <ul className="pp-family-list">{rows.map(d => <li key={d.id}><span><b>{d.name}</b> · {d.code} · {d.relationship}{d.relationship_other ? ` (${d.relationship_other})` : ''}{d.age !== null && d.age !== undefined ? ` · ${d.age} years old` : ''}</span>
+    {rows.length > 0 && <ul className="pp-family-list">{rows.map(d => <li key={d.id}><div className="care-family-person"><h3>{d.name}</h3><dl><div><dt>Patient</dt><dd>{d.code}</dd></div><div><dt>Relationship</dt><dd>{d.relationship}{d.relationship_other ? ` (${d.relationship_other})` : ''}</dd></div>{d.age !== null && d.age !== undefined && <div><dt>Age</dt><dd>{d.age} years old</dd></div>}</dl></div>
       {!d.minor && !d.has_account && inviting !== d.id && <button type="button" className="link-button" onClick={() => { setInviting(d.id); setInviteEmail(''); setNote('') }}>Invite to their own account</button>}
       {inviting === d.id && <form className="pp-family-invite" onSubmit={e => invite(e, d)}>
         <Field label={`${d.first_name}’s own email`} hint="We email a one-time link there. Only they can then set the password."><input type="email" autoComplete="off" required value={inviteEmail} onChange={e => setInviteEmail(e.target.value)}/></Field>
         <div className="pp-row-actions"><Button type="submit" size="sm" disabled={busy || !inviteEmail}>{busy ? 'Sending…' : 'Send the link'}</Button><button type="button" className="link-button" onClick={() => setInviting(null)}>Cancel</button></div>
       </form>}</li>)}</ul>}
     {adding ? <form onSubmit={add} className="pp-form care-family-form"><h2>Add a family member</h2><fieldset disabled={busy||uncertain} style={{border:0,padding:0,margin:0,minWidth:0}}>
-      <Field label="First name" required><input value={form.first_name} onChange={e => setForm(f => ({ ...f, first_name: e.target.value }))}/></Field>
+      <Field label="First name" required><input ref={firstName} value={form.first_name} onChange={e => setForm(f => ({ ...f, first_name: e.target.value }))}/></Field>
       <Field label="Last name" required><input value={form.last_name} onChange={e => setForm(f => ({ ...f, last_name: e.target.value }))}/></Field>
       <Field label="Date of birth" required><input type="date" value={form.date_of_birth} onChange={e => setForm(f => ({ ...f, date_of_birth: e.target.value }))}/></Field>
       <SelectWithOther label="Relationship" required value={form.relationship} onChange={v => setForm(f => ({ ...f, relationship: v }))} options={['Child', 'Daughter', 'Son', 'Grandchild', 'Ward', 'Parent', 'Other']} otherValue={form.relationship_other} onOtherChange={v => setForm(f => ({ ...f, relationship_other: v }))} placeholder="e.g., Niece, Nephew, Cousin"/>

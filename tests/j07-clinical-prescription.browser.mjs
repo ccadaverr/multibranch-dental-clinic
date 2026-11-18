@@ -1,0 +1,67 @@
+// Real local clinical/prescription workflow. All medicine text is explicitly synthetic, never clinical advice.
+import assert from 'node:assert/strict'
+import {readFileSync,writeFileSync,existsSync} from 'node:fs'
+import {browser,login,get,api,evidence,target} from './local-visit-support.mjs'
+const f=JSON.parse(readFileSync(target.runtime+'/visit-fixture.json','utf8')),prior=JSON.parse(readFileSync(target.runtime+'/workspace-browser/journey.json','utf8'));assert.equal(prior.accepted,true)
+const path=evidence+'/journey.json',state=existsSync(path)?JSON.parse(readFileSync(path,'utf8')):{groups:[]};state.accepted=false
+const save=()=>writeFileSync(path,JSON.stringify(state,null,2)),pass=text=>{if(!state.groups.includes(text))state.groups.push(text);save();console.log('PASS '+text)}
+async function cmd(page,name,args){return page.evaluate(async({name,args})=>{const a=await import('/src/api-client.js'),r=await a[name](...args);if(!r.ok)throw Error('Synthetic command refused '+r.kind);return r.data},{name,args})}
+async function post(page,url,action){const pending=page.waitForResponse(r=>new URL(r.url()).pathname===url&&r.request().method()==='POST');await action();const r=await pending;assert(r.status()<300);return r.json()}
+const widths=[375,390,430,768,1024,1440],medicine='Synthetic J07 medicine — not for clinical use'
+async function capture(page,name){for(const width of widths){await page.setViewportSize({width,height:1000});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await page.evaluate(()=>{window.scrollTo(0,0);return new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))});await page.screenshot({path:evidence+'/'+name+'-'+width+'.png',fullPage:true})}}
+let page
+try{
+ if(!process.env.J07_PATIENT_ONLY){
+ const staff=await login('sprint02.staff@example.test');page=staff.page
+ if(!state.visit){state.visit=await cmd(page,'walkInVisit',[{patient_id:f.patientId,branch_ref:f.branch,service_ref:f.service,dentist_ref:f.dentist},'j07-arrival']);save()}
+ const v=(await get(page,'/api/visits/'+state.visit.id)).body.data;if(v.queue.status==='Waiting')await cmd(page,'queueCommand',[v.queue.id,'call',{expected_revision:v.queue.revision},'j07-call']);await staff.context.close()
+ const dentist=await login('sprint02.dentist@example.test');page=dentist.page
+ await page.getByRole('button',{name:'My Queue',exact:true}).first().click()
+ if(state.treatment)await page.getByRole('button',{name:'Continue treatment',exact:true}).first().click()
+ else {const q=page.locator('.enc-queue-row').filter({has:page.locator('.enc-number b').filter({hasText:new RegExp('^'+v.queue.queue_number+'$')})});await q.getByRole('button',{name:'Open encounter',exact:true}).click();await page.getByRole('button',{name:'Add performed procedure',exact:true}).click();await page.getByRole('combobox',{name:'Procedure 1',exact:true}).selectOption(f.service);await page.getByRole('textbox',{name:'Chief complaint',exact:true}).fill('Synthetic J07 authorized examination');await page.getByRole('textbox',{name:'Procedure / treatment performed',exact:true}).fill('Synthetic J07 performed-care fixture');state.treatment=(await post(page,'/api/visits/'+state.visit.id+'/treatment',()=>page.getByRole('button',{name:'Start Treatment',exact:true}).click())).data;save()}
+ await page.getByText(/Saved revision [0-9]+\. Review before completing\./).waitFor()
+ const notes=page.getByRole('textbox',{name:'Clinical notes',exact:true})
+ if(!state.documented){await notes.fill('Synthetic J07 retained treatment documentation');await page.getByRole('button',{name:'Open visit prescriptions',exact:true}).click();await page.getByRole('dialog',{name:'Leave this encounter?',exact:true}).getByRole('button',{name:'Stay with encounter',exact:true}).click();assert.equal(await notes.inputValue(),'Synthetic J07 retained treatment documentation');await post(page,'/api/treatments/'+state.treatment.id+'/document',()=>page.getByRole('button',{name:'Save Treatment Progress',exact:true}).click());await page.getByText(/Saved on the clinic server/).waitFor();state.documented=true;save()}
+ assert.equal((await get(page,'/api/treatments/'+state.treatment.id)).body.data.clinical_notes,'Synthetic J07 retained treatment documentation')
+ await page.getByRole('button',{name:'Open dental chart',exact:true}).click();await page.getByRole('combobox',{name:'Choose tooth',exact:true}).selectOption('16')
+ if(!state.finding){await page.getByRole('combobox',{name:'Status',exact:true}).selectOption('Caries');await page.getByRole('checkbox',{name:'O',exact:true}).check();await page.getByRole('textbox',{name:/Note \(optional\)/}).fill('Synthetic J07 chart finding');const r=await post(page,'/api/patients/'+f.patientId+'/chart',()=>page.getByRole('button',{name:'Record finding',exact:true}).click());state.finding=r.meta.chart_receipt;save();await page.getByText(new RegExp('^Finding '+state.finding.entry_id+' saved')).waitFor()}
+ assert.equal(state.finding.visit_id,state.visit.id);assert.equal(state.finding.treatment_id,state.treatment.id);assert.equal(state.finding.patient_id,f.patientId)
+ await page.getByRole('button',{name:'Return to encounter',exact:true}).click();assert.equal(await page.getByRole('textbox',{name:'Clinical notes',exact:true}).inputValue(),'Synthetic J07 retained treatment documentation')
+ pass('exact Patient/Visit chart entry, guarded unsaved navigation, saved documentation and return while treatment remains active')
+ await page.route(api+'/api/prescriptions/visits',async route=>{const r=await route.fetch(),body=await r.json();body.data=[];await route.fulfill({response:r,json:body})},{times:2})
+ await page.getByRole('button',{name:'Open visit prescriptions',exact:true}).click();await page.getByRole('region',{name:'Prescription Patient and Visit',exact:true}).waitFor();assert.match(await page.getByRole('region',{name:'Prescription Patient and Visit',exact:true}).innerText(),new RegExp(state.visit.id));assert.equal(await page.getByRole('combobox',{name:/^Visit/}).inputValue(),state.visit.id);assert.equal(await page.getByRole('combobox',{name:/^Visit/}).isDisabled(),true)
+ if(!state.draft){
+  await page.getByRole('combobox',{name:'Select medicine 1',exact:true}).selectOption('__other__');await page.getByRole('textbox',{name:'Specify medicine name',exact:true}).fill(medicine)
+  for(const [field,value] of [['dosage','Synthetic dose fixture'],['frequency','Synthetic frequency fixture'],['duration','Synthetic duration fixture']]){assert.equal(await page.getByRole('combobox',{name:'Select '+field+' 1',exact:true}).inputValue(),'');await page.getByRole('combobox',{name:'Select '+field+' 1',exact:true}).selectOption('__other__');await page.getByRole('textbox',{name:'Specify custom '+field,exact:true}).fill(value)}
+  await page.getByRole('textbox',{name:'Note (optional)',exact:true}).fill('Synthetic J07 prescription note')
+  await capture(page,'prescription-compose')
+  const sends=[];page.on('request',r=>{if(new URL(r.url()).pathname==='/api/prescriptions'&&r.method()==='POST')sends.push({key:r.headers()['idempotency-key'],body:r.postDataJSON()})})
+  await page.route(api+'/api/prescriptions',async route=>{if(route.request().method()!=='POST')return route.continue();const r=await route.fetch();assert.equal(r.status(),201);state.draft=(await r.json()).data;save();await route.abort('failed')},{times:1})
+  await page.getByRole('button',{name:'Save draft',exact:true}).click();await page.getByRole('button',{name:'Retry same prescription request',exact:true}).focus();await page.keyboard.press('Enter');await page.getByRole('dialog').waitFor();assert.equal(sends.length,2);assert.deepEqual(sends[0],sends[1])
+ }else await page.locator('.fd-list li').filter({hasText:'Draft'}).getByRole('button',{name:'Open',exact:true}).first().click()
+ const draft=(await get(page,'/api/prescriptions/'+state.draft.id)).body.data;assert.equal(draft.visit,state.visit.id);assert.equal(draft.patient.id,f.patientId);assert.equal(draft.status,'Draft');assert.equal(draft.lines[0].medicine,medicine)
+ pass('linked Visit survives omitted recent suggestions; explicit medicines, committed-response loss and same-key Draft recovery with exact persisted lines')
+ if(!state.issued){
+  const dialog=page.getByRole('dialog');await dialog.getByText(medicine,{exact:true}).waitFor()
+  let refuseDraft=true;await page.route(api+'/api/prescriptions/'+draft.id,async route=>{if(route.request().method()!=='GET'||!refuseDraft)return route.continue();const r=await route.fetch(),body=await r.json();body.data.visit=prior.visit.id;await route.fulfill({response:r,json:body})})
+  await dialog.getByRole('button',{name:'Edit draft',exact:true}).click();await page.getByRole('button',{name:'Retry draft',exact:true}).waitFor();refuseDraft=false;await page.getByRole('button',{name:'Retry draft',exact:true}).click();await page.getByRole('textbox',{name:'Specify medicine name',exact:true}).waitFor();assert.equal(await page.getByRole('textbox',{name:'Specify medicine name',exact:true}).inputValue(),medicine)
+  await page.getByRole('button',{name:'Issue prescription',exact:true}).click();const confirm=page.getByRole('dialog',{name:'Issue and lock prescription?',exact:true});assert.match(await confirm.innerText(),new RegExp(f.patientName));await confirm.getByRole('button',{name:'Issue prescription',exact:true}).click();await page.getByRole('dialog').getByText(medicine,{exact:true}).waitFor();state.issued=(await get(page,'/api/prescriptions/'+draft.id)).body.data;save()
+ }
+ assert.equal(state.issued.status,'Issued');assert.equal(state.issued.visit,state.visit.id);assert.equal(state.issued.branch_id,f.branch);assert.equal(state.issued.patient.id,f.patientId);assert.equal(state.issued.can_edit,false)
+ await capture(page,'prescription-issued');await page.getByRole('dialog').getByRole('button',{name:'Close',exact:true}).click();assert.equal(await page.getByRole('combobox',{name:/^Visit/}).inputValue(),state.visit.id)
+ await page.getByRole('button',{name:'Return to encounter',exact:true}).click();await page.getByRole('textbox',{name:'Clinical notes',exact:true}).waitFor();assert.equal(await page.getByRole('textbox',{name:'Clinical notes',exact:true}).inputValue(),'Synthetic J07 retained treatment documentation')
+ const currentBefore=(await get(page,'/api/treatments/'+state.treatment.id)).body.data;assert.equal(currentBefore.status,'In Treatment')
+ const linkedRx=page.getByRole('region',{name:'Encounter prescriptions',exact:true});await linkedRx.getByRole('button',{name:'Review '+state.issued.number,exact:true}).waitFor();await linkedRx.getByRole('button',{name:'Review '+state.issued.number,exact:true}).click();await page.getByRole('dialog').getByText(medicine,{exact:true}).waitFor();assert.equal(await page.getByRole('dialog').getByRole('button',{name:'Edit draft',exact:true}).count(),0);await page.getByRole('dialog').getByRole('button',{name:'Close',exact:true}).click()
+ const draftNotes=page.getByRole('textbox',{name:'Clinical notes',exact:true});await draftNotes.fill('Synthetic J07 unsaved after prescription')
+ const history=page.locator('.enc-history-preview');await history.locator(':scope > summary').click();await history.getByRole('button',{name:new RegExp('reference '+prior.treatment.id+'$')}).click();await history.getByRole('region',{name:'Historical encounter',exact:true}).waitFor();assert.equal(await draftNotes.inputValue(),'Synthetic J07 unsaved after prescription');await history.getByRole('button',{name:'Return to treatment',exact:true}).click();assert.equal(await draftNotes.evaluate(e=>e===document.activeElement),true);assert.equal(await draftNotes.inputValue(),'Synthetic J07 unsaved after prescription');assert.deepEqual((await get(page,'/api/treatments/'+state.treatment.id)).body.data,currentBefore)
+ pass('wrong-Visit draft read rejected/retried; explicit issuance/read-only review and historical return preserve current treatment and its unsaved draft')
+ }
+ assert(state.issued?.id,'An accepted issued prescription is required for Patient-only recovery')
+ const patient=await login('sprint02.patient@example.test',390);page=patient.page
+ const mine=(await get(page,'/api/me/prescriptions')).body.data;assert(mine.some(p=>p.id===state.issued.id));assert(!mine.some(p=>p.status==='Draft'))
+ await page.getByRole('button',{name:/^Prescriptions/}).click();const record=page.locator('.pp-rx-list>li').filter({hasText:state.issued.number});await record.getByText(medicine,{exact:true}).waitFor();await capture(page,'patient-prescription')
+ const downloading=page.waitForEvent('download');await record.getByRole('button',{name:/^Download PDF for /}).click();const downloaded=await downloading,bytes=readFileSync(await downloaded.path());assert.equal(bytes.subarray(0,4).toString(),'%PDF')
+ const foreign=await login('patient@example.test',390);assert(!(await get(foreign.page,'/api/me/prescriptions')).body.data.some(p=>p.id===state.issued.id));assert([403,404].includes((await get(foreign.page,'/api/prescriptions/'+state.issued.id)).status))
+ pass('Issued prescription rendered and downloaded by exact Patient at six widths; drafts private and other Patient excluded')
+ state.accepted=true;save()
+}catch(error){if(page&&!page.isClosed()){writeFileSync(evidence+'/failure-text.txt',await page.locator('body').innerText());await page.screenshot({path:evidence+'/failure.png',fullPage:true})}throw error}finally{await browser.close()}

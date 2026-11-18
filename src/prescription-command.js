@@ -5,6 +5,12 @@ const content = value => JSON.stringify({ lines: (value.lines || []).map(l => ({
   ...Object.fromEntries(fields.map(f => [f, text(l[f])])),
   value_origins: Object.fromEntries(fields.filter(f => l.value_origins?.[f]).map(f => [f, l.value_origins[f]])),
 })), note: text(value.note) })
+export function unchangedPrescriptionDraft(row, request) {
+  return [request.visitId,request.patientId,request.branch].every(value=>typeof value==='string'&&!!value.trim()) &&
+    !!row?.id && Number.isSafeInteger(row.revision) && row.revision > 0 && row.status === 'Draft' && row.can_edit === true &&
+    !row.number && row.visit === request.visitId && row.patient?.id === request.patientId && row.branch === request.branch &&
+    content(row) === content(request.body)
+}
 export function prescriptionWriteMatches(row, request, issued = false) {
   if (![request.visitId,request.patientId,request.branch].every(value => typeof value === 'string' && !!value.trim())) return false
   const base = request.acceptedDraft || request.base
@@ -17,12 +23,24 @@ export async function runPrescriptionWrite(request, api, allowed) {
   try {
     if (!allowed()) return {ok:false, kind:'auth_changed', message:'Your session changed. Review the prescription after signing in.'}
     if (!request.acceptedDraft) {
-      const r = request.base
-        ? await api.update(request.base.id, {...request.body, expected_revision:request.base.revision}, request.saveKey, allowed)
-        : await api.create({visit_id:request.visitId, ...request.body}, request.saveKey, allowed)
-      if (!r.ok) return {...r, retryable:['network','server'].includes(r.kind)}
-      if (!prescriptionWriteMatches(r.data, request)) return unknown('The saved Draft did not match the reviewed Patient, visit or medicines. Reload or retry the same request.')
-      request.acceptedDraft = r.data
+      // A restored unchanged Draft still needs an authoritative identity/revision read,
+      // but no Update. Issue retains the reviewed revision and its original command key.
+      if (request.issue && unchangedPrescriptionDraft(request.base, request)) {
+        const current = await api.read(request.base.id)
+        if (!allowed()) return {ok:false, kind:'auth_changed', message:'Your session changed. Issuance was not started.'}
+        if (!current.ok) return {...current, retryable:['network','server'].includes(current.kind)}
+        if (!unchangedPrescriptionDraft(current.data, request) || current.data.id !== request.base.id || current.data.revision !== request.base.revision) {
+          return {ok:false, kind:'conflict', message:'The saved Draft changed or is no longer editable. Reload the Draft and review it before issuing.'}
+        }
+        request.acceptedDraft = current.data
+      } else {
+        const r = request.base
+          ? await api.update(request.base.id, {...request.body, expected_revision:request.base.revision}, request.saveKey, allowed)
+          : await api.create({visit_id:request.visitId, ...request.body}, request.saveKey, allowed)
+        if (!r.ok) return {...r, retryable:['network','server'].includes(r.kind)}
+        if (!prescriptionWriteMatches(r.data, request)) return unknown('The saved Draft did not match the reviewed Patient, visit or medicines. Reload or retry the same request.')
+        request.acceptedDraft = r.data
+      }
     }
     let accepted = request.acceptedDraft
     if (request.issue) {

@@ -1,0 +1,15 @@
+/* Dentist prescription content only; keep shared controls and clinical command contracts.
+   Unslop-informed polish: Damir Sokolovsky, CC BY 4.0; see J08 report attribution. */
+.dentist-prescriptions.clinical-experience { gap:16px; }
+.dentist-prescriptions.clinical-experience>.page-header { margin-bottom:0; align-items:center; }
+.dentist-prescriptions.clinical-experience>.page-header .page-header-right { width:auto; }
+.dentist-prescriptions.clinical-experience .page-kicker { text-transform:none; letter-spacing:0; font-size:13px; font-weight:500; }
+.dentist-prescriptions.clinical-experience .page-header h1 { font-size:28px; letter-spacing:0; line-height:1.25; }
+.dentist-prescriptions.clinical-experience .rx-scope-note { margin:0; font-size:14px; color:var(--care-muted); }
+.dentist-prescriptions.clinical-experience .rx-compose { margin-bottom:0; }
+.dentist-prescriptions.clinical-experience .rx-compose .au-form { gap:16px; }
+.dentist-prescriptions.clinical-experience .rx-line { padding:12px 16px 16px; gap:12px; }
+.dentist-prescriptions.clinical-experience .rx-line legend { font-size:16px; font-weight:600; letter-spacing:0; }
+.dentist-prescriptions.clinical-experience .rx-line .field { margin:0; }
+.dentist-prescriptions.clinical-experience .rx-encounter-identity { margin:0; }
+.dentist-prescriptions.clinical-experience .rx-compose>summary { min-height:56px; }
