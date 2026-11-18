@@ -159,11 +159,24 @@ class AppointmentController extends Controller
     {
         Gate::authorize('cancel', $appointment);
 
-        return \App\Support\CommandActor::run($request->user(), function ($actor) use ($request, $appointment) {
+        $response = \App\Support\CommandActor::run($request->user(), function ($actor) use ($request, $appointment) {
             Gate::forUser($actor)->authorize('cancel', $appointment);
 
             return $this->appointments->cancel($actor, $appointment, $request->safe()->only(['expected_revision', 'reason', 'note', 'reason_category', 'reason_detail']), $this->idempotencyKey($request));
         });
+
+        $current = $appointment->fresh();
+        if ($appointment->status === 'Cancelled' || $response->headers->has('Idempotent-Replayed')) {
+            $this->appointments->reconcileCancellationRefund($current, $request->user());
+            $current->refresh();
+        }
+        $body = $response->getData(true);
+        $body['data']['booking_payment_status'] = $current->booking_payment_status;
+        $body['data']['booking_refunded_at'] = $current->booking_refunded_at
+            ? ClinicClock::local($current->booking_refunded_at)->toIso8601String() : null;
+        $body['data']['cancellation_refund'] = $current->cancellationRefund();
+
+        return $response->setData($body);
     }
 
     /** Appointment-only lifecycle command: the pre-arrival No-show (see AppointmentService::TRANSITIONS). */

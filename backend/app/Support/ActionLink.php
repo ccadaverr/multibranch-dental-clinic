@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Models\User;
 use Carbon\CarbonImmutable;
 
 /**
@@ -15,15 +16,20 @@ final class ActionLink
 {
     public const PURPOSES = ['attend', 'cant_make_it', 'on_my_way', 'move_up'];
 
-    public static function make(string $purpose, string $subjectPublicId, int $revision, CarbonImmutable $expiresAt, string $nonce = ''): string
+    public static function make(string $purpose, string $subjectPublicId, int $revision, CarbonImmutable $expiresAt, string $nonce = '', ?User $recipient = null): string
     {
         if (! in_array($purpose, self::PURPOSES, true)) throw new \InvalidArgumentException("Unknown link purpose '$purpose'.");
-        $payload = self::b64(json_encode(['p' => $purpose, 's' => $subjectPublicId, 'r' => $revision, 'e' => $expiresAt->getTimestamp(), 'n' => $nonce]));
+        $claims = ['p' => $purpose, 's' => $subjectPublicId, 'r' => $revision, 'e' => $expiresAt->getTimestamp(), 'n' => $nonce];
+        if ($recipient) {
+            $claims['u'] = $recipient->public_id;
+            $claims['v'] = $recipient->auth_version;
+        }
+        $payload = self::b64(json_encode($claims));
 
         return $payload.'.'.self::b64(hash_hmac('sha256', $payload, self::key(), true));
     }
 
-    /** @return array{purpose:string, subject:string, revision:int, expires_at:CarbonImmutable, hash:string}|null null when forged or malformed */
+    /** @return array{purpose:string, subject:string, revision:int, expires_at:CarbonImmutable, hash:string, recipient:?string, recipient_version:?int}|null null when forged or malformed */
     public static function parse(?string $token): ?array
     {
         if (! is_string($token) || strlen($token) > 600 || ! preg_match('/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/', $token)) return null;
@@ -32,7 +38,9 @@ final class ActionLink
         $data = json_decode((string) base64_decode(strtr($payload, '-_', '+/'), true), true);
         if (! is_array($data) || ! in_array($data['p'] ?? null, self::PURPOSES, true) || ! is_string($data['s'] ?? null) || ! is_int($data['r'] ?? null) || ! is_int($data['e'] ?? null)) return null;
 
-        return ['purpose' => $data['p'], 'subject' => $data['s'], 'revision' => $data['r'], 'expires_at' => CarbonImmutable::createFromTimestamp($data['e']), 'hash' => hash('sha256', $token)];
+        return ['purpose' => $data['p'], 'subject' => $data['s'], 'revision' => $data['r'], 'expires_at' => CarbonImmutable::createFromTimestamp($data['e']), 'hash' => hash('sha256', $token),
+            'recipient' => is_string($data['u'] ?? null) ? $data['u'] : null,
+            'recipient_version' => is_int($data['v'] ?? null) ? $data['v'] : null];
     }
 
     public static function url(string $token): string

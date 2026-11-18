@@ -64,6 +64,17 @@ class BillingHardeningTest extends TestCase
     }
 
 
+    public function test_invoice_and_receipt_numbers_use_manila_year_at_utc_boundary(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-12-31 16:05:00', 'UTC'));
+        $invoice = $this->issued();
+        $this->assertStringStartsWith('INV-2027-', $invoice->invoice_number);
+        $this->postJson("/api/invoices/{$invoice->public_id}/payment", [
+            'expected_revision' => $invoice->revision, 'method' => 'Cash',
+        ], ['Idempotency-Key' => $this->key()])->assertOk();
+        $this->assertStringStartsWith('RCT-2027-', $invoice->fresh()->receipt->receipt_number);
+    }
+
     private function issued(string $amount = '125.50'): Invoice
     {
         $this->price('svc1', 'b1', $amount);

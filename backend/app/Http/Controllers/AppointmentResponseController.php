@@ -2,18 +2,22 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\Role;
 use App\Models\Appointment;
 use App\Models\AppointmentResponse;
+use App\Models\PatientGuardian;
 use App\Models\SlotOffer;
+use App\Models\User;
 use App\Services\Appointments\AppointmentCommandException;
 use App\Services\Appointments\AppointmentService;
 use App\Services\Automations\FillFreedSlots;
 use App\Support\ActionLink;
 use App\Support\ClinicClock;
+use App\Support\CommandActor;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 
 /**
  * F1–F3 patient answers.
@@ -42,23 +46,22 @@ class AppointmentResponseController extends Controller
         $link = ActionLink::parse($data['token']);
         if (! $link) return response()->json(['message' => 'This link is not valid.', 'code' => 'link_invalid'], 404);
         $state = $this->state($link);
-        if ($state['state'] !== 'ready') return response()->json(['message' => $state['message'], 'code' => 'link_'.$state['state'], 'data' => $state], 422);
+        if ($state['state'] !== 'ready' && ! ($link['purpose'] === 'cant_make_it' && $state['state'] === 'done')) return response()->json(['message' => $state['message'], 'code' => 'link_'.$state['state'], 'data' => $state], 422);
         if (in_array($link['purpose'], ['cant_make_it', 'move_up'], true) && ! ($data['confirm'] ?? false)) {
             return response()->json(['message' => 'Please confirm first.', 'code' => 'confirmation_required', 'data' => $state], 422);
         }
         try {
+            if ($link['purpose'] === 'cant_make_it') {
+                return $this->performCancellation($link);
+            }
             if ($link['purpose'] === 'move_up') {
                 $offer = SlotOffer::where('public_id', $link['subject'])->with('appointment.patient.user')->firstOrFail();
                 app(FillFreedSlots::class)->accept($offer, $offer->appointment->patient->user, 'email', $link['hash']);
             } else {
-                $appointment = Appointment::where('public_id', $link['subject'])->with('patient.user')->firstOrFail();
-                DB::transaction(function () use ($appointment, $link) {
-                    AppointmentResponse::create(['appointment_id' => $appointment->id, 'appointment_revision' => $link['revision'],
-                        'response' => ['attend' => 'attending', 'cant_make_it' => 'cant_make_it', 'on_my_way' => 'on_my_way'][$link['purpose']], 'via' => 'email', 'link_hash' => $link['hash']]);
-                    if ($link['purpose'] === 'cant_make_it') {
-                        app(AppointmentService::class)->cancel($appointment->patient->user, $appointment, ['expected_revision' => $link['revision'], 'source' => 'cant_make_it'], null);
-                    }
-                });
+                $appointment = Appointment::where('public_id', $link['subject'])->firstOrFail();
+                AppointmentResponse::create(['appointment_id' => $appointment->id, 'appointment_revision' => $link['revision'],
+                    'response' => ['attend' => 'attending', 'on_my_way' => 'on_my_way'][$link['purpose']],
+                    'via' => 'email', 'link_hash' => $link['hash']]);
             }
         } catch (QueryException $e) {
             if ($e->getCode() === '23505') return response()->json(['message' => 'This link was already used.', 'code' => 'link_used'], 422);
@@ -67,6 +70,53 @@ class AppointmentResponseController extends Controller
         }
 
         return response()->json(['data' => $this->state($link, done: true)]);
+    }
+
+    private function performCancellation(array $link): JsonResponse
+    {
+        $appointment = Appointment::where('public_id', $link['subject'])->firstOrFail();
+        $actor = $this->cancellationActor($appointment, $link);
+        abort_unless($actor, 403, 'Sign in to cancel this appointment or contact the clinic.');
+
+        $replay = CommandActor::run($actor, function (User $current) use ($appointment, $link) {
+            $locked = Appointment::whereKey($appointment->id)->lockForUpdate()->firstOrFail();
+            abort_unless($this->cancellationActor($locked, $link)?->id === $current->id, 403);
+            if ($current->patient?->id !== $locked->patient_id) {
+                abort_unless(PatientGuardian::where('guardian_patient_id', $current->patient?->id)
+                    ->where('dependent_patient_id', $locked->patient_id)->where('status', 'active')
+                    ->lockForUpdate()->first(), 403);
+            }
+            if (AppointmentResponse::where('link_hash', $link['hash'])->exists()) {
+                return true;
+            }
+            app(AppointmentService::class)->cancel($current, $locked, [
+                'expected_revision' => $link['revision'], 'source' => 'cant_make_it',
+            ], null);
+            AppointmentResponse::create([
+                'appointment_id' => $locked->id, 'appointment_revision' => $link['revision'],
+                'response' => 'cant_make_it', 'via' => 'email', 'link_hash' => $link['hash'],
+            ]);
+
+            return false;
+        });
+        if ($replay) {
+            app(AppointmentService::class)->reconcileCancellationRefund($appointment->fresh(), $actor);
+        }
+
+        return response()->json(['data' => $this->state($link, done: true)]);
+    }
+
+    private function cancellationActor(Appointment $appointment, array $link): ?User
+    {
+        $contact = $appointment->patient?->contactUser();
+        if (! $contact || $contact->role !== Role::Patient || $contact->account_status !== 'Active'
+            || $contact->public_id !== $link['recipient'] || $contact->auth_version !== $link['recipient_version']
+            || ClinicClock::now()->greaterThanOrEqualTo($link['expires_at'])
+            || ! Gate::forUser($contact)->allows('cancel', $appointment)) {
+            return null;
+        }
+
+        return $contact;
     }
 
     /** Patient, signed in: "On my way" for today's visit (the front desk sees it on the Check-In page). */
@@ -123,8 +173,20 @@ class AppointmentResponseController extends Controller
         $a = Appointment::where('public_id', $link['subject'])->with('branch')->first();
         if (! $a) return ['state' => 'invalid', 'purpose' => $link['purpose'], 'message' => 'This link is not valid.'];
         $base = ['purpose' => $link['purpose'], 'appointment' => $this->view($a)];
+        if ($link['purpose'] === 'cant_make_it') {
+            if ($now->greaterThanOrEqualTo($link['expires_at'])) {
+                return ['state' => 'expired', 'purpose' => 'cant_make_it', 'message' => 'This link has expired.'];
+            }
+            if (! $this->cancellationActor($a, $link)) {
+                return ['state' => 'invalid', 'purpose' => 'cant_make_it', 'message' => 'Sign in to cancel this appointment or contact the clinic.'];
+            }
+            if ($used && $a->status === 'Cancelled') {
+                $refund = $a->cancellationRefund();
+                return $base + ['state' => 'done', 'message' => 'Your appointment is cancelled.', 'cancellation_refund' => $refund];
+            }
+        }
         if ($done) return $base + ['state' => 'done', 'message' => ['attend' => 'Thank you! The clinic knows you’ll be there.', 'on_my_way' => 'Thank you! The front desk knows you’re on your way.',
-            'cant_make_it' => 'Your appointment is cancelled and the time was freed for another patient. You can book a new time anytime.'][$link['purpose']]];
+            ][$link['purpose']]];
         if ($used) return $base + ['state' => 'used', 'message' => 'This link was already used.'];
         if ($now->greaterThanOrEqualTo($link['expires_at'])) return $base + ['state' => 'expired', 'message' => 'This link has expired.'];
         if ($a->revision !== $link['revision'] || ! in_array($a->status, ['Pending', 'Confirmed'], true) || $a->visit()->exists()) {

@@ -154,9 +154,12 @@ export function createAppointmentFlow({ getState, getSession, getActions, refres
       let refreshFailed=false
       try{refreshFailed=(await refresh())?.ok===false}catch{refreshFailed=true}
       if(!owns())return {ok:false,kind:'superseded',message:'The cancellation belongs to an earlier session. Review current clinic records.'}
-      if(refreshFailed)return {ok:true,warning:'Cancellation verified. Clinic records could not be refreshed; refresh before taking another action.'}
+      const refund = result.row.cancellation_refund
+      const refundWarning = refund && refund.status !== 'refunded' ? 'The appointment is cancelled. ' + refund.message : ''
+      if(refreshFailed)return {ok:true,warning:refundWarning || 'Cancellation verified. Clinic records could not be refreshed; refresh before taking another action.'}
       const local = getActions().applyAppointmentCancellation(appointment.id)
-      return local.ok ? { ok: true } : { ok: true, warning: `The appointment is cancelled, but its local follow-up/notification records need review: ${local.message}` }
+      const warning = refundWarning || (!local.ok ? `The appointment is cancelled, but its local follow-up/notification records need review: ${local.message}` : '')
+      return { ok: true, ...(warning ? { warning } : {}) }
     },
 
     // M8 scheduled Check-In: the server moves the appointment to Checked In, opens the Visit and — when the Visit has a

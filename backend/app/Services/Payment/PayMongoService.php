@@ -604,9 +604,13 @@ class PayMongoService
         ]);
 
         $this->audit->record([
-            'action' => $status === 'succeeded' ? 'billing.booking_payment_refunded' : 'billing.booking_payment_refund_requested',
+            'action' => match ($status) {
+                'succeeded' => 'billing.booking_payment_refunded',
+                'failed' => 'billing.booking_refund_failed',
+                default => 'billing.booking_payment_refund_requested',
+            },
             'category' => 'financial',
-            'severity' => 'info',
+            'severity' => $status === 'failed' ? 'warning' : 'info',
             'actor' => null,
             'target' => $appointment,
             'branch_id' => $appointment->branch_id,

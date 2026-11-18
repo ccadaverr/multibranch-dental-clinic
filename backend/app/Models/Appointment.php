@@ -41,6 +41,23 @@ class Appointment extends Model
         ];
     }
 
+    /** Display outcome for the cancelled booking, separate from its stored payment status. */
+    public function cancellationRefund(): ?array
+    {
+        if ($this->status !== 'Cancelled') {
+            return null;
+        }
+
+        return match ($this->booking_payment_status) {
+            'refunded' => $this->booking_refunded_at
+                ? ['status' => 'refunded', 'message' => 'Your booking refund was confirmed.']
+                : ['status' => 'unconfirmed', 'message' => 'The booking refund could not be verified. Contact the clinic with your appointment reference.'],
+            'paid', 'partially_refunded' => ['status' => 'unconfirmed', 'message' => 'The booking refund is unconfirmed. Contact the clinic with your appointment reference.'],
+            'forfeited' => ['status' => 'withheld', 'message' => 'No automatic refund was issued. Contact the clinic to review your booking payment.'],
+            default => null,
+        };
+    }
+
     public function uniqueIds(): array
     {
         return ['public_id'];

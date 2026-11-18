@@ -12,7 +12,9 @@ use App\Models\DentistProfile;
 use App\Models\Patient;
 use App\Models\Service;
 use App\Models\User;
+use App\Services\Billing\BillingException;
 use App\Services\Followups\Followups;
+use App\Services\Payment\PayMongoService;
 use App\Services\Scheduling\SchedulingService;
 use App\Services\Scheduling\SlotRequest;
 use App\Support\ClinicClock;
@@ -20,6 +22,7 @@ use App\Support\IdempotentCommand;
 use Closure;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 
 // M6 named commands: create, reschedule, cancel and the pre-arrival No-show. Each runs in one transaction,
 // revalidates through SchedulingService, appends history, and is optionally idempotent. The PostgreSQL exclusion
@@ -267,11 +270,9 @@ final class AppointmentService
             if ($current->booking_payment_status === 'paid' && $current->booking_payment_ref) {
                 $diffHours = $now->diffInHours($current->starts_at, false);
                 if ($diffHours >= 24) {
-                    try {
-                        app(\App\Services\Payment\PayMongoService::class)->refundAppointment($current, 'requested_by_customer');
-                    } catch (\Throwable $e) {
-                        report($e);
-                    }
+                    // Commit the cancellation and the one-time attempt marker before contacting the provider.
+                    $this->recordCancellationRefund($current, $actor, 'billing.booking_refund_attempt_started');
+                    DB::afterCommit(fn () => $this->checkCancellationRefund($current->id, $actor, readback: (bool) $current->booking_refund_ref));
                 } else {
                     $current->update(['booking_payment_status' => 'forfeited']);
                     app(\App\Services\Audit\AuditService::class)->record([
@@ -297,6 +298,49 @@ final class AppointmentService
 
             return [$current, 200];
         });
+    }
+
+    public function reconcileCancellationRefund(Appointment $appointment, User $actor): void
+    {
+        if ($appointment->status !== 'Cancelled' || $appointment->booking_payment_status !== 'paid'
+            || ! $appointment->booking_refund_ref) {
+            return;
+        }
+        $this->checkCancellationRefund($appointment->id, $actor, readback: true);
+    }
+
+    private function checkCancellationRefund(int $appointmentId, User $actor, bool $readback): void
+    {
+        try {
+            // One attempt. If the provider succeeds and this transaction cannot save the
+            // receipt, the committed attempt event still prevents another creation.
+            DB::transaction(function () use ($appointmentId, $actor, $readback) {
+                $locked = Appointment::whereKey($appointmentId)->lockForUpdate()->firstOrFail();
+                if ($locked->status !== 'Cancelled' || $locked->booking_payment_status !== 'paid'
+                    || (bool) $locked->booking_refund_ref !== $readback) {
+                    return;
+                }
+                try {
+                    app(PayMongoService::class)->refundAppointment($locked, 'requested_by_customer');
+                } catch (BillingException $e) {
+                    $this->recordCancellationRefund($locked, $actor, 'billing.booking_refund_unconfirmed',
+                        $e->responseBody()['code']);
+                }
+            });
+        } catch (\Throwable $e) {
+            // The appointment and attempt marker already committed. Readback will show the
+            // refund as unconfirmed unless a verified provider receipt was saved.
+            report($e);
+        }
+    }
+
+    private function recordCancellationRefund(Appointment $appointment, User $actor, string $action, ?string $code = null): void
+    {
+        app(\App\Services\Audit\AuditService::class)->record([
+            'action' => $action, 'category' => 'financial', 'severity' => $code ? 'warning' : 'info',
+            'target' => $appointment, 'actor' => $actor, 'branch_id' => $appointment->branch_id,
+            'payload' => ['appointment_code' => $appointment->appointment_code, 'outcome_code' => $code],
+        ]);
     }
 
     /**
@@ -487,6 +531,13 @@ final class AppointmentService
                 throw AppointmentCommandException::rule('not_refundable', 'Only paid or forfeited booking payments can be refunded.', 'booking_payment_status');
             }
 
+            if ($locked->status === 'Cancelled' && ! $locked->booking_refund_ref
+                && \App\Models\AuditLog::where('auditable_type', 'Appointment')
+                    ->where('auditable_public_id', $locked->public_id)
+                    ->where('action', 'billing.booking_refund_attempt_started')->exists()) {
+                throw AppointmentCommandException::rule('refund_reconciliation_required',
+                    'Verify the original request with the payment provider before taking another refund action.', 'booking_payment_status');
+            }
             $result = app(\App\Services\Payment\PayMongoService::class)->refundAppointment($locked, $reason);
             $this->record($locked, $actor, $result['status'] === 'refunded' ? 'appointment.booking_refunded' : 'appointment.booking_refund_requested', $locked->status);
 

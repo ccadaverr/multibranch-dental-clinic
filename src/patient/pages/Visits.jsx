@@ -78,6 +78,7 @@ export function VisitsPage({ selectionDetailsAvailable = false, context, onNavig
           <p className="pp-muted"><Icon name="pin" size={14}/> {a.branch?.name}{a.dentist?.name ? ` · ${a.dentist.name}` : ''}</p>
           <p className="pp-muted">Ref. {a.code} <Pill>{a.status}</Pill></p>
           {a.cancellation_category && <p style={{overflowWrap:'anywhere'}}>{a.cancellation_category}{a.cancellation_detail && `: ${a.cancellation_detail}`}</p>}
+          {a.cancellation_refund && <p>{a.cancellation_refund.message}</p>}
           {['Checked In','In Treatment','Completed'].includes(a.status)&&<Button size="sm" variant="soft" icon="receipt" onClick={()=>onNavigate('billing',{appointmentId:a.id,patientId:a.patient?.id,receiptOnly:true})}>Invoice and receipt</Button>}
           {tab === 'upcoming' && a.date === today && ['Pending', 'Confirmed'].includes(a.status) && <OnMyWay appointment={a} toast={toast}/>}
           {a.status === 'Pending' && <p className="pp-hint">{a.booking_payment_status === 'held' ? 'Awaiting verified online payment. Your slot hold expires if payment is not completed.' : 'Waiting for the front desk to confirm this booking.'}</p>}
@@ -97,7 +98,7 @@ export function VisitsPage({ selectionDetailsAvailable = false, context, onNavig
       {treatments.status === 'ready' && !summaries.length && <p>No treatment summaries available.</p>}
       <ul className="pp-list">{summaries.map(t => <li key={t.id} className="pp-card"><h3>{t.service.name}</h3><p>{dateLong(t.date) || 'Date unavailable'}</p>{t.dentist?.name && <p>{t.dentist.name}</p>}</li>)}</ul>
     </section>}
-    {action?.kind === 'cancel' && <CancelDialog selectionDetailsAvailable={selectionDetailsAvailable} appointment={action.appointment} onClose={() => setAction(null)} onDone={() => { setAction(null); toast?.('Your appointment is cancelled.', 'success'); list.reload({ quiet: true }) }}/>}
+    {action?.kind === 'cancel' && <CancelDialog selectionDetailsAvailable={selectionDetailsAvailable} appointment={action.appointment} onClose={() => setAction(null)} onDone={refund => { setAction(null); toast?.(refund ? 'Your appointment is cancelled. ' + refund.message : 'Your appointment is cancelled.', refund && refund.status !== 'refunded' ? 'warning' : 'success'); list.reload({ quiet: true }) }}/>}
     {action?.kind === 'reschedule' && <RescheduleDialog appointment={action.appointment} onClose={() => setAction(null)} onDone={() => { setAction(null); toast?.('Your appointment is moved.', 'success'); list.reload({ quiet: true }) }}/>}
   </div>
 }
@@ -119,7 +120,7 @@ function CancelDialog({ selectionDetailsAvailable = false, appointment, onClose,
     const r = await cancelAppointment(appointment, key.current, { ...(selectionDetailsAvailable ? { reason_category: reason, ...(reason === 'Other' ? { reason_detail: effectiveReason } : {}) } : {reason:effectiveReason}), note: note.trim() })
     setBusy(false)
     if (!r.ok) return setError(r.message)
-    onDone()
+    onDone(r.row?.cancellation_refund)
   }
   return <Modal open title="Cancel this visit?" subtitle={`${appointment.service?.name} · ${dateLong(appointment.date)} at ${time12(appointment.start_time)}`} onClose={onClose}>
     <SelectionDetailsNotice available={selectionDetailsAvailable}/>

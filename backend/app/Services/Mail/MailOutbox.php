@@ -190,7 +190,7 @@ class MailOutbox
                 if (! in_array($appointment->status, ['Pending', 'Confirmed'], true) || $appointment->starts_at->lessThanOrEqualTo(now()) || $appointment->visit()->exists()) return [null, $appointment, true, null];
                 [$user, $reason] = \App\Services\Automations\Recipient::patient($appointment->patient);
 
-                return [new \App\Mail\AppointmentReminderMail($appointment, substr(strrchr($dispatch->dedupe_key, ':'), 1) ?: 'lead'), $appointment, false, $reason ? null : $user?->email];
+                return [new \App\Mail\AppointmentReminderMail($appointment, substr(strrchr($dispatch->dedupe_key, ':'), 1) ?: 'lead', $user), $appointment, false, $reason ? null : $user?->email];
             }
             if ($dispatch->purpose === 'late_check') {
                 $settings = \App\Services\Automations\NoShowDetection::settings();

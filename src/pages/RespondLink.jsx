@@ -25,6 +25,9 @@ export function RespondLink({ hash }) {
     setState(s => ({ ...s, phase: 'working' }))
     const r = await performResponseLink(token, confirm)
     if (r.ok) return setState({ phase: 'done', data: r.data, message: r.data?.message })
+    if (confirm && r.kind === 'network') {
+      return setState(s => ({ ...s, phase: 'retry', message: 'The clinic response was not received. Check the same appointment again.' }))
+    }
     setState(s => ({ phase: 'final', data: s.data, message: r.message || 'That did not work. Please contact the clinic.' }))
   }
   useEffect(() => {
@@ -32,6 +35,7 @@ export function RespondLink({ hash }) {
     describeResponseLink(token).then(r => {
       if (!r.ok) return setState({ phase: 'invalid', data: null, message: '' })
       const d = r.data
+      if (d.state === 'done') return setState({ phase: 'done', data: d, message: d.message })
       if (d.state !== 'ready') return setState({ phase: 'final', data: d, message: d.message })
       if (d.purpose === 'attend' || d.purpose === 'on_my_way') { setState({ phase: 'working', data: d, message: '' }); return perform(false) }
       setState({ phase: 'confirm', data: d, message: '' })
@@ -60,6 +64,8 @@ export function RespondLink({ hash }) {
       <a className="link-button respond-alt" href="#home">No thanks, keep my time</a>
     </>}
     {state.phase === 'done' && <Notice tone="success" title="Done">{state.message}</Notice>}
+    {state.phase === 'retry' && <Notice tone="warning">{state.message} <Button variant="soft" onClick={() => perform(true)}>Retry original response</Button></Notice>}
+    {state.phase === 'done' && d?.cancellation_refund && <Notice tone={d.cancellation_refund.status === 'refunded' ? 'success' : 'warning'}>{d.cancellation_refund.message}</Notice>}
     {state.phase === 'final' && <Notice tone="warning" title="This link can’t be used">{state.message}</Notice>}
     {(state.phase === 'done' || state.phase === 'final') && <p className="login-copy"><a href="#sign-in">Sign in to see your visits</a>{a?.phone ? <> · or call the branch: <a href={`tel:${a.phone.replace(/[^0-9+]/g, '')}`}>{a.phone}</a></> : null}</p>}
   </div></AuthShell>

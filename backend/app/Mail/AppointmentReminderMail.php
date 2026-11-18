@@ -3,6 +3,7 @@
 namespace App\Mail;
 
 use App\Models\Appointment;
+use App\Models\User;
 use App\Support\Brand;
 use App\Support\ClinicClock;
 use App\Support\ActionLink;
@@ -15,7 +16,7 @@ use Illuminate\Mail\Mailables\Envelope;
 /** A1 reminder: when and where, how to reschedule or cancel, and a calendar file. No service, Dentist, prices or health advice. */
 class AppointmentReminderMail extends AutomationMail
 {
-    public function __construct(public Appointment $appointment, public string $kind = 'lead') {}
+    public function __construct(public Appointment $appointment, public string $kind = 'lead', private ?User $actionRecipient = null) {}
 
     public function envelope(): Envelope
     {
@@ -39,7 +40,8 @@ class AppointmentReminderMail extends AutomationMail
     {
         $a = $this->appointment;
 
-        return ActionLink::url(ActionLink::make($purpose, (string) $a->public_id, (int) $a->revision, CarbonImmutable::instance($a->starts_at), $this->kind));
+        return ActionLink::url(ActionLink::make($purpose, (string) $a->public_id, (int) $a->revision, CarbonImmutable::instance($a->starts_at), $this->kind,
+            $purpose === 'cant_make_it' ? ($this->actionRecipient ?? $a->patient?->contactUser()) : null));
     }
 
     public function content(): Content
