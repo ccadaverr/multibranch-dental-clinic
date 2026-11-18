@@ -126,6 +126,14 @@ final class QueueService
             if ($command === 'call' && $current->dentistQueue->dentist?->available === false) {
                 throw VisitCommandException::rule('dentist_unavailable', 'This Dentist is marked unavailable. Ask Staff to review the queue.', 'dentist');
             }
+            if ($command === 'call') {
+                $next = app(QueueOrder::class)->eligible($visit->branch_id, $visit->clinic_date->format('Y-m-d'))
+                    ->first(fn (QueueEntry $candidate) => $candidate->dentist_queue_id === $current->dentist_queue_id
+                        && in_array($candidate->status, ['Waiting', 'In Queue'], true));
+                if ($next?->id !== $current->id) {
+                    throw VisitCommandException::rule('queue_out_of_order', 'Call the next waiting patient in this Dentist?s queue. Refresh to review the order.', 'queue');
+                }
+            }
             $previous = $current->status;
             $current->update(['status' => $to, 'revision' => $current->revision + 1, 'updated_by_user_id' => $actor->id]);
             $this->history($current, $actor, $event, $previous, null);

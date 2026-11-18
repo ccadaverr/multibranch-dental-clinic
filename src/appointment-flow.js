@@ -173,7 +173,8 @@ export function createAppointmentFlow({ getState, getSession, getActions, refres
       if (!appointment) return guarded ? stale() : { ok: false, message: 'This appointment is not loaded from the server. Refresh and try again.' }
       // Copy the reviewed version before the first await. Never substitute a
       // newer projected revision for the human's confirmed command context.
-      const submitted = Object.freeze({...appointment, revision:guarded ? reviewed.revision : appointment.revision})
+      const submitted = Object.freeze({...appointment, revision:guarded ? reviewed.revision : appointment.revision,
+        idConfirmed: guarded ? reviewed.idConfirmed : appointment.idConfirmed})
       const currentActor = () => !guarded || getAuthGeneration() === reviewed.authGeneration && checkInActorKey(getSession()) === reviewed.actorKey
       const beforeDispatch = guarded ? () => !!reviewedCheckInAppointmentFor({state:getState(),session:getSession(),getAuthGeneration}, reviewed) : undefined
       const result = await visits.checkIn(submitted, key, beforeDispatch)

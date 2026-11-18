@@ -66,7 +66,7 @@ test('CAL-02 sign-out has a truthful offline state; unauthorized roles and inact
 test('CAL-02 source keeps canonical display names and existing booking/attendance authority', () => {
   assert.doesNotMatch(source, /patientName\(a\.patientName\)/)
   assert.match(source, /const name = appointmentName\(a\)/)
-  assert.match(source, /store\.appointmentFlow\.cancel\(a, commandKey\(\)\)/)
+  assert.match(source, /store\.appointmentFlow\.cancel\(a, key, selection\)/)
   assert.match(source, /store\.appointmentFlow\.noShow\(a, commandKey\(\)\)/)
   assert.match(source, /<AppointmentForm/)
   assert.doesNotMatch(source, /setAppointments|setQueue|setCheckIns|Math\.random|\.status\s*=/)

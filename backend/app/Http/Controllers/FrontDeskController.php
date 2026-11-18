@@ -53,7 +53,7 @@ class FrontDeskController extends Controller
         $free = $scope(SlotOpening::query())->where('status', 'open')->where('clinic_date', ClinicClock::today())->where('ends_at', '>', $now->toIso8601String())
             ->withCount(['offers as offers_out' => fn ($q) => $q->where('status', 'offered')])->with(['dentist.person', 'branch'])->orderBy('starts_at')->get();
 
-        $pending = $scope(Appointment::query())->where('status', 'Pending')->where('starts_at', '>', $now->toIso8601String())->with($relations)->orderBy('starts_at')->limit(50)->get();
+        $pending = $scope(Appointment::query())->where('status', 'Pending')->where('starts_at', '>=', $dayStart->toIso8601String())->with($relations)->orderBy('starts_at')->limit(50)->get();
 
         return response()->json(['data' => [
             'settings' => $settings ? ['late_minutes' => $settings['late_minutes'], 'release_minutes' => $settings['release_minutes'], 'release_mode' => $settings['release_mode']] : null,

@@ -66,7 +66,13 @@ class AppointmentAuthorizationTest extends TestCase
         $this->assertSame([$this->a1->public_id], $this->ids($this->getJson('/api/appointments')->assertOk()));
         $this->getJson('/api/appointments/'.$this->a1->public_id)->assertOk();
         $this->staffBook(['patient_id' => $this->p['B']->public_id])->assertCreated();
-        $this->postJson('/api/appointments/'.$this->a1->public_id.'/cancel', ['expected_revision' => 1])->assertOk();
+        $cancel = '/api/appointments/'.$this->a1->public_id.'/cancel';
+        $this->postJson($cancel, ['expected_revision' => 1])->assertUnprocessable()->assertJsonPath('code', 'cancellation_reason_required');
+        $this->assertSame(1, $this->a1->fresh()->revision);
+        $body = ['expected_revision' => 1, 'reason' => 'Synthetic cancellation'];
+        $headers = ['Idempotency-Key' => 'staff-cancel-readback'];
+        $this->postJson($cancel, $body, $headers)->assertOk()->assertJsonPath('data.status', 'Cancelled');
+        $this->postJson($cancel, $body, $headers)->assertOk()->assertJsonPath('data.revision', 2);
     }
 
     public function test_staff_out_of_scope_is_forbidden(): void
@@ -154,7 +160,7 @@ class AppointmentAuthorizationTest extends TestCase
         $this->assertCount(2, $this->getJson('/api/appointments')->assertOk()->json('data'));
         $this->getJson('/api/appointments/'.$this->b2->public_id)->assertOk();
         $this->staffBook(['branch_ref' => 'b2', 'date' => '2026-10-05'])->assertCreated();
-        $this->postJson('/api/appointments/'.$this->b2->public_id.'/cancel', ['expected_revision' => 1])->assertOk();
+        $this->postJson('/api/appointments/'.$this->b2->public_id.'/cancel', ['expected_revision' => 1, 'reason' => 'Synthetic cancellation'])->assertOk();
     }
 
     public function test_inactive_account_is_forbidden_and_recommendation_is_patient_only(): void

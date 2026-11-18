@@ -243,7 +243,7 @@ class InterviewRoundTwoTest extends TestCase
         $y = $this->existing('B', 'd1', 'b1', 'svc1', '2026-09-29', '14:00');
         $z = $this->existing('C', 'd1', 'b1', 'svc1', '2026-09-29', '15:00');
         $this->actingAsUser('staffB1');
-        $this->postJson("/api/appointments/{$x->public_id}/cancel", ['expected_revision' => 1])->assertOk();
+        $this->postJson("/api/appointments/{$x->public_id}/cancel", ['expected_revision' => 1, 'reason' => 'Synthetic cancellation'])->assertOk();
         $this->assertFalse($x->fresh()->late_cancellation); // the front desk's cancellation is never counted
         $this->runJobs(['fill_slots']);
         $this->runJobs(['fill_slots']);
@@ -278,7 +278,7 @@ class InterviewRoundTwoTest extends TestCase
         $far = $this->book(['date' => '2026-10-05', 'start_time' => '09:00'])->assertCreated()->json('data.id');
         foreach (['09:00', '10:00', '11:00'] as $time) { // tomorrow, under 24 hours away
             $id = $this->book(['date' => '2026-09-29', 'start_time' => $time])->assertCreated()->json('data.id');
-            $this->postJson("/api/appointments/$id/cancel", ['expected_revision' => 1])->assertOk();
+            $this->postJson("/api/appointments/$id/cancel", ['expected_revision' => 1, 'reason' => 'Synthetic cancellation'])->assertOk();
         }
         $this->assertSame(3, Appointment::where('late_cancellation', true)->count());
         $this->assertNotNull($this->p['A']->fresh()->confirmation_required_at);
@@ -291,7 +291,7 @@ class InterviewRoundTwoTest extends TestCase
         $this->postJson("/api/patients/{$this->p['A']->public_id}/attendance/clear", ['reason' => 'Talked with the patient'])->assertOk();
         $this->actingAsUser('patientA');
         $this->book(['date' => '2026-10-07', 'start_time' => '09:00'])->assertCreated()->assertJsonPath('data.status', 'Confirmed');
-        $this->postJson("/api/appointments/$far/cancel", ['expected_revision' => 1])->assertOk();
+        $this->postJson("/api/appointments/$far/cancel", ['expected_revision' => 1, 'reason' => 'Synthetic cancellation'])->assertOk();
         $this->assertFalse(Appointment::where('public_id', $far)->sole()->late_cancellation); // a week ahead is not late
         $this->assertStringContainsString('24 hours', \App\Services\Automations\AttendancePolicy::summary());
     }

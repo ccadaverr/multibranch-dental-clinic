@@ -7,6 +7,7 @@ import { Button, Card, Field, FilterBar, Icon, Modal, Notice, PageHeader, Progre
 import { branchCapacity, dentistName, displayTime, patientName, queueWaitEstimate } from '../logic.js'
 import { STAFF_CANCELLATION_REASONS, commandKey } from '../appointments-api.js'
 import { compareBranchQueue, displayQueueStatus } from '../queue-api.js'
+import { getAppointment } from '../api-client.js'
 import { findPatientConversation } from '../messaging-api.js'
 import '../b4-queue.css'
 import '../checkin-reception.css'
@@ -92,7 +93,8 @@ export function CheckInPage({ store, context, setPage }) {
   const [cancelNote, setCancelNote] = useState('')
   const [cancelling, setCancelling] = useState(false)
   const cancelKey = useRef(commandKey())
-  const cancelAttempt=useRef(null),cancelSending=useRef(false)
+  const cancelAttempt=useRef(null),cancelSending=useRef(false),cancelReading=useRef(false)
+  const [reviewedCancellation, setReviewedCancellation] = useState(null)
   const [cancelUncertain,setCancelUncertain]=useState(false),[cancelError,setCancelError]=useState('')
 
   const handleCancelAppointment = async () => {
@@ -108,7 +110,8 @@ export function CheckInPage({ store, context, setPage }) {
     }
     const command=cancelAttempt.current
     const owns=()=>arrivalLive.current&&cancelAttempt.current===command&&reviewedSelection.current===command.reviewed&&command.auth===latestStore.current.getAuthGeneration?.()&&command.actor===schedulingActorKey(latestStore.current)
-    if(!owns())return
+    if(!owns() || (command.uncertain && reviewedCancellation !== command)) return
+    setReviewedCancellation(null)
     cancelSending.current=true;setCancelling(true);setCancelError('')
     try{
       let result
@@ -120,7 +123,7 @@ export function CheckInPage({ store, context, setPage }) {
       if(!result.ok){
         command.uncertain=command.uncertain||!['validation','conflict','not_found','forbidden','unauthenticated','rate_limited','stale_context'].includes(result.kind)
         setCancelUncertain(command.uncertain)
-        setCancelError(command.uncertain?'Cancellation is unconfirmed. Retry the same cancellation to recover its recorded result.':result.message||'Cancellation was refused. Review the appointment before trying again.')
+        setCancelError(command.uncertain?'Cancellation is unconfirmed. Close this dialog and review the current appointment.':result.message||'Cancellation was refused. Review the appointment before trying again.')
         if(!command.uncertain){cancelAttempt.current=null;cancelKey.current=commandKey()}
         return
       }
@@ -128,6 +131,38 @@ export function CheckInPage({ store, context, setPage }) {
       setAppointmentId('');setIdConfirmed(false);setArrivalResult(null);setCancelReason('No valid ID presented');setCancelReasonOther('');setCancelNote('');cancelKey.current=commandKey()
       toast(result.warning||'Appointment cancelled.',result.warning?'warning':'success')
     }finally{cancelSending.current=false;if(arrivalLive.current)setCancelling(false)}
+  }
+  const reviewCancellation = async () => {
+    const command = cancelAttempt.current
+    if (!command?.uncertain || cancelReading.current || cancelSending.current) return
+    cancelReading.current = true
+    setReviewedCancellation(null)
+    const owns = () => arrivalLive.current && cancelAttempt.current === command && command.auth === latestStore.current.getAuthGeneration?.()
+      && command.actor === schedulingActorKey(latestStore.current)
+    try {
+      const result = await getAppointment(command.appointment.id)
+      if (!owns()) return
+      const row = result.data
+      if (!result.ok || row?.id !== command.appointment.id) {
+        setCancelError('The appointment could not be read. Try reviewing it again.')
+        return
+      }
+      if (['Pending', 'Confirmed'].includes(row.status) && row.revision === command.appointment.revision) {
+        setReviewedCancellation(command)
+        setCancelError('The appointment still shows as active. You can recover the original cancellation using the same request.')
+        return
+      }
+      cancelAttempt.current = null
+      setCancelUncertain(false)
+      reviewedSelection.current = null
+      setSelectionContext(null)
+      setAppointmentId('')
+      setIdConfirmed(false)
+      toast(row.status === 'Cancelled' ? 'The clinic record confirms this appointment is cancelled.' : 'The appointment changed. Review the latest record before acting.', 'warning')
+      await flow.refresh()
+    } catch {
+      if (owns()) setCancelError('The appointment could not be read. Try reviewing it again.')
+    } finally { cancelReading.current = false }
   }
   const checkScheduledLegacy=async()=>{
     const reviewed=reviewedSelection.current
@@ -139,7 +174,7 @@ export function CheckInPage({ store, context, setPage }) {
     if(checkInKey.current.selection!==selection)checkInKey.current={selection,key:commandKey()}
     const ticket={reviewed,key:checkInKey.current.key};scheduledPending.current=ticket;setBusy(true);setArrivalProblem('')
     let result
-    try {result=await flow.checkIn(reviewed.appointmentId,ticket.key,reviewed)}
+    try {result=await flow.checkIn(reviewed.appointmentId,ticket.key,{...reviewed,idConfirmed:true})}
     catch {result={ok:false,message:'The arrival outcome could not be confirmed. Refresh the appointment list before retrying; no new arrival was assumed.'}}
     if(scheduledPending.current!==ticket)return
     scheduledPending.current=null
@@ -212,18 +247,43 @@ export function CheckInPage({ store, context, setPage }) {
   const emptyPatient={firstName:'',lastName:'',phone:'',email:'',dob:''}
   const [newPatient,setNewPatient]=useState(emptyPatient)
   const registerKey=useRef(commandKey())
+  const registerSending = useRef(false)
+  const [registerBusy, setRegisterBusy] = useState(false)
+  const [registerUncertain, setRegisterUncertain] = useState(false)
   const [registerError,setRegisterError]=useState('')
   const updateNewPatient=(key,value)=>{registerKey.current=commandKey();setRegisterError('');setNewPatient(previous=>({...previous,[key]:value}))}
   const register=async()=>{
+    if (registerSending.current) return
     const phone=newPatient.phone.trim()?normalizePhoneNumber(DEFAULT_COUNTRY.dial,newPatient.phone):{ok:true,e164:''}
     if(!newPatient.firstName.trim()||!newPatient.lastName.trim())return setRegisterError('Enter the patient’s first and last name.')
     if(!phone.ok)return setRegisterError(phone.reason)
-    const result=await flow.registerPatient({...newPatient,firstName:newPatient.firstName.trim(),lastName:newPatient.lastName.trim(),phone:phone.e164,email:newPatient.email.trim()},registerKey.current)
-    if(!result.ok)return setRegisterError(result.message)
-    flow?.searchPatients?.('')
-    updateWalkin('patientPublicId',result.patient.id)
-    setNewPatient(emptyPatient);setRegistering(false);registerKey.current=commandKey()
-    toast(`Created registration: ${result.patient.name} (${result.patient.patientCode}).`,'success')
+    const actor = schedulingActorKey(store), auth = store.getAuthGeneration?.()
+    const owns = () => arrivalLive.current && actor === schedulingActorKey(latestStore.current) && auth === latestStore.current.getAuthGeneration?.()
+    registerSending.current = true
+    setRegisterBusy(true)
+    setRegisterError('')
+    try {
+      const result = await flow.registerPatient({...newPatient,firstName:newPatient.firstName.trim(),lastName:newPatient.lastName.trim(),phone:phone.e164,email:newPatient.email.trim()},registerKey.current)
+      if (!owns()) return
+      if (!result.ok) {
+        const uncertain = registerUncertain || ['network', 'server', 'unverified'].includes(result.kind)
+        setRegisterUncertain(uncertain)
+        setRegisterError(uncertain ? 'Registration is unconfirmed. Retry this same registration to recover its result.' : result.message)
+        return
+      }
+      setRegisterUncertain(false)
+      flow?.searchPatients?.('')
+      updateWalkin('patientPublicId',result.patient.id)
+      setNewPatient(emptyPatient);setRegistering(false);registerKey.current=commandKey()
+      toast('Created registration: ' + result.patient.name + ' (' + result.patient.patientCode + ').','success')
+    } catch {
+      if (!owns()) return
+      setRegisterUncertain(true)
+      setRegisterError('Registration is unconfirmed. Retry this same registration to recover its result.')
+    } finally {
+      registerSending.current = false
+      if (owns()) setRegisterBusy(false)
+    }
   }
   const selectCombPatient=p=>{updateWalkin('patientPublicId',p.id);setSearch(`${p.name} • ${p.patientCode}`);setPatientMenuOpen(false);setActiveIndex(-1)}
 
@@ -233,7 +293,7 @@ export function CheckInPage({ store, context, setPage }) {
         <RefreshButton size="sm" onClick={()=>flow?.refresh()}/>
       </div>}/>
     <AppointmentsLoadNotice store={store}/>
-    {cancelUncertain&&(!cancelModalOpen||!selectedAppointment)&&<Notice tone="warning" title="Cancellation unconfirmed">{cancelError}<Button onClick={handleCancelAppointment} disabled={cancelling}>Retry same cancellation</Button></Notice>}
+    {cancelUncertain&&(!cancelModalOpen||!selectedAppointment)&&<Notice tone="warning" title="Cancellation unconfirmed">{cancelError}<div className="row-actions"><Button onClick={reviewCancellation} disabled={cancelling}>Review appointment</Button>{reviewedCancellation && <Button onClick={handleCancelAppointment} disabled={cancelling}>Retry same cancellation</Button>}</div></Notice>}
     <div ref={arrivalFeedback} tabIndex={-1} role={['unknown','refused'].includes(arrivalPhase)?'alert':'status'}>
       {arrivalPhase==='submitting'&&<p>Recording the reviewed arrival…</p>}
       {arrivalMessage&&<p>{arrivalMessage}</p>}
@@ -263,7 +323,7 @@ export function CheckInPage({ store, context, setPage }) {
           </div></div>:<Notice>Select an appointment to check the patient in.</Notice>}
         {selectedAppointment?.patientPublicId&&session?.role==='staff'&&<IdCheck patientId={selectedAppointment.patientPublicId} toast={toast} getAuthGeneration={store.getAuthGeneration}/>}
         {cancelModalOpen && selectedAppointment && (
-          <Modal open title={`Cancel appointment: ${patientName(selectedAppointment.patientId, state.patients)}`} onClose={() => !cancelling && !cancelUncertain && setCancelModalOpen(false)}>
+          <Modal open title={`Cancel appointment: ${patientName(selectedAppointment.patientId, state.patients)}`} onClose={() => !cancelling && setCancelModalOpen(false)}>
             <div className="form-grid">
               {cancelError&&<p className="span-2" role="alert">{cancelError}</p>}
               <Notice tone="warning">Cancelling this appointment will mark it as Cancelled on the clinic server and reopen any linked follow-up.</Notice>
@@ -286,10 +346,10 @@ export function CheckInPage({ store, context, setPage }) {
               </Field>
               </fieldset>
               <div className="span-2 row-actions" style={{ justifyContent: 'flex-end', gap: '8px', marginTop: '12px' }}>
-                <Button variant="ghost" onClick={() => setCancelModalOpen(false)} disabled={cancelling||cancelUncertain}>Keep appointment</Button>
+                <Button variant="ghost" onClick={() => setCancelModalOpen(false)} disabled={cancelling}>{cancelUncertain ? 'Close and review' : 'Keep appointment'}</Button>
                 <Button
                   className="pp-danger-solid"
-                  disabled={cancelling || (cancelReason === 'Other' && !cancelReasonOther.trim())}
+                  disabled={cancelling || cancelUncertain || (cancelReason === 'Other' && !cancelReasonOther.trim())}
                   onClick={handleCancelAppointment}
                 >
                   {cancelling ? 'Cancelling…' : cancelUncertain?'Retry same cancellation':'Confirm cancellation'}
@@ -305,10 +365,10 @@ export function CheckInPage({ store, context, setPage }) {
       </Card>:<Card title="Walk-in admission" subtitle="Find an existing patient or register a new walk-in patient, then select branch, service and dentist."><fieldset className="form-grid" disabled={arrivalLocked} style={{border:0,padding:0,margin:0,minWidth:0}}>
         <div className="span-2" style={{ display: 'flex', gap: '16px', marginBottom: '8px' }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: !registering ? 'bold' : 'normal' }}>
-            <input type="radio" name="walkinType" checked={!registering} onChange={()=>setRegistering(false)}/> Existing registered patient
+            <input type="radio" name="walkinType" checked={!registering} disabled={registerBusy || registerUncertain} onChange={()=>setRegistering(false)}/> Existing registered patient
           </label>
           <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: registering ? 'bold' : 'normal' }}>
-            <input type="radio" name="walkinType" checked={registering} onChange={()=>{setRegistering(true);updateWalkin('patientPublicId','');setSearch('');setPatientMenuOpen(false);setActiveIndex(-1)}}/> New patient registration
+            <input type="radio" name="walkinType" checked={registering} disabled={registerBusy || registerUncertain} onChange={()=>{setRegistering(true);updateWalkin('patientPublicId','');setSearch('');setPatientMenuOpen(false);setActiveIndex(-1)}}/> New patient registration
           </label>
         </div>
         {!registering && <>
@@ -322,12 +382,14 @@ export function CheckInPage({ store, context, setPage }) {
 
         </>}
         {registering && <div className="span-2 form-grid" style={{ padding: '14px', background: 'var(--surface-2)', borderRadius: '12px' }}>
+          <fieldset className="span-2 form-grid" disabled={registerBusy || registerUncertain} style={{border:0,padding:0,margin:0,minWidth:0}}>
           <Field label="First name" required><input value={newPatient.firstName} onChange={e=>updateNewPatient('firstName',e.target.value)}/></Field>
           <Field label="Last name" required><input value={newPatient.lastName} onChange={e=>updateNewPatient('lastName',e.target.value)}/></Field>
           <Field label="Mobile number" hint="Optional. 10 digits starting with 9 (no leading 0)."><input inputMode="tel" value={newPatient.phone} maxLength={10} placeholder="9171234567" onChange={e=>updateNewPatient('phone',e.target.value.replace(/\D/g, '').replace(/^0+/, '').slice(0, 10))}/></Field>
           <Field label="Email" hint="Optional. If this email is already on file, select that patient instead."><input type="email" value={newPatient.email} onChange={e=>updateNewPatient('email',e.target.value)}/></Field>
           <Field label="Date of birth" hint="Up to 120 years old"><input type="date" min={addCalendarMonths(today, -12 * 120)} max={today} value={newPatient.dob} onChange={e=>updateNewPatient('dob',e.target.value)}/></Field>
-          <div className="span-2">{registerError&&<Notice tone="warning">{registerError}</Notice>}<div className="row-actions"><Button size="sm" onClick={register}>Register new patient</Button></div><small className="block-muted">Creates a clinic patient record only — no login account.</small></div>
+          </fieldset>
+          <div className="span-2">{registerError&&<Notice tone="warning">{registerError}</Notice>}<div className="row-actions"><Button size="sm" onClick={register} disabled={registerBusy}>{registerBusy ? "Registering?" : registerUncertain ? "Retry same registration" : "Register new patient"}</Button></div><small className="block-muted">Creates a clinic patient record only — no login account.</small></div>
         </div>}
         <Field label="Branch"><select value={walkIn.branchId} onChange={e=>updateWalkin('branchId',e.target.value)}>{branches.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>
         <Field label="Requested service" required><select value={walkIn.serviceId} onChange={e=>updateWalkin('serviceId',e.target.value)}><option value="">Select service</option>{walkServices.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>

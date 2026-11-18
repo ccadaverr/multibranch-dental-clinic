@@ -82,6 +82,9 @@ final class QueueFifoAcceptanceTest extends TestCase
         $response = $this->move($c, $a, $snapshot)->assertOk()->assertJsonPath('data.branch_position', 1)
             ->assertJsonPath('meta.queue_order.from_position', 3)->assertJsonPath('meta.queue_order.to_position', 1);
         $this->move($c, $a, $snapshot)->assertOk()->assertHeader('Idempotent-Replayed', 'true')->assertExactJson($response->json());
+        $rows = $this->getJson('/api/queue?branch_ref=b1')->assertOk()->json('data');
+        $this->assertSame($c->public_id, $rows[0]['id']);
+        $this->assertSame([1, 2, 3], array_column($rows, 'branch_position'));
         $this->assertSame([$c->public_id, $a->public_id, $b->public_id], array_column($this->snapshot($a)['entries'], 'id'));
         $this->assertEquals($before, Visit::orderBy('id')->pluck('arrived_at', 'id')->all());
         $this->assertSame($history, QueueEntryHistory::orderBy('id')->limit(3)->get()->map->getRawOriginal()->all());
@@ -134,7 +137,10 @@ final class QueueFifoAcceptanceTest extends TestCase
         $c = $this->arrive('C');
         $d = $this->arrive('D');
         $this->move($d, $b, $this->snapshot($a))->assertOk();
-        $this->postJson("/api/queue/{$b->public_id}/call", ['expected_revision' => 1], ['Idempotency-Key' => 'call-b'])->assertOk();
+        foreach ([$a, $d, $b] as $entry) {
+            $this->postJson("/api/queue/{$entry->public_id}/call", ['expected_revision' => $entry->fresh()->revision],
+                ['Idempotency-Key' => 'call-'.$entry->public_id])->assertOk();
+        }
         $this->actingAsUser('dentist1');
         $visit = $b->visit;
         $this->postJson("/api/visits/{$visit->public_id}/treatment", ['expected_revision' => $visit->revision], ['Idempotency-Key' => 'start-b'])->assertCreated();

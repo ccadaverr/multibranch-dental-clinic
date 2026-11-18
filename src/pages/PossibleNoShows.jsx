@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react'
-import { Button, Card } from '../components.jsx'
+import React, { useEffect, useRef, useState } from 'react'
+import { Button, Card, ConfirmDialog } from '../components.jsx'
 import { confirmNoShowFlag, dismissNoShowFlag, listNoShowFlags } from '../api-client.js'
 
 /**
@@ -9,6 +9,8 @@ import { confirmNoShowFlag, dismissNoShowFlag, listNoShowFlags } from '../api-cl
  */
 export function PossibleNoShows({ onChanged, toast = () => {} }) {
   const [rows, setRows] = useState([]), [busy, setBusy] = useState('')
+  const [selected, setSelected] = useState(null)
+  const sending = useRef(false)
   const load = () => listNoShowFlags().then(r => { if (r.ok) setRows(r.data || []) })
   useEffect(() => {
     load()
@@ -16,9 +18,19 @@ export function PossibleNoShows({ onChanged, toast = () => {} }) {
     return () => clearInterval(t)
   }, [])
   const act = async (flag, kind) => {
+    if (!flag || sending.current) return
+    sending.current = true
     setBusy(flag.id)
-    const r = kind === 'confirm' ? await confirmNoShowFlag(flag.id) : await dismissNoShowFlag(flag.id)
-    setBusy('')
+    setSelected(null)
+    let r
+    try {
+      r = kind === 'confirm' ? await confirmNoShowFlag(flag.id) : await dismissNoShowFlag(flag.id)
+    } catch {
+      r = { message: 'The outcome could not be confirmed. Review the appointment before trying again.' }
+    } finally {
+      sending.current = false
+      setBusy('')
+    }
     if (!r.ok) { toast(r.kind === 'validation' ? Object.values(r.errors || {})[0]?.[0] || r.message : r.message, 'warning'); return load() }
     toast(kind === 'confirm' ? `${flag.appointment?.patient || 'Appointment'} marked No-show.` : 'Flag removed. The appointment is unchanged.', 'success')
     setRows(list => list.filter(f => f.id !== flag.id))
@@ -30,10 +42,14 @@ export function PossibleNoShows({ onChanged, toast = () => {} }) {
       {rows.map(f => <li key={f.id}>
         <div><b>{f.appointment?.patient}</b><span>{f.appointment?.time} · {f.appointment?.service} · {f.appointment?.branch} · {f.appointment?.code}</span></div>
         <div className="ns-actions">
-          <Button size="sm" variant="danger" disabled={busy === f.id} onClick={() => act(f, 'confirm')}>Confirm no-show</Button>
+          <Button size="sm" variant="danger" disabled={busy === f.id} onClick={() => setSelected(f)}>Review no-show</Button>
           <Button size="sm" variant="ghost" disabled={busy === f.id} onClick={() => act(f, 'dismiss')}>Undo</Button>
         </div>
       </li>)}
     </ul>
+    <ConfirmDialog open={!!selected} title="Mark as No-show?" tone="danger" confirmLabel="Mark No-show" cancelLabel="Keep appointment"
+      onCancel={() => setSelected(null)} onConfirm={() => act(selected, 'confirm')}>
+      {selected && <p>{selected.appointment?.code} ? {selected.appointment?.patient}. Confirm after checking that the patient has not arrived.</p>}
+    </ConfirmDialog>
   </Card>
 }

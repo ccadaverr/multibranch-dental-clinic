@@ -7,7 +7,7 @@ import { calendarLoad, getAppointment } from '../api-client.js'
 import { commandKey } from '../appointments-api.js'
 import { mapAppointment } from '../appointments-api.js'
 import { appointmentActionProblem, canSchedule, schedulingActorKey, useRequestOwner } from '../appointment-ui.js'
-import { AppointmentForm } from './Scheduling.jsx'
+import { AppointmentForm, StaffCancellationDialog } from './Scheduling.jsx'
 import '../b4-calendar.css'
 import {
   VIEWS, WEEKDAYS, createDayLoader, dayTotals, defaultCalendarDate, groupByDate, isValidClinicDate, monthCells,
@@ -118,6 +118,7 @@ function CalendarSession({ store, scopes, authorizationKey }) {
   const [newOpen, setNewOpen] = useState(false)
   const [reschedule, setReschedule] = useState(null)
   const [cancelling, setCancelling] = useState(null)
+  const cancellationKeys = useRef(new Map())
   const [missed, setMissed] = useState(null)
   const [actionError, setActionError] = useState('')
   const [resolving, setResolving] = useState(false)
@@ -259,23 +260,30 @@ function CalendarSession({ store, scopes, authorizationKey }) {
     detailGeneration.current++; actionOwner.invalidate(); setResolving(false)
     setReschedule(null); setCancelling(null); setMissed(null); setNewOpen(true)
   }
-  const runAction = async (action, a, close, command) => {
+  const runAction = async (action, a, close, command, keepOpen = false) => {
     const problem = appointmentActionProblem(store, a, action)
-    if (problem) { close(null); setActionError(problem); return }
+    if (problem) { if (!keepOpen) close(null); setActionError(problem); return { ok: false, message: problem } }
     const ticket = actionOwner.begin()
     if (!ticket) return
-    close(null); setActionError('')
+    if (!keepOpen) close(null)
+    setActionError('')
     try {
       const result = await command(a)
       if (!actionOwner.current(ticket)) return
       if (result.ok && result.warning) toast(result.warning, 'warning')
       if (!result.ok) setActionError(result.message)
       toast(result.ok ? (action === 'cancel' ? 'Appointment cancelled.' : 'Marked as No-show.') : result.message, result.ok ? 'success' : 'warning')
-      if (result.ok) handleRefresh()
-    } catch { if (actionOwner.current(ticket)) setActionError('Could not confirm the action. Refresh the appointment before retrying.') }
+      if (result.ok) { if (keepOpen) close(null); handleRefresh() }
+      return result
+    } catch {
+      if (!actionOwner.current(ticket)) return
+      const message = 'Could not confirm the action. Refresh the appointment before retrying.'
+      setActionError(message)
+      return { ok: false, kind: 'network', message }
+    }
     finally { actionOwner.finish(ticket) }
   }
-  const cancel = () => runAction('cancel', cancelling, setCancelling, a => store.appointmentFlow.cancel(a, commandKey()))
+  const cancel = (selection, key) => runAction('cancel', cancelling, setCancelling, a => store.appointmentFlow.cancel(a, key, selection), true)
   const markNoShow = () => runAction('noShow', missed, setMissed, a => store.appointmentFlow.noShow(a, commandKey()))
 
   const selectedRows = selectedDate ? rowsOn(selectedDate) : []
@@ -524,9 +532,9 @@ function CalendarSession({ store, scopes, authorizationKey }) {
       {reschedule && <AppointmentForm role={role} store={store} appointment={reschedule} submitLabel="Save new time" onSaved={() => { setReschedule(null); handleRefresh() }}/>}
     </Modal>
 
-    <ConfirmDialog open={!!cancelling} title="Cancel this appointment?" confirmLabel="Cancel appointment" cancelLabel="Keep appointment" tone="danger" onConfirm={cancel} onCancel={() => setCancelling(null)}>
-      {cancelling && <p>{cancelling.code || cancelling.appointmentNo} • {dateLabel(cancelling.date)} at {displayTime(cancelling.start)} • {appointmentName(cancelling)}. The reserved time will be released.</p>}
-    </ConfirmDialog>
+    {cancelling && <StaffCancellationDialog key={cancelling.id} appointment={cancelling} operationKeys={cancellationKeys.current}
+      selectionDetailsAvailable={store.session?.selectionDetailsAvailable === true}
+      onCancel={() => { setCancelling(null); handleRefresh() }} onConfirm={cancel}/> }
 
     <ConfirmDialog open={!!missed} title="Mark as No-show?" confirmLabel="Mark No-show" cancelLabel="Keep appointment" tone="danger" onConfirm={markNoShow} onCancel={() => setMissed(null)}>
       {missed && <p>{missed.code || missed.appointmentNo} • today at {displayTime(missed.start)} • {appointmentName(missed)}. Use this only when the patient did not arrive; no visit is created. A patient who has already checked in can’t be marked No-show.</p>}

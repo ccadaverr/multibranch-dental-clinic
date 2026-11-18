@@ -168,7 +168,7 @@ class MailOutboxTest extends TestCase
         $this->useDatabaseQueue();
         $appointment = $this->book();
         $this->actingAsUser('staffB1');
-        $this->postJson("/api/appointments/{$appointment->public_id}/cancel", ['expected_revision' => 1])->assertOk();
+        $this->postJson("/api/appointments/{$appointment->public_id}/cancel", ['expected_revision' => 1, 'reason' => 'Synthetic cancellation'])->assertOk();
         $this->work(); $this->work();
         $this->assertSame(['appointment_confirmation' => 'superseded', 'appointment_cancelled' => 'logged_only'], MailDispatch::orderBy('id')->pluck('status', 'purpose')->all());
         Mail::assertNotSent(AppointmentConfirmationMail::class);

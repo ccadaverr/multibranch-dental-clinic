@@ -54,8 +54,8 @@ class AppointmentEmailTest extends TestCase
         Mail::assertSent(AppointmentChangedMail::class, fn ($m) => $m->change === 'rescheduled' && str_contains($m->render(), 'October 1, 2026') && str_contains($m->render(), '10:00 AM'));
         Mail::assertSent(AppointmentChangedMail::class, 1);
 
-        $this->postJson("/api/appointments/{$appointment->public_id}/cancel", ['expected_revision' => 2])->assertOk();
-        $this->postJson("/api/appointments/{$appointment->public_id}/cancel", ['expected_revision' => 2])->assertOk(); // no-op repeat
+        $this->postJson("/api/appointments/{$appointment->public_id}/cancel", ['expected_revision' => 2, 'reason' => 'Synthetic cancellation'])->assertOk();
+        $this->postJson("/api/appointments/{$appointment->public_id}/cancel", ['expected_revision' => 2, 'reason' => 'Synthetic cancellation'])->assertOk(); // no-op repeat
         Mail::assertSent(AppointmentChangedMail::class, fn ($m) => $m->change === 'cancelled' && $m->hasTo($this->u['patientA']->email));
         Mail::assertSent(AppointmentChangedMail::class, 2);
         $purposes = AuditLog::where('action', 'mail.dispatched')->where('auditable_public_id', $appointment->public_id)->get()->pluck('payload.purpose')->all();
@@ -76,7 +76,7 @@ class AppointmentEmailTest extends TestCase
         $appointment = $this->bookedByPatient();
         Mail::shouldReceive('to')->andThrow(new \RuntimeException('smtp down'));
         $this->actingAsUser('staffB1');
-        $this->postJson("/api/appointments/{$appointment->public_id}/cancel", ['expected_revision' => 1])->assertOk()->assertJsonPath('data.status', 'Cancelled');
+        $this->postJson("/api/appointments/{$appointment->public_id}/cancel", ['expected_revision' => 1, 'reason' => 'Synthetic cancellation'])->assertOk()->assertJsonPath('data.status', 'Cancelled');
         $this->assertSame('failed', AuditLog::where('action', 'mail.dispatched')->latest('id')->first()->payload['status']);
     }
 }

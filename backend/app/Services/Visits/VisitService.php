@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Models\Visit;
 use App\Models\VisitHistory;
 use App\Services\Appointments\AppointmentService;
+use App\Services\Automations\AttendancePolicy;
 use App\Services\Queue\QueueService;
 use App\Services\Scheduling\SchedulingService;
 use App\Support\ClinicClock;
@@ -63,6 +64,10 @@ final class VisitService
             if (! in_array($current->status, ['Pending', 'Confirmed'], true)) {
                 throw VisitCommandException::rule('invalid_transition', "An appointment that is {$current->status} cannot be checked in.", 'status');
             }
+            $branch = Branch::whereKey($current->branch_id)->sharedLock()->firstOrFail();
+            if ($branch->status !== 'Open') {
+                throw VisitCommandException::rule('branch_closed', 'This branch is closed. Review the appointment before recording arrival.', 'branch');
+            }
             // Existing approved rule: only today's appointments (Asia/Manila business date). The earliest-arrival window remains
             // an unresolved clinic policy (P3). Late arrival (R2-07): see the queue entry below.
             if (ClinicClock::local($current->starts_at)->toDateString() !== ClinicClock::today()) {
@@ -72,6 +77,10 @@ final class VisitService
             // unpaid pay-at-clinic appointments remain eligible under the existing admission rules.
             if ($current->booking_payment_status === 'held') {
                 throw VisitCommandException::rule('booking_payment_pending', 'This booking is awaiting verified payment confirmation.', 'booking_payment_status');
+            }
+            if ($current->status === 'Pending' && $current->source === 'patient_portal'
+                && AttendancePolicy::needsConfirmation($current->patient)) {
+                throw VisitCommandException::rule('appointment_confirmation_required', 'Confirm this booking before recording arrival.', 'status');
             }
             $this->assertNoActiveVisit($current->patient_id);
 

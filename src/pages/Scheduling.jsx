@@ -251,6 +251,7 @@ function AppointmentManagement({ role, store, setPage, context }) {
   const session=store.session||sessionForRole(role,state)
   const [reschedule,setReschedule]=useState(null)
   const [cancelling,setCancelling]=useState(null)
+  const cancellationKeys = useRef(new Map())
   const [missed,setMissed]=useState(null)
   const [newOpen,setNewOpen]=useState(false)
   const [search,setSearch]=useState('')
@@ -292,7 +293,7 @@ function AppointmentManagement({ role, store, setPage, context }) {
       if(result.ok&&keepOpen)close(null)
       toast(result.ok?(action==='cancel'?'Appointment cancelled.':'Marked as No-show.'):result.message,result.ok?'success':'warning')
       return result
-    }catch{if(owner.current(ticket)){const message='Could not confirm the action. Refresh the appointment before retrying.';setActionError(message);return {ok:false,message}}}
+    }catch{if(owner.current(ticket)){const message='Could not confirm the action. Refresh the appointment before retrying.';setActionError(message);return {ok:false,kind:'network',message}}}
     finally{owner.finish(ticket)}
   }
   const cancel=(selection,key)=>runAction('cancel',cancelling,setCancelling,a=>store.appointmentFlow.cancel(a,key,selection),true)
@@ -346,45 +347,57 @@ function AppointmentManagement({ role, store, setPage, context }) {
     </Card>
     <Modal open={newOpen} title="Create appointment" subtitle="The clinic server validates the slot and assigns an eligible Dentist unless you choose one." wide onClose={()=>setNewOpen(false)}><AppointmentForm role={role} store={store} onSaved={()=>setNewOpen(false)}/></Modal>
     <Modal open={!!reschedule} title="Reschedule appointment" subtitle="The new time must pass the same conflict-prevention rules as a new booking." wide onClose={()=>setReschedule(null)}>{reschedule&&<AppointmentForm role={role} store={store} appointment={reschedule} submitLabel="Save new time" onSaved={()=>setReschedule(null)}/>}</Modal>
-    {cancelling && <StaffCancellationDialog selectionDetailsAvailable={store.session?.selectionDetailsAvailable===true} key={cancelling.id} appointment={cancelling} onCancel={()=>setCancelling(null)} onConfirm={cancel}/>}
+    {cancelling && <StaffCancellationDialog selectionDetailsAvailable={store.session?.selectionDetailsAvailable===true} key={cancelling.id} appointment={cancelling} operationKeys={cancellationKeys.current} onCancel={()=>{setCancelling(null);store.appointmentFlow?.refresh()}} onConfirm={cancel}/>}
     <ConfirmDialog open={!!missed} title="Mark as No-show?" confirmLabel="Mark No-show" cancelLabel="Keep appointment" tone="danger" onConfirm={markNoShow} onCancel={()=>setMissed(null)}>
       {missed&&<p>{missed.appointmentNo} • today at {displayTime(missed.start)} • {missed.patientName}. Use this only when the patient did not arrive; no visit is created. A patient who has already checked in can’t be marked No-show.</p>}
     </ConfirmDialog>
   </>
 }
 
-function StaffCancellationDialog({ selectionDetailsAvailable = false, appointment, onCancel, onConfirm }) {
+export function StaffCancellationDialog({ selectionDetailsAvailable = false, appointment, operationKeys, onCancel, onConfirm }) {
   const [category, setCategory] = useState('')
   const [detail, setDetail] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const key = useRef(commandKey())
+  const [uncertain, setUncertain] = useState(false)
   const submitting = useRef(false)
   const ready = !!category && (category !== 'Other' || !!detail.trim())
   const submit = async event => {
     event.preventDefault()
-    if (!ready || submitting.current) return
+    if (!ready || uncertain || submitting.current) return
     submitting.current = true
     setBusy(true)
     setError('')
-    const result = await onConfirm((selectionDetailsAvailable ? { reason_category: category, ...(category === 'Other' ? { reason_detail: detail.trim() } : {}) } : {reason:category==='Other'?detail.trim():category}), key.current)
-    submitting.current = false
-    setBusy(false)
-    if (result?.ok === false) setError(result.message)
+    try {
+      const selection = selectionDetailsAvailable
+        ? { reason_category: category, ...(category === 'Other' ? { reason_detail: detail.trim() } : {}) }
+        : { reason: category === 'Other' ? detail.trim() : category }
+      const intent = JSON.stringify([appointment.id, appointment.revision, selection])
+      if (!operationKeys.has(intent)) operationKeys.set(intent, commandKey())
+      const result = await onConfirm(selection, operationKeys.get(intent))
+      if (result?.ok === false) {
+        const needsReview = ['server', 'network', 'unverified'].includes(result.kind)
+        setUncertain(needsReview)
+        setError(needsReview ? 'The outcome is unconfirmed. Close this dialog and review the appointment before making another change.' : result.message)
+      }
+    } finally {
+      submitting.current = false
+      setBusy(false)
+    }
   }
   return <Modal open title="Cancel this appointment?" onClose={()=>!busy&&onCancel()}>
     <p>{appointment.appointmentNo} · {appointment.patientName}. The reserved time will be released.</p>
     <form className="au-form" onSubmit={submit}>
       <SelectionDetailsNotice available={selectionDetailsAvailable}/>
-      <fieldset disabled={busy}>
+      <fieldset disabled={busy || uncertain}>
         <SelectWithOther label="Cancellation reason" value={category} onChange={setCategory}
           options={[{value:'',label:'Select a reason'}, ...STAFF_CANCELLATION_REASONS]}
           placeholder="e.g., Duplicate booking" required otherValue={detail} onOtherChange={setDetail}/>
       </fieldset>
       {error && <p role="alert">{error}</p>}
       <div className="row-actions">
-        <Button type="button" variant="ghost" onClick={onCancel} disabled={busy}>Keep appointment</Button>
-        <Button type="submit" variant="danger" disabled={busy || !ready}>{busy?'Cancelling…':'Cancel appointment'}</Button>
+        <Button type="button" variant="ghost" onClick={onCancel} disabled={busy}>{uncertain ? 'Close and review' : 'Keep appointment'}</Button>
+        <Button type="submit" variant="danger" disabled={busy || uncertain || !ready}>{busy?'Cancelling…':'Cancel appointment'}</Button>
       </div>
     </form>
   </Modal>

@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react'
-import { Button, Card } from '../components.jsx'
+import React, { useEffect, useRef, useState } from 'react'
+import { Button, Card, Notice } from '../components.jsx'
 import { confirmAppointment, frontDeskToday, undoNoShow, useFreeTimeForWalkIn } from '../api-client.js'
 
 const REPLY = { on_my_way: ['On my way', 'is-ok'], attending: ['I’ll be there', 'is-ok'], cant_make_it: ['Can’t make it', 'is-late'], move_up_accepted: ['Took an earlier time', 'is-info'] }
@@ -13,11 +13,28 @@ const firstError = r => (r.kind === 'validation' ? Object.values(r.errors || {})
  */
 export function FrontDeskToday({ toast = () => {}, onChanged }) {
   const [data, setData] = useState(null), [busy, setBusy] = useState('')
-  const load = () => frontDeskToday().then(r => { if (r.ok) setData(r.data) })
+  const [readState, setReadState] = useState('loading')
+  const read = useRef(0)
+  const load = async () => {
+    const generation = ++read.current
+    setReadState(previous => previous === 'ready' ? 'ready' : 'loading')
+    try {
+      const result = await frontDeskToday()
+      if (generation !== read.current) return
+      if (result.ok && result.data) {
+        setData(result.data)
+        setReadState('ready')
+        return
+      }
+    } catch {
+      // A failed read has the same recovery as a non-success response.
+    }
+    if (generation === read.current) setReadState('error')
+  }
   useEffect(() => {
     load()
     const t = setInterval(() => { if (document.visibilityState === 'visible') load() }, 60000)
-    return () => clearInterval(t)
+    return () => { read.current++; clearInterval(t) }
   }, [])
   const act = async (id, run, done) => {
     setBusy(id)
@@ -26,7 +43,8 @@ export function FrontDeskToday({ toast = () => {}, onChanged }) {
     if (!r.ok) { toast(firstError(r), 'warning'); return load() }
     toast(done, 'success'); load(); onChanged?.()
   }
-  if (!data) return null
+  if (readState === 'error') return <Notice tone="warning" title="Front Desk Today could not be loaded"><Button size="sm" onClick={load}>Retry</Button></Notice>
+  if (readState === 'loading' || !data) return <p role="status">Loading Front Desk Today?</p>
   const s = data.settings
   const replied = data.replies.filter(r => !data.late.some(l => l.appointment_id === r.appointment_id))
   return <div className="fd-grid">

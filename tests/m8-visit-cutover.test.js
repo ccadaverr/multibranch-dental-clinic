@@ -212,7 +212,7 @@ test('a missing server Visit fails closed where Visits are projected; Patient re
 // ================================================================================================================
 test('the front desk uses server commands only; no local arrival, walk-in or queue No-show authority remains', () => {
   const page = read('src/pages/PatientFlow.jsx')
-  assert.match(page, /flow\.checkIn\(reviewed\.appointmentId,ticket\.key,reviewed\)/)
+  assert.match(page, /flow\.checkIn\(reviewed\.appointmentId,ticket\.key,\{\.\.\.reviewed,idConfirmed:true\}\)/)
   assert.doesNotMatch(page, /flow\.checkIn\(selectedAppointment\.id,checkInKey\.current\.key\)/, 'arrival must carry the human-reviewed snapshot')
   assert.match(page, /flow\.walkIn\(\{\.\.\.walkIn,patientId\},walkKey\.current\)/)
   assert.match(page, /flow\.registerPatient\(/)

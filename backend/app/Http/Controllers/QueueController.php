@@ -51,6 +51,11 @@ class QueueController extends Controller
         $truncated = $entries->count() > self::LIST_LIMIT;
         $entries = $entries->take(self::LIST_LIMIT)->values();
         $this->queue->withPositions($entries);
+        $operational = in_array($request->user()->role->value, ['staff', 'owner'], true);
+        $entries = $entries->sortBy(fn (QueueEntry $entry) => [
+            $entry->dentistQueue->branch_id,
+            ($operational ? $entry->branch_position : $entry->position) ?? PHP_INT_MAX,
+        ])->values();
 
         return QueueEntryResource::collection($entries)
             ->additional(['meta' => ['limit' => self::LIST_LIMIT, 'returned' => $entries->count(), 'truncated' => $truncated]]);

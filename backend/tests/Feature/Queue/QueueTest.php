@@ -174,6 +174,20 @@ class QueueTest extends TestCase
         $this->assertEquals(['A' => 1, 'B' => 2, 'C' => 3, 'D' => 4], $this->positions());
     }
 
+    public function test_call_respects_fifo_within_the_exact_dentist_queue(): void
+    {
+        $this->actingAsUser('staffB1');
+        $this->walkIn('A')->assertCreated();
+        $this->walkIn('B')->assertCreated();
+        $this->walkIn('C', 'd2')->assertCreated();
+        $next = $this->entryFor('B');
+        $this->command($next, 'call')->assertStatus(422)->assertJsonPath('code', 'queue_out_of_order');
+        $this->assertSame(['Waiting', 1], [$next->fresh()->status, $next->fresh()->revision]);
+        $this->command($this->entryFor('C'), 'call')->assertOk();
+        $this->command($this->entryFor('A'), 'call')->assertOk();
+        $this->command($next, 'call')->assertOk()->assertJsonPath('data.status', 'Called');
+    }
+
     public function test_priority_is_staff_or_owner_only_needs_a_reason_and_is_recorded(): void
     {
         $this->actingAsUser('staffB1');
@@ -410,6 +424,7 @@ class QueueTest extends TestCase
         $this->assertStringNotContainsString('wait', strtolower(implode(',', array_keys($mine))), 'no backend wait estimate');
 
         $this->actingAsUser('dentist1');
+        $this->command($this->entryFor('B'), 'call')->assertOk();
         $this->command($this->entryFor('A'), 'call')->assertOk();
         $this->start(Visit::where('patient_id', $this->p['A']->id)->sole())->assertCreated();
         $this->actingAsUser('patientA');

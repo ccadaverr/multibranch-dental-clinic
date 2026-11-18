@@ -161,7 +161,7 @@ class AutomationsTest extends TestCase
     {
         $appointment = $this->bookWednesdayNine();
         $this->actingAsUser('staffB1');
-        $this->postJson("/api/appointments/{$appointment->public_id}/cancel", ['expected_revision' => 1])->assertOk();
+        $this->postJson("/api/appointments/{$appointment->public_id}/cancel", ['expected_revision' => 1, 'reason' => 'Synthetic cancellation'])->assertOk();
         $this->at('2026-09-29 09:00');
         $this->runAutomations();
         Mail::assertNotSent(AppointmentReminderMail::class);
@@ -326,7 +326,7 @@ class AutomationsTest extends TestCase
 
         $this->actingAsUser('staffB1');
         $slot = $blocking[10];
-        $this->postJson("/api/appointments/{$slot->public_id}/cancel", ['expected_revision' => 1])->assertOk();
+        $this->postJson("/api/appointments/{$slot->public_id}/cancel", ['expected_revision' => 1, 'reason' => 'Synthetic cancellation'])->assertOk();
         // F3 order: patients booked later that day get the move-up offers first; the waitlist waits for their head start.
         $this->runAutomations(['fill_slots', 'waitlist']);
         Mail::assertNotSent(WaitlistOpeningMail::class);

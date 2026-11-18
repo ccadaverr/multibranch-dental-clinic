@@ -97,6 +97,31 @@ class VisitTest extends TestCase
         $this->assertSame(['visit.checked_in'], VisitHistory::where('visit_id', $visit->id)->pluck('event')->all());
     }
 
+    public function test_closed_branch_cannot_create_a_visit_or_queue_entry(): void
+    {
+        $appointment = $this->today();
+        $this->b['b1']->update(['status' => 'Closed']);
+        $this->actingAsUser('staffB1');
+        $this->checkIn($appointment)->assertStatus(422)->assertJsonPath('code', 'branch_closed');
+        $this->assertSame('Confirmed', $appointment->fresh()->status);
+        $this->assertSame(0, Visit::count());
+        $this->assertSame(0, \App\Models\QueueEntry::count());
+    }
+
+    public function test_pending_attendance_review_must_be_confirmed_before_check_in(): void
+    {
+        $appointment = $this->today();
+        $appointment->update(['status' => 'Pending', 'source' => 'patient_portal']);
+        $this->p['A']->forceFill(['confirmation_required_at' => now()])->save();
+        \App\Models\AutomationSetting::whereKey('attendance_policy')->update(['enabled' => true]);
+        $this->actingAsUser('staffB1');
+        $this->checkIn($appointment)->assertStatus(422)->assertJsonPath('code', 'appointment_confirmation_required');
+        $this->assertSame(['Pending', 1], [$appointment->fresh()->status, $appointment->fresh()->revision]);
+        $this->assertSame(0, Visit::count());
+        $this->postJson('/api/appointments/'.$appointment->public_id.'/confirm', ['expected_revision' => 1])->assertOk();
+        $this->checkIn($appointment)->assertCreated();
+    }
+
     public function test_check_in_refuses_wrong_date_state_and_stale_revision(): void
     {
         $this->actingAsUser('staffB1');

@@ -232,6 +232,11 @@ final class AppointmentService
                 throw AppointmentCommandException::rule('appointment_started', 'This appointment’s scheduled time has passed, so it can’t be cancelled online. Please contact the clinic for assistance.', 'status');
             }
 
+            if (in_array($actor->role, [Role::Staff, Role::Owner], true)
+                && trim((string) ($input['reason'] ?? '')) === '' && empty($input['reason_category'])) {
+                throw AppointmentCommandException::rule('cancellation_reason_required', 'Select a cancellation reason.', 'reason');
+            }
+
             $from = $current->status;
             // F4 (R2-13): the Patient's own cancellation less than the policy's hours before the visit is a late cancellation.
             $late = $actor->role === Role::Patient && \App\Services\Automations\AttendancePolicy::isLate(\Carbon\CarbonImmutable::instance($current->starts_at), $now);
