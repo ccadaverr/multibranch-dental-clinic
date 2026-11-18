@@ -114,7 +114,7 @@ try {
   await p.route(api+'/api/me/prescriptions',r=>r.abort('failed'),{times:1})
   await p.getByRole('button',{name:'Reload my prescriptions',exact:true}).click()
   await p.getByRole('button',{name:'Try again',exact:true}).click();await p.getByText(state.issued.number,{exact:false}).waitFor()
-  const download=p.waitForEvent('download');await p.getByRole('button',{name:'Download PDF',exact:true}).click()
+  const download=p.waitForEvent('download');await p.getByRole('button',{name:/^Download PDF for /}).click()
   const document=await download;await document.saveAs(evidence+'/patient-issued.pdf');assert.equal(readFileSync(evidence+'/patient-issued.pdf').subarray(0,5).toString(),'%PDF-')
   await p.reload();await p.getByText(state.issued.number,{exact:false}).waitFor()
   console.log('PASS own Patient exact readback, six widths, loading, failure recovery and real PDF/reload')
@@ -128,7 +128,7 @@ try {
   let releasePdf,pdfStarted;const pdfBegan=new Promise(r=>pdfStarted=r),pdfGate=new Promise(r=>releasePdf=r),downloads=[]
   p.on('download',file=>downloads.push(file))
   await p.route(api+'/api/prescriptions/'+state.issued.id+'/pdf',async route=>{const response=await route.fetch();pdfStarted();await pdfGate;await route.fulfill({response})},{times:1})
-  await p.getByRole('button',{name:'Download PDF',exact:true}).evaluate(b=>{b.click();b.click()});await pdfBegan
+  await p.getByRole('button',{name:/^Download PDF for /}).evaluate(b=>{b.click();b.click()});await pdfBegan
   let releaseChart,chartStarted;const chartBegan=new Promise(r=>chartStarted=r),chartGate=new Promise(r=>releaseChart=r)
   // Hold both initial StrictMode reads, including the abandoned effect's request.
   await p.route(api+'/api/me/chart',async route=>{const response=await route.fetch();chartStarted();await chartGate;await route.fulfill({response})})

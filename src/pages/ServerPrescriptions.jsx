@@ -12,6 +12,7 @@ import {boundedClinicalRead} from '../clinical-history.js'
 import { runPrescriptionWrite } from '../prescription-command.js'
 import '../dentist-clinical.css'
 import '../clinical-care-experience.css'
+import '../prescription-experience.css'
 
 const firstError = r => (r.kind === 'validation' ? Object.values(r.errors || {})[0]?.[0] || r.message : r.message) || 'That did not work.'
 const day = d => d ? new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : ''
@@ -111,10 +112,10 @@ function PrescriptionsBody({ store, role, context, setPage }) {
   const filteredRows = rows || []
   return <div className={`st-page dentist-prescriptions${dentist?' clinical-experience':''}`}>
     {context?.returnEncounter&&<Button variant="ghost" onClick={()=>setPage('treatment',context.returnEncounter)}>Return to encounter</Button>}
-    {context?.visitId&&<Notice>Prescriptions for this encounter. A Draft has not been issued.</Notice>}
+    {context?.visitId&&(dentist?<p className="rx-scope-note">This encounter · Drafts stay private until issued</p>:<Notice>Prescriptions for this encounter. A Draft has not been issued.</Notice>)}
     <PageHeader kicker={owner ? 'Administration' : 'Clinical'} title="Prescriptions"
       text={owner ? 'Prescriptions issued at the clinic: number, date, dentist and branch. The medicines are visible only to the dentists, the branch front desk and the patient.'
-        : dentist ? 'Write a prescription for a recent visit. Issuing locks it; a mistake is voided with a reason and a new one is issued. There is no drug list and no interaction check: you decide what to prescribe.'
+        : dentist ? 'Write for an authorized Visit. Review medicines and allergies before issuing. Issuing locks the prescription; corrections require voiding and a new prescription. Medication decisions remain yours; interaction checks are not provided.'
           : 'Prescriptions issued at your branch, to view and print. Only a dentist writes or changes them.'}
       aside={<RefreshButton title="Reload prescriptions" ariaLabel="Reload prescriptions" loading={loading} onClick={load}/>}/>
     {dentist && <details ref={compose} className="rx-compose" open={!!context?.visitId||!!writing}><summary><span>Write a prescription<small>Saved drafts stay private until issued.</small></span></summary><WriteCard key={writing || 'new'} clinicalContext={store.session?.clinicalContext} getAuthGeneration={store.getAuthGeneration} context={context} toast={toast} onDone={id => { load(); setOpenId(id) }} editing={writing} onEdited={() => applyDraft(null)} leaveRef={editorLeave} isCurrent={() => editorGeneration.current===generation}/></details>}
@@ -309,7 +310,7 @@ function WriteCard({ clinicalContext, toast, onDone, editing, onEdited, context,
         const durationSelect = selectedOption(l, 'duration', COMMON_DURATIONS)
 
         return <fieldset key={i} className="rx-line" disabled={!!busy || !!retryWrite.current}><legend>Medicine {i + 1}</legend>
-          <Field label="Medicine" required hint="Choose standard medicine or Other to specify">
+          <Field label="Medicine" required>
             <select
               aria-label={`Select medicine ${i + 1}`}
               required
@@ -331,7 +332,7 @@ function WriteCard({ clinicalContext, toast, onDone, editing, onEdited, context,
           )}
 
           <div className="st-pair">
-            <Field label="Dosage" hint="Choose standard dosage or Other">
+            <Field label="Dosage">
               <select
                 aria-label={`Select dosage ${i + 1}`}
                 value={dosageSelect}
@@ -345,7 +346,7 @@ function WriteCard({ clinicalContext, toast, onDone, editing, onEdited, context,
                 <option value="__other__">Other (specify)</option>
               </select>
             </Field>
-            <Field label="Frequency" hint="Choose standard frequency or Other">
+            <Field label="Frequency">
               <select
                 aria-label={`Select frequency ${i + 1}`}
                 value={freqSelect}
@@ -374,7 +375,7 @@ function WriteCard({ clinicalContext, toast, onDone, editing, onEdited, context,
             )}
           </div>
 
-          <Field label="Duration" hint="Choose standard treatment duration or Other">
+          <Field label="Duration">
             <select
               aria-label={`Select duration ${i + 1}`}
               value={durationSelect}

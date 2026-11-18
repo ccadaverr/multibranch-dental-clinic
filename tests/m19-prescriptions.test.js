@@ -17,7 +17,7 @@ test('M19: prescriptions come from the clinic server; the browser mock and its s
 test('M19: dentist form shows the allergy check, has no drug database or interaction claims, and issuing is final', () => {
   const page = read('src/pages/ServerPrescriptions.jsx')
   assert.match(page, /title="Check allergies before prescribing"/)
-  assert.match(page, /There is no drug list and no interaction check/)
+  assert.match(page, /Medication decisions remain yours; interaction checks are not provided/)
   assert.doesNotMatch(page, /interaction warning|drug database|e-signature|digitally signed/i)
   assert.match(page, /Issuing locks the prescription and gives it a number\. It cannot be edited afterwards, only voided\./)
   assert.match(page, /voidPrescription\(id, submitted\.reason, submitted\.revision, submitted\.key, owns, clinicalContext\)/)

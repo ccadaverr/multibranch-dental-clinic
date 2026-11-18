@@ -62,7 +62,7 @@ try {
  page=patient.page;await page.getByRole('button',{name:'More',exact:true}).click();await page.getByRole('dialog',{name:'More',exact:true}).getByRole('button',{name:'Prescriptions',exact:true}).click()
  const patientRx=()=>page.locator('ul.pp-rx-list > li').filter({hasText:state.issued.number})
  await patientRx().getByText('Synthetic Sprint03 medicine',{exact:true}).waitFor()
- const download=page.waitForEvent('download');await patientRx().getByRole('button',{name:'Download PDF',exact:true}).click();await(await download).saveAs(evidence+'/issued.pdf')
+ const download=page.waitForEvent('download');await patientRx().getByRole('button',{name:/^Download PDF for /}).click();await(await download).saveAs(evidence+'/issued.pdf')
  assert.equal(readFileSync(evidence+'/issued.pdf').subarray(0,5).toString(),'%PDF-');await page.reload();await patientRx().getByText(state.issued.number,{exact:false}).waitFor();console.log('PASS own Patient issued prescription and actual PDF after reload')
  page=dentist.page;const dialog=page.getByRole('dialog');await dialog.getByRole('button',{name:'Void…',exact:true}).click();await dialog.getByRole('textbox',{name:'Reason for voiding',exact:true}).fill('Synthetic correction: demonstration prescription voided')
  const voidPath='/api/prescriptions/'+state.issued.id+'/void',voidRequests=[]
@@ -72,11 +72,15 @@ try {
  await dialog.getByRole('button',{name:'Retry same Void request',exact:true}).waitFor()
  state.voided=await waitPost(page,voidPath,()=>dialog.getByRole('button',{name:'Retry same Void request',exact:true}).click())
  assert.equal(voidRequests.length,2);assert.deepEqual(voidRequests[0],voidRequests[1]);save();assert.equal(state.voided.number,state.issued.number);assert.equal(state.voided.status,'Void')
- page=patient.page;await page.reload();await patientRx().getByText('VOID — do not use',{exact:true}).waitFor();const voidPdf=page.waitForEvent('download');await patientRx().getByRole('button',{name:'Download PDF',exact:true}).click();await(await voidPdf).saveAs(evidence+'/void.pdf')
+ page=patient.page;await page.reload();await patientRx().getByText('VOID — do not use',{exact:true}).waitFor();const voidPdf=page.waitForEvent('download');await patientRx().getByRole('button',{name:/^Download PDF for /}).click();await(await voidPdf).saveAs(evidence+'/void.pdf')
  console.log('PASS authorized Void preserves issued identity and Patient sees VOID with new PDF')
  // Existing correction contract: retain the Void record and explicitly write/issue a new prescription.
  page=dentist.page;await page.getByRole('dialog').getByRole('button',{name:'Close',exact:true}).click()
- await page.getByRole('combobox',{name:/^Visit/}).selectOption(state.visit)
+ const compose=page.locator('details.rx-compose').first()
+ if(!await compose.evaluate(el=>el.open)){await compose.locator(':scope > summary').focus();await page.keyboard.press('Enter')}
+ const correctionVisit=page.getByRole('combobox',{name:/^Visit/})
+ if(await correctionVisit.isDisabled())assert.equal(await correctionVisit.inputValue(),state.visit)
+ else await correctionVisit.selectOption(state.visit)
  await page.getByRole('combobox',{name:'Select medicine 1',exact:true}).selectOption('__other__')
  await page.getByRole('textbox',{name:'Specify medicine name',exact:true}).fill('Synthetic corrected medicine')
  state.correctedDraft=await waitPost(page,'/api/prescriptions',()=>page.getByRole('button',{name:'Save draft',exact:true}).click())

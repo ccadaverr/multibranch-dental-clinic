@@ -60,7 +60,7 @@ try{
  const patient=await login('sprint02.patient@example.test',390);page=patient.page
  const mine=(await get(page,'/api/me/prescriptions')).body.data;assert(mine.some(p=>p.id===state.issued.id));assert(!mine.some(p=>p.status==='Draft'))
  await page.getByRole('button',{name:/^Prescriptions/}).click();const record=page.locator('.pp-rx-list>li').filter({hasText:state.issued.number});await record.getByText(medicine,{exact:true}).waitFor();await capture(page,'patient-prescription')
- const downloading=page.waitForEvent('download');await record.getByRole('button',{name:'Download PDF',exact:true}).click();const downloaded=await downloading,bytes=readFileSync(await downloaded.path());assert.equal(bytes.subarray(0,4).toString(),'%PDF')
+ const downloading=page.waitForEvent('download');await record.getByRole('button',{name:/^Download PDF for /}).click();const downloaded=await downloading,bytes=readFileSync(await downloaded.path());assert.equal(bytes.subarray(0,4).toString(),'%PDF')
  const foreign=await login('patient@example.test',390);assert(!(await get(foreign.page,'/api/me/prescriptions')).body.data.some(p=>p.id===state.issued.id));assert([403,404].includes((await get(foreign.page,'/api/prescriptions/'+state.issued.id)).status))
  pass('Issued prescription rendered and downloaded by exact Patient at six widths; drafts private and other Patient excluded')
  state.accepted=true;save()

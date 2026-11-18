@@ -47,19 +47,19 @@ function PatientPrescriptions({ toast = () => {}, session, getAuthGeneration }) 
     if(!owns())return
     setDownloading('');if(!r.ok)toast(r.message||'The PDF could not be downloaded.','warning')
   }
-  return <div className="pp-page pp-fade">
+  return <div className="pp-page pp-fade care-prescriptions">
     <PageHead eyebrow="Records & Billing" title="Prescriptions" text="Prescriptions your dentist issued after a visit. Follow your dentist’s instructions; call the branch if you have a question." actions={<RefreshButton title="Reload my prescriptions" ariaLabel="Reload my prescriptions" loading={loading} onClick={load}/>}/>
     {error && <ErrorState text={error} onRetry={() => setAttempt(a => a + 1)}/>}
     {!rows && !error && <Skeleton lines={4} label="Loading your prescriptions"/>}
     {rows && !rows.length && <EmptyState icon="file" title="No prescriptions yet" text="Prescriptions issued by your dentist after a visit will appear here."/>}
-    {rows && rows.length > 0 && <section className="pp-card">
+    {rows && rows.length > 0 && <section aria-label="Issued and void prescriptions">
       <ul className="pp-rx-list">{rows.map(p => <li key={p.id} className={p.status === 'Void' ? 'is-void' : ''}>
-        <p><b>{p.number}</b> · {day(p.issued_at)}{p.patient?.name ? ` · ${p.patient.name}` : ''}{p.status === 'Void' ? <span className="pp-void"> VOID — do not use</span> : ''}</p>
-        <p className="pp-hint">{p.dentist} · {p.branch}</p>
-        <ol>{(p.lines || []).map((l, i) => <li key={i}><b>{l.medicine}</b>{[l.dosage, l.frequency, l.duration].filter(Boolean).length ? ` — ${[l.dosage, l.frequency, l.duration].filter(Boolean).join(', ')}` : ''}{l.instructions ? `. ${l.instructions}` : ''}</li>)}</ol>
+        <header className="care-rx-heading"><div><h2>{p.number}</h2><p className="pp-hint">Issued {day(p.issued_at)}</p></div><span className={p.status === 'Void' ? 'pp-void' : 'care-rx-status'}>{p.status === 'Void' ? 'VOID — do not use' : 'Issued'}</span></header>
+        <dl className="care-rx-facts">{p.patient?.name&&<div><dt>Patient</dt><dd>{p.patient.name}</dd></div>}<div><dt>Dentist</dt><dd>{p.dentist||'Not recorded'}</dd></div><div><dt>Branch</dt><dd>{p.branch}</dd></div></dl>
+        <ol className="care-rx-medicines">{(p.lines || []).map((l, i) => <li key={i}><b>{l.medicine}</b>{[l.dosage, l.frequency, l.duration].filter(Boolean).length>0&&<p>{[l.dosage, l.frequency, l.duration].filter(Boolean).join(' · ')}</p>}{l.instructions&&<p>{l.instructions}</p>}</li>)}</ol>
         {p.note && <p className="pp-hint">Note: {p.note}</p>}
         {p.voided && <p className="pp-hint">Voided: {day(p.voided.at)}. Reason: {p.voided.reason}</p>}
-        <Button size="sm" variant="soft" icon="download" disabled={!!downloading} onClick={()=>download(p)}>{downloading===p.id?'Downloading…':'Download PDF'}</Button>
+        <Button size="sm" variant="soft" icon="download" aria-label={`Download PDF for ${p.number}`} aria-busy={downloading===p.id} disabled={!!downloading} onClick={()=>download(p)}>{downloading===p.id?'Downloading…':'Download PDF'}</Button>
       </li>)}</ul>
     </section>}
   </div>
