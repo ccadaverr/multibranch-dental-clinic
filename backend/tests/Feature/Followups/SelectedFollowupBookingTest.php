@@ -125,9 +125,9 @@ final class SelectedFollowupBookingTest extends TestCase
     {
         $alternative = $this->task();
         $task = $this->task();
-        $this->patchJson('/api/followups/'.$task->public_id, ['action' => 'contacted'])->assertOk();
+        $this->patchJson('/api/followups/'.$task->public_id, ['action' => 'contacted', 'expected_revision' => $task->revision])->assertOk();
         $this->selected($task)->assertConflict()->assertJsonPath('code', 'followup_conflict');
-        $this->patchJson('/api/followups/'.$task->public_id, ['action' => 'close', 'note' => 'Synthetic closure'])->assertOk();
+        $this->patchJson('/api/followups/'.$task->public_id, ['action' => 'close', 'note' => 'Synthetic closure', 'expected_revision' => $task->fresh()->revision])->assertOk();
         $this->selected($task, ['followup_expected_revision' => 9])->assertConflict();
         self::assertSame(0, Appointment::count());
         self::assertSame('Open', $alternative->fresh()->status);

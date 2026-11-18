@@ -40,6 +40,14 @@ class FollowupExactReadbackTest extends TestCase
         ])->fresh();
     }
 
+    private function assignCareContext(FollowupTask $task): void
+    {
+        $this->actingAsUser('staffB1');
+        $this->postJson('/api/visits/walk-in', ['patient_id' => $this->p['A']->public_id, 'branch_ref' => 'b1',
+            'service_ref' => 'svc1', 'dentist_ref' => 'd1'], ['Idempotency-Key' => 'followup-readback-visit'])->assertCreated();
+        $task->update(['dentist_profile_id' => $this->d['d1']->id]);
+    }
+
     private function path(FollowupTask $task): string
     {
         return '/api/followups/'.$task->public_id;
@@ -72,6 +80,7 @@ class FollowupExactReadbackTest extends TestCase
     public function test_assigned_dentist_reads_closed_task_and_revision(): void
     {
         $task = $this->task('Closed', 9);
+        $this->assignCareContext($task);
         $this->actingAsUser('dentist1');
         $response = $this->getJson($this->path($task))->assertOk()
             ->assertJsonPath('data.id', $task->public_id)
@@ -194,6 +203,7 @@ class FollowupExactReadbackTest extends TestCase
     public function test_staff_scope_and_dentist_assignment_revocation_apply_to_the_next_read(): void
     {
         $task = $this->task();
+        $this->assignCareContext($task);
         $this->actingAsUser('staffB1');
         $this->getJson($this->path($task))->assertOk();
         UserBranchScope::where('user_id', $this->u['staffB1']->id)->update(['branch_id' => $this->b['b2']->id]);

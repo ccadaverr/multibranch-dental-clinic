@@ -33,7 +33,7 @@ class Follow03RevisionResponseTest extends TestCase
 
     private function createTask()
     {
-        return $this->postJson('/api/followups', $this->payload())->assertCreated();
+        return $this->postJson('/api/followups', $this->payload(), ['Idempotency-Key' => 'follow03-create'])->assertCreated();
     }
 
     private function assertFailure(Closure $command, string $message): void
@@ -102,7 +102,7 @@ class Follow03RevisionResponseTest extends TestCase
                     throw new RuntimeException('Synthetic FOLLOW-03 audit failure');
                 }
             });
-            $this->assertFailure(fn () => $this->postJson('/api/followups', $this->payload()), 'Synthetic FOLLOW-03 audit failure');
+            $this->assertFailure(fn () => $this->postJson('/api/followups', $this->payload(), ['Idempotency-Key' => 'follow03-create']), 'Synthetic FOLLOW-03 audit failure');
             $this->assertSame(0, FollowupTask::count());
             $this->assertSame(0, AuditLog::where('action', 'followup.created')->count());
         }
@@ -116,7 +116,7 @@ class Follow03RevisionResponseTest extends TestCase
             // Fail retrieval of the inserted Task, after its audit was written.
             // This catches moving the canonical reload outside the transaction.
             FollowupTask::retrieved(fn () => throw new RuntimeException('Synthetic FOLLOW-03 reload failure'));
-            $this->assertFailure(fn () => $this->postJson('/api/followups', $this->payload()), 'Synthetic FOLLOW-03 reload failure');
+            $this->assertFailure(fn () => $this->postJson('/api/followups', $this->payload(), ['Idempotency-Key' => 'follow03-create']), 'Synthetic FOLLOW-03 reload failure');
         } finally {
             FollowupTask::setEventDispatcher($events);
         }
@@ -129,19 +129,19 @@ class Follow03RevisionResponseTest extends TestCase
         $id = $this->createTask()->assertJsonPath('data.revision', 1)->json('data.id');
         $task = FollowupTask::where('public_id', $id)->sole();
         $before = $task->getRawOriginal();
-        $this->patchJson("/api/followups/$id", ['action' => 'close'])->assertStatus(422)->assertJsonValidationErrors('note');
+        $this->patchJson("/api/followups/$id", ['action' => 'close', 'expected_revision' => 1])->assertStatus(422)->assertJsonValidationErrors('note');
         $this->assertSame($before, $task->fresh()->getRawOriginal());
-        $this->patchJson("/api/followups/$id", ['action' => 'contacted'])->assertOk()->assertJsonPath('data.id', $id)
+        $this->patchJson("/api/followups/$id", ['action' => 'contacted', 'expected_revision' => 1])->assertOk()->assertJsonPath('data.id', $id)
             ->assertJsonPath('data.status', 'Contacted')->assertJsonPath('data.revision', 2);
         $this->assertSame(2, $task->fresh()->revision);
         $before = $task->fresh()->getRawOriginal();
-        $this->patchJson("/api/followups/$id", ['action' => 'contacted'])->assertStatus(422)->assertJsonValidationErrors('action');
+        $this->patchJson("/api/followups/$id", ['action' => 'contacted', 'expected_revision' => 2])->assertStatus(422)->assertJsonValidationErrors('action');
         $this->assertSame($before, $task->fresh()->getRawOriginal());
-        $this->patchJson("/api/followups/$id", ['action' => 'close', 'note' => 'Synthetic FOLLOW-03 closure'])->assertOk()
+        $this->patchJson("/api/followups/$id", ['action' => 'close', 'note' => 'Synthetic FOLLOW-03 closure', 'expected_revision' => 2])->assertOk()
             ->assertJsonPath('data.id', $id)->assertJsonPath('data.status', 'Closed')->assertJsonPath('data.revision', 3);
         $this->assertSame(3, $task->fresh()->revision);
         $before = $task->fresh()->getRawOriginal();
-        $this->patchJson("/api/followups/$id", ['action' => 'close', 'note' => 'Synthetic repeat'])->assertStatus(422)->assertJsonValidationErrors('action');
+        $this->patchJson("/api/followups/$id", ['action' => 'close', 'note' => 'Synthetic repeat', 'expected_revision' => 3])->assertStatus(422)->assertJsonValidationErrors('action');
         $this->assertSame($before, $task->fresh()->getRawOriginal());
         $this->assertSame(1, FollowupTask::count());
         $logs = AuditLog::where('action', 'like', 'followup.%')->where('payload->task', $id)->orderBy('id')->get();
@@ -156,7 +156,7 @@ class Follow03RevisionResponseTest extends TestCase
         $response = $this->getJson('/api/followups')->assertOk()->assertJsonPath('data.0.id', $id)->assertJsonPath('data.0.revision', 1);
         $this->assertEqualsCanonicalizing(['id', 'status', 'due_on', 'overdue', 'branch', 'source', 'revision'], array_keys($response->json('data.0')));
         $this->assertStringNotContainsString($this->payload()['reason'], $response->getContent());
-        $this->postJson('/api/followups', $this->payload())->assertForbidden();
+        $this->postJson('/api/followups', $this->payload(), ['Idempotency-Key' => 'follow03-create'])->assertForbidden();
         $this->patchJson("/api/followups/$id", ['action' => 'contacted'])->assertForbidden();
         $this->assertSame(1, FollowupTask::where('public_id', $id)->sole()->revision);
     }

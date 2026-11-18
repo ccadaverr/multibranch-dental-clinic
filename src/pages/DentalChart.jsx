@@ -3,7 +3,7 @@ import { clinicalSessionKey, resolveEncounter } from '../encounter.js'
 import { ClinicalNavigation } from '../clinical-navigation.jsx'
 import React, { useEffect, useState } from 'react'
 import { Button, Card, ConfirmDialog, Field, Notice, PageHeader, RefreshButton } from '../components.jsx'
-import { patientChart, prescriptionVisits, searchPatients } from '../api-client.js'
+import { patientChart, prescriptionVisits } from '../api-client.js'
 import { Odontogram, toothLabel } from '../components/odontogram/index.js'
 import {beginChartCommand,chartMatches,chartReady} from '../chart-command.js'
 
@@ -132,51 +132,46 @@ export function SearchablePatientPicker({ selectedPatient, onSelect, store, inpu
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(false)
   const [recentPatients, setRecentPatients] = useState([])
+  const [error, setError] = useState('')
+  const [attempt, setAttempt] = useState(0)
+  const term = query.trim()
+  const searching = term.length >= 2
+  const patientsFrom = visits => [...new Map(visits.filter(v => v.patient?.id).map(v => [v.patient.id, v.patient])).values()]
 
   useEffect(() => {
-    let live=true
-    prescriptionVisits().then(r => {
-      if(!live)return
-      if (r.ok && Array.isArray(r.data)) {
-        const unique = [...new Map(r.data.map(v => [v.patient.id, v.patient])).values()]
-        setRecentPatients(unique)
-      }
-    })
-    return()=>{live=false}
-  }, [])
-
-  useEffect(() => {
-    if (!query.trim() || query.trim().length < 2) {
-      setResults([])
-      setLoading(false)
-      return
-    }
-    let live=true
+    let live = true
+    setLoading(true)
+    setError('')
+    if (searching) setResults([])
     const timer = setTimeout(async () => {
-      setLoading(true)
-      const res = await searchPatients({ search: query.trim(), per_page: 25 })
-      if(!live)return
-      setLoading(false)
-      if (res.ok && Array.isArray(res.data)) {
-        setResults(res.data)
-      } else {
-        setResults([])
+      try {
+        const response = await prescriptionVisits(searching ? term : '')
+        if (!live) return
+        if (!response.ok || !Array.isArray(response.data)) {
+          setError(['unauthenticated', 'forbidden'].includes(response.kind) ? 'Your session cannot access these visits. Sign in again.' : 'Patient visits could not be loaded.')
+        } else {
+          (searching ? setResults : setRecentPatients)(patientsFrom(response.data))
+        }
+      } catch {
+        if (live) setError('Patient visits could not be loaded.')
+      } finally {
+        if (live) setLoading(false)
       }
-    }, 300)
-    return () => {live=false;clearTimeout(timer)}
-  }, [query])
+    }, searching ? 300 : 0)
+    return () => { live = false; clearTimeout(timer) }
+  }, [term, searching, attempt])
 
-  const shown = query.trim().length >= 2 ? results : recentPatients
+  const shown = searching ? results : recentPatients
 
   return (
     <div className="searchable-patient-picker" style={{ marginBottom: '16px' }}>
-      <Field label="Select or search patient" hint="Search 100,000+ clinic patients by name, code (PAT-0001), or mobile number">
+      <Field label="Select or search patient" hint="Search patients from your visits by name or patient code.">
         <div style={{ position: 'relative' }}>
           <input
             ref={inputRef}
             type="text"
             value={query}
-            placeholder="Search patient by name, patient code, or phone number…"
+            placeholder="Patient name or code"
             onChange={e => setQuery(e.target.value)}
             style={{ width: '100%', paddingRight: '32px' }}
           />
@@ -205,37 +200,41 @@ export function SearchablePatientPicker({ selectedPatient, onSelect, store, inpu
         </div>
       ) : (
         <div style={{ marginTop: '8px', maxHeight: '240px', overflowY: 'auto', border: '1px solid var(--line)', borderRadius: '8px', background: 'var(--surface)' }}>
-          {loading && <p style={{ padding: '12px', margin: 0, color: 'var(--muted)', fontSize: '13px' }}>Searching patient database…</p>}
-          {!loading && shown.length === 0 && (
+          {error && <div role="alert" style={{ padding: '12px' }}>{error} <Button size="sm" variant="ghost" onClick={() => setAttempt(n => n + 1)}>Retry</Button></div>}
+          {loading && <p role="status" style={{ padding: '12px', margin: 0, color: 'var(--muted)', fontSize: '13px' }}>Searching patient database…</p>}
+          {!loading && !error && shown.length === 0 && (
             <p style={{ padding: '12px', margin: 0, color: 'var(--muted)', fontSize: '13px' }}>
               {query.trim().length >= 2 ? 'No patients found matching your search.' : 'Type at least 2 characters to search, or pick from recent visits below.'}
             </p>
           )}
-          {!loading && shown.map(p => (
-            <div
+          {!loading && !error && shown.map(p => (
+            <button
+              type="button"
               key={p.id}
-              role="button"
-              tabIndex={0}
               onClick={() => onSelect(p)}
-              onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && onSelect(p)}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 padding: '10px 14px',
+                width: '100%',
+                textAlign: 'left',
+                border: 0,
+                background: 'transparent',
+                color: 'inherit',
                 borderBottom: '1px solid var(--line)',
                 cursor: 'pointer',
               }}
               className="patient-picker-item"
             >
-              <div>
+              <span>
                 <b style={{ fontSize: '14px' }}>{p.name}</b>
                 <span style={{ display: 'block', fontSize: '12px', color: 'var(--muted)' }}>
                   {p.patientCode || p.id} {p.phone ? `· ${p.phone}` : ''}
                 </span>
-              </div>
-              <Button size="sm" variant="soft">Open Chart</Button>
-            </div>
+              </span>
+              <span>Open chart</span>
+            </button>
           ))}
         </div>
       )}

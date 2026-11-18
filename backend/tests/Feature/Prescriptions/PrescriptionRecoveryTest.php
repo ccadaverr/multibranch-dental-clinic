@@ -76,17 +76,22 @@ class PrescriptionRecoveryTest extends TestCase
         $this->get('/api/prescriptions/'.$p['id'].'/pdf')->assertOk()->assertHeader('Cache-Control', 'no-store, private')->assertHeader('X-Content-Type-Options', 'nosniff');
     }
 
-    public function test_colleague_issuance_records_actual_issuer_and_revoked_writer_cannot_replay_clinical_content(): void
+    public function test_colleague_cannot_issue_and_revoked_author_cannot_replay_clinical_content(): void
     {
         $p = $this->draft();
         $this->actingAsUser('dentist2');
-        $this->postJson('/api/prescriptions/'.$p['id'].'/issue', ['expected_revision' => 1], ['Idempotency-Key' => 'colleague'])->assertOk()->assertJsonPath('data.dentist', 'Dr. '.$this->u['dentist2']->person->fullName());
+        $path = '/api/prescriptions/'.$p['id'].'/issue';
+        $this->postJson($path, ['expected_revision' => 1], ['Idempotency-Key' => 'other-dentist'])->assertForbidden();
+        $this->assertSame('Draft', Prescription::sole()->status);
+        $this->actingAsUser('dentist1');
+        $this->postJson($path, ['expected_revision' => 1], ['Idempotency-Key' => 'author-issue'])->assertOk()
+            ->assertJsonPath('data.dentist', 'Dr. '.$this->u['dentist1']->person->fullName());
         $row = Prescription::sole();
-        $this->assertSame($this->d['d2']->id, $row->dentist_profile_id);
-        $this->assertSame($this->u['dentist2']->id, $row->issued_by_user_id);
+        $this->assertSame($this->d['d1']->id, $row->dentist_profile_id);
+        $this->assertSame($this->u['dentist1']->id, $row->issued_by_user_id);
         $this->assertSame($this->u['dentist1']->id, $row->created_by_user_id);
-        $this->d['d2']->branches()->detach($this->b['b1']->id);
-        $this->postJson('/api/prescriptions/'.$p['id'].'/issue', ['expected_revision' => 1], ['Idempotency-Key' => 'colleague'])->assertForbidden();
+        $this->d['d1']->branches()->detach($this->b['b1']->id);
+        $this->postJson('/api/prescriptions/'.$p['id'].'/issue', ['expected_revision' => 1], ['Idempotency-Key' => 'author-issue'])->assertForbidden();
         $this->get('/api/prescriptions/'.$p['id'].'/pdf')->assertNotFound();
     }
 

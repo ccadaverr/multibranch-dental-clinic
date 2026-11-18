@@ -108,7 +108,7 @@ class Follow02AtomicTransitionsTest extends TestCase
     public function test_creation_and_its_required_audit_preserve_patient_and_branch_identity(): void
     {
         $this->actingAsUser('staffB2');
-        $response = $this->postJson('/api/followups', $this->payload('B', 'b2'))->assertCreated()
+        $response = $this->postJson('/api/followups', $this->payload('B', 'b2'), ['Idempotency-Key' => 'follow02-staff'])->assertCreated()
             ->assertJsonPath('data.patient.id', $this->p['B']->public_id)->assertJsonPath('data.branch.id', 'b2')
             ->assertJsonPath('data.status', 'Open')->assertJsonPath('data.revision', 1);
         $task = FollowupTask::where('public_id', $response->json('data.id'))->sole();
@@ -120,7 +120,7 @@ class Follow02AtomicTransitionsTest extends TestCase
     {
         $this->actingAsUser('staffB1');
         $this->failingAudit();
-        $this->assertFailure(fn () => $this->postJson('/api/followups', $this->payload()), 'Synthetic follow-up audit failure');
+        $this->assertFailure(fn () => $this->postJson('/api/followups', $this->payload(), ['Idempotency-Key' => 'follow02-create']), 'Synthetic follow-up audit failure');
         $this->assertSame(0, FollowupTask::count());
         $this->assertSame(0, $this->logs()->count());
     }
@@ -129,7 +129,7 @@ class Follow02AtomicTransitionsTest extends TestCase
     {
         $this->actingAsUser('staffB1');
         $this->failingAudit(true);
-        $this->assertFailure(fn () => $this->postJson('/api/followups', $this->payload()), 'Synthetic follow-up audit failure');
+        $this->assertFailure(fn () => $this->postJson('/api/followups', $this->payload(), ['Idempotency-Key' => 'follow02-create']), 'Synthetic follow-up audit failure');
         $this->assertSame(0, FollowupTask::count());
         $this->assertSame(0, $this->logs()->count());
     }
@@ -138,10 +138,10 @@ class Follow02AtomicTransitionsTest extends TestCase
     {
         $task = $this->task();
         $this->actingAsUser('staffB1');
-        $this->patchJson("/api/followups/{$task->public_id}", ['action' => 'contacted'])->assertOk()
+        $this->patchJson("/api/followups/{$task->public_id}", ['expected_revision' => $task->fresh()->revision, 'action' => 'contacted'])->assertOk()
             ->assertJsonPath('data.status', 'Contacted')->assertJsonPath('data.revision', 2);
         $this->assertAudit('followup.contacted', $task->fresh());
-        $this->patchJson("/api/followups/{$task->public_id}", ['action' => 'close', 'note' => 'Synthetic closure note'])->assertOk()
+        $this->patchJson("/api/followups/{$task->public_id}", ['expected_revision' => $task->fresh()->revision, 'action' => 'close', 'note' => 'Synthetic closure note'])->assertOk()
             ->assertJsonPath('data.status', 'Closed')->assertJsonPath('data.revision', 3);
         $this->assertAudit('followup.closed', $task->fresh());
         $this->assertSame(['Contacted', 'Closed'], $this->logs()->get()->map(fn ($log) => $log->payload['status'])->all());
@@ -155,7 +155,7 @@ class Follow02AtomicTransitionsTest extends TestCase
             $this->actingAsUser('staffB1');
             $this->failingAudit();
             $this->assertFailure(fn () => $this->patchJson("/api/followups/{$task->public_id}",
-                ['action' => $action, 'note' => 'Synthetic closure note']), 'Synthetic follow-up audit failure');
+                ['expected_revision' => $task->fresh()->revision, 'action' => $action, 'note' => 'Synthetic closure note']), 'Synthetic follow-up audit failure');
             $this->assertSame($before, $task->fresh()->getRawOriginal());
             $this->assertSame(0, $this->logs()->count());
         }
@@ -167,7 +167,7 @@ class Follow02AtomicTransitionsTest extends TestCase
         $before = $task->getRawOriginal();
         $this->actingAsUser('staffB1');
         $this->failingAudit(true);
-        $this->assertFailure(fn () => $this->patchJson("/api/followups/{$task->public_id}", ['action' => 'contacted']), 'Synthetic follow-up audit failure');
+        $this->assertFailure(fn () => $this->patchJson("/api/followups/{$task->public_id}", ['expected_revision' => $task->fresh()->revision, 'action' => 'contacted']), 'Synthetic follow-up audit failure');
         $this->assertSame($before, $task->fresh()->getRawOriginal());
         $this->assertSame(0, $this->logs()->count());
     }
@@ -183,7 +183,7 @@ class Follow02AtomicTransitionsTest extends TestCase
             FollowupTask::updating(function (FollowupTask $current) use ($task) {
                 if ($current->id === $task->id) throw new RuntimeException('Synthetic follow-up mutation failure');
             });
-            $this->assertFailure(fn () => $this->patchJson("/api/followups/{$task->public_id}", ['action' => 'contacted']), 'Synthetic follow-up mutation failure');
+            $this->assertFailure(fn () => $this->patchJson("/api/followups/{$task->public_id}", ['expected_revision' => $task->fresh()->revision, 'action' => 'contacted']), 'Synthetic follow-up mutation failure');
         } finally {
             FollowupTask::setEventDispatcher($originalEvents);
         }
@@ -199,7 +199,7 @@ class Follow02AtomicTransitionsTest extends TestCase
         $task->update(['branch_id' => $this->b['b2']->id]);
         $before = $task->fresh()->getRawOriginal();
         $this->actingAsUser('staffB1');
-        $this->patchJson("/api/followups/{$task->public_id}", ['action' => 'contacted'])->assertForbidden();
+        $this->patchJson("/api/followups/{$task->public_id}", ['expected_revision' => $task->fresh()->revision, 'action' => 'contacted'])->assertNotFound();
         $this->assertSame($before, $task->fresh()->getRawOriginal());
         $this->assertSame(0, $this->logs()->count());
     }
@@ -210,7 +210,7 @@ class Follow02AtomicTransitionsTest extends TestCase
         $this->bindSnapshot($task);
         $task->update(['patient_id' => $this->p['A']->id, 'branch_id' => $this->b['b1']->id, 'status' => 'Contacted', 'revision' => 7]);
         $this->actingAsUser('staffB1');
-        $this->patchJson("/api/followups/{$task->public_id}", ['action' => 'close', 'note' => 'Synthetic closure note'])->assertOk()
+        $this->patchJson("/api/followups/{$task->public_id}", ['expected_revision' => $task->fresh()->revision, 'action' => 'close', 'note' => 'Synthetic closure note'])->assertOk()
             ->assertJsonPath('data.patient.id', $this->p['A']->public_id)->assertJsonPath('data.branch.id', 'b1')
             ->assertJsonPath('data.status', 'Closed')->assertJsonPath('data.revision', 8);
         $this->assertAudit('followup.closed', $task->fresh());
@@ -223,7 +223,7 @@ class Follow02AtomicTransitionsTest extends TestCase
         $task->update(['status' => 'Closed', 'close_note' => 'Synthetic earlier closure', 'revision' => 4]);
         $before = $task->fresh()->getRawOriginal();
         $this->actingAsUser('staffB1');
-        $response = $this->patchJson("/api/followups/{$task->public_id}", ['action' => 'contacted'])->assertStatus(422)->assertJsonValidationErrors('action');
+        $response = $this->patchJson("/api/followups/{$task->public_id}", ['expected_revision' => $task->fresh()->revision, 'action' => 'contacted'])->assertStatus(422)->assertJsonValidationErrors('action');
         $this->assertSame('This follow-up is already Closed.', $response->json('errors.action.0'));
         $this->assertSame($before, $task->fresh()->getRawOriginal());
         $this->assertSame(0, $this->logs()->count());
@@ -235,15 +235,15 @@ class Follow02AtomicTransitionsTest extends TestCase
         $before = $task->getRawOriginal();
         $this->actingAsUser('staffB1');
         foreach ([[], ['note' => '   ']] as $body) {
-            $this->patchJson("/api/followups/{$task->public_id}", ['action' => 'close'] + $body)->assertStatus(422)->assertJsonValidationErrors('note');
+            $this->patchJson("/api/followups/{$task->public_id}", ['expected_revision' => $task->fresh()->revision, 'action' => 'close'] + $body)->assertStatus(422)->assertJsonValidationErrors('note');
             $this->assertSame($before, $task->fresh()->getRawOriginal());
             $this->assertSame(0, $this->logs()->count());
         }
-        $this->patchJson("/api/followups/{$task->public_id}", ['action' => 'close', 'note' => '  Synthetic reason  '])->assertOk();
+        $this->patchJson("/api/followups/{$task->public_id}", ['expected_revision' => $task->fresh()->revision, 'action' => 'close', 'note' => '  Synthetic reason  '])->assertOk();
         $this->assertSame('Synthetic reason', $task->fresh()->close_note);
         $appointment = $this->existing('A', 'd1', 'b1', 'svc1', '2026-10-06', '10:00');
         $booked = $this->task('A', 'b1', ['status' => 'Booked', 'appointment_id' => $appointment->id]);
-        $this->patchJson("/api/followups/{$booked->public_id}", ['action' => 'close'])->assertOk()
+        $this->patchJson("/api/followups/{$booked->public_id}", ['expected_revision' => $booked->fresh()->revision, 'action' => 'close'])->assertOk()
             ->assertJsonPath('data.status', 'Closed')->assertJsonPath('data.revision', 2)
             ->assertJsonPath('data.appointment.id', $appointment->public_id);
         $this->assertNull($booked->fresh()->close_note);
@@ -254,15 +254,15 @@ class Follow02AtomicTransitionsTest extends TestCase
     {
         $this->actingAsUser('staffB1');
         $task = $this->task();
-        $this->patchJson("/api/followups/{$task->public_id}", ['action' => 'contacted'])->assertOk();
-        $this->patchJson("/api/followups/{$task->public_id}", ['action' => 'contacted'])->assertStatus(422);
-        $this->patchJson("/api/followups/{$task->public_id}", ['action' => 'close', 'note' => 'Synthetic closure'])->assertOk();
-        $this->patchJson("/api/followups/{$task->public_id}", ['action' => 'close', 'note' => 'Different note'])->assertStatus(422);
+        $this->patchJson("/api/followups/{$task->public_id}", ['expected_revision' => $task->fresh()->revision, 'action' => 'contacted'])->assertOk();
+        $this->patchJson("/api/followups/{$task->public_id}", ['expected_revision' => $task->fresh()->revision, 'action' => 'contacted'])->assertStatus(422);
+        $this->patchJson("/api/followups/{$task->public_id}", ['expected_revision' => $task->fresh()->revision, 'action' => 'close', 'note' => 'Synthetic closure'])->assertOk();
+        $this->patchJson("/api/followups/{$task->public_id}", ['expected_revision' => $task->fresh()->revision, 'action' => 'close', 'note' => 'Different note'])->assertStatus(422);
         $this->assertSame(['Closed', 3, 'Synthetic closure'], [$task->fresh()->status, $task->fresh()->revision, $task->fresh()->close_note]);
         $this->assertSame(2, $this->logs()->where('payload->task', $task->public_id)->count());
         $closedFirst = $this->task();
-        $this->patchJson("/api/followups/{$closedFirst->public_id}", ['action' => 'close', 'note' => 'Synthetic closure'])->assertOk();
-        $this->patchJson("/api/followups/{$closedFirst->public_id}", ['action' => 'contacted'])->assertStatus(422);
+        $this->patchJson("/api/followups/{$closedFirst->public_id}", ['expected_revision' => $closedFirst->fresh()->revision, 'action' => 'close', 'note' => 'Synthetic closure'])->assertOk();
+        $this->patchJson("/api/followups/{$closedFirst->public_id}", ['expected_revision' => $closedFirst->fresh()->revision, 'action' => 'contacted'])->assertStatus(422);
         $this->assertSame(['Closed', 2], [$closedFirst->fresh()->status, $closedFirst->fresh()->revision]);
         $this->assertSame(1, $this->logs()->where('payload->task', $closedFirst->public_id)->count());
     }
@@ -273,8 +273,9 @@ class Follow02AtomicTransitionsTest extends TestCase
         $before = $task->getRawOriginal();
         foreach (['staffB2', 'dentist3', 'owner', 'patientA'] as $actor) {
             $this->actingAsUser($actor);
-            $this->patchJson("/api/followups/{$task->public_id}", ['action' => 'contacted'])->assertForbidden();
-            $this->postJson('/api/followups', $this->payload())->assertForbidden();
+            $this->patchJson("/api/followups/{$task->public_id}", ['expected_revision' => $task->fresh()->revision, 'action' => 'contacted'])
+                ->assertStatus(in_array($actor, ['staffB2', 'dentist3'], true) ? 404 : 403);
+            $this->postJson('/api/followups', $this->payload(), ['Idempotency-Key' => 'follow02-create'])->assertForbidden();
         }
         $this->assertSame($before, $task->fresh()->getRawOriginal());
         $this->assertSame(1, FollowupTask::count());
@@ -289,8 +290,11 @@ class Follow02AtomicTransitionsTest extends TestCase
         $this->assertEqualsCanonicalizing(['id', 'status', 'due_on', 'overdue', 'branch', 'source', 'revision'], array_keys($response->json('data.0')));
         $this->assertStringNotContainsString($task->reason, $response->getContent());
         $this->assertStringNotContainsString($task->close_note, $response->getContent());
+        $this->actingAsUser('staffB1');
+        $this->postJson('/api/visits/walk-in', ['patient_id' => $this->p['A']->public_id, 'branch_ref' => 'b1',
+            'service_ref' => 'svc1', 'dentist_ref' => 'd1'], ['Idempotency-Key' => 'follow02-visit'])->assertCreated();
         $this->actingAsUser('dentist1');
-        $created = $this->postJson('/api/followups', $this->payload())->assertCreated()->json('data.id');
+        $created = $this->postJson('/api/followups', $this->payload(), ['Idempotency-Key' => 'follow02-create'])->assertCreated()->json('data.id');
         $this->assertAudit('followup.created', FollowupTask::where('public_id', $created)->sole(), 'dentist1');
     }
 
@@ -310,13 +314,8 @@ class Follow02AtomicTransitionsTest extends TestCase
             sort($statuses);
             $accepted = array_values(array_filter($results, fn ($r) => $r['status'] === 200));
             $fresh = $task->fresh();
-            if ($actions[0] === $actions[1]) {
-                $this->assertSame([200, 422], $statuses);
-                $this->assertSame($actions[0] === 'close' ? 'Closed' : 'Contacted', $fresh->status);
-            } else {
-                $this->assertContains($statuses, [[200, 200], [200, 422]]);
-                $this->assertSame('Closed', $fresh->status);
-            }
+            $this->assertSame([200, 409], $statuses, 'Commands using the same observed revision may transition only once.');
+            $this->assertSame($accepted[0]['action'] === 'close' ? 'Closed' : 'Contacted', $fresh->status);
             $this->assertSame(1 + count($accepted), $fresh->revision);
             $logs = $this->logs()->where('payload->task', $task->public_id)->get();
             $this->assertCount(count($accepted), $logs);
@@ -338,7 +337,7 @@ class Follow02AtomicTransitionsTest extends TestCase
         try {
             foreach ($actions as $action) {
                 $process = proc_open([PHP_BINARY, base_path('tests/Support/concurrent_request.php'), $token,
-                    "/api/followups/{$task->public_id}", json_encode(['action' => $action, 'note' => 'Synthetic concurrent closure']),
+                    "/api/followups/{$task->public_id}", json_encode(['action' => $action, 'note' => 'Synthetic concurrent closure', 'expected_revision' => $task->revision]),
                     (string) $startAt, '{}', 'PATCH'], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, base_path(),
                     array_merge(getenv(), ['APP_ENV' => 'testing', 'DB_CONNECTION' => 'pgsql', 'DB_DATABASE' => 'dental_clinic_scratch', 'DB_URL' => '',
                         'CACHE_STORE' => 'array', 'SESSION_DRIVER' => 'array', 'QUEUE_CONNECTION' => 'sync', 'PGOPTIONS' => '-c lock_timeout=5000 -c statement_timeout=10000']));

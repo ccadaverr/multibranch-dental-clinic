@@ -27,7 +27,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * M19 Prescriptions. A Dentist working at the visit's branch (the treating one or another dentist there) writes a prescription for
+ * M19 Prescriptions. The responsible Dentist writes a prescription for
  * a visit: free-text lines (medicine, dosage, frequency, duration, instructions) and an optional note. No drug list and no
  * interaction checks; the Owner may keep a list of common medicine names for quick selection. Issuing locks it (append-only) and
  * numbers it RX-YYYY-000001 without gaps; a mistake is corrected by voiding it with a reason and issuing a new one.
@@ -106,16 +106,25 @@ class PrescriptionController extends Controller
         return response()->json(['data' => $rows->map(fn (Prescription $p) => $this->view($p, $request->user(), true))->values()])->header('Cache-Control', 'private, no-store');
     }
 
-    /** Dentist: visits at their branches in the last 30 days, to write a prescription for (with the allergy reminder). */
+    /** Dentist: their own Visits from the last 30 days, to write a prescription for (with the allergy reminder). */
     public function visits(Request $request): JsonResponse
     {
         $user = $request->user();
         $from = ClinicClock::addDays(ClinicClock::today(), -30);
-        $visits = Visit::whereIn('branch_id', $this->dentistBranchIds($user))->where('clinic_date', '>=', $from)
+        $search = trim($request->validate(['search' => ['nullable', 'string', 'max:120']])['search'] ?? '');
+        $visits = Visit::visibleTo($user)->whereIn('branch_id', $this->dentistBranchIds($user))
+            ->when($search === '', fn ($q) => $q->where('clinic_date', '>=', $from))
+            ->when($search !== '', function ($q) use ($search) {
+                $like = '%'.addcslashes($search, '\\%_').'%';
+                $q->whereHas('patient', fn ($patient) => $patient->where(function ($match) use ($like) {
+                    $match->where('patient_code', 'ilike', $like)->orWhereHas('person',
+                        fn ($person) => $person->whereRaw("concat_ws(' ', first_name, last_name) ILIKE ?", [$like]));
+                }));
+            })
             ->with(['patient.person', 'branch', 'treatment', 'dentist.person'])->orderByDesc('clinic_date')->orderByDesc('id')->limit(100)->get();
 
         return response()->json(['data' => $visits->map(fn (Visit $v) => ['id' => $v->public_id, 'date' => substr((string) $v->clinic_date, 0, 10), 'status' => $v->status,
-            'patient' => ['id' => $v->patient?->public_id, 'name' => $v->patient?->person?->fullName(), 'age' => Guardianship::age($v->patient?->person?->date_of_birth?->toDateString())],
+            'patient' => ['id' => $v->patient?->public_id, 'patientCode' => $v->patient?->patient_code, 'name' => $v->patient?->person?->fullName(), 'age' => Guardianship::age($v->patient?->person?->date_of_birth?->toDateString())],
             'branch' => $v->branch?->name, 'dentist' => $v->dentist ? 'Dr. '.$v->dentist->person?->fullName() : null, 'treatment' => $v->treatment?->public_id])->values(),
             'meta' => ['common_medicines' => $this->commonMedicines(), 'license_no' => $this->me($user)?->rx_license_no,
                 // The clinic server does not record allergies yet: say so instead of implying there are none.
@@ -126,9 +135,8 @@ class PrescriptionController extends Controller
     {
         $user = $request->user();
         $data = $request->validate(['visit_id' => ['required', 'string', 'max:40']] + self::LINE_RULES + $this->serverFields());
-        $visit = Visit::where('public_id', $data['visit_id'])->with('treatment')->firstOrFail();
-        $dentist = $this->dentistAt($user, $visit->branch_id);
-        $response = $this->command($request, 'prescription.create', $data, $visit->branch_id, function () use ($user, $visit, $dentist, $data) {
+        $visit = Visit::where('public_id', $data['visit_id'])->firstOrFail();
+        $response = $this->command($request, 'prescription.create', $data, $visit->id, null, function (DentistProfile $dentist, Visit $visit) use ($user, $data) {
             $p = DB::transaction(function () use ($user, $visit, $dentist, $data) {
                 $p = Prescription::create(['patient_id' => $visit->patient_id, 'branch_id' => $visit->branch_id, 'visit_id' => $visit->id, 'treatment_id' => $visit->treatment?->id,
                     'dentist_profile_id' => $dentist->id, 'created_by_user_id' => $user->id, 'status' => 'Draft', 'note' => $data['note'] ?? null]);
@@ -148,11 +156,10 @@ class PrescriptionController extends Controller
     {
         $user = $request->user();
         $data = $request->validate(['expected_revision' => ['required', 'integer', 'min:1'], 'visit_id' => ['prohibited']] + self::LINE_RULES + $this->serverFields());
-        $this->dentistAt($user, $prescription->branch_id);
 
-        return $this->command($request, 'prescription.update', ['prescription' => $prescription->public_id] + $data, $prescription->branch_id, function () use ($prescription, $data, $user) {
+        return $this->command($request, 'prescription.update', ['prescription' => $prescription->public_id] + $data, $prescription->visit_id, $prescription, function () use ($prescription, $data, $user) {
             $accepted = DB::transaction(function () use ($prescription, $data, $user) {
-                $p = Prescription::whereKey($prescription->id)->lockForUpdate()->first();
+                $p = Prescription::whereKey($prescription->id)->lockForUpdate()->firstOrFail();
                 if ($p->status !== 'Draft') {
                     throw ValidationException::withMessages(['status' => ['An issued prescription cannot be changed. Void it and write a new one.']]);
                 }
@@ -177,12 +184,10 @@ class PrescriptionController extends Controller
     {
         $user = $request->user();
         $data = $request->validate(['expected_revision' => ['required', 'integer', 'min:1'], 'visit_id' => ['prohibited']] + $this->serverFields());
-        $dentist = $this->dentistAt($user, $prescription->branch_id);
 
-        return $this->command($request, 'prescription.issue', ['prescription' => $prescription->public_id] + $data, $prescription->branch_id, function () use ($prescription, $data, $user, $dentist) {
+        return $this->command($request, 'prescription.issue', ['prescription' => $prescription->public_id] + $data, $prescription->visit_id, $prescription, function (DentistProfile $dentist) use ($prescription, $data, $user) {
             $p = DB::transaction(function () use ($prescription, $data, $user, $dentist) {
-                $dentist = $this->dentistAt($user, $prescription->branch_id);
-                $p = Prescription::whereKey($prescription->id)->lockForUpdate()->first();
+                $p = Prescription::whereKey($prescription->id)->lockForUpdate()->firstOrFail();
                 if ($p->status !== 'Draft') {
                     throw ValidationException::withMessages(['status' => ['This prescription was already issued.']]);
                 }
@@ -197,7 +202,7 @@ class PrescriptionController extends Controller
                 $n = DB::table('prescription_counters')->where('year', $year)->lockForUpdate()->value('last_number') + 1;
                 DB::table('prescription_counters')->where('year', $year)->update(['last_number' => $n]);
                 $p->update(['status' => 'Issued', 'number' => sprintf('RX-%d-%06d', $year, $n), 'issued_at' => now(), 'issued_by_user_id' => $user->id,
-                    'dentist_profile_id' => $dentist->id, 'license_no' => $dentist->rx_license_no, 'revision' => $p->revision + 1]);
+                    'license_no' => $dentist->rx_license_no, 'revision' => $p->revision + 1]);
                 $this->audit($user, 'prescription.issued', $p);
                 $p->load(['patient.person', 'branch', 'dentist.person', 'lines']);
                 // No patient/guardian notice for an uncommitted or rolled-back
@@ -224,11 +229,10 @@ class PrescriptionController extends Controller
     {
         $user = $request->user();
         $data = $request->validate(['reason' => ['required', 'string', 'min:3', 'max:300'], 'expected_revision' => ['required', 'integer', 'min:1'], 'visit_id' => ['prohibited']] + $this->serverFields());
-        $this->dentistAt($user, $prescription->branch_id);
 
-        return $this->command($request, 'prescription.void', ['prescription' => $prescription->public_id] + $data, $prescription->branch_id, function () use ($prescription, $data, $user) {
+        return $this->command($request, 'prescription.void', ['prescription' => $prescription->public_id] + $data, $prescription->visit_id, $prescription, function () use ($prescription, $data, $user) {
             $p = DB::transaction(function () use ($prescription, $data, $user) {
-                $p = Prescription::whereKey($prescription->id)->lockForUpdate()->first();
+                $p = Prescription::whereKey($prescription->id)->lockForUpdate()->firstOrFail();
                 if ($p->status !== 'Issued') {
                     throw ValidationException::withMessages(['status' => [$p->status === 'Void' ? 'This prescription is already void.' : 'Only an issued prescription is voided; a draft is just not issued.']]);
                 }
@@ -287,19 +291,29 @@ class PrescriptionController extends Controller
     }
 
     /** Reauthorize even a replay. Clinical responses are encrypted inside the existing generic journal. */
-    private function command(Request $request, string $name, array $payload, int $branchId, Closure $work): JsonResponse
+    private function command(Request $request, string $name, array $payload, int $visitId, ?Prescription $prescription, Closure $work): JsonResponse
     {
         PrescriptionSession::assertCurrent($request);
         $key = $this->idempotencyKey($request);
         $actor = $request->user();
 
-        return DB::transaction(function () use ($actor, $branchId, $key, $name, $payload, $work) {
+        return DB::transaction(function () use ($actor, $visitId, $prescription, $key, $name, $payload, $work) {
             $current = User::whereKey($actor->id)->sharedLock()->firstOrFail();
             abort_unless($current->role->value === 'dentist' && $current->account_status === 'Active' && $current->auth_version === $actor->auth_version, 403);
             $profile = DentistProfile::where('person_id', $current->person_id)->sharedLock()->first();
-            abort_unless($profile && DB::table('dentist_branches')->where('dentist_profile_id', $profile->id)->where('branch_id', $branchId)->sharedLock()->first(), 403);
-            $response = IdempotentCommand::run(CommandKey::class, $current, $key, $name, $payload, function () use ($work) {
-                [$body, $status] = $work();
+            $visit = Visit::whereKey($visitId)->sharedLock()->firstOrFail()->load('treatment');
+            abort_unless($profile && $visit->responsible_dentist_profile_id === $profile->id
+                && (! $visit->treatment || $visit->treatment->dentist_profile_id === $profile->id)
+                && DB::table('dentist_branches')->where('dentist_profile_id', $profile->id)->where('branch_id', $visit->branch_id)->sharedLock()->first(), 403);
+            if ($prescription) {
+                $currentPrescription = Prescription::whereKey($prescription->id)->lockForUpdate()->firstOrFail();
+                abort_unless($currentPrescription->dentist_profile_id === $profile->id
+                    && $currentPrescription->visit_id === $visit->id && $currentPrescription->patient_id === $visit->patient_id
+                    && $currentPrescription->branch_id === $visit->branch_id
+                    && (! $currentPrescription->treatment_id || $currentPrescription->treatment_id === $visit->treatment?->id), 403);
+            }
+            $response = IdempotentCommand::run(CommandKey::class, $current, $key, $name, $payload, function () use ($work, $profile, $visit) {
+                [$body, $status] = $work($profile, $visit);
 
                 return [['encrypted_prescription_response' => Crypt::encryptString(json_encode($body, JSON_THROW_ON_ERROR))], $status];
             }, fn () => ValidationException::withMessages(['idempotency_key' => ['This key was used for a different prescription request.']]));
@@ -321,13 +335,11 @@ class PrescriptionController extends Controller
         return $this->me($user)?->branches()->pluck('branches.id')->all() ?? [];
     }
 
-    /** Only a Dentist working at that branch writes, issues or voids. */
-    private function dentistAt(User $user, int $branchId): DentistProfile
+    private function canWrite(User $user, Prescription $p): bool
     {
-        $me = $this->me($user);
-        abort_unless($me && in_array($branchId, $this->dentistBranchIds($user), true), 403, 'Only a dentist at this branch can write or change prescriptions.');
-
-        return $me;
+        return $p->dentist_profile_id === $this->me($user)?->id
+            && $p->visit?->responsible_dentist_profile_id === $p->dentist_profile_id
+            && in_array($p->branch_id, $this->dentistBranchIds($user), true);
     }
 
     private function canRead(User $user, Prescription $p): bool
@@ -377,8 +389,8 @@ class PrescriptionController extends Controller
         } // metadata only
         $out += ['patient' => ['id' => $p->patient?->public_id, 'name' => $p->patient?->person?->fullName()], 'visit' => $p->visit?->public_id, 'branch_id' => $p->branch?->legacy_ref,
             'voided' => $p->voided_at ? ['at' => $p->voided_at->toIso8601String(), 'reason' => $p->void_reason] : null,
-            'can_edit' => $viewer->role->value === 'dentist' && $p->status === 'Draft' && in_array($p->branch_id, $this->dentistBranchIds($viewer), true),
-            'can_void' => $viewer->role->value === 'dentist' && $p->status === 'Issued' && in_array($p->branch_id, $this->dentistBranchIds($viewer), true)];
+            'can_edit' => $viewer->role->value === 'dentist' && $p->status === 'Draft' && $this->canWrite($viewer, $p),
+            'can_void' => $viewer->role->value === 'dentist' && $p->status === 'Issued' && $this->canWrite($viewer, $p)];
         if ($content) {
             $out += ['note' => $p->note, 'license_no' => $p->license_no, 'lines' => $p->lines->map(fn ($l) => ['medicine' => $l->medicine, 'dosage' => $l->dosage,
                 'frequency' => $l->frequency, 'duration' => $l->duration, 'instructions' => $l->instructions, 'value_origins' => $l->value_origins])->values()];

@@ -16,19 +16,21 @@ use App\Models\Patient;
 use App\Models\Service;
 use App\Models\User;
 use App\Models\UserBranchScope;
+use App\Models\Visit;
+use App\Support\CommandActor;
+use Illuminate\Database\Eloquent\Builder;
 use App\Services\Audit\AuditService;
 use App\Services\Followups\Followups;
 use App\Support\ClinicClock;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
  * M20 Patient Follow-Up. Tasks come from a completed treatment's follow-up fields (automatically, once) or are added by a Dentist or
  * the front desk: patient, reason, due date, branch, the service to book and an assignee (the branch front desk unless one person
  * is named). Open → Contacted → Booked (set by the system when the patient's next appointment is booked) → Closed (a note is
- * required when closed without a booking). The front desk and Dentists of the branch see and work the list; the Owner sees counts
+ * required when closed without a booking). The front desk works the branch list; Dentists work their assigned tasks; the Owner sees counts
  * and dates only (no reason). Audited without the reason or the note.
  */
 class FollowupController extends Controller
@@ -73,8 +75,7 @@ class FollowupController extends Controller
         $user = $request->user();
         $data = $request->validate(['branch_ref' => ['nullable', 'string', 'max:50'], 'status' => ['nullable', 'in:active,Open,Contacted,Booked,Closed'], 'due' => ['nullable', 'in:overdue,today,week,all']]);
         $today = ClinicClock::today();
-        $q = FollowupTask::with(['patient.person', 'branch', 'service', 'dentist.person', 'assignee.person', 'appointment'])->orderBy('due_on')->orderBy('id')->limit(300)
-            ->whereIn('branch_id', $this->branchIds($user))
+        $q = $this->scopedTasks($user)->with(['patient.person', 'branch', 'service', 'dentist.person', 'assignee.person', 'appointment'])->orderBy('due_on')->orderBy('id')->limit(300)
             ->when(! empty($data['branch_ref']), fn ($q) => $q->whereIn('branch_id', Branch::select('id')->where('legacy_ref', $data['branch_ref'])))
             ->when(($data['status'] ?? 'active') === 'active', fn ($q) => $q->whereIn('status', FollowupTask::OPEN), fn ($q) => $q->where('status', $data['status']))
             ->when(($data['due'] ?? 'all') === 'overdue', fn ($q) => $q->where('due_on', '<', $today))
@@ -92,8 +93,7 @@ class FollowupController extends Controller
         abort_unless(in_array($user->role->value, ['staff', 'dentist'], true), 403);
         // Re-read by public identity with current branch scope. Do not serialize
         // a stale route snapshot or rely on the capped/active work lists.
-        $task = FollowupTask::where('public_id', $followupTask->public_id)
-            ->whereIn('branch_id', $this->branchIds($user))
+        $task = $this->scopedTasks($user)->where('public_id', $followupTask->public_id)
             ->with(['patient.person', 'branch', 'service', 'dentist.person', 'assignee.person', 'appointment'])
             ->firstOrFail();
 
@@ -105,8 +105,13 @@ class FollowupController extends Controller
     public function forPatient(Request $request, Patient $patient): JsonResponse
     {
         $user = $request->user();
-        abort_unless($user->role->value === 'dentist' || $user->can('viewProfile', $patient), 403);
-        $rows = FollowupTask::where('patient_id', $patient->id)->whereIn('branch_id', $this->branchIds($user))->with(['patient.person', 'branch', 'service', 'dentist.person', 'assignee.person', 'appointment'])
+        if ($user->role->value === 'dentist') {
+            abort_unless(Visit::visibleTo($user)->where('patient_id', $patient->id)
+                ->whereIn('branch_id', $this->branchIds($user))->exists(), 404);
+        } else {
+            abort_unless($user->can('viewProfile', $patient), 403);
+        }
+        $rows = $this->scopedTasks($user)->where('patient_id', $patient->id)->with(['patient.person', 'branch', 'service', 'dentist.person', 'assignee.person', 'appointment'])
             ->orderByDesc('due_on')->limit(50)->get();
 
         return response()->json(['data' => $rows->map(fn (FollowupTask $t) => $this->view($t, $user))->values()]);
@@ -114,7 +119,7 @@ class FollowupController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        return \App\Support\CommandActor::run($request->user(), function ($actor) use ($request) {
+        return CommandActor::run($request->user(), function ($actor) use ($request) {
             $user = $actor;
             $data = $request->validate(['patient_id' => ['required', 'string', 'max:40'], 'branch_ref' => ['required', 'string', 'max:50'], 'reason' => ['nullable', 'required_without:reason_category', 'string', 'max:500', 'not_in:Other', 'prohibits:reason_category'],
                 ...ReasonSelection::rules('reason_category', 'reason_detail', ReasonSelection::FOLLOWUP, 500),
@@ -122,10 +127,15 @@ class FollowupController extends Controller
             $patient = Patient::where('public_id', $data['patient_id'])->firstOrFail();
             $branch = Branch::where('legacy_ref', $data['branch_ref'])->firstOrFail();
             abort_unless(in_array($branch->id, $this->branchIds($user), true), 403, 'You can add follow-ups for your own branches only.');
-            if ($user->role->value === 'staff') abort_unless($user->can('viewProfile', $patient), 403);
+            if ($user->role->value === 'dentist') {
+                abort_unless(Visit::visibleTo($user)->where('patient_id', $patient->id)
+                    ->where('branch_id', $branch->id)->exists(), 404);
+            } else {
+                abort_unless($user->can('viewProfile', $patient), 403);
+            }
             if ($data['due_on'] < ClinicClock::addDays(ClinicClock::today(), -365)) throw ValidationException::withMessages(['due_on' => ['Choose a date within the last year or later.']]);
             \App\Support\SelectionDetailsSchema::requireRequested($data, ['reason_category', 'reason_detail']);
-            $receipt = IdempotentCommand::run(CommandKey::class, $user, $this->idempotencyKey($request), 'followup.create', $data,
+            $receipt = IdempotentCommand::run(CommandKey::class, $user, $this->idempotencyKey($request, true), 'followup.create', $data,
                 function () use ($data, $user, $patient, $branch) {
                 \App\Support\SelectionDetailsSchema::requireRequested($data, ['reason_category', 'reason_detail']);
                 $task = FollowupTask::create(['patient_id' => $patient->id, 'branch_id' => $branch->id, 'reason' => ReasonSelection::text($data, 'reason_category', 'reason_detail', 'reason'),
@@ -153,14 +163,11 @@ class FollowupController extends Controller
     public function update(Request $request, FollowupTask $followupTask): JsonResponse
     {
         $user = $request->user();
-        $data = $request->validate(['action' => ['required', 'in:contacted,close'], 'note' => ['nullable', 'string', 'max:500'],
-            'expected_revision' => ['sometimes', 'required', 'integer', 'min:1', 'max:2147483647']]);
-        $task = DB::transaction(function () use ($followupTask, $data, $user) {
-            $t = FollowupTask::whereKey($followupTask->id)->lockForUpdate()->firstOrFail();
-            // The route snapshot may predate a state/branch change. Authorize
-            // and audit the locked row within the same transaction as its write.
-            abort_unless(in_array($t->branch_id, $this->branchIds($user), true), 403);
-            if (isset($data['expected_revision']) && $t->revision !== (int) $data['expected_revision']) {
+        $task = CommandActor::run($user, function (User $user) use ($followupTask, $request) {
+            $t = $this->scopedTasks($user)->whereKey($followupTask->id)->lockForUpdate()->firstOrFail();
+            $data = $request->validate(['action' => ['required', 'in:contacted,close'], 'note' => ['nullable', 'string', 'max:500'],
+                'expected_revision' => ['required', 'integer', 'min:1', 'max:2147483647']]);
+            if ($t->revision !== (int) $data['expected_revision']) {
                 throw new \App\Services\Appointments\AppointmentCommandException(409, 'followup_conflict', 'The follow-up changed. Reload and review it before continuing.');
             }
             if ($data['action'] === 'contacted') {
@@ -193,9 +200,25 @@ class FollowupController extends Controller
         };
     }
 
+    private function scopedTasks(User $user): Builder
+    {
+        return FollowupTask::whereIn('branch_id', $this->branchIds($user))
+            ->when($user->role->value === 'dentist', function (Builder $query) use ($user) {
+                $visits = Visit::visibleTo($user)->selectRaw('1')
+                    ->whereColumn('visits.patient_id', 'followup_tasks.patient_id')
+                    ->whereColumn('visits.branch_id', 'followup_tasks.branch_id');
+                $query->whereHas('dentist', fn (Builder $dentist) => $dentist->where('person_id', $user->person_id))
+                    ->where(fn (Builder $context) => $context
+                        ->where(fn (Builder $manual) => $manual->whereNull('treatment_id')->whereExists($visits))
+                        ->orWhereHas('treatment', fn (Builder $treatment) => $treatment
+                            ->whereColumn('treatments.dentist_profile_id', 'followup_tasks.dentist_profile_id')
+                            ->whereExists((clone $visits)->whereColumn('visits.id', 'treatments.visit_id'))));
+            });
+    }
+
     private function counts(User $user): array
     {
-        $base = FollowupTask::whereIn('branch_id', $this->branchIds($user))->whereIn('status', FollowupTask::OPEN);
+        $base = $this->scopedTasks($user)->whereIn('status', FollowupTask::OPEN);
 
         return ['open' => (clone $base)->count(), 'overdue' => (clone $base)->where('due_on', '<', ClinicClock::today())->count(), 'due_today' => (clone $base)->where('due_on', ClinicClock::today())->count()];
     }

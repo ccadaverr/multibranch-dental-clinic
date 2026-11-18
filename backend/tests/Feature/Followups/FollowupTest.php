@@ -62,7 +62,7 @@ class FollowupTest extends TestCase
         $this->actingAsUser('staffB1');
         $list = $this->getJson('/api/followups')->assertOk();
         $this->assertSame([$task->public_id, self::REASON, 'Branch front desk'], [$list->json('data.0.id'), $list->json('data.0.reason'), $list->json('data.0.assignee')]);
-        $this->patchJson("/api/followups/{$task->public_id}", ['action' => 'contacted'])->assertOk()->assertJsonPath('data.status', 'Contacted');
+        $this->patchJson("/api/followups/{$task->public_id}", ['action' => 'contacted', 'expected_revision' => $task->fresh()->revision])->assertOk()->assertJsonPath('data.status', 'Contacted');
 
         // Booking the patient's next appointment (the normal booking command) marks it Booked.
         $booked = $this->postJson('/api/appointments', ['patient_id' => $this->p['A']->public_id, 'branch_ref' => 'b1', 'service_ref' => 'svc2', 'date' => '2026-10-05', 'start_time' => '10:00'])->assertCreated();
@@ -70,12 +70,34 @@ class FollowupTest extends TestCase
         $this->assertSame('Booked', $task->status);
         $this->assertSame($booked->json('data.id'), $task->appointment->public_id);
         // Cancelling that appointment opens it again; closing without a booking needs a note.
-        $this->postJson("/api/appointments/{$booked->json('data.id')}/cancel", ['expected_revision' => 1])->assertOk();
+        $this->postJson("/api/appointments/{$booked->json('data.id')}/cancel", ['expected_revision' => 1, 'reason' => 'Synthetic cancellation'])->assertOk();
         $this->assertSame('Open', $task->fresh()->status);
-        $this->patchJson("/api/followups/{$task->public_id}", ['action' => 'close'])->assertStatus(422)->assertJsonValidationErrors('note');
-        $this->patchJson("/api/followups/{$task->public_id}", ['action' => 'close', 'note' => 'Patient moved abroad'])->assertOk()->assertJsonPath('data.status', 'Closed');
+        $this->patchJson("/api/followups/{$task->public_id}", ['action' => 'close', 'expected_revision' => $task->fresh()->revision])->assertStatus(422)->assertJsonValidationErrors('note');
+        $this->patchJson("/api/followups/{$task->public_id}", ['action' => 'close', 'note' => 'Patient moved abroad', 'expected_revision' => $task->fresh()->revision])->assertOk()->assertJsonPath('data.status', 'Closed');
         $this->expectException(\Illuminate\Database\QueryException::class);
         FollowupTask::query()->delete();
+    }
+
+    public function test_dentist_scope_keyed_creation_and_required_revision(): void
+    {
+        $task = Followups::fromTreatment($this->completedTreatment());
+        $path = '/api/followups/'.$task->public_id;
+        $body = ['patient_id' => $this->p['A']->public_id, 'branch_ref' => 'b1', 'reason' => 'Synthetic follow-up', 'due_on' => '2026-10-10'];
+        $headers = ['Idempotency-Key' => 'followup-dentist-retry'];
+        $this->actingAsUser('dentist2');
+        $this->getJson($path)->assertNotFound();
+        $this->getJson('/api/followups')->assertOk()->assertJsonCount(0, 'data');
+        $this->postJson('/api/followups', $body, $headers)->assertNotFound();
+        $this->patchJson($path, ['action' => 'contacted', 'expected_revision' => 1])->assertNotFound();
+        $this->actingAsUser('dentist1');
+        $this->getJson($path)->assertOk();
+        $this->postJson('/api/followups', $body)->assertUnprocessable();
+        $id = $this->postJson('/api/followups', $body, $headers)->assertCreated()->json('data.id');
+        $this->postJson('/api/followups', $body, $headers)->assertCreated()->assertJsonPath('data.id', $id);
+        $this->assertSame(2, FollowupTask::count());
+        $this->patchJson($path, ['action' => 'contacted'])->assertUnprocessable();
+        $this->patchJson($path, ['action' => 'contacted', 'expected_revision' => 1])->assertOk()->assertJsonPath('data.status', 'Contacted');
+        $this->patchJson($path, ['action' => 'contacted', 'expected_revision' => 1])->assertConflict();
     }
 
     public function test_scope_owner_metadata_overdue_flag_and_audit_without_reason(): void
@@ -83,7 +105,7 @@ class FollowupTest extends TestCase
         $task = Followups::fromTreatment($this->completedTreatment('A', '2026-09-20'));
         $this->actingAsUser('staffB1');
         $this->assertTrue($this->getJson('/api/followups?due=overdue')->assertOk()->json('data.0.overdue'));
-        $this->postJson('/api/followups', ['patient_id' => $this->p['A']->public_id, 'branch_ref' => 'b1', 'reason' => 'Recheck bite', 'due_on' => '2026-10-10'])->assertCreated();
+        $this->postJson('/api/followups', ['patient_id' => $this->p['A']->public_id, 'branch_ref' => 'b1', 'reason' => 'Recheck bite', 'due_on' => '2026-10-10'], ['Idempotency-Key' => 'followup-test-create'])->assertCreated();
         $this->actingAsUser('staffB2');
         $this->assertSame([], $this->getJson('/api/followups')->assertOk()->json('data'));
         $this->postJson('/api/followups', ['patient_id' => $this->p['A']->public_id, 'branch_ref' => 'b1', 'reason' => 'x', 'due_on' => '2026-10-10'])->assertForbidden();

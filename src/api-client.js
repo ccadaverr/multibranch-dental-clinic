@@ -500,7 +500,10 @@ export function updateFollowup(id, body) { return json(`/api/followups/${encodeU
 export function listPrescriptions(params = {}) { return request(`/api/prescriptions${query(params)}`) }
 export function myPrescriptions() { return request('/api/me/prescriptions') }
 export function prescription(id) { return request(`/api/prescriptions/${encodeURIComponent(id)}`) }
-export function prescriptionVisits() { return request('/api/prescriptions/visits') }
+export function prescriptionVisits(search = '') {
+  const query = search ? '?' + new URLSearchParams({ search }) : ''
+  return request('/api/prescriptions/visits' + query)
+}
 const clinicalRequest = (path, method, body, key, beforeDispatch, context) => request(path, {method, body:JSON.stringify(body), headers:{...(key?{'Idempotency-Key':key}:{}),...(context?{'X-Clinical-Context':context}:{})}, beforeDispatch})
 export function createPrescription(body, key, beforeDispatch, context) { return clinicalRequest('/api/prescriptions', 'POST', body, key, beforeDispatch, context) }
 export function updatePrescription(id, body, key, beforeDispatch, context) { return clinicalRequest(`/api/prescriptions/${encodeURIComponent(id)}`, 'PUT', body, key, beforeDispatch, context) }

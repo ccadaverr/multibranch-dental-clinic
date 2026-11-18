@@ -57,16 +57,31 @@ class PrescriptionTest extends TestCase
         $this->assertSame(31, Prescription::where('visit_id', $visit->id)->where('status', 'Draft')->count());
     }
 
-    public function test_only_a_dentist_at_the_branch_writes_issues_and_voids(): void
+    public function test_only_the_responsible_author_can_write_issue_or_void(): void
     {
         $visit = $this->visit();
-        foreach (['staffB1', 'owner', 'patientA', 'dentist3'] as $who) $this->draft($visit, $who)->assertForbidden();
-        $p = $this->draft($visit, 'dentist2')->assertCreated()->assertJsonPath('data.status', 'Draft'); // another dentist at that branch
-        $this->actingAsUser('dentist3');
-        $this->postJson("/api/prescriptions/{$p->json('data.id')}/issue", ['expected_revision' => 1])->assertForbidden();
+        foreach (['staffB1', 'owner', 'patientA', 'dentist2', 'dentist3'] as $who) $this->draft($visit, $who)->assertForbidden();
+        $id = $this->draft($visit)->assertCreated()->json('data.id');
+        $url = '/api/prescriptions/'.$id;
+        foreach (['dentist2', 'dentist3', 'staffB1', 'owner'] as $who) {
+            $this->actingAsUser($who);
+            $this->putJson($url, ['expected_revision' => 1, 'lines' => [['medicine' => 'Synthetic test']]])->assertForbidden();
+            $this->postJson($url.'/issue', ['expected_revision' => 1])->assertForbidden();
+        }
         $this->actingAsUser('dentist1');
-        $this->postJson("/api/prescriptions/{$p->json('data.id')}/issue", ['expected_revision' => 1])->assertOk()
-            ->assertJsonPath('data.status', 'Issued')->assertJsonPath('data.number', 'RX-2026-000001');
+        $body = ['expected_revision' => 1];
+        $headers = ['Idempotency-Key' => 'rx-test-issue-replay'];
+        $accepted = $this->postJson($url.'/issue', $body, $headers)->assertOk()->assertJsonPath('data.status', 'Issued')->json('data');
+        $this->postJson($url.'/issue', $body, $headers)->assertOk()->assertJsonPath('data.number', $accepted['number']);
+        foreach (['dentist2', 'dentist3', 'staffB1', 'owner'] as $who) {
+            $this->actingAsUser($who);
+            $this->postJson($url.'/void', ['expected_revision' => 2, 'reason' => 'Synthetic correction'])->assertForbidden();
+        }
+        $record = Prescription::where('public_id', $id)->sole();
+        $this->assertSame($this->d['d1']->id, $record->dentist_profile_id);
+        $this->assertSame($this->u['dentist1']->id, $record->created_by_user_id);
+        $this->assertSame($this->u['dentist1']->id, $record->issued_by_user_id);
+        $this->assertSame(1, Prescription::where('visit_id', $visit->id)->count());
     }
 
     public function test_exact_visit_filter_preserves_patient_branch_and_role_boundaries(): void
