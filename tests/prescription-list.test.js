@@ -39,12 +39,21 @@ test('Patient prescription read adopts only own/dependent issued and void persis
   const records=[row,{...row,id:'rx2',patient:{id:'dependent'},status:'Void',voided:{at:row.issued_at,reason:'Synthetic correction'}}]
   const r=await readPatientPrescriptions(async()=>({ok:true,data:records}),family,'p1',()=>true)
   assert.deepEqual(r.data,records)
-  for(const change of [{patient:{id:'foreign'}},{visit:null},{branch_id:null},{status:'Draft'},{lines:[]},{revision:0},
+  for(const change of [{patient:{id:'foreign'}},{visit:null},{branch_id:null},{status:'Draft'},{lines:null},{revision:0},
     {number:{}},{issued_at:'invalid'},{note:{}},{patient:{id:'p1',name:{}}},{status:'Void'}, {voided:{at:row.issued_at,reason:{}}}, {lines:[{medicine:'Synthetic',instructions:{}}]}]){
     const result=await readPatientPrescriptions(async()=>({ok:true,data:[{...row,...change}]}),family,'p1',()=>true)
     assert.equal(result.ok,false);assert.equal(result.data,undefined)
   }
   assert.equal((await readPatientPrescriptions(async()=>({ok:true,data:[row,row]}),family,'p1',()=>true)).ok,false)
+})
+test('Patient prescription history keeps valid PDFs accessible when an authorized legacy row has no items', async () => {
+  const empty = { ...row, id: 'rx-incomplete', lines: [] }
+  const read = data => readPatientPrescriptions(async () => ({ ok: true, data }), family, 'p1', () => true)
+  const result = await read([empty, row])
+  assert.deepEqual(result.data, [row])
+  assert.equal(result.unavailableCount, 1)
+  assert.equal((await read([{ ...empty, patient: { id: 'foreign' } }, row])).ok, false)
+  assert.equal((await read([{ ...empty, visit: null }, row])).ok, false)
 })
 test('Patient prescription read fails closed for lost family scope, timeout, rejection and revocation',async()=>{
   const read=async()=>({ok:true,data:[row]})

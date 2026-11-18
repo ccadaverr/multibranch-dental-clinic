@@ -20,11 +20,12 @@ export async function readPatientPrescriptions(read, family, patientId, isCurren
         !text(p.branch) || !optionalText(p.dentist) || !optionalText(p.note) ||
         !['Issued','Void'].includes(p.status) || !text(p.number) || !timestamp(p.issued_at) || !Number.isSafeInteger(p.revision) || p.revision<1 ||
         (p.status==='Void' && !p.voided) || (p.voided!=null && (!timestamp(p.voided.at) || !text(p.voided.reason))) ||
-        !Array.isArray(p.lines) || !p.lines.length || p.lines.some(l=>!text(l?.medicine) ||
+        !Array.isArray(p.lines) || p.lines.some(l=>!text(l?.medicine) ||
           !['dosage','frequency','duration','instructions'].every(field=>optionalText(l[field]))))) {
         return {ok:false, message:'The returned prescriptions did not confirm your Patient and visit identities. No records were adopted.'}
       }
-      return r
+      const complete = r.data.filter(p => p.lines.length > 0)
+      return { ...r, data: complete, unavailableCount: r.data.length - complete.length }
     },timeoutMs)
   } finally { active=false }
 }

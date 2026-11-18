@@ -16,6 +16,7 @@ export function PrescriptionsPage(props) {
 function PatientPrescriptions({ toast = () => {}, session, getAuthGeneration }) {
   const [rows, setRows] = useState(null), [error, setError] = useState(''), [attempt, setAttempt] = useState(0)
   const live = useRef(false), serial = useRef(0), pending = useRef(false)
+  const [unavailableCount, setUnavailableCount] = useState(0)
   const [loading,setLoading]=useState(true),[downloading,setDownloading]=useState('')
   const downloadPending=useRef(false), generation=getAuthGeneration?.()
   const owns=()=>live.current && session?.active===true && session?.role==='patient' && !!session?.patientPublicId &&
@@ -24,7 +25,7 @@ function PatientPrescriptions({ toast = () => {}, session, getAuthGeneration }) 
     if (pending.current) return
     pending.current = true
     const ticket = ++serial.current
-    setError('');setRows(null);setLoading(true)
+    setError('');setRows(null);setUnavailableCount(0);setLoading(true)
     try {
       const r = await readPatientPrescriptions(()=>myPrescriptions(),()=>myDependents(),session?.patientPublicId,owns)
       if (!live.current || ticket !== serial.current) return
@@ -33,6 +34,7 @@ function PatientPrescriptions({ toast = () => {}, session, getAuthGeneration }) 
         setRows(null); setError(r.message || 'Your prescriptions could not be verified. Try again.'); return
       }
       setRows(r.data)
+      setUnavailableCount(r.unavailableCount)
     } catch { if (live.current && ticket === serial.current) { setRows(null); setError('Your prescriptions could not be loaded. Try again.') } }
     finally { if (ticket === serial.current) {pending.current = false; if(live.current)setLoading(false)} }
   }
@@ -51,7 +53,8 @@ function PatientPrescriptions({ toast = () => {}, session, getAuthGeneration }) 
     <PageHead eyebrow="Records & Billing" title="Prescriptions" text="Prescriptions your dentist issued after a visit. Follow your dentist’s instructions; call the branch if you have a question." actions={<RefreshButton title="Reload my prescriptions" ariaLabel="Reload my prescriptions" loading={loading} onClick={load}/>}/>
     {error && <ErrorState text={error} onRetry={() => setAttempt(a => a + 1)}/>}
     {!rows && !error && <Skeleton lines={4} label="Loading your prescriptions"/>}
-    {rows && !rows.length && <EmptyState icon="file" title="No prescriptions yet" text="Prescriptions issued by your dentist after a visit will appear here."/>}
+    {unavailableCount > 0 && <p role="status" className="pp-hint">Some prescriptions are unavailable. Contact your clinic for a copy.</p>}
+    {rows && !rows.length && !unavailableCount && <EmptyState icon="file" title="No prescriptions yet" text="Prescriptions issued by your dentist after a visit will appear here."/>}
     {rows && rows.length > 0 && <section aria-label="Issued and void prescriptions">
       <ul className="pp-rx-list">{rows.map(p => <li key={p.id} className={p.status === 'Void' ? 'is-void' : ''}>
         <header className="care-rx-heading"><div><h2>{p.number}</h2><p className="pp-hint">Issued {day(p.issued_at)}</p></div><span className={p.status === 'Void' ? 'pp-void' : 'care-rx-status'}>{p.status === 'Void' ? 'VOID — do not use' : 'Issued'}</span></header>
