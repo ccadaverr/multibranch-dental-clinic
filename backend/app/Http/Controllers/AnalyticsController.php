@@ -135,10 +135,14 @@ class AnalyticsController extends Controller
             fputcsv($handle, ['EXECUTIVE OPERATIONAL SUMMARY']);
             fputcsv($handle, ['Reporting Period', $sanitize($scope['label'])]);
             fputcsv($handle, ['Branch Scope', $sanitize($summary['branch']['name'] ?? 'All Branches')]);
-            fputcsv($handle, ['Invoice date basis', 'Invoice creation (Asia/Manila); collected amounts use Paid invoices']);
+            fputcsv($handle, ['Invoice date basis', 'Invoice creation (Asia/Manila); paid invoice amounts include applied credits']);
             fputcsv($handle, []);
             fputcsv($handle, ['Metric Category', 'Metric Name', 'Value (PHP / Count)']);
-            fputcsv($handle, ['Financial', 'Total Revenue Collected', $summary['financials']['total_collected_php']]);
+            fputcsv($handle, ['Financial', 'Paid Invoice Amounts Applied', $summary['financials']['invoice_payments_applied_php']]);
+            fputcsv($handle, ['Cash flow date basis', 'Payments recorded and refunds made (Asia/Manila)']);
+            fputcsv($handle, ['Cash flow', 'Gross Collections', $summary['financials']['cash_flow']['gross_collected_php']]);
+            fputcsv($handle, ['Cash flow', 'Refunds', $summary['financials']['cash_flow']['refunded_php']]);
+            fputcsv($handle, ['Cash flow', 'Net Cash Flow', $summary['financials']['cash_flow']['net_cash_flow_php']]);
             fputcsv($handle, ['Financial', 'Gross Invoiced Amount', $summary['financials']['total_gross_php']]);
             fputcsv($handle, ['Financial', 'HMO Covered Amount', $summary['financials']['total_hmo_covered_php']]);
             fputcsv($handle, ['Financial', 'Outstanding Balance', $summary['financials']['outstanding_balance_php']]);
@@ -155,12 +159,15 @@ class AnalyticsController extends Controller
 
             // Section 2: Branch Comparative Performance
             fputcsv($handle, ['BRANCH COMPARATIVE BREAKDOWN']);
-            fputcsv($handle, ['Revenue date basis', 'Paid invoices by invoice creation (Asia/Manila)']);
+            fputcsv($handle, ['Date bases', 'Cash flow by payment or refund date; paid invoice amounts by invoice creation (Asia/Manila)']);
             fputcsv($handle, [
                 'Branch Name',
                 'Code',
                 'City',
-                'Revenue Collected (PHP)',
+                'Paid Invoice Amounts Applied (PHP)',
+                'Gross Collections (PHP)',
+                'Refunds (PHP)',
+                'Net Cash Flow (PHP)',
                 'Appointments',
                 'Completed Appointments',
                 'Active Queue',
@@ -173,7 +180,10 @@ class AnalyticsController extends Controller
                     $sanitize($b['name']),
                     $sanitize($b['code']),
                     $sanitize($b['city']),
-                    $b['revenue_collected_php'],
+                    $b['invoice_payments_applied_php'],
+                    $b['cash_flow']['gross_collected_php'],
+                    $b['cash_flow']['refunded_php'],
+                    $b['cash_flow']['net_cash_flow_php'],
                     $b['total_appointments'],
                     $b['completed_appointments'],
                     $b['active_queue'],

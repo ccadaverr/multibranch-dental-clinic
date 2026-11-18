@@ -87,6 +87,10 @@ function BillingWorkspace({ role, store, identity, auth }) {
           <p><b>Branch:</b> {i.branch?.name} • <b>Revision:</b> {i.revision}</p>
           <ul aria-label="Itemized charges">{(i.lines || []).map(l => <li key={l.id}>{l.service?.name} • {l.quantity} × ₱{l.unit_price} = <b>₱{l.line_total}</b></li>)}</ul>
           <p><b>Patient responsibility:</b> ₱{i.patient_responsibility_amount} • <b>Paid / credited:</b> ₱{i.paid_amount} • <b>Balance:</b> ₱{i.balance}</p>
+          {i.booking_credit && <p><b>Booking deposit applied:</b> ₱{i.booking_credit.applied_php}
+            {i.booking_credit.receipt_number && <> · {i.booking_credit.receipt_number}</>}
+            {Number(i.booking_credit.unapplied_php) > 0 && <> · <b>Unapplied deposit:</b> ₱{i.booking_credit.unapplied_php} · Requires reconciliation</>}
+          </p>}
           {Number(i.discount_amount) > 0 && <p>{i.discount_type} discount: −₱{i.discount_amount}</p>}
           {i.hmo_status && <p>HMO: {i.hmo_status}{i.settlement_type === 'full_hmo_coverage' ? ' • Fully covered; no payment collected.' : ''}</p>}
           {i.receipt && <p><b>Payment Receipt:</b> {i.receipt.number} • ₱{i.receipt.amount} • {i.receipt.method} • {dateLabel(i.receipt.issued_at)}{i.receipt.external_reference ? ` • ${i.receipt.external_reference}` : ''}</p>}

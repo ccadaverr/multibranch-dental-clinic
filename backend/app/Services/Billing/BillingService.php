@@ -1,7 +1,7 @@
 <?php
 namespace App\Services\Billing;
 use App\Enums\Role;
-use App\Models\{BillingCutover,Invoice,InvoiceHistory,InvoiceLine,Payment,Receipt,Treatment,User,UserBranchScope};
+use App\Models\{Appointment,BillingCutover,Invoice,InvoiceHistory,InvoiceLine,Payment,Receipt,Treatment,User,UserBranchScope};
 use App\Services\Hmo\HmoFinancialGate;
 use App\Services\Pricing\{PriceResolver,PriceUnavailable};
 use App\Support\ClinicClock;
@@ -26,9 +26,112 @@ final class BillingService {
             $this->history($invoice,$actor,'invoice.created',null,'Draft'); return $invoice->load(['lines','treatment','visit.patient.person','branch','payment','receipt','histories']);
         },3);
     }
-    public function transition(User $actor,Invoice $invoice,string $to,int $expected):Invoice {
-        $this->staffBranch($actor,$invoice->branch_id); return DB::transaction(function()use($actor,$invoice,$to,$expected){$i=Invoice::whereKey($invoice->id)->lockForUpdate()->with(['lines','visit.appointment','patient.person','patient.user'])->firstOrFail(); if($i->revision!==$expected)throw new BillingException(409,'stale_revision','Invoice changed; reload before continuing.'); if($to==='Review'){if($i->status!=='Draft')throw new BillingException(422,'invalid_invoice_state','Only Draft invoices can be reviewed.'); $from=$i->status;$i->update(['status'=>'Review','revision'=>$i->revision+1,'updated_by_user_id'=>$actor->id]);$this->history($i,$actor,'invoice.reviewed',$from,'Review');return $i->fresh(['lines','histories']);} if($to==='Issued'){if($i->status!=='Review')throw new BillingException(422,'invalid_invoice_state','Only Review invoices can be issued.');$gate=$this->gate->forTreatment($i->treatment()->firstOrFail()); if($gate['blocks_invoice_issue'])throw new BillingException(422,'hmo_financial_hold','HMO financial decision is required before issuing this invoice.',['gate'=>$gate]);$discount=(string)($i->discount_amount ?? '0.00');$netBeforeHmo=$this->sub((string)$i->gross_amount,$discount);$coverage=in_array($gate['coverage_status'],['approved'],true)?$this->min((string)($gate['approved_amount']??'0.00'),$netBeforeHmo):'0.00';$resp=$this->sub($netBeforeHmo,$coverage);$apt=$i->visit?->appointment;$bookingPaid=($apt&&$apt->booking_payment_status==='paid'&&(float)$apt->booking_fee_php>0)?(string)$apt->booking_fee_php:'0.00';$credit=$this->min($bookingPaid,$resp);$paid=$resp==='0.00'?'0.00':($credit!=='0.00'?$credit:(string)$i->paid_amount);$status=$resp==='0.00'?'Paid':($paid===$resp?'Paid':'Issued');$settlement=$resp==='0.00'?'full_hmo_coverage':($paid===$resp?'booking_deposit':($paid!=='0.00'?'partial_booking_deposit':null));if($paid===$resp&&$resp!=='0.00'){$payment=Payment::create(['invoice_id'=>$i->id,'amount'=>$resp,'method'=>$apt->booking_payment_method??'PayMongo','external_reference'=>$apt->booking_payment_ref,'recorded_by_user_id'=>$actor->id,'recorded_at'=>ClinicClock::now()]);$rn=DB::selectOne("select nextval('m11_receipt_number_seq') as n")->n;$receipt=Receipt::create(['received_from_name'=>$i->patient?->person?trim($i->patient->person->first_name.' '.$i->patient->person->last_name):null,'payment_id'=>$payment->id,'invoice_id'=>$i->id,'receipt_number'=>'RCT-'.now()->format('Y').'-'.str_pad((string)$rn,6,'0',STR_PAD_LEFT),'amount'=>$resp,'method'=>$apt->booking_payment_method??'PayMongo','external_reference'=>$apt->booking_payment_ref,'issued_at'=>ClinicClock::now()]);app(\App\Services\Notifications\NotificationCenter::class)->paymentReceived($i,$receipt);try{app(\App\Services\Mail\MailOutbox::class)->queue('payment_receipt',"payment_receipt:{$receipt->public_id}",$receipt,null,$i->patient?->contactUser(),$actor);}catch(\Throwable $e){report($e);}}$i->update(['status'=>$status,'billed_to_name'=>$i->patient?->person?trim($i->patient->person->first_name.' '.$i->patient->person->last_name):null,'revision'=>$i->revision+1,'hmo_status'=>$gate['status'],'hmo_approved_amount'=>$gate['approved_amount'],'hmo_coverage_amount'=>$coverage,'patient_responsibility_amount'=>$resp,'paid_amount'=>$paid,'settlement_type'=>$settlement,'issued_at'=>ClinicClock::now(),'paid_at'=>$status==='Paid'?ClinicClock::now():null,'updated_by_user_id'=>$actor->id]);$this->history($i,$actor,'invoice.issued','Review',$status,$settlement);if($status==='Issued'){app(\App\Services\Notifications\NotificationCenter::class)->invoiceIssued($i);try{app(\App\Services\Mail\MailOutbox::class)->queue('invoice_issued',"invoice_issued:{$i->public_id}",$i,null,$i->patient?->contactUser(),$actor);}catch(\Throwable $e){report($e);}}$this->audit($actor,$settlement==='full_hmo_coverage'?'billing.invoice_settled_by_hmo':($settlement==='booking_deposit'?'billing.invoice_settled_by_booking_deposit':'billing.invoice_issued'),$i,['invoice_number'=>$i->invoice_number,'gross_amount'=>(string)$i->gross_amount,'discount_amount'=>$discount,'hmo_coverage_amount'=>$coverage,'patient_responsibility_amount'=>$resp,'paid_amount'=>$paid,'settlement_type'=>$settlement]);return $i->fresh(['lines','histories','payment','receipt']);} throw new BillingException(422,'invalid_invoice_state','Unsupported invoice transition.');},3);
+    public function transition(User $actor, Invoice $invoice, string $to, int $expected): Invoice
+    {
+        $this->staffBranch($actor, $invoice->branch_id);
+
+        return DB::transaction(function () use ($actor, $invoice, $to, $expected) {
+            $i = Invoice::whereKey($invoice->id)->lockForUpdate()->with(['patient.person', 'patient.user', 'visit'])->firstOrFail();
+            if ($i->revision !== $expected) {
+                throw new BillingException(409, 'stale_revision', 'Invoice changed; reload before continuing.');
+            }
+            if ($to === 'Review') {
+                if ($i->status !== 'Draft') {
+                    throw new BillingException(422, 'invalid_invoice_state', 'Only Draft invoices can be reviewed.');
+                }
+                $i->update(['status' => 'Review', 'revision' => $i->revision + 1, 'updated_by_user_id' => $actor->id]);
+                $this->history($i, $actor, 'invoice.reviewed', 'Draft', 'Review');
+
+                return $i->fresh(['lines', 'histories']);
+            }
+            if ($to !== 'Issued' || $i->status !== 'Review') {
+                throw new BillingException(422, 'invalid_invoice_state', 'Only Review invoices can be issued.');
+            }
+            $gate = $this->gate->forTreatment($i->treatment()->firstOrFail());
+            if ($gate['blocks_invoice_issue']) {
+                throw new BillingException(422, 'hmo_financial_hold', 'HMO financial decision is required before issuing this invoice.', ['gate' => $gate]);
+            }
+            $discount = (string) ($i->discount_amount ?? '0.00');
+            $net = $this->sub((string) $i->gross_amount, $discount);
+            $coverage = $gate['coverage_status'] === 'approved' ? $this->min((string) $gate['approved_amount'], $net) : '0.00';
+            $responsibility = $this->sub($net, $coverage);
+            $allocation = $this->bookingAllocation($i, $responsibility);
+            $paid = $allocation['applied_php'] ?? '0.00';
+            $status = $paid === $responsibility ? 'Paid' : 'Issued';
+            $settlement = match (true) {
+                $responsibility === '0.00' => 'full_hmo_coverage',
+                $status === 'Paid' => 'booking_deposit',
+                $paid !== '0.00' => 'partial_booking_deposit',
+                default => null,
+            };
+            $now = ClinicClock::now();
+            $i->update([
+                'status' => $status, 'billed_to_name' => $i->patient?->person?->fullName(),
+                'revision' => $i->revision + 1, 'hmo_status' => $gate['status'], 'hmo_approved_amount' => $gate['approved_amount'],
+                'hmo_coverage_amount' => $coverage, 'patient_responsibility_amount' => $responsibility, 'paid_amount' => $paid,
+                'settlement_type' => $settlement, 'issued_at' => $now, 'paid_at' => $status === 'Paid' ? $now : null,
+                'updated_by_user_id' => $actor->id,
+            ]);
+            $this->history($i, $actor, 'invoice.issued', 'Review', $status, $settlement, $allocation);
+            if ($status === 'Issued' || $settlement === 'booking_deposit') {
+                app(\App\Services\Notifications\NotificationCenter::class)->invoiceIssued($i);
+                try {
+                    app(\App\Services\Mail\MailOutbox::class)->queue(
+                        'invoice_issued', "invoice_issued:{$i->public_id}", $i, null, $i->patient?->contactUser(), $actor
+                    );
+                } catch (\Throwable $e) {
+                    report($e);
+                }
+            }
+            $action = match ($settlement) {
+                'full_hmo_coverage' => 'billing.invoice_settled_by_hmo',
+                'booking_deposit' => 'billing.invoice_settled_by_booking_deposit',
+                default => 'billing.invoice_issued',
+            };
+            $this->audit($actor, $action, $i, [
+                'invoice_number' => $i->invoice_number, 'gross_amount' => (string) $i->gross_amount,
+                'discount_amount' => $discount, 'hmo_coverage_amount' => $coverage, 'patient_responsibility_amount' => $responsibility,
+                'paid_amount' => $paid, 'settlement_type' => $settlement, 'booking_credit' => $allocation,
+            ]);
+
+            return $i->fresh(['lines', 'histories', 'payment', 'receipt']);
+        }, 3);
     }
+
+    /** Read the exact original capture under lock. Invoice issue only allocates credit. */
+    private function bookingAllocation(Invoice $invoice, string $responsibility): ?array
+    {
+        $appointmentId = $invoice->visit?->appointment_id;
+        if (! $appointmentId) {
+            return null;
+        }
+        $appointment = Appointment::whereKey($appointmentId)->lockForUpdate()->firstOrFail();
+        if ($appointment->booking_payment_status === 'partially_refunded') {
+            throw new BillingException(422, 'booking_credit_unverified', 'The remaining booking deposit must be reconciled before issuing this invoice.');
+        }
+        if ($appointment->booking_payment_status !== 'paid') {
+            return null;
+        }
+        if ($appointment->patient_id !== $invoice->patient_id || $appointment->branch_id !== $invoice->branch_id
+            || ! $appointment->booking_payment_ref || ! $appointment->booking_paid_at || $this->cents((string) ($appointment->booking_fee_php ?? 0)) === 0) {
+            throw new BillingException(422, 'booking_credit_unverified', 'The original booking payment must be reconciled before issuing this invoice.');
+        }
+        // The database permits one visit per appointment, one treatment per visit,
+        // and one invoice per treatment. The issue revision guards against reuse.
+        $captured = (string) $appointment->booking_fee_php;
+        $available = $this->cents($captured);
+        $applied = min($available, $this->cents($responsibility));
+
+        return [
+            'appointment_id' => $appointment->public_id,
+            'receipt_number' => $appointment->appointment_code ? 'DEP-'.$appointment->appointment_code : null,
+            'captured_at' => $appointment->booking_paid_at->toIso8601String(),
+            'captured_php' => $captured,
+            'applied_php' => $this->dec($applied),
+            'unapplied_php' => $this->dec($available - $applied),
+        ];
+    }
+
     public function applyDiscount(User $actor,Invoice $invoice,?string $type,?string $idNumber,int $expected):Invoice {
         $this->staffBranch($actor,$invoice->branch_id);
         return DB::transaction(function() use ($actor,$invoice,$type,$idNumber,$expected) {
@@ -77,7 +180,7 @@ final class BillingService {
             throw new BillingException(422, 'invalid_payment_amount', 'Payment must equal the full current balance.');
         }
         if ($current !== (string) $i->hmo_coverage_amount || (string) ($gate['status'] ?? '') !== (string) ($i->hmo_status ?? '')) {
-            throw new BillingException(409, 'financial_state_changed', 'The HMO financial outcome changed after issue.');
+            throw new BillingException(409, 'financial_state_changed', 'HMO coverage changed after issue. Keep this invoice on hold for an authorized correction before recording payment.');
         }
         if ($balance === '0.00') {
             throw new BillingException(422, 'already_paid', 'This invoice is already settled.');
@@ -176,7 +279,7 @@ final class BillingService {
         ]);
     }
 
-    private function history(Invoice $i,User $a,string $event,?string $from,?string $to,?string $settlement=null):void{InvoiceHistory::create(['invoice_id'=>$i->id,'event'=>$event,'from_status'=>$from,'to_status'=>$to,'settlement_type'=>$settlement,'snapshot'=>['gross_amount'=>(string)$i->gross_amount,'discount_amount'=>(string)($i->discount_amount??'0.00'),'hmo_coverage_amount'=>(string)$i->hmo_coverage_amount,'patient_responsibility_amount'=>(string)$i->patient_responsibility_amount,'paid_amount'=>(string)$i->paid_amount],'actor_user_id'=>$a->id,'occurred_at'=>ClinicClock::now()]);}
+    private function history(Invoice $i,User $a,string $event,?string $from,?string $to,?string $settlement=null,?array $bookingCredit=null):void{InvoiceHistory::create(['invoice_id'=>$i->id,'event'=>$event,'from_status'=>$from,'to_status'=>$to,'settlement_type'=>$settlement,'snapshot'=>(['gross_amount'=>(string)$i->gross_amount,'discount_amount'=>(string)($i->discount_amount??'0.00'),'hmo_coverage_amount'=>(string)$i->hmo_coverage_amount,'patient_responsibility_amount'=>(string)$i->patient_responsibility_amount,'paid_amount'=>(string)$i->paid_amount] + ($bookingCredit ? ['booking_credit' => $bookingCredit] : [])),'actor_user_id'=>$a->id,'occurred_at'=>ClinicClock::now()]);}
     private function staffBranch(User $a,int $branch):void{if($a->role!==Role::Staff||!UserBranchScope::where('user_id',$a->id)->where('branch_id',$branch)->exists())throw new BillingException(403,'forbidden','Staff branch access is required.');}
     private function cents(string $v):int{$v=trim($v);if(!preg_match('/^\d+(?:\.\d{1,2})?$/',$v))throw new BillingException(500,'invalid_decimal','Invalid stored financial decimal.');$p=explode('.',$v);return ((int)$p[0])*100+(int)str_pad($p[1]??'0',2,'0');}
     private function dec(int $c):string{return number_format($c/100,2,'.','');}

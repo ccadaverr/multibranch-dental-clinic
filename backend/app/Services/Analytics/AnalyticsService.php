@@ -7,7 +7,6 @@ use App\Models\AutomatedAction;
 use App\Models\Branch;
 use App\Models\HmoCase;
 use App\Models\Invoice;
-use App\Models\Payment;
 use App\Models\QueueEntry;
 use App\Models\Visit;
 use App\Support\ClinicClock;
@@ -180,7 +179,10 @@ class AnalyticsService
             'period_label' => $bounds['label'],
             'branch' => $branch ? ['public_id' => $branch->public_id, 'name' => $branch->name] : null,
             'financials' => [
+                // Legacy alias for consumers of the invoice-cohort contract.
                 'total_collected_php' => $fin->collected,
+                'invoice_payments_applied_php' => $fin->collected,
+                'cash_flow' => $this->cashFlowTotals($bounds, $branchId),
                 'total_gross_php' => $fin->gross,
                 'total_hmo_covered_php' => $fin->hmo,
                 'outstanding_balance_php' => $fin->outstanding,
@@ -251,7 +253,9 @@ class AnalyticsService
                 'name' => $b->name,
                 'code' => $b->branch_code,
                 'city' => $b->city,
-                'revenue_collected_php' => $revenue,
+                'revenue_collected_php' => $revenue, // Legacy invoice-date alias.
+                'invoice_payments_applied_php' => $revenue,
+                'cash_flow' => $this->cashFlowTotals($bounds, $b->id),
                 'total_appointments' => $totalAppts,
                 'completed_appointments' => $completedAppts,
                 'active_queue' => $this->currentQueue($b->id)->count(),
@@ -337,6 +341,8 @@ class AnalyticsService
             'date_basis' => [
                 'collections' => 'payments.recorded_at',
                 'refunds' => 'invoice_refunds.refunded_at',
+                'booking_collections' => 'appointments.booking_paid_at',
+                'booking_refunds' => 'appointments.booking_refunded_at',
             ],
             'date_from' => $firstDay->toDateString(),
             'date_to' => $lastDay->toDateString(),
@@ -416,6 +422,8 @@ class AnalyticsService
             'date_basis' => [
                 'collections' => 'payments.recorded_at',
                 'refunds' => 'invoice_refunds.refunded_at',
+                'booking_collections' => 'appointments.booking_paid_at',
+                'booking_refunds' => 'appointments.booking_refunded_at',
             ],
             'is_finalized' => ClinicClock::today() > $saturday->toDateString(),
             'branch' => $branch ? ['public_id' => $branch->public_id, 'name' => $branch->name] : null,
@@ -431,7 +439,7 @@ class AnalyticsService
     }
 
     /**
-     * Query payments and invoice_refunds independently by their respective Manila calendar dates.
+     * Bucket payments, booking captures, and confirmed refunds by their original Manila dates.
      *
      * @return array{
      *   payments: array<string, array{gross_centavos: int, payments_count: int}>,
@@ -442,59 +450,77 @@ class AnalyticsService
     {
         $tz = ClinicClock::TIMEZONE;
 
-        $paymentQuery = Payment::query()
-            ->join('invoices', 'invoices.id', '=', 'payments.invoice_id');
+        // Existing full-deposit invoice rows are historical allocation projections. Match the
+        // original capture by appointment and reference before excluding them from cash flow.
+        $paymentQuery = DB::table('payments')
+            ->join('invoices', 'invoices.id', '=', 'payments.invoice_id')
+            ->whereNotExists(function ($q) {
+                $q->selectRaw('1')->from('visits')
+                    ->join('appointments', 'appointments.id', '=', 'visits.appointment_id')
+                    ->whereColumn('visits.id', 'invoices.visit_id')
+                    ->whereColumn('appointments.branch_id', 'invoices.branch_id')
+                    ->whereColumn('appointments.patient_id', 'invoices.patient_id')
+                    ->where('invoices.settlement_type', 'booking_deposit')
+                    ->whereColumn('appointments.booking_payment_ref', 'payments.external_reference')
+                    ->whereIn('appointments.booking_payment_status', ['paid', 'refunded', 'partially_refunded', 'forfeited'])
+                    ->where('appointments.booking_fee_php', '>', 0)
+                    ->whereNotNull('appointments.booking_paid_at');
+            });
+        $invoiceRefunds = DB::table('invoice_refunds')
+            ->join('invoices', 'invoices.id', '=', 'invoice_refunds.invoice_id');
+        $bookingPayments = DB::table('appointments')
+            ->whereIn('booking_payment_status', ['paid', 'refunded', 'partially_refunded', 'forfeited'])
+            ->where('booking_fee_php', '>', 0)
+            ->whereNotNull('booking_payment_ref')
+            ->whereNotNull('booking_paid_at');
+        $bookingRefunds = (clone $bookingPayments)->where('booking_payment_status', 'refunded')
+            ->whereNotNull('booking_refund_ref')->whereNotNull('booking_refunded_at');
         if ($branchId !== null) {
             $paymentQuery->where('invoices.branch_id', $branchId);
+            $invoiceRefunds->where('invoices.branch_id', $branchId);
+            $bookingPayments->where('appointments.branch_id', $branchId);
+            $bookingRefunds->where('appointments.branch_id', $branchId);
         }
         $this->within($paymentQuery, 'payments.recorded_at', $bounds);
+        $this->within($bookingPayments, 'booking_paid_at', $bounds);
+        $this->within($invoiceRefunds, 'invoice_refunds.refunded_at', $bounds);
+        $this->within($bookingRefunds, 'booking_refunded_at', $bounds);
 
-        $paymentRows = $paymentQuery->toBase()
-            ->selectRaw(
-                "to_char(payments.recorded_at AT TIME ZONE '{$tz}', 'YYYY-MM-DD') AS bucket_date,
-                 COUNT(*) AS payments_count,
-                 COALESCE(SUM(payments.amount), 0)::numeric(16,2)::text AS gross_collected_php"
-            )
-            ->groupByRaw("to_char(payments.recorded_at AT TIME ZONE '{$tz}', 'YYYY-MM-DD')")
-            ->orderBy('bucket_date')
-            ->get();
-
-        $paymentsByDate = [];
-        foreach ($paymentRows as $row) {
+        $collections = $paymentQuery->selectRaw('payments.recorded_at AS occurred_at, payments.amount AS amount')
+            ->unionAll($bookingPayments->selectRaw('booking_paid_at AS occurred_at, booking_fee_php AS amount'));
+        $refunds = $invoiceRefunds->selectRaw('invoice_refunds.refunded_at AS occurred_at, invoice_refunds.amount AS amount')
+            ->unionAll($bookingRefunds->selectRaw('booking_refunded_at AS occurred_at, booking_fee_php AS amount'));
+        $bucket = "to_char(occurred_at AT TIME ZONE '{$tz}', 'YYYY-MM-DD')";
+        $paymentsByDate = $refundsByDate = [];
+        foreach (DB::query()->fromSub($collections, 'collections')->selectRaw("{$bucket} AS bucket_date, COUNT(*) AS count, SUM(amount)::numeric(16,2)::text AS total")->groupByRaw($bucket)->get() as $row) {
             $paymentsByDate[(string) $row->bucket_date] = [
-                'gross_centavos' => $this->toCentavos((string) $row->gross_collected_php),
-                'payments_count' => (int) $row->payments_count,
+                'gross_centavos' => $this->toCentavos((string) $row->total),
+                'payments_count' => (int) $row->count,
             ];
         }
-
-        $refundQuery = DB::table('invoice_refunds')
-            ->join('invoices', 'invoices.id', '=', 'invoice_refunds.invoice_id');
-        if ($branchId !== null) {
-            $refundQuery->where('invoices.branch_id', $branchId);
-        }
-        $this->within($refundQuery, 'invoice_refunds.refunded_at', $bounds);
-
-        $refundRows = $refundQuery
-            ->selectRaw(
-                "to_char(invoice_refunds.refunded_at AT TIME ZONE '{$tz}', 'YYYY-MM-DD') AS bucket_date,
-                 COUNT(*) AS refunds_count,
-                 COALESCE(SUM(invoice_refunds.amount), 0)::numeric(16,2)::text AS refunded_php"
-            )
-            ->groupByRaw("to_char(invoice_refunds.refunded_at AT TIME ZONE '{$tz}', 'YYYY-MM-DD')")
-            ->orderBy('bucket_date')
-            ->get();
-
-        $refundsByDate = [];
-        foreach ($refundRows as $row) {
+        foreach (DB::query()->fromSub($refunds, 'refunds')->selectRaw("{$bucket} AS bucket_date, COUNT(*) AS count, SUM(amount)::numeric(16,2)::text AS total")->groupByRaw($bucket)->get() as $row) {
             $refundsByDate[(string) $row->bucket_date] = [
-                'refunded_centavos' => $this->toCentavos((string) $row->refunded_php),
-                'refunds_count' => (int) $row->refunds_count,
+                'refunded_centavos' => $this->toCentavos((string) $row->total),
+                'refunds_count' => (int) $row->count,
             ];
         }
 
         return [
             'payments' => $paymentsByDate,
             'refunds' => $refundsByDate,
+        ];
+    }
+
+    private function cashFlowTotals(array $bounds, ?int $branchId): array
+    {
+        $flows = $this->aggregateCollectionsAndRefundsByDate($bounds, $branchId);
+        $gross = array_sum(array_column($flows['payments'], 'gross_centavos'));
+        $refunds = array_sum(array_column($flows['refunds'], 'refunded_centavos'));
+
+        return [
+            'gross_collected_php' => $this->formatCentavos($gross),
+            'refunded_php' => $this->formatCentavos($refunds),
+            'net_cash_flow_php' => $this->formatCentavos($gross - $refunds),
         ];
     }
 

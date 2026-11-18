@@ -43,8 +43,9 @@ test('ARC-02 1: one Staff scope renders only that branch’s historical rows and
   const html = await render(fixture())
   assert.match(html, /APT-a/); assert.doesNotMatch(html, /APT-b/)
   assert.match(html, /Historical Appointments \(1\)/)
-  assert.match(html, /Prescriptions \(1\)/)
-  assert.match(html, /Settled Invoices &amp; Receipts \(1\)/)
+  assert.match(html, /Prescriptions/)
+  assert.match(html, /Settled Invoices &amp; Receipts/)
+  assert.doesNotMatch(html, /Prescriptions \(\d+\)|Settled Invoices &amp; Receipts \(\d+\)|INV-a|RCPT-a/)
 })
 test('ARC-02 2: multiple Staff scopes retain all permitted rows', async () => {
   const html = await render(fixture('staff', ['a','b']))

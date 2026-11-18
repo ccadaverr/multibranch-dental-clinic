@@ -137,7 +137,7 @@ class AnalyticsCorrectionsTest extends TestCase
         $this->actingAsUser('owner');
         $csv = $this->get('/api/analytics/export?period=all&branch_id=b2')->assertOk()->streamedContent();
         $this->assertStringContainsString('"Branch Scope","Branch B2"', $csv);
-        $this->assertStringContainsString('"Total Revenue Collected",300.00', $csv);
+        $this->assertStringContainsString('"Paid Invoice Amounts Applied",300.00', $csv);
         $this->assertStringNotContainsString('Branch B1', $csv);
         $all = $this->get('/api/analytics/export?period=all')->assertOk()->streamedContent();
         $this->assertStringContainsString('"Branch Scope","All Branches"', $all);

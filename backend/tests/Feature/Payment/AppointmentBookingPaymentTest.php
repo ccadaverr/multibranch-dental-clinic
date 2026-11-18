@@ -4,7 +4,6 @@ namespace Tests\Feature\Payment;
 
 use App\Enums\Role;
 use App\Mail\AppointmentConfirmationMail;
-use App\Mail\PaymentReceiptMail;
 use App\Models\Appointment;
 use App\Models\AuditLog;
 use App\Models\Invoice;
@@ -525,21 +524,13 @@ class AppointmentBookingPaymentTest extends TestCase
         $this->assertSame('600.00', (string) $issued->paid_amount);
         $this->assertSame('booking_deposit', $issued->settlement_type);
 
-        // Payment and Receipt were generated
-        $payment = Payment::where('invoice_id', $invoice->id)->first();
-        $this->assertNotNull($payment);
-        $this->assertSame('600.00', (string) $payment->amount);
-        $this->assertSame('pay_inv_1', $payment->external_reference);
-
-        $receipt = Receipt::where('invoice_id', $invoice->id)->first();
-        $this->assertNotNull($receipt);
-        $this->assertSame('600.00', (string) $receipt->amount);
-
-        // When the invoice is issued and settled by the deposit, PaymentReceiptMail is queued/sent
-        \Illuminate\Support\Facades\Artisan::call('queue:work', ['connection' => 'database', '--queue' => 'mail', '--stop-when-empty' => true, '--tries' => 1]);
-        Mail::assertSent(PaymentReceiptMail::class, function (PaymentReceiptMail $mail) use ($invoice, $receipt) {
-            return $mail->invoice->id === $invoice->id && $mail->receipt->id === $receipt->id;
-        });
+        // Invoice issue allocates the verified capture. The original booking receipt stands.
+        $this->assertDatabaseMissing('payments', ['invoice_id' => $invoice->id]);
+        $this->assertDatabaseMissing('receipts', ['invoice_id' => $invoice->id]);
+        $credit = $issued->histories->firstWhere('event', 'invoice.issued')->snapshot['booking_credit'];
+        $this->assertSame('600.00', $credit['applied_php']);
+        $this->assertSame($appointment->public_id, $credit['appointment_id']);
+        $this->assertSame($appointment->fresh()->booking_paid_at->toIso8601String(), $credit['captured_at']);
     }
 
     public function test_release_expired_holds_command_is_registered_in_scheduler_every_minute(): void

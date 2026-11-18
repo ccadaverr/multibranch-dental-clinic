@@ -239,7 +239,7 @@ class AnalyticsTest extends TestCase
             ->assertJsonCount(1, 'data.days')
             ->assertJsonPath('data.days.0.net_cash_flow_php', '1180.39')->json('data.days.0');
         $csv = $this->get('/api/analytics/export'.$query.'&include_daily=1')->assertOk()->streamedContent();
-        $this->assertStringContainsString('"Total Revenue Collected",9.99', $csv);
+        $this->assertStringContainsString('"Paid Invoice Amounts Applied",9.99', $csv);
         $this->assertStringContainsString('DAILY CASH FLOW', $csv);
         $this->assertStringContainsString('From,2026-09-28,Through,2026-09-28', $csv);
         $this->assertStringContainsString(implode(',', [$daily['date'], $daily['gross_collected_php'], $daily['refunded_php'], $daily['net_cash_flow_php']]), $csv);
@@ -329,11 +329,13 @@ class AnalyticsTest extends TestCase
             $invoiceQuery = '?date_from=2026-10-31&date_to=2026-10-31'.$branchQuery;
             $this->getJson('/api/analytics/executive-summary'.$invoiceQuery)->assertOk()
                 ->assertJsonPath('data.financials.total_collected_php', $invoiceCollected)
+                ->assertJsonPath('data.financials.cash_flow.refunded_php', $refunded)
+                ->assertJsonPath('data.financials.cash_flow.net_cash_flow_php', $net)
                 ->assertJsonPath('data.financials.outstanding_balance_php', $outstanding);
             $csv = $this->get('/api/analytics/export'.$invoiceQuery.'&include_daily=1')->assertOk()->streamedContent();
-            $this->assertStringContainsString('Invoice creation (Asia/Manila); collected amounts use Paid invoices', $csv);
+            $this->assertStringContainsString('Invoice creation (Asia/Manila); paid invoice amounts include applied credits', $csv);
             $this->assertStringContainsString('Payments recorded and refunds made (Asia/Manila)', $csv);
-            $this->assertStringContainsString('"Total Revenue Collected",'.$invoiceCollected, $csv);
+            $this->assertStringContainsString('"Paid Invoice Amounts Applied",'.$invoiceCollected, $csv);
             $this->assertStringContainsString("2026-10-31,{$gross},{$refunded},{$net}", $csv);
             $this->assertStringContainsString("Total,{$gross},{$refunded},{$net}", $csv);
         }

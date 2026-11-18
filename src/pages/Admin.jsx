@@ -649,8 +649,10 @@ export function AnalyticsPage({ activeBranch, store }) {
   ]
 
   const rateText = v => (v === null || v === undefined ? 'No data' : `${v}%`)
+  const cashFlow = serverSummary?.financials.cash_flow
   const metrics = serverSummary ? [
-    { name: 'Recorded revenue', value: reportPeso(serverSummary.financials.total_collected_php), note: `Paid invoices created in this period: ${serverSummary.financials.paid_invoices_count} • Gross invoiced: ${reportPeso(serverSummary.financials.total_gross_php)}` },
+    ...(cashFlow ? [{ name: 'Net cash flow', value: reportPeso(cashFlow.net_cash_flow_php), note: 'Gross ' + reportPeso(cashFlow.gross_collected_php) + ' · Refunds ' + reportPeso(cashFlow.refunded_php) }] : []),
+    { name: serverSummary.financials.cash_flow ? 'Paid invoice amounts' : 'Recorded revenue', value: reportPeso(serverSummary.financials.invoice_payments_applied_php ?? serverSummary.financials.total_collected_php), note: `Paid invoices created in this period: ${serverSummary.financials.paid_invoices_count} • Gross invoiced: ${reportPeso(serverSummary.financials.total_gross_php)}` },
     { name: 'Scheduling', value: serverSummary.scheduling.total_appointments, note: `Completion rate: ${rateText(serverSummary.scheduling.completion_rate_pct)} (${serverSummary.scheduling.completed} completed, ${serverSummary.scheduling.cancelled} cancelled)` },
     { name: 'Queue / patient flow', value: serverSummary.patient_flow.total_visits, note: `${serverSummary.patient_flow.served_from_queue} served in this period • ${serverSummary.patient_flow.current_waiting} waiting now (today's queue)` },
     { name: 'HMO processing', value: serverSummary.hmo.approved, note: `${reportPeso(serverSummary.hmo.approved_amount_php)} approved coverage • ${serverSummary.hmo.pending} pending coordinator action` },
@@ -758,7 +760,7 @@ export function AnalyticsPage({ activeBranch, store }) {
               {workload !== null && <Progress value={workload} threshold={threshold} />}
               <small>
                 {waiting} waiting now • {booked} appointments{estimateKnown ? ` • ~${estimate} min wait` : ' • wait estimate not configured'}
-                {revenue ? ` • Revenue: ${revenue}` : ''}
+                {b.cash_flow ? ` • Gross collections: ${reportPeso(b.cash_flow.gross_collected_php)} • Refunds: ${reportPeso(b.cash_flow.refunded_php)} • Net cash flow: ${reportPeso(b.cash_flow.net_cash_flow_php)}` : revenue ? ` • Paid invoice amounts: ${revenue}` : ''}
               </small>
             </div>
           })}

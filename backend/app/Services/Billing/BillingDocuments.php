@@ -36,6 +36,7 @@ class BillingDocuments
         return [
             'patientEmail' => $invoice->patient?->user?->email ?? $invoice->patient?->person?->email,
             'billingAddress' => $this->billingAddressLines($invoice),
+            'bookingCredit' => $invoice->bookingCredit(),
             'issuedOn' => Brand::date($invoice->issued_at),
             'subtotal' => Brand::money($invoice->gross_amount),
             'discountShare' => (float) ($invoice->discount_amount ?? 0) > 0 ? Brand::money($invoice->discount_amount) : null,

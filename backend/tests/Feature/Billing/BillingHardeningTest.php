@@ -76,17 +76,17 @@ class BillingHardeningTest extends TestCase
     }
 
     /** A verified booking deposit is fixture evidence; exercise the real invoice-issue command to apply its credit. */
-    private function issuedWithBookingDeposit(string $deposit = '300.00'): Invoice
+    private function issuedWithBookingDeposit(string $deposit = '300.00', string $unitPrice = '500.00', bool $sameDay = false): Invoice
     {
         Http::preventStrayRequests();
         Mail::fake();
-        $this->price('svc1', 'b1', '500.00'); // The existing completed-treatment fixture has quantity two.
+         $this->price('svc1', 'b1', $unitPrice); // The existing completed-treatment fixture has quantity two.
         $treatment = $this->completed();
         $appointment = $this->existing('A', 'd1', 'b1', 'svc1', '2026-09-28', '09:00', 30, 'Completed');
         $appointment->update([
             'booking_payment_status' => 'paid', 'booking_fee_php' => $deposit,
             'booking_payment_ref' => 'fin01-booking-fixture', 'booking_payment_method' => 'PayMongo (GCASH)',
-            'booking_paid_at' => now()->subDay(),
+            'booking_paid_at' => $sameDay ? now()->subHour() : now()->subDay(),
         ]);
         $treatment->visit->update(['source' => 'appointment', 'appointment_id' => $appointment->id]);
         $invoice = Invoice::where('public_id', $this->createInvoice($treatment)->assertCreated()->json('data.id'))->firstOrFail();
@@ -162,12 +162,102 @@ class BillingHardeningTest extends TestCase
         $this->assertSame(['Paid', '1000.00', '0.00', 'booking_deposit'], [
             $invoice->status, (string) $invoice->paid_amount, $invoice->balance(), $invoice->settlement_type,
         ]);
-        $this->assertSame('1000.00', (string) $invoice->payment->amount);
-        $this->assertSame('1000.00', (string) $invoice->receipt->amount);
+        $this->assertNull($invoice->payment);
+        $this->assertNull($invoice->receipt);
         $this->postJson("/api/invoices/{$invoice->public_id}/payment", [
             'expected_revision' => 3, 'method' => 'Cash', 'amount' => '0.00',
         ], ['Idempotency-Key' => $this->key()])->assertStatus(422)->assertJsonPath('code', 'already_paid');
-        $this->assertSame([1, 1], [Payment::count(), Receipt::count()]);
+        $this->assertSame([0, 0], [Payment::count(), Receipt::count()]);
+    }
+
+    public function test_booking_capture_and_cash_reconcile_on_their_original_manila_dates(): void
+    {
+        $invoice = $this->issuedWithBookingDeposit('600.00', '900.00');
+        $credit = $invoice->histories()->where('event', 'invoice.issued')->sole()->snapshot['booking_credit'];
+        $this->assertSame('600.00', $credit['applied_php']);
+        $this->assertSame('0.00', $credit['unapplied_php']);
+        $this->assertSame($invoice->visit->appointment->booking_paid_at->toIso8601String(), $credit['captured_at']);
+        $this->postJson("/api/invoices/{$invoice->public_id}/payment", [
+            'expected_revision' => 3, 'method' => 'Cash', 'amount' => '1200.00',
+        ], ['Idempotency-Key' => $this->key()])->assertOk()->assertJsonPath('data.paid_amount', '1800.00')
+            ->assertJsonPath('data.payment.amount', '1200.00')->assertJsonPath('data.receipt.amount', '1200.00')
+            ->assertJsonPath('data.booking_credit.applied_php', '600.00');
+        $this->assertSame(1, Payment::count());
+        $this->assertSame(1, Receipt::count());
+
+        $this->actingAsUser('owner');
+        $branch = $this->b['b1']->public_id;
+        $scope = "date_from=2026-09-27&date_to=2026-09-28&branch_id={$branch}";
+        $this->getJson('/api/analytics/daily-revenue?'.$scope)->assertOk()
+            ->assertJsonPath('data.days.0.gross_collected_php', '600.00')
+            ->assertJsonPath('data.days.1.gross_collected_php', '1200.00')
+            ->assertJsonPath('data.totals.gross_collected_php', '1800.00')
+            ->assertJsonPath('data.totals.payments_count', 2);
+        $this->getJson("/api/analytics/weekly-histogram?date=2026-09-28&branch_id={$branch}")->assertOk()
+            ->assertJsonPath('data.totals.gross_collected_php', '1200.00');
+        $day = "date_from=2026-09-28&date_to=2026-09-28&branch_id={$branch}";
+        $this->getJson('/api/analytics/executive-summary?'.$day)->assertOk()
+            ->assertJsonPath('data.financials.invoice_payments_applied_php', '1800.00')
+            ->assertJsonPath('data.financials.cash_flow.net_cash_flow_php', '1200.00');
+        $this->getJson('/api/analytics/branch-performance?'.$scope)->assertOk()
+            ->assertJsonPath('data.0.cash_flow.gross_collected_php', '1800.00');
+        $csv = $this->get('/api/analytics/export?'.$scope.'&include_daily=1')->assertOk()->streamedContent();
+        $this->assertStringContainsString('2026-09-27,600.00,0.00,600.00', $csv);
+        $this->assertStringContainsString('2026-09-28,1200.00,0.00,1200.00', $csv);
+    }
+
+    public function test_excess_deposit_stays_visible_as_unapplied_and_only_the_original_capture_is_counted(): void
+    {
+        $invoice = $this->issuedWithBookingDeposit('1200.00', '500.00', true);
+        $this->assertSame('1000.00', (string) $invoice->paid_amount);
+        $this->getJson("/api/invoices/{$invoice->public_id}")->assertOk()
+            ->assertJsonPath('data.booking_credit.captured_php', '1200.00')
+            ->assertJsonPath('data.booking_credit.applied_php', '1000.00')
+            ->assertJsonPath('data.booking_credit.unapplied_php', '200.00');
+        $this->assertSame([0, 0], [Payment::count(), Receipt::count()]);
+        $this->assertNull($invoice->visit->appointment->booking_refund_ref);
+        $this->actingAsUser('owner');
+        $this->getJson('/api/analytics/executive-summary?period=today')->assertOk()
+            ->assertJsonPath('data.financials.invoice_payments_applied_php', '1000.00')
+            ->assertJsonPath('data.financials.cash_flow.gross_collected_php', '1200.00');
+        $this->getJson('/api/analytics/daily-revenue?period=today')->assertOk()
+            ->assertJsonPath('data.totals.gross_collected_php', '1200.00')
+            ->assertJsonPath('data.totals.payments_count', 1);
+    }
+
+    public function test_legacy_full_deposit_projection_is_retained_without_second_collection(): void
+    {
+        $invoice = $this->issuedWithBookingDeposit('1000.00');
+        $legacy = Payment::create([
+            'invoice_id' => $invoice->id, 'amount' => '1000.00', 'method' => 'PayMongo (GCASH)',
+            'external_reference' => $invoice->visit->appointment->booking_payment_ref,
+            'recorded_by_user_id' => $this->u['staffB1']->id, 'recorded_at' => now(),
+        ]);
+        $this->actingAsUser('owner');
+        $this->getJson('/api/analytics/daily-revenue?date_from=2026-09-27&date_to=2026-09-28')->assertOk()
+            ->assertJsonPath('data.days.0.gross_collected_php', '1000.00')
+            ->assertJsonPath('data.days.1.gross_collected_php', '0.00')
+            ->assertJsonPath('data.totals.payments_count', 1);
+        $this->assertDatabaseHas('payments', ['id' => $legacy->id]);
+    }
+
+    public function test_confirmed_booking_refund_uses_refund_date_in_dashboard_and_branch_report(): void
+    {
+        $booking = $this->existing('A', 'd1', 'b1', 'svc1', '2026-09-28', '09:00', 30, 'Cancelled');
+        $booking->update([
+            'booking_payment_status' => 'refunded', 'booking_fee_php' => '600.00',
+            'booking_payment_ref' => 'b18-captured-fixture', 'booking_paid_at' => now()->subDay(),
+            'booking_refund_ref' => 'b18-refunded-fixture', 'booking_refunded_at' => now(),
+        ]);
+        $this->actingAsUser('owner');
+        $this->getJson('/api/analytics/daily-revenue?date_from=2026-09-27&date_to=2026-09-28')->assertOk()
+            ->assertJsonPath('data.days.0.gross_collected_php', '600.00')
+            ->assertJsonPath('data.days.1.refunded_php', '600.00')
+            ->assertJsonPath('data.totals.net_cash_flow_php', '0.00');
+        $this->getJson('/api/analytics/executive-summary?period=today')->assertOk()
+            ->assertJsonPath('data.financials.cash_flow.net_cash_flow_php', '-600.00');
+        $this->getJson('/api/analytics/branch-performance?period=today&branch_id='.$this->b['b1']->public_id)->assertOk()
+            ->assertJsonPath('data.0.cash_flow.refunded_php', '600.00');
     }
 
     public function test_zero_remaining_balance_does_not_create_a_zero_payment_on_an_issued_invoice(): void
