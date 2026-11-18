@@ -131,7 +131,7 @@ test('ARC-02 16: ARC-01 restore remains disabled and linked to its keyboard-focu
   const button = html.match(/<button[^>]*aria-describedby="archive-restore-unavailable"[^>]*>[\s\S]*?<\/button>/)?.[0]
   assert.ok(button); assert.match(button, /\bdisabled/); assert.match(button, /Retrieve \/ Restore \(unavailable\)/)
   assert.match(html, /id="archive-restore-unavailable" tabindex="0"/)
-  assert.match(html, /Viewing a record does not restore it/)
+  assert.match(html, /Read-only records\. Restoration is unavailable\./)
 })
 test('ARC-02 18: historical wording includes past Confirmed and future Cancelled appointments without claiming completed care', async () => {
   const store = fixture()

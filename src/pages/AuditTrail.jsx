@@ -341,12 +341,15 @@ function AuditLifetime({ store }) {
         </div>
       </Card>
 
-      {viewStatus === 'ready' && !rangeInvalid && <dl className="owner-audit-counts" aria-label="Counts for loaded events">
+      {viewStatus === 'ready' && !rangeInvalid && <section className="audit-loaded-summary" aria-label="Audit summary">
+        <div className="audit-summary-heading"><h2>Activity overview</h2><p>Counts reflect loaded events for the active filters.</p></div>
+        <dl className="owner-audit-counts" aria-label="Counts for loaded events">
         <div><dt>Events loaded</dt><dd>{shownLogs.length}</dd></div>
         <div><dt>Security &amp; warnings</dt><dd>{securityCount}</dd></div>
         <div><dt>Financial</dt><dd>{financialCount}</dd></div>
         <div><dt>Clinical</dt><dd>{clinicalCount}</dd></div>
-      </dl>}
+        </dl>
+      </section>}
 
       <div ref={activityLog} role="region" aria-label="Activity Log" tabIndex={-1} style={{ marginTop: '20px' }}>
         <Card title="Activity Log" subtitle="Newest first · Manila time · Read only" className="owner-record-workspace">

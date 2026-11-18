@@ -597,7 +597,7 @@ test('ARC-01: disabled restore explains unavailability in visible keyboard-focus
   assert.match(button, /\bdisabled\b/)
   assert.doesNotMatch(button, /onClick|type="submit"/)
   assert.match(button, /Retrieve \/ Restore \(unavailable\)/)
-  assert.match(page, /<span id="archive-restore-unavailable" tabIndex=\{0\}>Retrieval \/ restoration is unavailable on this screen\. Viewing a record does not restore it or flag it for active follow-up\.<\/span>/)
+  assert.match(page, /<p[^>]*id="archive-restore-unavailable" tabIndex=\{0\}>Read-only records\. Restoration is unavailable\. Permanent deletion is disabled\.<\/p>/)
 })
 
 test('ARC-01: read-only viewing and existing role restrictions remain in place', () => {
@@ -608,7 +608,7 @@ test('ARC-01: read-only viewing and existing role restrictions remain in place',
   }
   assert.match(page, /logArchiveView\(match\.kind, match\.record\)/)
   assert.equal((page.match(/logArchiveAudit\('archive\.viewed'/g) || []).length, 1)
-  assert.match(page, /title="Archived Record Details \(Read-Only\)"/)
+  assert.match(page, /title="Archived Record Details"\s+subtitle="Read-only"/)
   assert.match(page, /const canViewFinancials = role !== 'dentist'/)
   assert.match(page, /if \(!inStaffBranch\) return false/)
   assert.match(page, /if \(!inDentistBranch \|\| !isDentistRecord\) return false/)

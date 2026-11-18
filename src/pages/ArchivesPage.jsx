@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Card, FilterBar, Modal, Notice, PageHeader, Status, Table, Tabs } from '../components.jsx'
 import { makeCsv, peso } from '../logic.js'
+import { exactPeso } from '../owner-revenue-data.js'
 import { clinicDate } from '../clock.js'
 import { inScope } from '../contracts.js'
 import { canAccessPage, permitted } from '../safeguards.js'
@@ -400,11 +401,7 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
         text="Role- and branch-scoped history of past or terminal appointments, prescriptions, and settled financial records."
       />}
 
-      {role === 'owner' ? <p className="muted-copy owner-archive-access">Read-only. Restoration is unavailable.</p> : <Notice tone="info" title="History viewing and restoration availability">
-        <b>Viewing</b> inspects historical records read-only within your role and branch scope.
-        <br/><span id="archive-restore-unavailable" tabIndex={0}>Retrieval / restoration is unavailable on this screen. Viewing a record does not restore it or flag it for active follow-up.</span><br/>
-        <b>Permanent deletion</b> is not available on this screen.
-      </Notice>}
+      <p className="clinic-inline-help owner-archive-access" id="archive-restore-unavailable" tabIndex={0}>Read-only records. Restoration is unavailable. Permanent deletion is disabled.</p>
 
       {!enabled || noStaffScope ? <Notice tone="warning" title={noStaffScope && enabled ? 'No authorized archive branches' : 'Archive access unavailable'}>
         {noStaffScope && enabled ? 'This account has no authorized branches for archive viewing or export.' : 'These records are unavailable to the current account.'}
@@ -588,24 +585,35 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
       {viewRecord && (
         <Modal
           open
-          title="Archived Record Details (Read-Only)"
-          subtitle="Historical archive inspection. Permanent deletion is disabled under clinic retention rules."
+          title="Archived Record Details"
+          subtitle="Read-only"
+          className="archive-record-dialog"
           onClose={() => setViewRecord(null)}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <p><b>Record Type:</b> {role === 'owner' ? archiveType[viewRecord.kind] : viewRecord.kind.toUpperCase()}</p>
-            <p><b>Reference:</b> <code>{role === 'owner' ? archiveReference(viewRecord.kind, viewRecord.record) :
-              (viewRecord.record.code || viewRecord.record.number || viewRecord.record.invoiceNumber || viewRecord.record.id)}</code></p>
+          <dl className="archive-record-identity">
+            <div><dt>Record type</dt><dd>{archiveType[viewRecord.kind]}</dd></div>
+            <div><dt>Reference</dt><dd><code>{archiveReference(viewRecord.kind, viewRecord.record)}</code></dd></div>
             {(role === 'owner' || usesStaffServer) && viewRecord.kind === 'financial' && receiptReference(viewRecord.record) &&
-              <p><b>Receipt:</b> <code>{receiptReference(viewRecord.record)}</code></p>}
+              <div><dt>Receipt</dt><dd><code>{receiptReference(viewRecord.record)}</code></dd></div>}
             {viewRecord.kind === 'financial' && viewRecord.record.bookingCredit?.receipt_number &&
-              <p><b>Booking receipt:</b> <code>{viewRecord.record.bookingCredit.receipt_number}</code></p>}
-            <p><b>Patient:</b> {role === 'owner' ? archivePatient(viewRecord.record) :
-              (viewRecord.record.patientName || viewRecord.record.patient?.name || 'Patient')}</p>
-            <p><b>Branch:</b> {branchLabel(viewRecord.record)}</p>
-            <p><b>Date:</b> {role === 'owner' ? archiveDateDisplay(archiveDate(viewRecord.record)) : (viewRecord.record.date || viewRecord.record.issued_at || '—')}</p>
-            <p><b>Status:</b> {viewRecord.record.status || 'Archived'}</p>
-          </div>
+              <div><dt>Booking receipt</dt><dd><code>{viewRecord.record.bookingCredit.receipt_number}</code></dd></div>}
+          </dl>
+          <section className="archive-record-group">
+            <h3>Visit context</h3>
+            <dl>
+              <div><dt>Patient</dt><dd>{archivePatient(viewRecord.record)}</dd></div>
+              <div><dt>Branch</dt><dd>{branchLabel(viewRecord.record)}</dd></div>
+              <div><dt>Date</dt><dd>{archiveDateDisplay(archiveDate(viewRecord.record))}</dd></div>
+            </dl>
+          </section>
+          <section className="archive-record-group">
+            <h3>{viewRecord.kind === 'financial' ? 'Settlement' : 'Record status'}</h3>
+            <dl>
+              <div><dt>Status</dt><dd><Status>{viewRecord.record.status || 'Archived'}</Status></dd></div>
+              {viewRecord.kind === 'financial' && typeof viewRecord.record.paid_amount === 'string' && /^\d+\.\d{2}$/.test(viewRecord.record.paid_amount) &&
+                <div><dt>Paid amount</dt><dd>{exactPeso(viewRecord.record.paid_amount)}</dd></div>}
+            </dl>
+          </section>
           {documentError && <p role="alert">{documentError}</p>}
           {usesStaffServer && viewRecord.kind === 'financial' && <div className="row-actions">
             {viewRecord.record.receiptId && <Button variant="soft" onClick={() => downloadArchivedReceipt(viewRecord.record)}>Download Payment Receipt</Button>}
