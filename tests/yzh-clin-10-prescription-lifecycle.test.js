@@ -15,12 +15,12 @@ const source = readFileSync(new URL('../src/pages/ServerPrescriptions.jsx', impo
 const start = source.indexOf('function WriteCard('), end = source.indexOf('\n  if(editing&&!draft)', start)
 assert(start > 0 && end > start, 'Review extraction after a controller structure change.')
 const controller = source.slice(source.indexOf('const firstError'), source.indexOf('const TONE')) + '\n'
-  + source.slice(start, end) + '\nreturn {save, changeVisit, setNote, setLines, stay, discard, requestLeave, visitId, lines, note, err, busy, visitError, visits, setVisitAttempt};\n}\nWriteCard'
+  + source.slice(start, end) + '\nreturn {save, changeVisit, setNote, setLines, stay, discard, requestLeave, visitId, lines, note, err, busy, visitError, visits, setVisitAttempt, setVisitVerified};\n}\nWriteCard'
 const wire = v => JSON.parse(JSON.stringify(v))
 const deferred = () => {let resolve; const promise = new Promise(r => {resolve = r}); return {promise, resolve}}
 const accepted = (id = 'rx-A') => ({ok: true, data: {id, revision: 1, status: 'Draft', can_edit: true}})
 
-function editor({respond = async () => accepted(), issue = async () => ({ok: true, data: {id: 'rx-A', number: 'RX-2026-000001', status: 'Issued'}}), visits = async () => ({ok: true, data: []}), context = {visitId:'visit-A',patientPublicId:'patient-A',branchId:'branch-A'}} = {}) {
+function editor({respond = async () => accepted(), issue = async () => ({ok: true, data: {id: 'rx-A', number: 'RX-2026-000001', status: 'Issued'}}), visits = async () => ({ok: true, data: []}), context = {visitId:'visit-A',patientPublicId:'patient-A',branchId:'branch-A'}, verified = true} = {}) {
   const cells = [], pending = [], calls = [], feedback = [], done = [], protections = []
   let cursor = 0, active = true, value, authGeneration = 1, knownRow
   const enrich = (r,body) => {if(r.ok)knownRow={patient:{id:"patient-A"},visit:"visit-A",branch:"Synthetic branch",lines:body.lines,note:body.note,...r.data};return r.ok?{...r,data:knownRow}:r}
@@ -53,9 +53,19 @@ function editor({respond = async () => accepted(), issue = async () => ({ok: tru
   const props = {getAuthGeneration:()=>authGeneration, context: context, editing: null, isCurrent: () => active, leaveRef: {current: null}, toast: (...args) => feedback.push(args), onDone: id => done.push(id), onEdited() {}}
   const render = () => {cursor = 0; value = component(props); for (const run of pending.splice(0)) run(); return value}
   render()
+  // Command tests model a rendered, verified Visit. Read lifecycle tests use the
+  // actual asynchronous reader; the explicit false case covers the write guard.
+  value.setVisitVerified(verified);render()
   const fill = () => {value.setLines([{medicine: 'Synthetic medicine', dosage: 'Synthetic dosage', frequency: '', duration: '', instructions: 'Synthetic instructions'}]); value.setNote('Submitted note'); render()}
   return {replaceActor(){authGeneration++}, render, fill, calls, feedback, done, protections, get value() {return value}, unmount() {active = false; for (const cell of cells) cell?.cleanup?.()}}
 }
+
+test('unverified Visit refuses Save and Issue without erasing entered medicine',async()=>{
+ const e=editor({verified:false});e.fill()
+ await e.value.save(false);await e.value.save(true);e.render()
+ assert.equal(e.calls.length,0);assert.match(e.value.err,/Verify the selected Visit/)
+ assert.equal(e.value.lines[0].medicine,'Synthetic medicine');e.unmount()
+})
 
 test('genuine medication fields and notes register dirty protection; pending Save registers busy', async () => {
   const held = deferred(), e = editor({respond: () => held.promise})

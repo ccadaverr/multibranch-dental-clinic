@@ -8,8 +8,9 @@ let page
 const waitPost=async(page,path,work)=>{const awaited=page.waitForResponse(r=>r.url()===api+path&&r.request().method()!=='GET');await work();const r=await awaited;const body=await r.json();assert.ok(r.status()<300,JSON.stringify(body));return body.data}
 try {
  const dentist=await login('sprint02.dentist@example.test');page=dentist.page
- await page.getByRole('button',{name:'My Queue',exact:true}).first().click();await page.getByRole('combobox',{name:'Worklist',exact:true}).selectOption('history')
- await page.getByRole('button',{name:'View completed record',exact:true}).first().click()
+ await page.getByRole('button',{name:'My Queue',exact:true}).first().click()
+ if(process.env.LOCAL_SYSTEM_ACTIVE_PRESCRIPTION==='1')await page.getByRole('button',{name:'Continue treatment',exact:true}).first().click()
+ else {await page.getByRole('combobox',{name:'Worklist',exact:true}).selectOption('history');await page.getByRole('button',{name:'View completed record',exact:true}).first().click()}
  await page.getByRole('button',{name:'Open visit prescriptions',exact:true}).click()
  await page.getByRole('combobox',{name:/^Visit/}).waitFor()
  const selected=await page.getByRole('combobox',{name:/^Visit/}).inputValue();assert.ok(selected);state.visit=selected
@@ -41,8 +42,8 @@ try {
  const relogin=otherTab.waitForResponse(r=>r.url()===api+'/api/login'&&r.request().method()==='POST')
  await otherTab.getByRole('button',{name:'Sign in',exact:true}).click();assert.equal((await relogin).status(),200)
  let heldHeader=false
- page.on('request',r=>{if(r.url()===api+'/api/prescriptions/'+state.draft.id&&r.method()==='PUT')heldHeader=/^[a-f0-9]{64}$/.test(r.headers()['x-clinical-context']||'')})
- const refused=page.waitForResponse(r=>r.url()===api+'/api/prescriptions/'+state.draft.id&&r.request().method()==='PUT')
+ page.on('request',r=>{if(r.url()===api+'/api/prescriptions/'+state.draft.id+'/issue'&&r.method()==='POST')heldHeader=/^[a-f0-9]{64}$/.test(r.headers()['x-clinical-context']||'')})
+ const refused=page.waitForResponse(r=>r.url()===api+'/api/prescriptions/'+state.draft.id+'/issue'&&r.request().method()==='POST')
  await page.getByRole('button',{name:'Issue prescription',exact:true}).click()
  await page.getByRole('dialog',{name:'Issue and lock prescription?',exact:true}).getByRole('button',{name:'Issue prescription',exact:true}).click()
  assert.equal((await refused).status(),409);assert.equal(heldHeader,true)
