@@ -110,15 +110,21 @@ function PatientRecordsBody({ role, store, context, setPage }) {
     {role==='dentist'&&context?.returnEncounter&&<Button variant="ghost" onClick={()=>setPage('treatment',context.returnEncounter)}>Return to encounter</Button>}
     <PageHeader title="Centralized Patient Records" text="Identity and contact details are shared across the patient record. Staff may maintain approved demographics; dentists see those fields read-only and edit only clinical information." aside={role==='dentist'&&encounter&&(['Called','Treatment Ready'].includes(encounter.status)||encounter.status==='Served'&&encounter.visitStatus==='In Treatment')?<Button onClick={()=>setPage('treatment',context)}>{encounter.treatmentId?'Continue Treatment':'Open Treatment'}</Button>:null}/>
     {!patient&&!serverSession?<Notice>The selected patient is unavailable in your current scope. {availablePatients.length>0&&<Button onClick={()=>setSelected(availablePatients[0].id)}>Open an available patient</Button>}{role==='staff'&&<Button onClick={()=>setNewOpen(true)}>New Patient</Button>}</Notice>:<div className="records-layout">
-      <Card className="patient-list" title="Patients" subtitle={`${filteredPatients.length} on file`} actions={role==='staff'?<Button size="sm" onClick={()=>setNewOpen(true)}>New Patient</Button>:null}>
+      <Card className={role==='dentist'?'patient-list dentist-record-list':'patient-list'} title="Patients" subtitle={role==='dentist'?undefined:`${filteredPatients.length} on file`} actions={role==='staff'?<Button size="sm" onClick={()=>setNewOpen(true)}>New Patient</Button>:null}>
         <SearchInput className="search-input" ariaLabel="Search patients" placeholder={serverSession&&role!=='dentist'?'Search the clinic directory…':'Search patient...'} value={search} onChange={setSearch} onClear={()=>setSearch('')}/>
         {branches.length>1&&<select className="filter-select" style={{width:'100%',margin:'6px 0 2px'}} aria-label="Filter patients by branch" value={branchFilter} onChange={e=>setBranchFilter(e.target.value)}>
           <option value="All">All branches</option>
           {branches.map(b=><option key={b.id} value={b.name}>{b.name}</option>)}
         </select>}
         {searchError&&<Notice tone="warning" title="Patient search unavailable">{searchError} <Button size="sm" variant="ghost" onClick={()=>setSearchAttempt(searchAttempt+1)}>Retry</Button></Notice>}
-        {serverSession&&availablePatients.length===0&&!searchError&&<p className="muted">{role==='dentist'?'Patients appear here from your appointments and queue.':'Type at least 2 characters to search the clinic patient directory.'}</p>}
-        <div className="patient-list-scroll">{filteredPatients.length?filteredPatients.map(p=><button key={p.id} className={selected===p.id?'selected':''} onClick={()=>{setSelected(p.id);setTab('summary')}}><span className="avatar">{p.name.split(' ').map(x=>x[0]).slice(0,2).join('')}</span><div><b>{p.name}</b><small>{p.serverProjection?p.patientCode:`${p.patientCode||p.id} • ${p.preferredBranch} • ${p.hmo}`}</small></div></button>):<p className="muted" style={{padding:'12px 8px'}}>No matching patients found.</p>}</div>
+        {serverSession&&role==='dentist'&&store.appointmentsStatus==='error'&&<Notice tone="warning" title="Patient list unavailable">
+          {store.appointmentsError} <Button size="sm" variant="ghost" onClick={()=>store.appointmentFlow?.refresh()}>Retry</Button>
+        </Notice>}
+        <div className="patient-list-scroll">{filteredPatients.length?filteredPatients.map(p=><button type="button" key={p.id} aria-pressed={selected===p.id} className={selected===p.id?'selected':''} onClick={()=>{setSelected(p.id);setTab('summary')}}><span className="avatar">{p.name.split(' ').map(x=>x[0]).slice(0,2).join('')}</span><div><b>{p.name}</b><small>{p.serverProjection?p.patientCode:`${p.patientCode||p.id} • ${p.preferredBranch} • ${p.hmo}`}</small></div></button>):!searchError&&!(serverSession&&role==='dentist'&&store.appointmentsStatus==='error')&&<p className="clinic-inline-help" role="status">{
+          search.trim()||availablePatients.length?'No matching patients found.':
+            role==='dentist'?(store.appointmentsStatus==='loading'?'Loading patients from your visits…':'Patients appear here from your appointments and queue.'):
+              'Type at least 2 characters to search the clinic patient directory.'
+        }</p>}</div>
       </Card>
       {patient?      <div>
         <Card className={role==='staff'?'patient-header-card staff-workflow-record-header':'patient-header-card'} actions={role==='staff'&&session.role==='staff'?<Button disabled={!canSchedule(store)||!publicPatientIdFor(patient.id,{session,users:state.users,patients:state.patients})} onClick={()=>{if(canSchedule(store)&&publicPatientIdFor(patient.id,{session,users:state.users,patients:state.patients}))setBookingPatient(patient.id)}}>Book Appointment</Button>:null}><div className="patient-record-head"><div className="avatar xl">{patient.name.split(' ').map(x=>x[0]).slice(0,2).join('')}</div><div><h2>{patient.name}</h2><p>{patient.serverProjection?patient.patientCode:<>{patient.patientCode||patient.id} • {patient.dob||'DOB not set'} • {patient.sex||'—'} • {patient.preferredBranch}</>}</p><div className="chip-row">{!patient.serverProjection&&<span className="mini-chip">Allergies: {patient?.['allergies']}</span>}{patient.consent&&<span className="mini-chip success">Consent on file</span>}</div></div></div></Card>
@@ -208,7 +214,7 @@ function ServerPatientSummary({ patient, role, branches, toast, store }) {
 export function DentistPatientSummary({ patient }) {
   return <Card title="Patient summary" subtitle="Identity from your authorized appointments and encounters.">
     <dl className="enc-identity"><div><dt>Patient</dt><dd>{patient.name}</dd></div><div><dt>Patient code</dt><dd>{patient.patientCode || 'Not available'}</dd></div></dl>
-    <Notice title="Full patient record not available to Dentists yet">Medical alerts unavailable.There is no clinic-backed medical-alert record available here. Absence of information does not mean no allergies, conditions or medications. Verify the patient's clinical history through the clinic's approved process.</Notice>
+    <Notice title="Full patient record not available to Dentists yet">Medical alerts are unavailable in this view. Verify allergies, conditions and medications through the clinic’s approved process.</Notice>
     <p className="muted-copy">Earlier versions kept medical notes only in this browser. Those notes are not verified clinic records and are not displayed or changed here. Contact the clinic's authorized records custodian to arrange secure review and recovery.</p>
   </Card>
 }

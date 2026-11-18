@@ -160,13 +160,13 @@ export function ToothTimeline({
 
           <fieldset className="tc-surfaces">
             <legend>Surfaces (optional)</legend>
-            {['M', 'O', 'D', 'B', 'L'].map(s => (
+            {Object.entries({ M: 'Mesial', O: 'Occlusal', D: 'Distal', B: 'Buccal', L: 'Lingual' }).map(([s, name]) => (
               <label key={s} className="au-check">
                 <input
                   type="checkbox"
                   checked={f.surfaces.includes(s)}
                   onChange={e => changeForm({ surfaces: e.target.checked ? [...form.current.surfaces, s] : form.current.surfaces.filter(y => y !== s) })}
-                /> {s}
+                /> <span><b>{s}</b> {name}</span>
               </label>
             ))}
           </fieldset>

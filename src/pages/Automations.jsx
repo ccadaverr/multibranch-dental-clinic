@@ -282,7 +282,7 @@ export function TemplateEditor({ template, toast, onChanged, approveAction = app
     }
     setPreviewResult({scope, pending: false, data: r.data, error: ''})
   }
-  useEffect(() => { show() }, [template.key, template.revision])
+  useEffect(() => { if (canEdit) show() }, [canEdit, template.key, template.revision])
   const save = async () => {
     setBusy('save'); setErr('')
     const r = await updateMessageTemplate(template.key, { ...draft, expected_revision: template.revision })
@@ -325,28 +325,28 @@ export function TemplateEditor({ template, toast, onChanged, approveAction = app
           </div>
           <div className="au-approval-status-bar">
             {template.owner_approval ? (
-              <span className="au-tag is-ok">✓ Owner approved: {template.owner_approval.by}</span>
+              <span className="au-tag is-ok">Owner approved: {template.owner_approval.by}</span>
             ) : (
-              <span className="au-tag is-wait">⏳ Waiting for Owner approval</span>
+              <span className="au-tag is-wait">Owner approval pending</span>
             )}
             {template.dentist_approval ? (
-              <span className="au-tag is-ok">✓ Dentist approved: {template.dentist_approval.by}</span>
+              <span className="au-tag is-ok au-approved-badge">Dentist approved: {template.dentist_approval.by}</span>
             ) : (
-              <span className="au-tag is-wait">⏳ Waiting for Dentist approval</span>
+              <span className="au-tag is-wait">Dentist approval pending</span>
             )}
           </div>
         </div>
       )}
       {err && <p className="au-error" role="alert">{err}</p>}
       <div className="au-actions">
-        {canEdit && !dirty ? <RefreshButton title="Refresh preview" ariaLabel="Refresh preview" loading={!!busy} onClick={show}/> : <Button size="sm" variant="soft" disabled={!!busy} onClick={show}>{busy === 'preview' ? 'Loading…' : canEdit ? 'Preview my changes' : 'Preview formatted email'}</Button>}
         {canEdit && <Button size="sm" disabled={!dirty || !!busy} onClick={save}>{busy === 'save' ? 'Saving…' : 'Save wording'}</Button>}
         {!dirty && !approvedByMe && <Button size="sm" variant="primary" icon="check" disabled={!!busy} onClick={approve}>{busy === 'approve' ? 'Approving…' : 'Approve this wording'}</Button>}
-        {!canEdit && approvedByMe && <span className="au-tag is-ok au-approved-badge">✓ You approved this wording</span>}
+        {canEdit && !dirty ? <RefreshButton title="Refresh preview" ariaLabel="Refresh preview" loading={!!busy} onClick={show}/> : (canEdit || !preview) && <Button size="sm" variant="ghost" disabled={!!busy} onClick={show}>{busy === 'preview' ? 'Loading…' : canEdit ? 'Preview my changes' : 'Preview formatted email'}</Button>}
         {canEdit && showTest && <Button size="sm" variant="ghost" icon="mail" disabled={!!busy} onClick={test}>Send a test to myself</Button>}
       </div>
       {canEdit && dirty && template.approved && <p className="au-muted">Saving changes clears the approval and switches off the automations that use this email until you approve again.</p>}
     </div>
+    {canEdit ? (
     <div className="au-preview">
       <div className="au-preview-header">
         <span className="au-preview-title">Patient Email Preview</span>
@@ -361,6 +361,12 @@ export function TemplateEditor({ template, toast, onChanged, approveAction = app
         </div>
       )}
     </div>
+    ) : preview && (
+      <details className="au-preview wording-preview" open>
+        <summary>Formatted email preview</summary>
+        <iframe title={`Preview: ${template.name}`} sandbox="allow-same-origin" srcDoc={preview.html}/>
+      </details>
+    )}
   </div>
 }
 
