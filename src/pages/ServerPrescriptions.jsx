@@ -22,7 +22,12 @@ const EMPTY_LINE = { medicine: '', dosage: '', frequency: '', duration: '', inst
 const OTHER_OPTION = '__other__'
 const LINE_FIELDS = Object.keys(EMPTY_LINE)
 const CUSTOM_FIELDS = ['medicine', 'dosage', 'frequency', 'duration']
-const selectedOption = (line, field, catalog) => !line[field] && !line[`${field}Other`] ? '' : line[`${field}Other`] ? OTHER_OPTION : catalog.includes(line[field]) && line.value_origins?.[field] === 'standard' ? line[field] : '__recorded__'
+const selectedOption = (line, field, catalog, supportsOrigins) => {
+  if (line[`${field}Other`]) return OTHER_OPTION
+  if (!line[field]) return ''
+  if (!supportsOrigins) return catalog.includes(line[field]) ? line[field] : OTHER_OPTION
+  return catalog.includes(line[field]) && line.value_origins?.[field] === 'standard' ? line[field] : '__recorded__'
+}
 const chooseOption = (line, field, option) => ({ ...line, [field]: option === OTHER_OPTION ? '' : option, [`${field}Other`]: option === OTHER_OPTION, value_origins: {...line.value_origins, [field]: option === OTHER_OPTION ? 'other' : option ? 'standard' : undefined} })
 const apiLine = (line, withOrigins = true) => {
   const values = Object.fromEntries(LINE_FIELDS.map(field => [field, (line[field] ?? '').trim()]))
@@ -331,10 +336,10 @@ function WriteCard({ selectionDetailsAvailable = false, clinicalContext, toast, 
       {(visit || draft) && <Notice tone="warning" title="Check allergies before prescribing">{meta.allergies?.length ? meta.allergies.join(', ') : meta.allergy_notice||'Allergy information is unavailable. Verify allergies with the Patient before prescribing.'}</Notice>}
       {lines.map((l, i) => {
         const medicineCatalog = [...new Set([...(meta.common_medicines || []), ...COMMON_MEDICINE_NAMES])]
-        const medSelect = selectedOption(l, 'medicine', medicineCatalog)
-        const dosageSelect = selectedOption(l, 'dosage', COMMON_DOSAGES)
-        const freqSelect = selectedOption(l, 'frequency', COMMON_FREQUENCIES)
-        const durationSelect = selectedOption(l, 'duration', COMMON_DURATIONS)
+        const medSelect = selectedOption(l, 'medicine', medicineCatalog, selectionDetailsAvailable)
+        const dosageSelect = selectedOption(l, 'dosage', COMMON_DOSAGES, selectionDetailsAvailable)
+        const freqSelect = selectedOption(l, 'frequency', COMMON_FREQUENCIES, selectionDetailsAvailable)
+        const durationSelect = selectedOption(l, 'duration', COMMON_DURATIONS, selectionDetailsAvailable)
 
         return <fieldset key={i} className="rx-line" disabled={!!busy || !!retryWrite.current}><legend>Medicine {i + 1}</legend>
           <Field label="Medicine" required>

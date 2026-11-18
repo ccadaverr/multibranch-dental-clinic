@@ -36,6 +36,7 @@ test('M19: Other selection retains custom values and sends only clinical line fi
   const page = read('src/pages/ServerPrescriptions.jsx')
   const names = ['OTHER_OPTION', 'EMPTY_LINE', 'LINE_FIELDS', 'CUSTOM_FIELDS', 'selectedOption', 'chooseOption', 'apiLine']
   const declarations = names.map(name => {
+    if (name === 'selectedOption') return page.slice(page.indexOf('const selectedOption ='), page.indexOf('const chooseOption ='))
     if (name === 'apiLine') return page.slice(page.indexOf('const apiLine ='), page.indexOf('const draftSnapshot ='))
     const line = page.match(new RegExp(`^const ${name} = .+$`, 'm'))?.[0]
     assert.ok(line, `${name} helper is present`)
@@ -62,7 +63,9 @@ test('M19: Other selection retains custom values and sends only clinical line fi
   line = chooseOption(line, 'medicine', '__other__')
   line = { ...line, medicine: 'Amoxicillin' }
   assert.equal(selectedOption(line, 'medicine', catalogs.medicine), '__other__', 'custom editing keeps Other selected even when text matches catalog')
-  assert.equal(selectedOption({ medicine: 'Previously saved custom' }, 'medicine', catalogs.medicine), '__recorded__', 'legacy value is retained without inventing Other provenance')
+  assert.equal(selectedOption({ medicine: 'Previously saved custom' }, 'medicine', catalogs.medicine, true), '__recorded__', 'legacy value is retained without inventing Other provenance')
+  assert.equal(selectedOption({ medicine: 'Previously saved custom' }, 'medicine', catalogs.medicine, false), '__other__', 'a stored custom value stays editable when the schema has no provenance')
+  assert.equal(selectedOption({ medicine: 'Amoxicillin' }, 'medicine', catalogs.medicine, false), 'Amoxicillin', 'a saved catalog match stays selectable when the schema has no provenance')
   for (const field of Object.keys(catalogs)) {
     assert.match(page, new RegExp(`set\\(i, '${field}', e\\.target\\.value, true\\)`), `${field}: custom input preserves Other selection`)
     assert.match(page, new RegExp(`choose\\(i, '${field}', val\\)`), `${field}: selector uses separate option state`)
