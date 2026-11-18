@@ -1,17 +1,17 @@
-# TEAM-UAT-01
+# Team UAT runbook
 
 Use one local synthetic environment per teammate. The UI-R01 source anchor is *4ee9ef51e5839a5f7876834fc414e904275aba9a*, descended from A16 *87f41696561872fc24d399901b25d16e5afa1dce*.
 
 ## Get the source
 
-This branch is published at the source anchor above. Use:
+Clone the feature branch to get the application and this runbook together. The UI-R01 application commit above is an ancestor of the documentation handoff.
 
 ~~~sh
 git clone --single-branch --branch feature/ui-r01-anti-slop https://github.com/ccadaverr/multibranch-dental-clinic.git dentalops-team-uat-01
 cd dentalops-team-uat-01
 git rev-parse HEAD
 git status --short --branch
-git merge-base --is-ancestor 87f41696561872fc24d399901b25d16e5afa1dce HEAD
+git merge-base --is-ancestor 4ee9ef51e5839a5f7876834fc414e904275aba9a HEAD
 ~~~
 
 For offline source recovery, the owner can provide the source-only *UI-R01-source.bundle*. Its recorded SHA-256 is *cdca0841c2c547bd0b7940f7e3d86fd2c1c5784a3d1ddf6b75649defd9418d96*. Verify it with PowerShell *Get-FileHash* or macOS *shasum -a 256*, then use the bundle path in place of the GitHub URL. The bundle clone was checked at the exact source anchor. If the remote later carries documentation commits, compare its exact SHA with the owner before testing.
@@ -102,15 +102,17 @@ Capture the same Patient, appointment, Visit, invoice and receipt references at 
 
 ## Verified on the fresh source
 
-- The fresh local clone and the GitHub clone resolve to the same commit and tree. The GitHub tracked-source archive was byte-identical to the archive used for the isolated backend and browser tests. Its SHA-256 was *252829a0d4e525f9df5a089d4c7437f96bfecbae002e91d8eb3af3c1a59104de3*.
+- The following results were recorded at the UI-R01 application commit listed above.
 - Windows with Docker Desktop installed clean frontend and backend dependencies. The empty test profile applied exactly 87 approved migrations. The replacement demo target reproduced that profile without additional migrations or A16 data.
 - Frontend suite passed 2,059 tests and skipped eight. All 17 smoke groups passed. Production build passed with the existing chunk-size warning. Runtime predefense reported 0 failures and five warnings. The mail worker and scheduler restarted and captured one local message without replaying a historical job.
 - Focused Laravel/PostgreSQL ran 52 tests and 660 assertions. There were 51 passes and one known Audit CORS assertion mismatch. Live responses preserved the exact Vite origin and exposed X-Document-Id. A request from a different origin received no matching allow-origin value.
-- A Patient created a Pay at clinic booking, APT-2026-000005, which Staff found without a linked Visit. It was left for its scheduled Manila date. Separate same-day appointment APT-2026-000006 went through authorized Check-In, populated Live Queue, FIFO Call, the linked Dentist Visit, issued prescription RX-2026-000001, Cash invoice INV-2026-000004 and Patient receipt RCT-2026-000003. Owner chart and CSV matched the PHP 1,000 settlement. Stale arrival produced no Visit. Replayed Call and issuance used their original commands.
+- Staff found a Patient-created Pay at clinic booking without a linked Visit. It was left for its scheduled Manila date. A separate same-day booking went through authorized Check-In, populated Live Queue, FIFO Call, the linked Dentist Visit, prescription issuance, Cash settlement and Patient receipt download. The Owner chart and CSV matched the settlement. Stale arrival produced no Visit. Replayed Call and issuance used their original commands.
 - Browser checks confirmed scoped Staff document upload and replay, exact Dentist Visit attachment, a byte-identical authorized Patient download, masked foreign document and record reads, and revoked access after sign-out. Staff scheduling passed separate approval and publication, response replay and effective-duty readback in a fresh session.
 - Seven UI-R01 screens passed browser checks at the six listed widths, for 42 captures. Coverage includes appointment and booking-payment columns, notifications with read/archive, Walk-in Admission with keyboard dismissal and return focus, Dentist Patient Records and Chart, Owner Audit Trail and exact read-only receipt details. The remaining manual checklist cases are for teammate UAT.
 
 ## Bug report template
+
+Send one report per issue to the team's agreed UAT channel. Use synthetic references and attach only redacted evidence.
 
 ~~~text
 Source SHA / platform / browser / viewport:

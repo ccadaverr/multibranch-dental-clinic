@@ -1,5 +1,9 @@
 # Multi-Branch Dental Clinic Operation System
 
+## START HERE for team testing
+
+Follow the [team UAT runbook](docs/TEAM_UAT_01.md) to start the full application on Windows with Docker Desktop, sign in with locally generated synthetic accounts, and report findings.
+
 ## Professor documentation (A9, 2026-10-30)
 
 Read the [academic reconciliation](docs/defense/ACADEMIC_DOCUMENT_RECONCILIATION.md) first. It connects the [Proposed Workflow](PROPOSED-WORKFLOW.md), [official 25-module inventory](docs/defense/MODULES_FINAL.md) and [primary academic paper](docs/defense/BPA_MODULES_UPDATED_OCT_22_2026.docx). The [revised A9 Word candidate](docs/defense/BPA_MODULES_UPDATED_OCT_22_2026_A9_REVIEW.docx) applies the approved qualifications and is **REVIEW REQUIRED**. The [original paper](docs/defense/BPA_MODULES_UPDATED_OCT_22_2026.docx) is unchanged; no visually validated replacement exists. Read the [candidate validation and human checks](docs/defense/BPA_A9_REVIEW_VALIDATION.md) and [section amendment](docs/defense/BPA_OCT22_A9_SECTION_AMENDMENT.md).
