@@ -1,0 +1,314 @@
+{
+  "base_j07_frozen": "e4a3536d4d9fefd128f9d57c67176a5f391ecc2f",
+  "implementation_head": "bbdefbb2a974eb54770d99156aef85d0e773a9d5",
+  "branch": "feature/jaztin-j08-unslop-20261118",
+  "publication": "Local only; no push, merge, deployment or Windows acceptance",
+  "upstream_unslop": {
+    "source": "https://github.com/heydamir/unslop",
+    "reviewed_commit": "620163eedb3529d9cd23a3994ed8d287d06f760d",
+    "author": "Damir Sokolovsky (@heydamir)",
+    "license": "CC BY 4.0",
+    "mode": "polish",
+    "optional_scripts_executed": false,
+    "installed_skill_sha256": "54e74d73afedb70dd556495f03a13ab7a5724b948cad20c3c7452684f3cb65e9"
+  },
+  "api_cors_schema_backend_changes": false,
+  "qa_partial_advanced": [
+    "GEN-08"
+  ],
+  "whole_qa_promotions": 0,
+  "authoritative_totals": {
+    "Complete": 25,
+    "Partial": 32,
+    "Blocked": 11,
+    "integrated_acceptances": 9
+  },
+  "files": [
+    {
+      "path": "docs/JAZTIN_J08_UNSLOP_20261118.md",
+      "bytes": 15840,
+      "sha256": "0ff76015eea01ce6f8c68dfb2c7df3f7c7225a5738e584c35b6574f6a1ffd2b2",
+      "lf_sha256": "0ff76015eea01ce6f8c68dfb2c7df3f7c7225a5738e584c35b6574f6a1ffd2b2"
+    },
+    {
+      "path": "src/pages/ServerPrescriptions.jsx",
+      "bytes": 44009,
+      "sha256": "93922e019a62144800c0ac4034a854ad4154fa6e3da28a45109904bcfa8e181e",
+      "lf_sha256": "93922e019a62144800c0ac4034a854ad4154fa6e3da28a45109904bcfa8e181e"
+    },
+    {
+      "path": "src/patient/care-experience.css",
+      "bytes": 9786,
+      "sha256": "601c975e762e010206d3d1052ec2f4a722e3a906e10fa0e606a8c04ffb2ee83b",
+      "lf_sha256": "601c975e762e010206d3d1052ec2f4a722e3a906e10fa0e606a8c04ffb2ee83b"
+    },
+    {
+      "path": "src/patient/pages/Family.jsx",
+      "bytes": 10799,
+      "sha256": "63e0ccd14e79c387d97e80ebf4086ab8bab1c404b2b17ee44dd4d83aa11f0aa6",
+      "lf_sha256": "63e0ccd14e79c387d97e80ebf4086ab8bab1c404b2b17ee44dd4d83aa11f0aa6"
+    },
+    {
+      "path": "src/patient/pages/Home.jsx",
+      "bytes": 6554,
+      "sha256": "7f83b3d4bcb4185b4774dcc3175de34e85b3fccdc098e7a2d2aff1bee1046f55",
+      "lf_sha256": "7f83b3d4bcb4185b4774dcc3175de34e85b3fccdc098e7a2d2aff1bee1046f55"
+    },
+    {
+      "path": "src/patient/pages/Prescriptions.jsx",
+      "bytes": 5256,
+      "sha256": "1c4695cd3feaa6253db507e08b2412893a61aef76848e126ca53c859f5722ea5",
+      "lf_sha256": "1c4695cd3feaa6253db507e08b2412893a61aef76848e126ca53c859f5722ea5"
+    },
+    {
+      "path": "src/prescription-experience.css",
+      "bytes": 1378,
+      "sha256": "a5d7837ab8e5a5c6d2834cee756b251b3787414b72dd9726260d91c9dfb8a9f9",
+      "lf_sha256": "a5d7837ab8e5a5c6d2834cee756b251b3787414b72dd9726260d91c9dfb8a9f9"
+    },
+    {
+      "path": "tests/j07-clinical-prescription.browser.mjs",
+      "bytes": 13429,
+      "sha256": "9b5079a112bc91caa583dfe3a1fa7dd1a0da77d3f97a00dd8f71dd6ed84a169f",
+      "lf_sha256": "9b5079a112bc91caa583dfe3a1fa7dd1a0da77d3f97a00dd8f71dd6ed84a169f"
+    },
+    {
+      "path": "tests/j08-clinical-polish.browser.mjs",
+      "bytes": 7777,
+      "sha256": "a8ca07b8d39f0545958b3b8cbc58868994712eb47ef3d8caa3a275d31a93baec",
+      "lf_sha256": "a8ca07b8d39f0545958b3b8cbc58868994712eb47ef3d8caa3a275d31a93baec"
+    },
+    {
+      "path": "tests/local-prescription-search.browser.mjs",
+      "bytes": 12458,
+      "sha256": "ca5c81d663cd6f08c535744cdb8ae52b73100174e7830a6c732495271418a52b",
+      "lf_sha256": "ca5c81d663cd6f08c535744cdb8ae52b73100174e7830a6c732495271418a52b"
+    },
+    {
+      "path": "tests/local-prescription.browser.mjs",
+      "bytes": 11421,
+      "sha256": "def3ad3f1885c97f6c600f3584743afac6492c1725dfa340aeca57dd871f80ca",
+      "lf_sha256": "def3ad3f1885c97f6c600f3584743afac6492c1725dfa340aeca57dd871f80ca"
+    },
+    {
+      "path": "tests/m19-prescriptions.test.js",
+      "bytes": 6462,
+      "sha256": "a9ff028676d3b0c2119a1bfad6a1a006ffc9269f47df2701f78e5788a079d41f",
+      "lf_sha256": "a9ff028676d3b0c2119a1bfad6a1a006ffc9269f47df2701f78e5788a079d41f"
+    }
+  ],
+  "excluded_self": "docs/JAZTIN_J08_MANIFEST_20261118.json",
+  "protected_unchanged": [
+    {
+      "path": "src/pages/DentalChart.jsx",
+      "sha256": "f3327d36b304ede592c610c83791cee13100b152e474ce5c9f1868f1b6ec2729"
+    },
+    {
+      "path": "src/chart-read.js",
+      "sha256": "67222a2a1ed69b2154790d07f145b573dcb10eb954d05145db7419288f9644b2"
+    },
+    {
+      "path": "src/chart-command.js",
+      "sha256": "455282f15ddf19693d29d0d8ada7181b245fd9a89c171b795640a31664cfebe0"
+    },
+    {
+      "path": "src/api-client.js",
+      "sha256": "4c31bf84c7a4c133882bbfb707b7862c74adfefc55b1bdbad1801308d288f553"
+    },
+    {
+      "path": "backend/config/cors.php",
+      "sha256": "56936f6ead0943ae67e9a1ede185da33675a990e7d17cc673d9cad11abe0d925"
+    },
+    {
+      "path": "src/components.jsx",
+      "sha256": "81f6d1f6c2d8f835bb1dd0451abfb5371a7104a6d61d022259377ed49f13efaa"
+    },
+    {
+      "path": "src/patient/Portal.jsx",
+      "sha256": "778214da9555b3d525e0cb09c63730ee9a3540945b801b536beee0c1dab724d9"
+    },
+    {
+      "path": "src/patient/pages/Billing.jsx",
+      "sha256": "05584025206e4fb68797b0fb4e03dca75f189935077a674015604e4310a620ce"
+    },
+    {
+      "path": "src/pages/ServerBilling.jsx",
+      "sha256": "c0566c4e95abf5b95a7cb75100cd3098705b3e0d46ac86edb69757762be44c33"
+    },
+    {
+      "path": "src/components/odontogram/toothShapes.js",
+      "sha256": "61359f0b76eaf42839e60cac51e67716acc70e10469f3878304ab98e80997ab7"
+    },
+    {
+      "path": "docs/INTEGRATION_QA_LEDGER_20261117.json",
+      "sha256": "9e3650a343474fc165b1bffe0d6b0ad1907451ddc83962d3506b1c845f5388e9"
+    }
+  ],
+  "private_evidence": [
+    {
+      "path": "/private/tmp/j08-focused.log",
+      "bytes": 24333,
+      "sha256": "dccf27e1be122494a7d1d2ece7f1c871481e56936ff4e637c0f5cadbbd2c3425",
+      "lf_sha256": "dccf27e1be122494a7d1d2ece7f1c871481e56936ff4e637c0f5cadbbd2c3425"
+    },
+    {
+      "path": "/private/tmp/j08-copy-focused.log",
+      "bytes": 3432,
+      "sha256": "5961530281de90f710f7ba569c2358346bcc859c919b5c0e3c55961c4bf5d6f7",
+      "lf_sha256": "5961530281de90f710f7ba569c2358346bcc859c919b5c0e3c55961c4bf5d6f7"
+    },
+    {
+      "path": "/private/tmp/j08-frontend-accepted.log",
+      "bytes": 465212,
+      "sha256": "f1fde32002fb1b5221673abc16fa0d217d84d443cc4b0170888e33768a4b6006",
+      "lf_sha256": "f1fde32002fb1b5221673abc16fa0d217d84d443cc4b0170888e33768a4b6006"
+    },
+    {
+      "path": "/private/tmp/j08-backend.log",
+      "bytes": 432,
+      "sha256": "63d2cea2c5c9e94eb38c35bf3780e99ee8e234a27ac97094814b66d4c6674a6f",
+      "lf_sha256": "63d2cea2c5c9e94eb38c35bf3780e99ee8e234a27ac97094814b66d4c6674a6f"
+    },
+    {
+      "path": "/private/tmp/j08-backend-unit-final.log",
+      "bytes": 1020,
+      "sha256": "3f9663380bba5b7b9445276ea2d1bcb17e45b84a65c00d1f109585eace1a7c24",
+      "lf_sha256": "3f9663380bba5b7b9445276ea2d1bcb17e45b84a65c00d1f109585eace1a7c24"
+    },
+    {
+      "path": "/private/tmp/j08-baseline-clinical.log",
+      "bytes": 890,
+      "sha256": "38ec5ca0716188eff6f869c389a4830079b724d8d7bba6bdd53931dd18659b33",
+      "lf_sha256": "38ec5ca0716188eff6f869c389a4830079b724d8d7bba6bdd53931dd18659b33"
+    },
+    {
+      "path": "/private/tmp/j08-baseline-prescription.log",
+      "bytes": 557,
+      "sha256": "20a98e76c2db5c5881460e8b967397e59f96f2e288eb8a272b69f8ffea7ec22e",
+      "lf_sha256": "20a98e76c2db5c5881460e8b967397e59f96f2e288eb8a272b69f8ffea7ec22e"
+    },
+    {
+      "path": "/private/tmp/j08-family-baseline.log",
+      "bytes": 406,
+      "sha256": "92bda240c82d5e7622453b7799fb98c32717f832d9fbd57e58b988ea51ce8da7",
+      "lf_sha256": "92bda240c82d5e7622453b7799fb98c32717f832d9fbd57e58b988ea51ce8da7"
+    },
+    {
+      "path": "/private/tmp/j08-before-final.log",
+      "bytes": 122,
+      "sha256": "95bc387c116bc85cf5644f45e74f86927fbad05d1202c46a2be74f2f558cd4f5",
+      "lf_sha256": "95bc387c116bc85cf5644f45e74f86927fbad05d1202c46a2be74f2f558cd4f5"
+    },
+    {
+      "path": "/private/tmp/j08-after-accepted.log",
+      "bytes": 121,
+      "sha256": "d30069775767fb16b2afa5a7926848cc8cdf3d728f8aa2a3230d6b4bf3c302fc",
+      "lf_sha256": "d30069775767fb16b2afa5a7926848cc8cdf3d728f8aa2a3230d6b4bf3c302fc"
+    },
+    {
+      "path": "/private/tmp/j08-prescription-lifecycle-accepted.log",
+      "bytes": 551,
+      "sha256": "93284fa8d08b3c4bbb453b0673ca3d4838097de766707f4f010cd3e4ff249e3d",
+      "lf_sha256": "93284fa8d08b3c4bbb453b0673ca3d4838097de766707f4f010cd3e4ff249e3d"
+    },
+    {
+      "path": "/private/tmp/j08-smoke-accepted.log",
+      "bytes": 2893,
+      "sha256": "c3769ed471bcdf2c2d0a2e72342343d138d4c1dcc5860fda0440d406066b331e",
+      "lf_sha256": "c3769ed471bcdf2c2d0a2e72342343d138d4c1dcc5860fda0440d406066b331e"
+    },
+    {
+      "path": "/private/tmp/j08-build-accepted.log",
+      "bytes": 7013,
+      "sha256": "45e0e3645e175d315961d32fb2973495c2bc37d799fa4aa7c5f57454715f32fc",
+      "lf_sha256": "45e0e3645e175d315961d32fb2973495c2bc37d799fa4aa7c5f57454715f32fc"
+    },
+    {
+      "path": "/private/tmp/j08-predefense-accepted.log",
+      "bytes": 2603,
+      "sha256": "bd2d316d3685cdc19f7bec77cd1eff3b03c665709bcc7932afe2cf316a2705f3",
+      "lf_sha256": "bd2d316d3685cdc19f7bec77cd1eff3b03c665709bcc7932afe2cf316a2705f3"
+    },
+    {
+      "path": "/private/tmp/jaztin-j08-20261118/polish-browser/before/results.json",
+      "bytes": 5092,
+      "sha256": "06c29a9b483caf9b86f8dab860f7f4ea4cab3a10c4abeaab0c193543dd9c1ab9",
+      "lf_sha256": "06c29a9b483caf9b86f8dab860f7f4ea4cab3a10c4abeaab0c193543dd9c1ab9"
+    },
+    {
+      "path": "/private/tmp/jaztin-j08-20261118/polish-browser/after/results.json",
+      "bytes": 5124,
+      "sha256": "2c9c01568b49cdc11d00ff67ff448047b96b58ea7a23645e52475e745e5b42c7",
+      "lf_sha256": "2c9c01568b49cdc11d00ff67ff448047b96b58ea7a23645e52475e745e5b42c7"
+    },
+    {
+      "path": "/private/tmp/jaztin-j08-20261118/lifecycle-accepted-browser/journey.json",
+      "bytes": 4657,
+      "sha256": "8752afa1b8c56a1d6766fc0c583f6f7e10818b5d0d2644d02ccd4fa42a97b5cd",
+      "lf_sha256": "8752afa1b8c56a1d6766fc0c583f6f7e10818b5d0d2644d02ccd4fa42a97b5cd"
+    }
+  ],
+  "test_results": {
+    "focused_frontend_passed": 103,
+    "frontend": {
+      "total": 2041,
+      "passed": 2033,
+      "skipped": 8,
+      "failed": 0
+    },
+    "postgres": {
+      "tests": 95,
+      "assertions": 2040,
+      "passed": true
+    },
+    "backend_unit": {
+      "tests": 252,
+      "assertions": 1193,
+      "notices": 30,
+      "passed": true
+    },
+    "smoke_groups": 17,
+    "build": "passed; existing bundle-size warning",
+    "browser_before_after": {
+      "captures_each": 52,
+      "widths": [
+        375,
+        390,
+        430,
+        768,
+        1024,
+        1440
+      ],
+      "accepted": true
+    },
+    "prescription_lifecycle": "seven groups accepted in complete final run",
+    "predefense": {
+      "failures": 6,
+      "warnings": 6,
+      "passed": false,
+      "last_failure": "Intentionally unprocessed synthetic outbox email aged beyond ten minutes"
+    }
+  },
+  "reproduction": {
+    "prerequisites": "New independently owned synthetic target only; exact reviewed held-migration exclusions. DatabaseSeeder then visit-fixture. No external services/workers. J04 workspace journal and J07 clinical journal are required; existing Family acceptance supplies a linked dependent. Before mode must run against frozen J07 source with the J08 harness available.",
+    "sequence": [
+      "tests/j04-clinical-workspace.browser.mjs (workspace-browser evidence)",
+      "tests/j07-clinical-prescription.browser.mjs (clinical-browser evidence)",
+      "tests/j02-family.browser.mjs (family-browser evidence)",
+      "J08_PHASE=before node tests/j08-clinical-polish.browser.mjs on frozen J07",
+      "J08_PHASE=after node tests/j08-clinical-polish.browser.mjs on J08",
+      "tests/local-prescription.browser.mjs with fresh lifecycle evidence",
+      "npm test",
+      "npm run test:smoke",
+      "npm run build",
+      "bash scripts/predefense-check.sh --local-only (verified target environment)"
+    ],
+    "browser_env_names": [
+      "DENTALOPS_LOCAL_TARGET",
+      "PLAYWRIGHT_MODULE",
+      "LOCAL_SYSTEM_EVIDENCE",
+      "LOCAL_SYSTEM_BROWSER_TIMEOUT_MS"
+    ]
+  },
+  "integration": "Apply J08 UI-only delta after A13 review. Do not import pre-A13 chart authorization or overwrite A12. Merge ServerPrescriptions.jsx semantically with new scoped CSS; no API or migrations required. Preserve frozen J07 separately."
+}
