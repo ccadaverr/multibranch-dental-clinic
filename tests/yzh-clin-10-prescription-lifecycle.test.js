@@ -2,6 +2,9 @@
 // Executes actual pre-JSX WriteCard controller code with hook cells. This is
 // synthetic controller coverage, not React/browser/authenticated acceptance.
 import { runPrescriptionWrite } from '../src/prescription-command.js'
+import {readPrescriptionVisitOptions} from '../src/prescription-visit-read.js'
+import {boundedClinicalRead} from '../src/clinical-history.js'
+import {prescriptionContextMatches} from '../src/prescription-readback.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {readFileSync} from 'node:fs'
@@ -17,7 +20,7 @@ const wire = v => JSON.parse(JSON.stringify(v))
 const deferred = () => {let resolve; const promise = new Promise(r => {resolve = r}); return {promise, resolve}}
 const accepted = (id = 'rx-A') => ({ok: true, data: {id, revision: 1, status: 'Draft', can_edit: true}})
 
-function editor({respond = async () => accepted(), issue = async () => ({ok: true, data: {id: 'rx-A', number: 'RX-2026-000001', status: 'Issued'}}), visits = async () => ({ok: true, data: []})} = {}) {
+function editor({respond = async () => accepted(), issue = async () => ({ok: true, data: {id: 'rx-A', number: 'RX-2026-000001', status: 'Issued'}}), visits = async () => ({ok: true, data: []}), context = {visitId:'visit-A',patientPublicId:'patient-A',branchId:'branch-A'}} = {}) {
   const cells = [], pending = [], calls = [], feedback = [], done = [], protections = []
   let cursor = 0, active = true, value, authGeneration = 1, knownRow
   const enrich = (r,body) => {if(r.ok)knownRow={patient:{id:"patient-A"},visit:"visit-A",branch:"Synthetic branch",lines:body.lines,note:body.note,...r.data};return r.ok?{...r,data:knownRow}:r}
@@ -41,12 +44,13 @@ function editor({respond = async () => accepted(), issue = async () => ({ok: tru
     runPrescriptionWrite:(request,api,allowed)=>runPrescriptionWrite(Object.assign(request,{patientId:request.patientId||'patient-A',branch:request.branch||'Synthetic branch'}),api,allowed),
     prescription:async()=>({ok:true,data:knownRow}),
     useClinicalProtection: (dirty, busy) => protections.push({dirty, busy}),
-    prescriptionVisits: visits,
+    prescriptionVisits: visits,readPrescriptionVisitOptions,boundedClinicalRead,prescriptionContextMatches,
+    getVisit:async()=>({ok:true,data:{id:'visit-A',revision:1,clinic_date:'2026-11-18',status:'In Treatment',patient:{id:'patient-A',code:'PAT-A',name:'Synthetic Patient'},branch:{id:'branch-A',name:'Synthetic branch'}}}),
     createPrescription: body => {calls.push({command: 'create', body: wire(body)}); return Promise.resolve(respond(body)).then(r=>enrich(r,body))},
     updatePrescription: (id, body) => {calls.push({command: 'update', id, body: wire(body)}); return Promise.resolve(respond(body)).then(r=>enrich(r,body))},
     issuePrescription: (id, revision) => {calls.push({command: 'issue', id, revision}); return Promise.resolve(issue(id, revision)).then(r=>{if(r.ok)knownRow={...knownRow,...r.data,revision:r.data.revision??revision+1,can_edit:false,can_void:true,issued_at:'2026-11-15T10:00:00+08:00'};return r.ok?{...r,data:knownRow}:r})},
   })
-  const props = {getAuthGeneration:()=>authGeneration, context: {visitId: 'visit-A'}, editing: null, isCurrent: () => active, leaveRef: {current: null}, toast: (...args) => feedback.push(args), onDone: id => done.push(id), onEdited() {}}
+  const props = {getAuthGeneration:()=>authGeneration, context: context, editing: null, isCurrent: () => active, leaveRef: {current: null}, toast: (...args) => feedback.push(args), onDone: id => done.push(id), onEdited() {}}
   const render = () => {cursor = 0; value = component(props); for (const run of pending.splice(0)) run(); return value}
   render()
   const fill = () => {value.setLines([{medicine: 'Synthetic medicine', dosage: 'Synthetic dosage', frequency: '', duration: '', instructions: 'Synthetic instructions'}]); value.setNote('Submitted note'); render()}
@@ -113,15 +117,15 @@ test('issuance success proves issuance, without asserting notification delivery'
 
 test('failed Visit retrieval becomes an error and supports retry to an empty list', async () => {
   let attempts = 0
-  const e = editor({visits: async () => ++attempts === 1 ? {ok: false, message: 'Synthetic outage'} : {ok: true, data: []}})
+  const e = editor({context:null,visits: async () => ++attempts === 1 ? {ok: false, message: 'Synthetic outage'} : {ok: true, data: []}})
   // The VM awaits a host Promise: one host microtask does not settle its
   // cross-realm continuation. Yield to the next event-loop turn to drain the
   // mock's microtasks, with no elapsed-time sleep or production-source adapter.
-  assert.equal(attempts, 1); assert.equal(e.value.visits, null)
-  await setImmediate(); e.render(); assert.equal(e.value.visitError, 'Synthetic outage')
+  assert.equal(e.value.visits, null)
+  await setImmediate(); e.render(); assert.equal(attempts, 1); assert.equal(e.value.visitError, 'Synthetic outage')
   e.value.setVisitAttempt(a => a + 1); e.render()
-  assert.equal(attempts, 2); assert.equal(e.value.visits, null)
-  await setImmediate(); e.render()
+  assert.equal(e.value.visits, null)
+  await setImmediate(); e.render(); assert.equal(attempts, 2)
   assert.equal(e.value.visitError, ''); assert.deepEqual(wire(e.value.visits), []); e.unmount()
 })
 

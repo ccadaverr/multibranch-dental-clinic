@@ -30,6 +30,7 @@ legacy = replaceOnce(legacy, 'function editor({respond =', 'function editor({get
 // that default, while injecting the real store reader for CLIN-11 owner cases.
 legacy = replaceOnce(legacy, 'getAuthGeneration:()=>authGeneration, context:', 'getAuthGeneration:getAuthGeneration === undefined ? (()=>authGeneration) : getAuthGeneration, context:')
 legacy = replaceOnce(legacy, '../src/prescription-command.js', new URL('../src/prescription-command.js', import.meta.url).href)
+for(const path of ['prescription-visit-read.js','clinical-history.js','prescription-readback.js'])legacy=replaceOnce(legacy,'../src/'+path,new URL('../src/'+path,import.meta.url).href)
 const {editor} = await import('data:text/javascript;base64,' + Buffer.from(legacy + '\nexport {editor}\n').toString('base64'))
 
 const fixture = () => ({

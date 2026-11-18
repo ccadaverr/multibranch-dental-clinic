@@ -3,9 +3,12 @@ import { useClinicalProtection } from '../clinical-navigation.jsx'
 import { clinicalSessionKey, resolveEncounter } from '../encounter.js'
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Button, Card, ConfirmDialog, Field, FilterBar, Modal, Notice, PageHeader, RefreshButton } from '../components.jsx'
-import { createPrescription, downloadPrescriptionPdf, issuePrescription, listPrescriptions, prescription, prescriptionVisits, savePrescriptionLicense, updatePrescription, voidPrescription } from '../api-client.js'
+import { createPrescription, downloadPrescriptionPdf, issuePrescription, listPrescriptions, prescription, prescriptionVisits, getVisit, savePrescriptionLicense, updatePrescription, voidPrescription } from '../api-client.js'
 import { commandKey } from '../appointments-api.js'
 import { readPrescriptionPage } from '../prescription-list.js'
+import {readPrescriptionVisitOptions} from '../prescription-visit-read.js'
+import {prescriptionContextMatches} from '../prescription-readback.js'
+import {boundedClinicalRead} from '../clinical-history.js'
 import { runPrescriptionWrite } from '../prescription-command.js'
 import '../dentist-clinical.css'
 import '../clinical-care-experience.css'
@@ -56,6 +59,7 @@ export function PrescriptionsServerPage(props) {
 }
 function PrescriptionsBody({ store, role, context, setPage }) {
   const toast = store?.toast || (() => {})
+  const expectedContext=context?.visitId?{visitId:context.visitId,patientId:context.patientPublicId||context.patientId,branchId:context.branchId}:null
   const [result, setResult] = useState(null), [openId, setOpenId] = useState(null), [writing, setWriting] = useState(null)
   const [query, setQuery] = useState(''), [statusFilter, setStatusFilter] = useState('all'), [page, setPageNumber] = useState(1)
   const changeQuery = value => { setQuery(value); setPageNumber(1) }
@@ -149,7 +153,7 @@ function PrescriptionsBody({ store, role, context, setPage }) {
         <Button variant="soft" disabled={loading || page>=meta.last_page} onClick={()=>setPageNumber(p=>p+1)}>Older prescriptions</Button>
       </nav>}
     </Card>
-    {openId && <PrescriptionDialog id={openId} clinicalContext={store.session?.clinicalContext} getAuthGeneration={store.getAuthGeneration} toast={toast} onClose={() => setOpenId(null)} onChanged={load} onEdit={dentist ? id => selectDraft(id, true) : undefined}/>}
+    {openId && <PrescriptionDialog id={openId} expectedContext={expectedContext} clinicalContext={store.session?.clinicalContext} getAuthGeneration={store.getAuthGeneration} toast={toast} onClose={() => setOpenId(null)} onChanged={load} onEdit={dentist ? id => selectDraft(id, true) : undefined}/>}
   </div>
 }
 
@@ -163,7 +167,7 @@ function WriteCard({ clinicalContext, toast, onDone, editing, onEdited, context,
   const [lines, renderLines] = useState([{ ...EMPTY_LINE }]), [note, renderNote] = useState(''), [draft, setDraft] = useState(null)
   const [err, setErr] = useState(''), [busy, setBusy] = useState(''), [confirmIssue, setConfirmIssue] = useState(false)
   const [leaving, setLeaving] = useState(false)
-  const [visitError, setVisitError] = useState(''), [visitAttempt, setVisitAttempt] = useState(0)
+  const [visitError, setVisitError] = useState(''), [visitAttempt, setVisitAttempt] = useState(0),[draftAttempt,setDraftAttempt]=useState(0)
   const form = useRef({lines, note}), cleanForm = useRef(draftSnapshot(form.current))
   useClinicalProtection(draftSnapshot(form.current) !== cleanForm.current, !!busy)
   const replaceForm = (nextLines, nextNote) => {
@@ -204,14 +208,12 @@ function WriteCard({ clinicalContext, toast, onDone, editing, onEdited, context,
   useEffect(() => {
     let live = true
     setVisitError(''); setVisits(null)
+    const auth=getAuthGeneration?.(),owns=()=>live&&mounted.current&&isCurrent()&&(!getAuthGeneration||getAuthGeneration()===auth)
     const loadVisits = async () => {
-      let r
-      try { r = await prescriptionVisits() }
-      catch { r = {ok: false, message: 'Visits could not be loaded. Try again.'} }
-      if (!live) return
-      if (!r.ok) { setVisitError(firstError(r)); return }
-      setVisits(context?.visitId ? r.data.filter(v => v.id === context.visitId && v.patient?.id === (context.patientPublicId || context.patientId)) : r.data)
-      setMeta(r.meta || {})
+      const r=await readPrescriptionVisitOptions(prescriptionVisits,getVisit,context,owns)
+      if(!owns())return
+      if(!r?.ok){setVisitError(firstError(r||{}));return}
+      setVisits(r.data);setMeta(r.meta||{})
     }
     loadVisits()
     return () => { live = false }
@@ -219,13 +221,15 @@ function WriteCard({ clinicalContext, toast, onDone, editing, onEdited, context,
   useEffect(() => {
     if (!editing) return
     let live=true
-    prescription(editing).then(r => {
-      if(!live)return
-      if (r.ok && r.data.id===editing && r.data.status==='Draft' && r.data.can_edit) { setDraft(r.data); setVisitId(r.data.visit); replaceForm(r.data.lines.map(l => ({ ...EMPTY_LINE, ...l })), r.data.note || '') }
+    const auth=getAuthGeneration?.()
+    boundedClinicalRead(()=>prescription(editing)).then(r => {
+      if(!live||!mounted.current||!isCurrent()||getAuthGeneration&&getAuthGeneration()!==auth)return
+      const expected=context?.visitId?{visitId:context.visitId,patientId:context.patientPublicId||context.patientId,branchId:context.branchId}:null
+      if (r.ok && (!expected||prescriptionContextMatches(r.data,expected)) && r.data.id===editing && r.data.status==='Draft' && r.data.can_edit) { setDraft(r.data); setVisitId(r.data.visit); replaceForm(r.data.lines.map(l => ({ ...EMPTY_LINE, ...l })), r.data.note || '') }
       else setErr(r.ok ? 'This prescription is no longer an editable draft.' : firstError(r))
     })
     return()=>{live=false}
-  }, [editing])
+  }, [editing,draftAttempt])
   const visit = (visits || []).find(v => v.id === visitId)
   const set = (i, k, v, custom = false) => setLines(ls => ls.map((l, j) => j === i ? { ...l, [k]: v, ...(custom ? { [`${k}Other`]: true } : {}) } : l))
   const choose = (i, field, option) => setLines(ls => ls.map((l, j) => j === i ? chooseOption(l, field, option) : l))
@@ -243,7 +247,7 @@ function WriteCard({ clinicalContext, toast, onDone, editing, onEdited, context,
       setVisitId(id); replaceForm([{ ...EMPTY_LINE }], ''); setErr(''); setBusy(''); setConfirmIssue(false)
     })
   }
-  const reset = () => { visitGeneration.current++; saving.current = null; retryWrite.current = null; setDraft(null); setVisitId(''); replaceForm([{ ...EMPTY_LINE }], ''); onEdited() }
+  const reset = () => { visitGeneration.current++; saving.current = null; retryWrite.current = null; setDraft(null); setVisitId(context?.visitId||''); replaceForm([{ ...EMPTY_LINE }], ''); onEdited() }
   const prepareIssue = () => {
     issueReview.current = {visitId, revision:draft?.revision || null, id:draft?.id || null, form:draftSnapshot(form.current)}
     setConfirmIssue(true)
@@ -285,14 +289,15 @@ function WriteCard({ clinicalContext, toast, onDone, editing, onEdited, context,
     if (pendingLeave.current) pendingCompletion.current = complete
     else complete()
   }
-  if(editing&&!draft)return <Card title="Open prescription draft">{err?<Notice tone="warning" title="Draft unavailable">{err}</Notice>:<p role="status">Loading prescription draft…</p>}<Button variant="ghost" onClick={onEdited}>Cancel</Button></Card>
-  return <Card title={draft ? `Edit draft for ${draft.patient?.name}` : 'Write a prescription'}>
+  if(editing&&!draft)return <Card title="Open prescription draft">{err?<Notice tone="warning" title="Draft unavailable">{err}</Notice>:<p role="status">Loading prescription draft…</p>}<Button variant="ghost" onClick={onEdited}>Cancel</Button>{err&&<Button variant="soft" onClick={()=>{setErr('');setDraftAttempt(n=>n+1)}}>Retry draft</Button>}</Card>
+  return <Card title={draft ? `Edit draft for ${draft.patient?.name}` : undefined}>
     <ConfirmDialog open={leaving} title="Leave this prescription?" cancelLabel="Stay" confirmLabel="Discard changes and continue" onCancel={stay} onConfirm={discard}>
       <p>Unsaved medicines and notes for {draft?.patient?.name || visit?.patient.name || 'this prescription'} will be discarded. A submitted request continues for its original Visit; its result is shown here only if you stay.</p>
     </ConfirmDialog>
     {visitError ? <Notice tone="warning" title="Visits unavailable"><p role="alert">{visitError}</p><Button variant="soft" onClick={() => setVisitAttempt(a => a + 1)}>Retry loading visits</Button></Notice> : !visits ? <p className="au-muted" role="status">Loading visits…</p> : <form className="au-form" onSubmit={e => { e.preventDefault(); save(false) }}>
       {!visits.length && <p role="status">No eligible visits found.</p>}
-      {!draft && <Field label="Visit" required hint="Visits at your branches in the last 30 days."><select value={visitId} onChange={e => changeVisit(e.target.value)} required>
+      {context?.visitId&&(visit||draft)&&<section className="rx-encounter-identity" aria-label="Prescription Patient and Visit"><b>{draft?.patient?.name||visit?.patient.name}</b><p>Patient {draft?.patient?.id||visit?.patient.id} · Visit {context.visitId}</p><p>{draft?.branch||visit?.branch} · {draft?'Draft revision '+draft.revision:visit?.status}</p></section>}
+      {!draft && <Field label="Visit" required hint={context?.visitId?'Verified encounter selection.':'Recent Visit suggestions at your branches (up to 100).'}><select disabled={!!context?.visitId} value={visitId} onChange={e => changeVisit(e.target.value)} required>
         <option value="">Choose a visit…</option>{visits.map(v => <option key={v.id} value={v.id}>{day(v.date)} · {v.patient.name}{v.patient.age !== null ? ` (${v.patient.age})` : ''} · {v.branch}</option>)}</select></Field>}
       {(visit || draft) && <Notice tone="warning" title="Check allergies before prescribing">{meta.allergies?.length ? meta.allergies.join(', ') : meta.allergy_notice}</Notice>}
       <datalist id="rx-common">{[...new Set([...(meta.common_medicines || []), ...COMMON_MEDICINE_NAMES])].map(m => <option key={m} value={m}/>)}</datalist>
