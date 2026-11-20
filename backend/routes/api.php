@@ -96,6 +96,9 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
         Route::post('/{invoice}/discount', [BillingController::class, 'discount'])->middleware('role:staff');
         Route::post('/{invoice}/issue', [BillingController::class, 'issue'])->middleware('role:staff');
         Route::post('/{invoice}/payment', [BillingController::class, 'pay'])->middleware('role:staff');
+        Route::post('/{invoice}/close-checkout', [BillingController::class, 'closeCheckout'])->middleware(['role:staff', 'throttle:6,1']);
+        Route::post('/{invoice}/cash-correction-review', [BillingController::class, 'requestCashCorrection'])->middleware(['role:staff', 'throttle:10,1']);
+        Route::post('/{invoice}/cash-correction-acknowledgement', [BillingController::class, 'acknowledgeCashCorrection'])->middleware(['role:owner', 'throttle:10,1']);
         Route::post('/{invoice}/paymongo-checkout', [PayMongoController::class, 'checkout']);
         Route::get('/{invoice}/payment-options', [PayMongoController::class, 'options']);
         // The emailed PDFs, for download (own invoices only for a Patient), and rate-limited receipt email resend.

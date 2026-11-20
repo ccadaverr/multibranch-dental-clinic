@@ -451,7 +451,16 @@ export function hmoCaseCommand(id, name, payload, key, beforeDispatch) { return 
 // M11 server-authoritative billing. These calls never write invoices, payments or receipts to browser storage.
 // Cursor-paged (newest first): params may carry per_page (1-100), cursor (the previous page's meta.next_cursor), status.
 export function listBillingInvoices(params, signal) { return request(`/api/invoices${query(params)}`, signal ? { signal } : {}) }
-export function getBillingInvoice(id) { return request(`/api/invoices/${encodeURIComponent(id)}`) }
+export function getBillingInvoice(id, signal) { return request(`/api/invoices/${encodeURIComponent(id)}`, signal ? { signal } : {}) }
+export function requestCashCorrection(id, payload, key, beforeDispatch) {
+  return command(`/api/invoices/${encodeURIComponent(id)}/cash-correction-review`, payload, key, beforeDispatch)
+}
+export function acknowledgeCashCorrection(id, payload, key, beforeDispatch) {
+  return command(`/api/invoices/${encodeURIComponent(id)}/cash-correction-acknowledgement`, payload, key, beforeDispatch)
+}
+export function closeInvoiceCheckout(id, payload, key, beforeDispatch) {
+  return command(`/api/invoices/${encodeURIComponent(id)}/close-checkout`, payload, key, beforeDispatch)
+}
 export function listBillingTreatments(signal) { return request('/api/billing/treatments', signal ? { signal } : {}) }
 export function createBillingDraft(treatmentId, key, beforeDispatch) { return command(`/api/invoices/from-treatment/${encodeURIComponent(treatmentId)}`, {}, key, beforeDispatch) }
 export function reviewBillingInvoice(id, payload, key, beforeDispatch) { return command(`/api/invoices/${encodeURIComponent(id)}/review`, payload, key, beforeDispatch) }

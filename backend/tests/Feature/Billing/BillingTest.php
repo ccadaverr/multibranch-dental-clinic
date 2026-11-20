@@ -71,6 +71,66 @@ class BillingTest extends TestCase
         $this->assertSame(1, InvoiceHistory::where('event', 'invoice.created')->count());
     }
 
+    public function test_cash_review_and_owner_acknowledgement_keep_the_original_financial_evidence(): void
+    {
+        $this->price();
+        $invoice = $this->createInvoice($this->completed())->json('data.id');
+        $path = "/api/invoices/{$invoice}";
+        $review = "{$path}/cash-correction-review";
+        $ack = "{$path}/cash-correction-acknowledgement";
+        $this->postJson("{$path}/review", ['expected_revision' => 1], ['Idempotency-Key' => $this->key()])->assertOk();
+        $this->postJson("{$path}/issue", ['expected_revision' => 2], ['Idempotency-Key' => $this->key()])->assertOk();
+        $paid = $this->postJson("{$path}/payment", ['expected_revision' => 3, 'method' => 'Cash', 'amount' => '251.00'],
+            ['Idempotency-Key' => $this->key()])->assertOk()->assertJsonPath('data.cash_review_available', true)->json('data');
+
+        $command = ['expected_revision' => 4, 'reason' => 'refund_requested'];
+        $key = ['Idempotency-Key' => $this->key()];
+        $this->actingAsUser('staffB2');
+        $this->postJson($review, $command, $key)->assertForbidden();
+        $this->actingAsUser('staffB1');
+        $this->postJson($review, $command + ['amount' => '999.00'], $key)->assertUnprocessable();
+        $this->postJson($review, $command, $key)->assertOk()
+            ->assertJsonPath('data.cash_correction.status', 'requested')->assertJsonPath('data.refund_status', 'none');
+        $this->postJson($review, $command, $key)->assertOk()->assertHeader('Idempotent-Replayed', 'true');
+        $this->postJson($review, $command, ['Idempotency-Key' => $this->key()])->assertConflict();
+        $this->postJson($ack, ['expected_revision' => 5], ['Idempotency-Key' => $this->key()])->assertForbidden();
+
+        $this->actingAsUser('owner');
+        $this->getJson($path)->assertOk()->assertJsonPath('data.cash_correction.reason', 'refund_requested');
+        $this->postJson($ack, ['expected_revision' => 5], ['Idempotency-Key' => $this->key()])->assertOk()
+            ->assertJsonPath('data.cash_correction.status', 'acknowledged')->assertJsonPath('data.payment.id', $paid['payment']['id'])
+            ->assertJsonPath('data.receipt.id', $paid['receipt']['id'])->assertJsonPath('data.paid_amount', '251.00')
+            ->assertJsonPath('data.balance', '0.00')->assertJsonPath('data.refund_status', 'none');
+        $this->actingAsUser('patientA');
+        $this->getJson($path)->assertOk()->assertJsonMissingPath('data.cash_correction')
+            ->assertJsonMissing(['event' => InvoiceHistory::CASH_REVIEW_REQUESTED])
+            ->assertJsonMissing(['event' => InvoiceHistory::CASH_REVIEW_ACKNOWLEDGED])
+            ->assertJsonPath('data.receipt.number', $paid['receipt']['number']);
+        $this->assertSame(1, Payment::count());
+        $this->assertSame(1, Receipt::count());
+        $this->assertSame(2, InvoiceHistory::whereIn('event', [InvoiceHistory::CASH_REVIEW_REQUESTED, InvoiceHistory::CASH_REVIEW_ACKNOWLEDGED])->count());
+    }
+
+    public function test_open_online_checkout_blocks_full_counter_collection_under_the_invoice_lock(): void
+    {
+        $this->price();
+        $id = $this->createInvoice($this->completed())->json('data.id');
+        $path = "/api/invoices/{$id}";
+        $this->postJson("{$path}/review", ['expected_revision' => 1], ['Idempotency-Key' => $this->key()])->assertOk();
+        $this->postJson("{$path}/issue", ['expected_revision' => 2], ['Idempotency-Key' => $this->key()])->assertOk();
+        $invoice = Invoice::where('public_id', $id)->firstOrFail();
+        $invoice->openCheckouts()->create([
+            'provider_session_id' => 'cs_counter_cash_fixture', 'checkout_url' => 'https://checkout.example.test/session',
+            'amount' => '251.00', 'currency' => 'PHP', 'status' => 'Open', 'initiated_by_user_id' => $this->u['patientA']->id,
+        ]);
+        $this->getJson('/api/invoices')->assertOk()->assertJsonPath('data.0.has_open_checkout', true);
+        $this->postJson("{$path}/payment", ['expected_revision' => 3, 'method' => 'Cash', 'amount' => '251.00'],
+            ['Idempotency-Key' => $this->key()])->assertConflict()->assertJsonPath('code', 'checkout_reconciliation_required');
+        $this->assertSame('Issued', $invoice->fresh()->status);
+        $this->assertSame(0, Payment::count());
+        $this->assertSame(0, Receipt::count());
+    }
+
     public function test_missing_price_is_safe_and_does_not_change_completed_treatment_or_use_reference_fee(): void
     {
         $t = $this->completed();

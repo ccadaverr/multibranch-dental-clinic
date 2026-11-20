@@ -33,7 +33,7 @@ class RefundIntegrationAcceptanceTest extends TestCase
     {
         $appointment = $this->existing('A', 'd1', 'b1', 'svc1', '2026-09-30', '09:00');
         $appointment->update(['booking_payment_status' => 'paid', 'booking_payment_ref' => 'pay_qa_refund', 'booking_fee_php' => '600.00']);
-        Http::fake(['*' => Http::response(['data' => ['id' => 'ref_qa', 'attributes' => ['status' => $state, 'amount' => 60000]]])]);
+        Http::fake(['*' => Http::response(['data' => ['id' => 'ref_qa', 'attributes' => ['status' => $state, 'amount' => 60000, 'payment_id' => 'pay_qa_refund', 'currency' => 'PHP', 'livemode' => false]]])]);
         $service = app(PayMongoService::class);
         $this->assertSame($state, $service->refundAppointment($appointment)['status']);
         $this->assertSame($state, $service->refundAppointment($appointment->fresh())['status']);
@@ -50,9 +50,12 @@ class RefundIntegrationAcceptanceTest extends TestCase
     public static function unverifiableRefunds(): array
     {
         return [
-            [['id' => 'ref_other', 'attributes' => ['status' => 'succeeded', 'amount' => 60000]]],
+            [['id' => 'ref_other', 'attributes' => ['status' => 'succeeded', 'amount' => 60000, 'payment_id' => 'pay_qa_refund', 'currency' => 'PHP', 'livemode' => false]]],
             [['id' => 'ref_qa', 'attributes' => ['status' => 'succeeded', 'amount' => 59999]]],
             [['id' => 'ref_qa', 'attributes' => ['status' => 'unknown', 'amount' => 60000]]],
+            [['id' => 'ref_qa', 'attributes' => ['status' => 'succeeded', 'amount' => 60000, 'payment_id' => 'pay_other']]],
+            [['id' => 'ref_qa', 'attributes' => ['status' => 'succeeded', 'amount' => 60000, 'currency' => 'USD']]],
+            [['id' => 'ref_qa', 'attributes' => ['status' => 'succeeded', 'amount' => 60000, 'livemode' => true]]],
         ];
     }
 
@@ -63,6 +66,7 @@ class RefundIntegrationAcceptanceTest extends TestCase
         $appointment->update(['booking_payment_status' => 'paid', 'booking_payment_ref' => 'pay_qa_refund',
             'booking_refund_ref' => 'ref_qa', 'booking_fee_php' => '600.00']);
         $before = $appointment->fresh()->getAttributes();
+        $response['attributes'] += ['payment_id' => 'pay_qa_refund', 'currency' => 'PHP', 'livemode' => false];
         Http::fake(['*' => Http::response(['data' => $response])]);
         try {
             app(PayMongoService::class)->refundAppointment($appointment);
@@ -72,5 +76,27 @@ class RefundIntegrationAcceptanceTest extends TestCase
         }
         $this->assertSame($before, $appointment->fresh()->getAttributes());
         $this->assertSame(0, AuditLog::where('action', 'billing.booking_payment_refunded')->count());
+    }
+
+    public function test_older_pending_readback_cannot_revert_a_confirmed_refund(): void
+    {
+        $appointment = $this->existing('A', 'd1', 'b1', 'svc1', '2026-09-30', '09:00');
+        $appointment->update(['booking_payment_status' => 'paid', 'booking_payment_ref' => 'pay_qa_refund',
+            'booking_refund_ref' => 'ref_qa', 'booking_fee_php' => '600.00']);
+        $attributes = ['amount' => 60000, 'payment_id' => 'pay_qa_refund', 'currency' => 'PHP', 'livemode' => false];
+        $service = app(PayMongoService::class);
+        $arrival = 0;
+        Http::fake(['*/v1/refunds/ref_qa' => function () use (&$arrival, $service, $appointment, $attributes) {
+            if (++$arrival === 1) {
+                $this->assertSame('refunded', $service->reconcileAppointmentRefund($appointment->fresh())['status']);
+                return Http::response(['data' => ['id' => 'ref_qa', 'attributes' => $attributes + ['status' => 'pending']]]);
+            }
+            return Http::response(['data' => ['id' => 'ref_qa', 'attributes' => $attributes + ['status' => 'succeeded']]]);
+        }]);
+
+        $this->assertSame('refunded', $service->reconcileAppointmentRefund($appointment)['status']);
+        $this->assertNotNull($appointment->fresh()->booking_refunded_at);
+        $this->assertSame(1, AuditLog::where('action', 'billing.booking_payment_refunded')->count());
+        Http::assertSentCount(2);
     }
 }

@@ -200,3 +200,19 @@ test('R23B booking refund reconciliation is a separate POST with revision but no
   assert.equal(command.options.headers['Idempotency-Key'], 'r23-reconcile-key')
   assert.deepEqual(JSON.parse(command.options.body), { expected_revision: 3 })
 })
+
+test('R23 Cash review and checkout closure send only the original observed revision and review reason', async () => {
+  for (const [command, route, payload] of [
+    [api.closeInvoiceCheckout, 'close-checkout', { expected_revision: 2 }],
+    [api.requestCashCorrection, 'cash-correction-review', { expected_revision: 3, reason: 'refund_requested' }],
+    [api.acknowledgeCashCorrection, 'cash-correction-acknowledgement', { expected_revision: 4 }],
+  ]) {
+    api.__resetCsrfCacheForTests()
+    mockFetch([jsonResponse(200, {}), jsonResponse(200, { data: {} })])
+    assert.equal((await command('invoice-one', payload, 'finance-command')).ok, true)
+    const sent = calls.find(call => call.options?.method === 'POST')
+    assert.ok(sent.url.endsWith(`/api/invoices/invoice-one/${route}`))
+    assert.equal(sent.options.headers['Idempotency-Key'], 'finance-command')
+    assert.deepEqual(JSON.parse(sent.options.body), payload)
+  }
+})

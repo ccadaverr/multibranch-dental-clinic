@@ -67,7 +67,7 @@ class R23ManualBookingRefundTest extends TestCase
     {
         $a = $this->paid();
         Http::fake(['https://refund.r23.test/v1/refunds' => Http::response([
-            'data' => ['id' => 'ref_r23', 'attributes' => ['status' => 'succeeded', 'amount' => 60000]],
+            'data' => ['id' => 'ref_r23', 'attributes' => ['status' => 'succeeded', 'amount' => 60000, 'payment_id' => 'pay_r23', 'currency' => 'PHP', 'livemode' => false]],
         ])]);
         $this->actingAsUser('staffB1');
         $this->requestRefund($a)->assertOk()->assertJsonPath('data.refund_status', 'refunded')
@@ -98,10 +98,10 @@ class R23ManualBookingRefundTest extends TestCase
         $a = $this->paid();
         Http::fake([
             'https://refund.r23.test/v1/refunds' => Http::response([
-                'data' => ['id' => 'ref_r23', 'attributes' => ['status' => 'processing', 'amount' => 60000]],
+                'data' => ['id' => 'ref_r23', 'attributes' => ['status' => 'processing', 'amount' => 60000, 'payment_id' => 'pay_r23', 'currency' => 'PHP', 'livemode' => false]],
             ]),
             'https://refund.r23.test/v1/refunds/ref_r23' => Http::response([
-                'data' => ['id' => 'ref_r23', 'attributes' => ['status' => 'succeeded', 'amount' => 60000]],
+                'data' => ['id' => 'ref_r23', 'attributes' => ['status' => 'succeeded', 'amount' => 60000, 'payment_id' => 'pay_r23', 'currency' => 'PHP', 'livemode' => false]],
             ]),
         ]);
         $this->actingAsUser('owner');
@@ -147,10 +147,10 @@ class R23ManualBookingRefundTest extends TestCase
         $a = $this->paid();
         Http::fake([
             'https://refund.r23.test/v1/refunds' => Http::response([
-                'data' => ['id' => 'ref_r23', 'attributes' => ['status' => 'pending', 'amount' => 60000]],
+                'data' => ['id' => 'ref_r23', 'attributes' => ['status' => 'pending', 'amount' => 60000, 'payment_id' => 'pay_r23', 'currency' => 'PHP', 'livemode' => false]],
             ]),
             'https://refund.r23.test/v1/refunds/ref_r23' => Http::response([
-                'data' => ['id' => 'ref_r23', 'attributes' => ['status' => 'processing', 'amount' => 60000]],
+                'data' => ['id' => 'ref_r23', 'attributes' => ['status' => 'processing', 'amount' => 60000, 'payment_id' => 'pay_r23', 'currency' => 'PHP', 'livemode' => false]],
             ]),
         ]);
         $this->actingAsUser('staffB1');

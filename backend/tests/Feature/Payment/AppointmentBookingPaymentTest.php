@@ -74,7 +74,7 @@ class AppointmentBookingPaymentTest extends TestCase
         ]);
     }
 
-    private function fakePayMongoRefund(string $refundId = 'ref_unit_1'): void
+    private function fakePayMongoRefund(string $refundId, string $paymentId): void
     {
         Http::fake([
             'https://api.paymongo.com/v1/refunds' => Http::response([
@@ -83,6 +83,9 @@ class AppointmentBookingPaymentTest extends TestCase
                     'attributes' => [
                         'amount' => 60000,
                         'status' => 'succeeded',
+                        'payment_id' => $paymentId,
+                        'currency' => 'PHP',
+                        'livemode' => false,
                     ],
                 ],
             ], 200),
@@ -123,6 +126,9 @@ class AppointmentBookingPaymentTest extends TestCase
                     'attributes' => [
                         'amount' => $centavos,
                         'status' => 'succeeded',
+                        'payment_id' => $paymentId,
+                        'currency' => 'PHP',
+                        'livemode' => false,
                     ],
                 ],
             ], 200);
@@ -343,7 +349,7 @@ class AppointmentBookingPaymentTest extends TestCase
         $this->deliverWebhook($payload)->assertOk();
 
         // Set up fake refund response
-        $this->fakePayMongoRefund('ref_booking_123');
+        $this->fakePayMongoRefund('ref_booking_123', 'pay_ref_1');
 
         // Patient cancels
         $this->actingAsUser('patientA');
@@ -426,7 +432,7 @@ class AppointmentBookingPaymentTest extends TestCase
         // Mark forfeited
         $appointment->fresh()->update(['status' => 'Cancelled', 'booking_payment_status' => 'forfeited']);
 
-        $this->fakePayMongoRefund('ref_manual_789');
+        $this->fakePayMongoRefund('ref_manual_789', 'pay_man_1');
 
         // Owner/Staff decides to refund
         $service = app(AppointmentService::class);
@@ -646,8 +652,8 @@ class AppointmentBookingPaymentTest extends TestCase
         $appointment->update(['booking_payment_status' => 'paid', 'booking_payment_ref' => 'pay_refund_pending', 'booking_fee_php' => '600.00']);
         $this->freshHttp();
         Http::fake([
-            'https://api.paymongo.com/v1/refunds' => Http::response(['data' => ['id' => 'ref_pending', 'attributes' => ['status' => 'pending', 'amount' => 60000]]]),
-            'https://api.paymongo.com/v1/refunds/ref_pending' => Http::response(['data' => ['id' => 'ref_pending', 'attributes' => ['status' => 'succeeded', 'amount' => 60000]]]),
+            'https://api.paymongo.com/v1/refunds' => Http::response(['data' => ['id' => 'ref_pending', 'attributes' => ['status' => 'pending', 'amount' => 60000, 'payment_id' => 'pay_refund_pending', 'currency' => 'PHP', 'livemode' => false]]]),
+            'https://api.paymongo.com/v1/refunds/ref_pending' => Http::response(['data' => ['id' => 'ref_pending', 'attributes' => ['status' => 'succeeded', 'amount' => 60000, 'payment_id' => 'pay_refund_pending', 'currency' => 'PHP', 'livemode' => false]]]),
         ]);
         $service = app(\App\Services\Payment\PayMongoService::class);
         $first = $service->refundAppointment($appointment);

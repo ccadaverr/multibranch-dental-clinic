@@ -83,7 +83,7 @@ class AppointmentLifecycleTest extends TestCase
         $this->postJson($this->url($a, 'cancel'), ['expected_revision' => 1])->assertStatus(422)->assertJsonPath('code', 'appointment_started');
 
         $this->actingAsUser('staffB1');
-        $this->postJson($this->url($a, 'cancel'), ['expected_revision' => 1])->assertOk();
+        $this->postJson($this->url($a, 'cancel'), ['expected_revision' => 1, 'reason' => 'Patient contacted the front desk'])->assertOk();
     }
 
     public function test_valid_reschedule_preserves_history(): void
@@ -102,6 +102,9 @@ class AppointmentLifecycleTest extends TestCase
         $this->assertSame(['appointment.created', 'appointment.rescheduled'], array_column($history, 'event'));
         $this->assertSame('2026-09-29T09:00:00+08:00', $history[0]['starts_at'], 'the original schedule is still recorded');
         $this->assertSame('2026-10-05T13:00:00+08:00', $history[1]['starts_at']);
+        $opening = \App\Models\SlotOpening::where('appointment_id', $appointment->id)->where('appointment_revision', 1)->sole();
+        $this->assertSame('2026-09-29', $opening->dateString());
+        $this->assertSame($appointment->dentist_profile_id, $opening->dentist_profile_id);
     }
 
     public function test_patient_reschedule_changes_only_date_time_within_the_window(): void

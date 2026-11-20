@@ -186,13 +186,17 @@ class AppointmentController extends Controller
         Gate::authorize('reschedule', $appointment);
         $dentistRef = $request->validated('dentist_ref');
 
-        return $this->appointments->reschedule(
-            $request->user(),
-            $appointment,
-            $dentistRef ? DentistProfile::where('legacy_ref', $dentistRef)->firstOrFail() : null,
-            $request->safe()->only(['date', 'start_time', 'expected_revision']),
-            $this->idempotencyKey($request),
-        );
+        return \App\Support\CommandActor::run($request->user(), function ($actor) use ($request, $appointment, $dentistRef) {
+            Gate::forUser($actor)->authorize('reschedule', $appointment);
+
+            return $this->appointments->reschedule(
+                $actor,
+                $appointment,
+                $dentistRef ? DentistProfile::where('legacy_ref', $dentistRef)->firstOrFail() : null,
+                $request->safe()->only(['date', 'start_time', 'expected_revision']),
+                $this->idempotencyKey($request),
+            );
+        });
     }
 
     public function cancel(CancelAppointmentRequest $request, Appointment $appointment): JsonResponse
@@ -238,6 +242,7 @@ class AppointmentController extends Controller
             'appointment_id' => $fresh->public_id,
             'booking_payment_status' => $fresh->booking_payment_status,
             'refund_status' => $result['status'],
+            'provider_ref_known' => (bool) $fresh->booking_refund_ref,
             'outcome' => $result['status'] === 'refunded'
                 ? 'The provider confirmed the booking refund.'
                 : 'The refund is not confirmed. Reconcile the original provider request; do not submit a new refund.',

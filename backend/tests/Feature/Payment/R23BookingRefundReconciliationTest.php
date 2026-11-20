@@ -73,10 +73,10 @@ class R23BookingRefundReconciliationTest extends TestCase
         $a = $this->paid();
         Http::fake([
             'https://refund.r23b.test/v1/refunds' => Http::response([
-                'data' => ['id' => 'ref_r23b', 'attributes' => ['status' => 'pending', 'amount' => 60000]],
+                'data' => ['id' => 'ref_r23b', 'attributes' => ['status' => 'pending', 'amount' => 60000, 'payment_id' => 'pay_r23b', 'currency' => 'PHP', 'livemode' => false]],
             ]),
             'https://refund.r23b.test/v1/refunds/ref_r23b' => Http::response([
-                'data' => ['id' => 'ref_r23b', 'attributes' => ['status' => 'succeeded', 'amount' => 60000]],
+                'data' => ['id' => 'ref_r23b', 'attributes' => ['status' => 'succeeded', 'amount' => 60000, 'payment_id' => 'pay_r23b', 'currency' => 'PHP', 'livemode' => false]],
             ]),
         ]);
         $this->actingAsUser('owner');
@@ -99,7 +99,7 @@ class R23BookingRefundReconciliationTest extends TestCase
         $a = $this->paid();
         $a->update(['booking_refund_ref' => 'ref_failed_r23b']);
         Http::fake(['https://refund.r23b.test/v1/refunds/ref_failed_r23b' => Http::response([
-            'data' => ['id' => 'ref_failed_r23b', 'attributes' => ['status' => 'failed', 'amount' => 60000]],
+            'data' => ['id' => 'ref_failed_r23b', 'attributes' => ['status' => 'failed', 'amount' => 60000, 'payment_id' => 'pay_r23b', 'currency' => 'PHP', 'livemode' => false]],
         ])]);
         $this->actingAsUser('owner');
         $this->reconcile($a)->assertOk()->assertJsonPath('data.refund_status', 'failed')

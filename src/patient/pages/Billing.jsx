@@ -13,6 +13,8 @@ const view = i => ({ id: i.id, patientId:i.patient?.id,visitId:i.visit_id,appoin
   discountType: i.discount_type, discountIdNumber: i.discount_id_number, discountAmount: i.discount_amount,
   hmoCoverage: i.hmo_coverage_amount, patientResponsibility: i.patient_responsibility_amount, paidAmount: i.paid_amount, balance: i.balance,
   settlementType: i.settlement_type || null,
+  refundStatus: i.refund_status,
+  openCheckout: i.has_open_checkout === true,
   items: (i.lines || []).map(l => ({ key: l.id, name: l.service?.name || 'Service', quantity: l.quantity, unit: l.unit_price, amount: l.line_total })),
   receiptUnavailable: i.status==='Paid'&&!verifiedPaid(i)||!!i.receipt&&!confirmedBillingReceipt(i),
   receipt: confirmedBillingReceipt(i) ? { id:i.receipt.id,number: i.receipt.number, amount: i.receipt.amount, method: paymentMethodLabel(i.receipt.method), reference: i.receipt.external_reference || i.payment?.external_reference || null, paidAt: i.receipt.issued_at } : null })
@@ -141,6 +143,8 @@ export function BillingPage({ context, toast,session,getAuthGeneration,onNavigat
         {Number(inv.hmoCoverage) > 0 && <p className="pp-row"><span>Less: coverage</span><span>−{money(inv.hmoCoverage)}</span></p>}
         {inv.status === 'Issued' && Number(inv.paidAmount) > 0 && <p className="pp-row"><span>Less: booking deposit applied</span><span>−{money(inv.paidAmount)}</span></p>}
         <p className="pp-row pp-total"><span>{inv.status === 'Paid' ? 'Paid' : 'To pay'}</span><b>{money(inv.status === 'Paid' ? inv.patientResponsibility ?? inv.total : inv.balance)}</b></p>
+        {['partially_refunded', 'refunded'].includes(inv.refundStatus) && <p className="pp-hint">{inv.refundStatus === 'refunded' ? 'A full refund was recorded.' : 'A partial refund was recorded.'} The receipt shows the original payment.</p>}
+        {inv.status === 'Issued' && inv.openCheckout && <p className="pp-hint">An online checkout is open. Refresh payment status before paying at the clinic.</p>}
         <div className="pp-actions">
           {inv.receiptUnavailable && <p role="alert">The receipt could not be verified. Refresh or contact the front desk.</p>}
           {inv.status === 'Issued' && Number(inv.balance) > 0 && <Button onClick={() => setReviewId(inv.id)}>Review and pay</Button>}

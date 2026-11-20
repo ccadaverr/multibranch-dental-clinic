@@ -56,3 +56,18 @@ test('Patient receipt availability requires concordant stored payment evidence',
     const row=paid();mutate(row);assert.equal(confirmedBillingReceipt(row),false)
   }
 })
+
+test('Cash correction acknowledgement refers to the original immutable receipt and cannot imply a refund', () => {
+  const original = { ...paid(), refund_status: 'none' }
+  const request = { mode: 'cashReview', base: original, payload: { expected_revision: 4, reason: 'suspected_duplicate' } }
+  const review = { ...original, revision: 5, cash_correction: {
+    status: 'requested', reason: 'suspected_duplicate', occurred_at: original.paid_at,
+  } }
+  assert.equal(billingReceiptMatches(request, review), true)
+  assert.equal(billingReceiptMatches(request, { ...review, refund_status: 'refunded' }), false)
+  assert.equal(billingReceiptMatches(request, { ...review, receipt: { ...review.receipt, id: 'other' } }), false)
+  const acknowledge = { mode: 'ackCashReview', base: review, payload: { expected_revision: 5 } }
+  const result = { ...review, revision: 6, cash_correction: { ...review.cash_correction, status: 'acknowledged' } }
+  assert.equal(billingReceiptMatches(acknowledge, result), true)
+  assert.equal(billingReceiptMatches(acknowledge, { ...result, cash_correction: { ...result.cash_correction, reason: 'refund_requested' } }), false)
+})

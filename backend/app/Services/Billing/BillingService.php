@@ -203,20 +203,78 @@ final class BillingService {
 
     public function pay(User $actor, Invoice $invoice, int $expected, string $method, ?string $reference, ?string $submittedAmount = null): Invoice
     {
-        $this->staffBranch($actor, $invoice->branch_id);
-
         return DB::transaction(function () use ($actor, $invoice, $expected, $method, $reference, $submittedAmount) {
+            $actor = $this->lockFinancialActor($actor, $invoice, Role::Staff);
             $i = Invoice::whereKey($invoice->id)->lockForUpdate()->with(['lines', 'visit.patient.person', 'payment', 'receipt', 'branch'])->firstOrFail();
             if ($i->revision !== $expected) {
                 throw new BillingException(409, 'stale_revision', 'Invoice changed; reload before continuing.');
             }
             $balance = $this->payableBalance($i, $submittedAmount);
+            if ($i->openCheckouts()->exists()) {
+                throw new BillingException(409, 'checkout_reconciliation_required',
+                    'An online checkout is still open. Check the provider status before collecting payment at the counter.');
+            }
             if (in_array($method, ['Card/POS', 'Bank Transfer', 'E-Wallet'], true) && ! $reference) {
                 throw new BillingException(422, 'invalid_payment_reference', 'An external reference is required for this payment method.');
             }
             $this->settle($i, $actor, $balance, $method, $reference, 'invoice.paid', null);
 
             return $i->fresh(['lines', 'histories', 'payment', 'receipt', 'visit.patient.person', 'branch']);
+        }, 3);
+    }
+
+    /** Hold current account and branch authority through both a financial work request and its replay. */
+    public function lockFinancialActor(User $actor, Invoice $invoice, Role $role): User
+    {
+        $current = User::whereKey($actor->id)->where('role', $role->value)->where('auth_version', $actor->auth_version)
+            ->where('account_status', 'Active')->whereNull('deleted_at')->sharedLock()->first();
+        if (! $current) {
+            throw new BillingException(403, 'forbidden', 'This account cannot perform that financial action.');
+        }
+        if ($role === Role::Staff && ! UserBranchScope::where('user_id', $current->id)
+            ->where('branch_id', $invoice->branch_id)->sharedLock()->first()) {
+            throw new BillingException(403, 'forbidden', 'Staff branch access is required.');
+        }
+
+        return $current;
+    }
+
+    /** Records operational review in the existing immutable invoice history. Settlement evidence stays intact. */
+    public function recordCashCorrectionReview(User $actor, Invoice $invoice, int $expected, ?string $reason): Invoice
+    {
+        return DB::transaction(function () use ($actor, $invoice, $expected, $reason) {
+            $requesting = $reason !== null;
+            $actor = $this->lockFinancialActor($actor, $invoice, $requesting ? Role::Staff : Role::Owner);
+            $i = Invoice::whereKey($invoice->id)->lockForUpdate()->with(['payment', 'receipt', 'histories', 'visit'])->firstOrFail();
+            if ($i->revision !== $expected) {
+                throw new BillingException(409, 'stale_revision', 'Invoice changed; reload before continuing.');
+            }
+            if (! $i->cashSettlementRecorded() || $i->visit?->patient_id !== $i->patient_id || $i->visit?->branch_id !== $i->branch_id) {
+                throw new BillingException(422, 'cash_evidence_unavailable', 'A verified Cash collection and its original Payment Receipt are required.');
+            }
+            $review = $i->cashCorrectionReview();
+            if ($requesting && ! in_array($reason, InvoiceHistory::CASH_REVIEW_REASONS, true)) {
+                throw new BillingException(422, 'invalid_cash_review_reason', 'Choose a reason for financial review.');
+            }
+            if ($requesting ? $review !== null : $review?->event !== InvoiceHistory::CASH_REVIEW_REQUESTED) {
+                throw new BillingException(422, 'cash_review_state_changed', 'This Cash collection already has a review record, or no request is awaiting acknowledgement.');
+            }
+            $event = $requesting ? InvoiceHistory::CASH_REVIEW_REQUESTED : InvoiceHistory::CASH_REVIEW_ACKNOWLEDGED;
+            $snapshot = [
+                'reason' => $reason ?? $review->snapshot['reason'],
+                'payment_id' => $i->payment->public_id,
+                'receipt_id' => $i->receipt->public_id,
+                'receipt_number' => $i->receipt->receipt_number,
+                'original_amount' => $i->payment->amount,
+            ];
+            $i->update(['revision' => $i->revision + 1, 'updated_by_user_id' => $actor->id]);
+            $i->histories()->create([
+                'event' => $event, 'from_status' => 'Paid', 'to_status' => 'Paid', 'snapshot' => $snapshot,
+                'actor_user_id' => $actor->id, 'occurred_at' => ClinicClock::now(),
+            ]);
+            $this->audit($actor, 'billing.'.substr($event, strlen('invoice.')), $i, $snapshot);
+
+            return $i->fresh();
         }, 3);
     }
 
@@ -229,7 +287,9 @@ final class BillingService {
     {
         return DB::transaction(function () use ($invoice, $method, $providerPaymentId, $actor, $expectedAmount) {
             $i = Invoice::whereKey($invoice->id)->lockForUpdate()->with(['lines', 'visit.patient.person', 'patient.person', 'payment', 'receipt', 'branch'])->firstOrFail();
-            if ($i->status === 'Paid' && $i->payment?->external_reference === $providerPaymentId) {
+            if ($i->status === 'Paid' && $i->payment?->external_reference === $providerPaymentId
+                && $i->payment->method === $method && $this->cents($i->payment->amount) === $this->cents($expectedAmount)
+                && $i->receipt?->payment_id === $i->payment->id) {
                 return $i; // the same provider payment replayed
             }
             $balance = $this->payableBalance($i);

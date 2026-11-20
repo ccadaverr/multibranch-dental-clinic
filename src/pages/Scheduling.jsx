@@ -407,49 +407,56 @@ function BookingRefundDialog({ appointment, onClose }) {
   const [result,setResult]=useState(null)
   const key=useRef(commandKey())
   const submitted=useRef(false)
+  const inFlight=useRef(false)
   const [checking,setChecking]=useState(false)
+  const adopt=(data)=>{
+    if(data?.appointment_id!==appointment.id || typeof data.outcome!=='string' ||
+      !['refunded','unconfirmed','pending','processing','failed'].includes(data.refund_status) ||
+      (data.refund_status==='refunded' && data.booking_payment_status!=='refunded')) return false
+    setResult(data)
+    return true
+  }
   const checkStatus=async()=>{
-    if(busy||checking)return
+    if(inFlight.current)return
+    inFlight.current=true
     setChecking(true);setError('')
     try{
       const response=await reconcileBookingRefund(appointment.id,{expected_revision:appointment.revision},commandKey())
-      if(response.ok){setResult(response.data)}
-      else setError(response.message||'Could not verify the original provider refund. No new refund was requested.')
+      if(!response.ok || !adopt(response.data)) setError(response.message||'Could not verify the original provider refund. No new refund was requested.')
     }catch{
       setError('The provider status could not be checked. No new refund request was sent.')
-    }finally{setChecking(false)}
+    }finally{inFlight.current=false;setChecking(false)}
   }
   const submit=async event=>{
     event.preventDefault()
-    if(submitted.current || busy || (reason==='others'&&!note.trim()))return
+    if(submitted.current || inFlight.current || (reason==='others'&&!note.trim()))return
+    inFlight.current=true
     submitted.current=true
     setBusy(true);setError('')
     try {
       const response=await requestBookingRefund(appointment.id,{
         expected_revision:appointment.revision,reason,note:note.trim()||null,
       },key.current)
-      if(response.ok){
-        setResult(response.data)
-      }else{
+      if(!response.ok || !adopt(response.data)){
         setError(response.kind==='network'||response.kind==='server'
           ? 'The provider outcome may be unknown. Close this window and refresh the appointment before any further action. Do not send another refund request.'
           : response.message||'Refund could not be authorized. Review the current appointment and financial records.')
       }
     }catch{
       setError('The refund outcome could not be confirmed. Refresh the appointment before any further action.')
-    }finally{setBusy(false)}
+    }finally{inFlight.current=false;setBusy(false)}
   }
-  return <Modal open title="Review booking payment refund" onClose={()=>!busy&&onClose()}>
+  return <Modal open title="Review booking payment refund" onClose={()=>!inFlight.current&&onClose()}>
     <p><b>{appointment.appointmentNo}</b> · {appointment.patientName} · {appointment.bookingPaymentStatus==='forfeited'?'Booking fee withheld':'Captured booking fee'}.</p>
     <Notice tone="warning">PayMongo booking payment only. If the Patient has checked in, received treatment or an invoice has used the booking credit, stop and review the financial record. This cannot refund counter Cash or reverse an issued receipt.</Notice>
+    {error&&<Notice tone="warning" title="Refund not confirmed">{error}</Notice>}
     {result ? <div role="status" aria-live="polite">
       <p>{result.outcome}</p>
       <p><b>Provider outcome:</b> {result.refund_status==='refunded'?'Confirmed refunded':result.refund_status==='unconfirmed'?'Unconfirmed — manual reconciliation needed':result.refund_status}</p>
       {result.provider_ref_known&&result.refund_status!=='refunded'&&
         <Button disabled={checking} onClick={checkStatus}>{checking?'Checking provider…':'Check provider again (read-only)'}</Button>}
-      <Button onClick={onClose}>Close and refresh</Button>
+      <Button disabled={checking} onClick={onClose}>Close and refresh</Button>
     </div> : <>
-      {error&&<Notice tone="warning" title="Refund not confirmed">{error}</Notice>}
       <form className="au-form" onSubmit={submit}>
         <Field label="Reason"><select aria-label="Refund reason" value={reason} disabled={busy||submitted.current} onChange={e=>setReason(e.target.value)}>
           <option value="requested_by_customer">Patient requested refund</option>

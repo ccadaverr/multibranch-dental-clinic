@@ -72,8 +72,8 @@ class CancellationRefundSafetyTest extends TestCase
     {
         $booking = $this->paidBooking();
         Http::fake([
-            'https://refund.example.test/v1/refunds' => Http::response(['data' => ['id' => 'ref_fixture', 'attributes' => ['status' => 'pending', 'amount' => 60000]]]),
-            'https://refund.example.test/v1/refunds/ref_fixture' => Http::response(['data' => ['id' => 'ref_fixture', 'attributes' => ['status' => 'succeeded', 'amount' => 60000]]]),
+            'https://refund.example.test/v1/refunds' => Http::response(['data' => ['id' => 'ref_fixture', 'attributes' => ['status' => 'pending', 'amount' => 60000, 'payment_id' => 'pay_fixture', 'currency' => 'PHP', 'livemode' => false]]]),
+            'https://refund.example.test/v1/refunds/ref_fixture' => Http::response(['data' => ['id' => 'ref_fixture', 'attributes' => ['status' => 'succeeded', 'amount' => 60000, 'payment_id' => 'pay_fixture', 'currency' => 'PHP', 'livemode' => false]]]),
         ]);
         $this->actingAsUser('patientA');
         $this->cancelRequest($booking)->assertOk()->assertJsonPath('data.cancellation_refund.status', 'unconfirmed');
@@ -106,7 +106,7 @@ class CancellationRefundSafetyTest extends TestCase
     public function test_provider_failed_status_never_becomes_refunded(): void
     {
         $booking = $this->paidBooking();
-        $failed = ['data' => ['id' => 'ref_failed', 'attributes' => ['status' => 'failed', 'amount' => 60000]]];
+        $failed = ['data' => ['id' => 'ref_failed', 'attributes' => ['status' => 'failed', 'amount' => 60000, 'payment_id' => 'pay_fixture', 'currency' => 'PHP', 'livemode' => false]]];
         Http::fake([
             'https://refund.example.test/v1/refunds' => Http::response($failed),
             'https://refund.example.test/v1/refunds/ref_failed' => Http::response($failed),

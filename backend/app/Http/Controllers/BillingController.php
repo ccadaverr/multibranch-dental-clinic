@@ -3,10 +3,11 @@ namespace App\Http\Controllers;
 use App\Enums\Role;
 use App\Http\Controllers\Concerns\ReadsIdempotencyKey;
 use App\Http\Resources\{InvoiceResource,ReceiptResource};
-use App\Models\{CommandKey,Invoice,Receipt,Treatment};
+use App\Models\{CommandKey,Invoice,InvoiceHistory,Receipt,Treatment};
 use App\Services\Billing\{BillingException,BillingService};
 use App\Support\IdempotentCommand;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Closure;
 class BillingController extends Controller { use ReadsIdempotencyKey;
  /** Money, state, ownership, evidence and timestamp fields are server-owned: supplying any of them is refused (422), never silently ignored. */
@@ -17,7 +18,7 @@ class BillingController extends Controller { use ReadsIdempotencyKey;
  private const MAX_PER_PAGE=100;
  private const WITH=['lines.servicePrice','treatment','visit','patient.person','branch','payment','receipt','histories'];
  /** Keyset page over an already-authorized query: newest first by internal id (deterministic), the cursor is the last public id seen. */
- private function page(Request $r,$query,array $with){$v=$r->validate(['per_page'=>['nullable','integer','min:1','max:'.self::MAX_PER_PAGE],'cursor'=>['nullable','string','size:26'],'status'=>['nullable','string','in:Draft,Review,Issued,Paid']]);$per=(int)($v['per_page']??50);if(!empty($v['status']))$query->where('status',$v['status']);if(!empty($v['cursor']))$query->where('id','<',Invoice::select('id')->where('public_id',strtolower($v['cursor']))->limit(1));$rows=$query->with($with)->orderByDesc('id')->limit($per+1)->get();$more=$rows->count()>$per;$pageRows=$rows->take($per)->values();return response()->json(['data'=>InvoiceResource::collection($pageRows)->resolve($r),'meta'=>['per_page'=>$per,'next_cursor'=>$more?$pageRows->last()->public_id:null]]);}
+ private function page(Request $r,$query,array $with){$v=$r->validate(['per_page'=>['nullable','integer','min:1','max:'.self::MAX_PER_PAGE],'cursor'=>['nullable','string','size:26'],'status'=>['nullable','string','in:Draft,Review,Issued,Paid']]);$per=(int)($v['per_page']??50);if(!empty($v['status']))$query->where('status',$v['status']);if(!empty($v['cursor']))$query->where('id','<',Invoice::select('id')->where('public_id',strtolower($v['cursor']))->limit(1));$rows=$query->with($with)->withExists('openCheckouts')->orderByDesc('id')->limit($per+1)->get();$more=$rows->count()>$per;$pageRows=$rows->take($per)->values();return response()->json(['data'=>InvoiceResource::collection($pageRows)->resolve($r),'meta'=>['per_page'=>$per,'next_cursor'=>$more?$pageRows->last()->public_id:null]]);}
  /** Staff/Owner list. Authorization (Invoice::visibleTo) is applied first; filters can only narrow it. */
  public function index(Request $r){abort_unless(in_array($r->user()->role,[Role::Staff,Role::Owner],true),403);$f=$r->validate(['branch_id'=>['nullable','string','max:64'],'patient_id'=>['nullable','string','max:64']]);$q=Invoice::visibleTo($r->user());if(!empty($f['branch_id'])){$branch=\App\Models\Branch::where('legacy_ref',$f['branch_id'])->orWhereRaw('lower(public_id) = ?',[strtolower($f['branch_id'])])->first();if(!$branch)throw \Illuminate\Validation\ValidationException::withMessages(['branch_id'=>'Choose an existing branch.']);$q->where('branch_id',$branch->id);}if(!empty($f['patient_id'])){$patient=\Illuminate\Support\Str::isUlid($f['patient_id'])?\App\Models\Patient::where('public_id',strtolower($f['patient_id']))->first():null;$q->where('patient_id',$patient?->id??0);}return $this->page($r,$q,self::WITH);}
  public function mine(Request $r){
@@ -40,13 +41,76 @@ class BillingController extends Controller { use ReadsIdempotencyKey;
         } catch (\Throwable) {}
     }
 
-    return new InvoiceResource($invoice->load(['lines.servicePrice', 'treatment', 'visit', 'patient.person', 'branch', 'payment', 'receipt', 'histories']));
+    return new InvoiceResource($invoice->load(self::WITH)->loadExists('openCheckouts'));
  }
  public function create(Request $r,Treatment $treatment){$key=$this->idempotencyKey($r,true);$r->validate($this->forbidden()); try{return $this->command($r,$key,'billing.draft',['treatment'=>$treatment->public_id],fn()=>[$this->billing->createDraft($r->user(),$treatment),201],fn($row)=>(new InvoiceResource($row->load(['lines.servicePrice','treatment','visit','patient.person','branch','payment','receipt','histories'])))->response($r)->getData(true));}catch(BillingException $e){return $this->fail($e);}}
  public function review(Request $r,Invoice $invoice){$key=$this->idempotencyKey($r,true);$v=$r->validate($this->forbidden()+['expected_revision'=>['required','integer','min:1']]);try{return $this->command($r,$key,'billing.review',['invoice'=>$invoice->public_id,'expected_revision'=>(int)$v['expected_revision']],fn()=>[$this->billing->transition($r->user(),$invoice,'Review',(int)$v['expected_revision']),200],fn($row)=>(new InvoiceResource($row->load(['lines.servicePrice','histories'])))->response($r)->getData(true));}catch(BillingException $e){return $this->fail($e);}}
  public function discount(Request $r,Invoice $invoice){$key=$this->idempotencyKey($r,true);$v=$r->validate($this->forbidden()+['expected_revision'=>['required','integer','min:1'],'discount_type'=>['nullable','in:Senior Citizen,PWD'],'discount_id_number'=>['required_with:discount_type','nullable','string','max:50']]);$type=$v['discount_type']??null;$idNum=$v['discount_id_number']??null;try{return $this->command($r,$key,'billing.discount',['invoice'=>$invoice->public_id,'expected_revision'=>(int)$v['expected_revision'],'type'=>$type,'id_number'=>$idNum],fn()=>[$this->billing->applyDiscount($r->user(),$invoice,$type,$idNum,(int)$v['expected_revision']),200],fn($row)=>(new InvoiceResource($row->load(['lines.servicePrice','treatment','visit','patient.person','branch','payment','receipt','histories'])))->response($r)->getData(true));}catch(BillingException $e){return $this->fail($e);}}
  public function issue(Request $r,Invoice $invoice){$key=$this->idempotencyKey($r,true);$v=$r->validate($this->forbidden()+['expected_revision'=>['required','integer','min:1']]);try{return $this->command($r,$key,'billing.issue',['invoice'=>$invoice->public_id,'expected_revision'=>(int)$v['expected_revision']],fn()=>[$this->billing->transition($r->user(),$invoice,'Issued',(int)$v['expected_revision']),200],fn($row)=>(new InvoiceResource($row->load(['lines.servicePrice','histories','payment','receipt'])))->response($r)->getData(true));}catch(BillingException $e){return $this->fail($e);}}
- public function pay(Request $r,Invoice $invoice){$key=$this->idempotencyKey($r,true);$v=$r->validate($this->forbidden()+['expected_revision'=>['required','integer','min:1'],'method'=>['required','in:Cash,Card/POS,Bank Transfer,E-Wallet'],'amount'=>['nullable','string','regex:/^\d+(\.\d{1,2})?$/'],'external_reference'=>['nullable','string','max:160']]);$payload=['invoice'=>$invoice->public_id,'expected_revision'=>(int)$v['expected_revision'],'method'=>$v['method'],'amount'=>$v['amount']??null,'external_reference'=>$v['external_reference']??null];try{return $this->command($r,$key,'billing.payment',$payload,fn()=>[$this->billing->pay($r->user(),$invoice,(int)$v['expected_revision'],$v['method'],$v['external_reference']??null,$v['amount']??null),200],fn($row)=>(new InvoiceResource($row->load(['lines.servicePrice','histories','payment','receipt'])))->response($r)->getData(true));}catch(BillingException $e){return $this->fail($e);}}
+ public function pay(Request $r, Invoice $invoice)
+ {
+    $values = $r->validate($this->forbidden() + [
+        'expected_revision' => ['required', 'integer', 'min:1'],
+        'method' => ['required', 'in:Cash,Card/POS,Bank Transfer,E-Wallet'],
+        'amount' => ['nullable', 'string', 'regex:/^\d{1,10}(\.\d{1,2})?$/'],
+        'external_reference' => ['nullable', 'string', 'max:160'],
+    ]);
+    $payload = [
+        'expected_revision' => (int) $values['expected_revision'], 'method' => $values['method'],
+        'amount' => $values['amount'] ?? null, 'external_reference' => $values['external_reference'] ?? null,
+    ];
+    return $this->authorizedFinancialCommand($r, $invoice, Role::Staff, 'billing.payment', $payload,
+        fn ($actor) => $this->billing->pay($actor, $invoice, $payload['expected_revision'], $payload['method'], $payload['external_reference'], $payload['amount']));
+ }
+
+ public function requestCashCorrection(Request $r, Invoice $invoice)
+ {
+    return $this->cashCorrection($r, $invoice, Role::Staff);
+ }
+
+ public function closeCheckout(Request $r, Invoice $invoice)
+ {
+    $values = $r->validate($this->forbidden() + ['expected_revision' => ['required', 'integer', 'min:1'], 'amount' => ['prohibited']]);
+    $expected = (int) $values['expected_revision'];
+
+    return $this->authorizedFinancialCommand($r, $invoice, Role::Staff, 'billing.checkout_closed_for_counter',
+        ['expected_revision' => $expected], fn ($actor) => app(\App\Services\Payment\PayMongoService::class)->closeInvoiceCheckout($invoice, $actor, $expected));
+ }
+
+ public function acknowledgeCashCorrection(Request $r, Invoice $invoice)
+ {
+    return $this->cashCorrection($r, $invoice, Role::Owner);
+ }
+
+ private function cashCorrection(Request $r, Invoice $invoice, Role $role)
+ {
+    $values = $r->validate($this->forbidden() + [
+        'expected_revision' => ['required', 'integer', 'min:1'],
+        'reason' => $role === Role::Staff ? ['required', 'string', 'in:'.implode(',', InvoiceHistory::CASH_REVIEW_REASONS)] : ['prohibited'],
+        'amount' => ['prohibited'], 'refund_status' => ['prohibited'], 'provider_refund_id' => ['prohibited'],
+    ]);
+    $payload = ['expected_revision' => (int) $values['expected_revision'], 'reason' => $values['reason'] ?? null];
+    $command = $role === Role::Staff ? 'billing.cash_correction_requested' : 'billing.cash_correction_acknowledged';
+
+    return $this->authorizedFinancialCommand($r, $invoice, $role, $command, $payload,
+        fn ($actor) => $this->billing->recordCashCorrectionReview($actor, $invoice, $payload['expected_revision'], $payload['reason']));
+ }
+
+ private function authorizedFinancialCommand(Request $r, Invoice $invoice, Role $role, string $name, array $payload, Closure $work)
+ {
+    $key = $this->idempotencyKey($r, true);
+    try {
+        return DB::transaction(function () use ($r, $invoice, $role, $name, $payload, $work, $key) {
+            $actor = $this->billing->lockFinancialActor($r->user(), $invoice, $role);
+            return $this->command($r, $key, $name, ['invoice' => $invoice->public_id] + $payload,
+                fn () => [$work($actor), 200],
+                fn (Invoice $row) => (new InvoiceResource($row->load(self::WITH)->loadExists('openCheckouts')))->response($r)->getData(true))
+                ->header('Cache-Control', 'private, no-store');
+        }, 3);
+    } catch (BillingException $e) {
+        return $this->fail($e);
+    }
+ }
  private function command(Request $r,string $key,string $name,array $payload,Closure $work,Closure $present){return IdempotentCommand::run(CommandKey::class,$r->user(),$key,$name,$payload,function()use($work,$present){[$row,$status]=$work();return [$present($row),$status];},fn()=>new BillingException(409,'idempotency_key_reused','This Idempotency-Key was already used for a different billing request.'));}
  /** Provider events that could not be settled automatically (reconciliation worklist). Staff: their branch scopes; Owner: all. Read-only. */
  public function providerEvents(Request $r){abort_unless(in_array($r->user()->role,[Role::Staff,Role::Owner],true),403);$q=\App\Models\PaymentProviderEvent::query()->with('invoice.branch')->whereIn('status',['Needs review','Duplicate','Received'])->latest('id');if($r->user()->role===Role::Staff){$q->whereHas('invoice',fn($i)=>$i->whereIn('branch_id',\App\Models\UserBranchScope::select('branch_id')->where('user_id',$r->user()->id)));}return response()->json(['data'=>$q->limit(100)->get()->map(fn($e)=>['id'=>$e->public_id,'status'=>$e->status,'reason'=>$e->reason,'event_type'=>$e->event_type,'invoice'=>$e->invoice?['id'=>$e->invoice->public_id,'invoice_number'=>$e->invoice->invoice_number,'branch'=>['id'=>$e->invoice->branch?->legacy_ref,'name'=>$e->invoice->branch?->name]]:null,'provider_payment_id'=>$e->provider_payment_id,'amount'=>$e->amount_centavos===null?null:number_format($e->amount_centavos/100,2,'.',''),'currency'=>$e->currency,'received_at'=>$e->received_at?->toIso8601String(),'processed_at'=>$e->processed_at?->toIso8601String()])->values()]);}

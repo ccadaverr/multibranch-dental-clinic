@@ -180,10 +180,22 @@ class PayMongoPaymentTest extends TestCase
         Http::swap(new \Illuminate\Http\Client\Factory());
     }
 
-    private function fakeCheckout(string $sessionId = 'cs_unit_1'): void
+    private function fakeCheckout(string $sessionId = 'cs_unit_1', ?string $retire = null): void
     {
         $this->freshHttp();
-        Http::fake(['https://api.paymongo.com/v2/checkout_sessions' => Http::response(['data' => ['id' => $sessionId, 'attributes' => ['checkout_url' => "https://checkout.paymongo.com/{$sessionId}", 'livemode' => false]]], 200)]);
+        Http::preventStrayRequests();
+        $responses = ['https://api.paymongo.com/v2/checkout_sessions' => Http::response(['data' => ['id' => $sessionId, 'attributes' => ['checkout_url' => "https://checkout.paymongo.com/{$sessionId}", 'livemode' => false]]], 200)];
+        if ($retire !== null) {
+            $responses["https://api.paymongo.com/v1/checkout_sessions/{$retire}/expire"] = Http::response($this->expiredCheckout($retire));
+        }
+        Http::fake($responses);
+    }
+
+    private function expiredCheckout(string $id): array
+    {
+        return ['data' => ['id' => $id, 'attributes' => [
+            'status' => 'expired', 'reference_number' => $this->invoice->public_id, 'livemode' => false, 'payments' => [],
+        ]]];
     }
 
     private function startCheckout(string $sessionId = 'cs_unit_1'): void
@@ -690,9 +702,9 @@ class PayMongoPaymentTest extends TestCase
     public function test_a_changed_balance_supersedes_the_old_session_and_never_reuses_it(): void
     {
         $this->startCheckout('cs_unit_1');
-        // Simulate the recorded balance no longer matching (e.g. the HMO share changed): the old session is retired locally.
+        // The old link must be closed at the provider before the replacement exists.
         PaymentCheckoutSession::where('provider_session_id', 'cs_unit_1')->update(['amount' => '1400.00']);
-        $this->fakeCheckout('cs_unit_2');
+        $this->fakeCheckout('cs_unit_2', 'cs_unit_1');
         $data = $this->actingAs($this->patientUser)->postJson("/api/invoices/{$this->invoice->public_id}/paymongo-checkout")->assertOk()->json('data');
         $this->assertSame('cs_unit_2', $data['checkout_session_id']);
         $this->assertSame(['Superseded', 'Open'], [PaymentCheckoutSession::where('provider_session_id', 'cs_unit_1')->value('status'), PaymentCheckoutSession::where('provider_session_id', 'cs_unit_2')->value('status')]);
@@ -813,21 +825,47 @@ class PayMongoPaymentTest extends TestCase
         $first = Http::recorded(fn ($r) => str_contains($r->url(), 'v2/checkout_sessions'))->last()[0]->header('Idempotency-Key')[0];
         $this->assertMatchesRegularExpression('/^checkout-[0-9a-f]{48}$/', $first);
         PaymentCheckoutSession::query()->update(['amount' => '1400.00']); // balance changed: a new session is needed
-        $this->startCheckout('cs_unit_2');
+        $this->fakeCheckout('cs_unit_2', 'cs_unit_1');
+        $this->actingAs($this->patientUser)->postJson("/api/invoices/{$this->invoice->public_id}/paymongo-checkout")->assertOk();
         $second = Http::recorded(fn ($r) => str_contains($r->url(), 'v2/checkout_sessions'))->last()[0]->header('Idempotency-Key')[0];
         $this->assertNotSame($first, $second);
     }
 
-    public function test_a_superseded_session_is_expired_at_paymongo_and_a_refusal_does_not_block_the_new_one(): void
+    public function test_unconfirmed_expiry_blocks_a_second_checkout(): void
     {
         $this->startCheckout('cs_unit_1');
         PaymentCheckoutSession::query()->update(['amount' => '1400.00']);
         $this->freshHttp();
+        Http::preventStrayRequests();
         Http::fake(['https://api.paymongo.com/v1/checkout_sessions/cs_unit_1/expire' => Http::response(['errors' => [['code' => 'resource_failed_state']]], 400),
-            'https://api.paymongo.com/v2/checkout_sessions' => Http::response(['data' => ['id' => 'cs_unit_2', 'attributes' => ['checkout_url' => 'https://checkout.paymongo.com/cs_unit_2', 'livemode' => false]]], 200)]);
-        $this->actingAs($this->patientUser)->postJson("/api/invoices/{$this->invoice->public_id}/paymongo-checkout")->assertOk()->assertJsonPath('data.checkout_session_id', 'cs_unit_2');
+            'https://api.paymongo.com/v1/checkout_sessions/cs_unit_1' => Http::response(['data' => ['id' => 'cs_unit_1', 'attributes' => ['status' => 'active']]])]);
+        $this->actingAs($this->patientUser)->postJson("/api/invoices/{$this->invoice->public_id}/paymongo-checkout")->assertConflict()
+            ->assertJsonPath('code', 'checkout_expiry_unconfirmed');
         Http::assertSent(fn ($r) => $r->method() === 'POST' && $r->url() === 'https://api.paymongo.com/v1/checkout_sessions/cs_unit_1/expire');
-        $this->assertSame('Superseded', PaymentCheckoutSession::where('provider_session_id', 'cs_unit_1')->value('status'));
+        Http::assertNotSent(fn ($r) => str_contains($r->url(), '/v2/checkout_sessions'));
+        $this->assertSame('Open', PaymentCheckoutSession::where('provider_session_id', 'cs_unit_1')->value('status'));
+    }
+
+    public function test_branch_staff_can_close_an_authoritatively_unpaid_sandbox_checkout_and_collect_cash_once(): void
+    {
+        $this->startCheckout('cs_unit_1');
+        $staff = User::factory()->create(['role' => Role::Staff]);
+        UserBranchScope::create(['user_id' => $staff->id, 'branch_id' => $this->branch->id]);
+        $path = "/api/invoices/{$this->invoice->public_id}";
+        $key = ['Idempotency-Key' => 'close-checkout-fixture'];
+        $body = ['expected_revision' => 2];
+        $this->actingAs($this->owner)->postJson("$path/close-checkout", $body, $key)->assertForbidden();
+        $this->freshHttp();
+        Http::preventStrayRequests();
+        Http::fake(['https://api.paymongo.com/v1/checkout_sessions/cs_unit_1/expire' => Http::response($this->expiredCheckout('cs_unit_1'))]);
+        $this->actingAs($staff)->postJson("$path/close-checkout", $body, $key)->assertOk()
+            ->assertJsonPath('data.has_open_checkout', false)->assertJsonPath('data.status', 'Issued')->assertJsonPath('data.revision', 3);
+        $this->postJson("$path/close-checkout", $body, $key)->assertOk()->assertHeader('Idempotent-Replayed', 'true');
+        Http::assertSentCount(1);
+        $this->postJson("$path/payment", ['expected_revision' => 3, 'method' => 'Cash', 'amount' => '1500.00'],
+            ['Idempotency-Key' => 'collect-after-close'])->assertOk()->assertJsonPath('data.receipt.method', 'Cash');
+        $this->assertSame(1, Payment::count());
+        $this->assertSame(1, Receipt::count());
     }
 
     public function test_a_billing_address_is_sent_with_paymongo_keys_validated_and_saved_only_when_the_patient_ticks_save(): void
@@ -844,7 +882,7 @@ class PayMongoPaymentTest extends TestCase
             ->assertJsonPath('data.checkout_session_id', 'cs_unit_1'); // identical request: the open session is reused
         $this->assertSame('PH', $this->patient->fresh()->billing_address['country']);
 
-        $this->fakeCheckout('cs_unit_3');
+        $this->fakeCheckout('cs_unit_3', 'cs_unit_1');
         $this->actingAs($this->patientUser)->postJson($url, ['billing_address' => ['line1' => 'x', 'country' => 'Philippines']])->assertStatus(422)
             ->assertJsonValidationErrors(['billing_address.city', 'billing_address.state', 'billing_address.postal_code', 'billing_address.country']);
         $this->actingAs($this->patientUser)->postJson($url, ['billing_address' => $address + ['street' => 'x']])->assertStatus(422);

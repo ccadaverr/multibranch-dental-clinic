@@ -21,6 +21,29 @@ class Invoice extends Model {
     public function payment(): HasOne { return $this->hasOne(Payment::class); }
     public function receipt(): HasOne { return $this->hasOne(Receipt::class); }
     public function histories(): HasMany { return $this->hasMany(InvoiceHistory::class)->orderBy('id'); }
+    public function openCheckouts(): HasMany
+    {
+        return $this->hasMany(PaymentCheckoutSession::class)->where('status', 'Open');
+    }
+
+    public function cashSettlementRecorded(): bool
+    {
+        return $this->status === 'Paid'
+            && $this->payment?->method === 'Cash' && $this->receipt?->method === 'Cash'
+            && $this->receipt->payment_id === $this->payment->id
+            && $this->receipt->invoice_id === $this->id
+            && $this->payment->invoice_id === $this->id
+            && $this->receipt->amount === $this->payment->amount
+            && $this->receipt->external_reference === $this->payment->external_reference
+            && $this->payment->amount !== '0.00';
+    }
+
+    public function cashCorrectionReview(): ?InvoiceHistory
+    {
+        return $this->histories->last(fn (InvoiceHistory $history) => in_array($history->event, [
+            InvoiceHistory::CASH_REVIEW_REQUESTED, InvoiceHistory::CASH_REVIEW_ACKNOWLEDGED,
+        ], true));
+    }
     public function bookingCredit(): ?array
     {
         $issued = $this->relationLoaded('histories')

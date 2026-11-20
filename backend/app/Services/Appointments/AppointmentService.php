@@ -213,10 +213,11 @@ final class AppointmentService
 
         return $this->idempotent($actor, $key, 'appointment.reschedule', $payload, function () use ($actor, $appointment, $dentist, $input) {
             $current = Appointment::whereKey($appointment->id)->lockForUpdate()->firstOrFail();
+            Gate::forUser($actor)->authorize('reschedule', $current);
             if ($current->revision !== (int) $input['expected_revision']) {
                 throw AppointmentCommandException::staleRevision();
             }
-            if (! in_array($current->status, ['Pending', 'Confirmed'], true)) {
+            if (! in_array($current->status, ['Pending', 'Confirmed'], true) || $current->visit()->exists()) {
                 throw AppointmentCommandException::rule('appointment_not_reschedulable', 'An admitted or closed appointment cannot be rescheduled.', 'status');
             }
             if ($current->booking_payment_status === 'paid' &&
@@ -226,6 +227,10 @@ final class AppointmentService
             }
             // A Patient changes only the date and time (the Dentist, branch and service stay fixed).
             $isPatient = $actor->role === Role::Patient;
+            if ($isPatient && $current->starts_at->lessThanOrEqualTo(ClinicClock::now())) {
+                throw AppointmentCommandException::rule('appointment_started',
+                    'The scheduled time has passed. Contact the clinic to reschedule.', 'status');
+            }
             $dentist = $isPatient || ! $dentist ? $current->dentist : $dentist;
             $request = new SlotRequest($current->patient, $current->branch, $current->service, $dentist, $input['date'], $input['start_time'], $isPatient, $current->id);
             $result = $this->scheduling->evaluate($request);
@@ -237,6 +242,10 @@ final class AppointmentService
             }
 
             $from = $current->status;
+            $before = [
+                'starts_at' => $current->starts_at, 'ends_at' => $current->ends_at,
+                'dentist_profile_id' => $current->dentist_profile_id, 'revision' => $current->revision,
+            ];
             $current->update([
                 'starts_at' => $result->startsAt,
                 'ends_at' => $result->endsAt,
@@ -247,6 +256,10 @@ final class AppointmentService
                 'updated_by_user_id' => $actor->id,
             ]);
             $this->record($current, $actor, 'appointment.rescheduled', $from);
+            if ($before['dentist_profile_id'] !== $dentist->id || $before['ends_at']->lessThanOrEqualTo($result->startsAt)
+                || $before['starts_at']->greaterThanOrEqualTo($result->endsAt)) {
+                \App\Services\Automations\FillFreedSlots::open($current, 'released', before: $before);
+            }
             \App\Services\Automations\FillFreedSlots::claimByBooking($current);
             $this->notifyPatient($current, $actor, 'appointment_rescheduled');
 
@@ -260,6 +273,7 @@ final class AppointmentService
 
         return $this->idempotent($actor, $key, 'appointment.cancel', $payload, function () use ($actor, $appointment, $input) {
             $current = Appointment::whereKey($appointment->id)->lockForUpdate()->firstOrFail();
+            Gate::forUser($actor)->authorize('cancel', $current);
             if ($current->status === 'Cancelled') {
                 return [$current, 200];
             }

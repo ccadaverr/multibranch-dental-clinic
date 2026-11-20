@@ -7,6 +7,11 @@ export function moneyMinor(value) {
   return Number.isSafeInteger(amount) ? amount : null
 }
 const sameMoney = (a, b) => moneyMinor(a) !== null && moneyMinor(a) === moneyMinor(b)
+export const cashCorrectionReasons = {
+  refund_requested: 'Refund requested',
+  suspected_duplicate: 'Possible duplicate collection',
+  collection_discrepancy: 'Collection discrepancy',
+}
 const linesKey = row => JSON.stringify((row.lines || []).map(l => [l.id, l.service?.id, l.service?.code, l.service?.name, l.service_price_id, l.quantity, l.unit_price, l.line_total]))
 export function billingReceiptMatches(intent, row) {
   if (!row?.id || !Number.isInteger(row.revision)) return false
@@ -16,6 +21,18 @@ export function billingReceiptMatches(intent, row) {
   if (intent.mode === 'review') return row.status === 'Review'
   if (intent.mode === 'discount') return row.status === base.status && (row.discount_type || null) === intent.payload.discount_type && (row.discount_id_number || null) === (intent.payload.discount_id_number || null)
   if (intent.mode === 'issue') return ['Issued', 'Paid'].includes(row.status) && !!row.issued_at && (row.status !== 'Paid' || moneyMinor(row.balance) === 0 && (moneyMinor(row.patient_responsibility_amount) === 0 ? !row.payment && !row.receipt : confirmedBillingReceipt(row)))
+  if (intent.mode === 'closeCheckout') return base.has_open_checkout === true && row.has_open_checkout === false &&
+    row.status === 'Issued' && !row.payment && !row.receipt && sameMoney(row.balance, base.balance)
+  if (intent.mode === 'cashReview' || intent.mode === 'ackCashReview') {
+    const requested = intent.mode === 'cashReview'
+    const reason = requested ? intent.payload.reason : base.cash_correction?.reason
+    return !!reason && row.cash_correction?.reason === reason && !!row.cash_correction.occurred_at &&
+      row.cash_correction.status === (requested ? 'requested' : 'acknowledged') &&
+      confirmedBillingReceipt(row) && row.payment.method === 'Cash' && row.payment.id === base.payment?.id &&
+      row.receipt.id === base.receipt?.id && row.receipt.number === base.receipt?.number &&
+      sameMoney(row.payment.amount, base.payment?.amount) && sameMoney(row.paid_amount, base.paid_amount) &&
+      row.refund_status === base.refund_status
+  }
   if (intent.mode !== 'payment') return false
   const p = row.payment, r = row.receipt
   return row.status === 'Paid' && !!row.paid_at && moneyMinor(row.balance) === 0 && sameMoney(row.paid_amount, row.patient_responsibility_amount) && sameMoney(row.patient_responsibility_amount, base.patient_responsibility_amount) && !!p?.id && !!r?.id && !!r.number && !!r.issued_at && !!p.recorded_at && sameMoney(p.amount, intent.payload.amount) && sameMoney(r.amount, intent.payload.amount) && p.method === intent.payload.method && r.method === intent.payload.method && (p.external_reference || null) === (intent.payload.external_reference || null) && (r.external_reference || null) === (intent.payload.external_reference || null)
@@ -40,7 +57,7 @@ export function createBillingCommand({ send, read, key, allowed = () => true, pu
       if (!result.ok) {
         // A validation refusal is definitive. Transport failures, conflicts and contradictory
         // success responses require the same journal key; never infer that no write occurred.
-        if (result.status === 422 || result.kind === 'validation') intent = null
+        if (result.status === 422 || result.kind === 'validation' || ['checkout_reconciliation_required', 'checkout_expiry_unconfirmed'].includes(result.code)) intent = null
         return result
       }
       if (!billingReceiptMatches(attempt, result.data)) return { ok: false, kind: 'unconfirmed', message: 'The returned invoice did not confirm this action. Retry the same command or reload billing.' }

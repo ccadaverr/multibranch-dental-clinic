@@ -2,6 +2,7 @@
 
 namespace App\Services\Payment;
 
+use App\Enums\Role;
 use App\Models\Appointment;
 use App\Models\Invoice;
 use App\Models\PaymentCheckoutSession;
@@ -218,7 +219,14 @@ class PayMongoService
         $methods = $this->paymentMethodTypes();
         // Serialized per invoice: a second initiation (double click, retry, two tabs) waits here and then sees the first one's session.
         return DB::transaction(function () use ($invoice, $actor, $secret, $methods, $address, $saveAddress) {
+            if (! in_array($actor->role, [Role::Staff, Role::Patient], true)) {
+                throw new BillingException(403, 'forbidden', 'This account cannot start online checkout.');
+            }
+            $actor = $this->billing->lockFinancialActor($actor, $invoice, $actor->role);
             $invoice = Invoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
+            if ($actor->role === Role::Patient && ! in_array($invoice->patient_id, \App\Services\Intake\Guardianship::patientIdsFor($actor), true)) {
+                throw new BillingException(403, 'forbidden', 'This account cannot pay for that invoice.');
+            }
             $invoice->loadMissing(['patient.person', 'patient.user', 'branch', 'lines']);
             $balance = $this->billing->payableBalance($invoice); // refuses Paid, non-Issued and HMO-held invoices
             $centavos = $this->billing->centavos($balance);
@@ -263,10 +271,9 @@ class PayMongoService
                 return ['checkout_session_id' => $existing->provider_session_id, 'checkout_url' => $existing->checkout_url, 'reference_number' => $invoice->public_id, 'amount_php' => $balance, 'line_items_mode' => $mode];
             }
             if ($existing) {
-                // The balance or the details changed: the old session can no longer settle this invoice. It is retired here and
-                // expired at PayMongo so its page stops taking payments.
+                // A replacement may only open after the provider confirms the existing checkout is closed.
+                $this->confirmInvoiceCheckoutExpired($existing, $invoice, $secret);
                 $existing->update(['status' => 'Superseded']);
-                $this->expireAtProvider($existing, $secret);
             }
 
             // The same request (same invoice, same details, same attempt number) carries the same key, so a retry after a lost
@@ -302,6 +309,67 @@ class PayMongoService
         });
     }
 
+    /** Close an unpaid sandbox checkout so branch Staff can collect at the counter. */
+    public function closeInvoiceCheckout(Invoice $invoice, User $actor, int $expected): Invoice
+    {
+        if ($this->live()) {
+            throw new BillingException(422, 'checkout_close_test_only', 'Contact the payment provider to resolve this live checkout before collecting at the counter.');
+        }
+        $secret = $this->secretKey();
+        return DB::transaction(function () use ($invoice, $actor, $expected, $secret) {
+            $actor = $this->billing->lockFinancialActor($actor, $invoice, Role::Staff);
+            $current = Invoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
+            if ($current->revision !== $expected || $current->status !== 'Issued') {
+                throw new BillingException(409, 'stale_revision', 'The invoice has changed. Refresh before closing the checkout.');
+            }
+            $open = $current->openCheckouts()->first();
+            if (! $open) {
+                throw new BillingException(422, 'checkout_not_open', 'There is no open checkout for this invoice. Refresh the invoice to verify the balance.');
+            }
+            // Earlier versions could retire an old checkout locally without provider confirmation.
+            // Verify those sessions too before making this invoice available for collection.
+            $sessions = PaymentCheckoutSession::where('invoice_id', $current->id)
+                ->whereIn('status', ['Open', 'Superseded'])->orderByDesc('id')->limit(5)->get();
+            if ($sessions->count() === 5) {
+                throw new BillingException(409, 'checkout_reconciliation_required', 'Several previous checkouts exist. Review them with the payment provider before collecting at the counter.');
+            }
+            foreach ($sessions as $session) {
+                $this->confirmInvoiceCheckoutExpired($session, $current, $secret);
+            }
+            $open->update(['status' => 'Superseded']);
+            $current->update(['revision' => $current->revision + 1, 'updated_by_user_id' => $actor->id]);
+            $this->audit->record([
+                'action' => 'billing.checkout_closed_for_counter', 'category' => 'financial',
+                'actor' => $actor, 'target' => $current, 'branch_id' => $current->branch_id,
+                'payload' => ['invoice_number' => $current->invoice_number, 'checkout_id' => $open->public_id],
+            ]);
+
+            return $current;
+        });
+    }
+
+    private function confirmInvoiceCheckoutExpired(PaymentCheckoutSession $session, Invoice $invoice, string $secret): void
+    {
+        $url = $this->host().'/v1/checkout_sessions/'.rawurlencode($session->provider_session_id);
+        $request = fn () => Http::withBasicAuth($secret, '')->acceptJson()->connectTimeout(3)->timeout(6);
+        try {
+            $response = $request()->post($url.'/expire');
+            if (! $response->successful() || $response->json('data.attributes.status') !== 'expired') {
+                $response = $request()->get($url);
+            }
+        } catch (ConnectionException) {
+            throw new BillingException(409, 'checkout_expiry_unconfirmed', 'The provider could not confirm closure. Check online payment status before collecting at the counter.');
+        }
+        $payments = $response->json('data.attributes.payments');
+        if (! $response->successful() || $response->json('data.id') !== $session->provider_session_id
+            || $response->json('data.attributes.reference_number') !== $invoice->public_id
+            || $response->json('data.attributes.livemode') !== $this->live()
+            || $response->json('data.attributes.status') !== 'expired' || ! is_array($payments)
+            || collect($payments)->contains(fn ($payment) => ! in_array($payment['attributes']['status'] ?? null, ['failed', 'cancelled'], true))) {
+            throw new BillingException(409, 'checkout_expiry_unconfirmed', 'The provider did not confirm an unpaid, closed checkout. Check online payment status before collecting at the counter.');
+        }
+    }
+
     /**
      * Checks open checkout sessions against PayMongo directly (useful when webhooks are delayed or in local development).
      */
@@ -334,6 +402,9 @@ class PayMongoService
             $invoice = $session->invoice()->lockForUpdate()->firstOrFail();
             if ($invoice->status === 'Paid') {
                 return $invoice;
+            }
+            if ($session->fresh()?->status !== 'Open') {
+                return null;
             }
 
             $settled = $this->billing->payOnline(
@@ -600,7 +671,7 @@ class PayMongoService
             throw new BillingException(422, 'refund_reference_unavailable', 'A provider refund reference is required for reconciliation.');
         }
         $secret = $this->secretKey();
-        $this->live();
+        $live = $this->live();
 
         if (! $appointment->booking_payment_ref || ! in_array($appointment->booking_payment_status, ['paid', 'forfeited'], true)) {
             throw new BillingException(422, 'no_refundable_payment', 'This appointment does not have a settled booking payment to refund.');
@@ -640,9 +711,39 @@ class PayMongoService
         $amount = $response->json('data.attributes.amount');
         if (! is_string($refundId) || $refundId === '' || ($appointment->booking_refund_ref && $refundId !== $appointment->booking_refund_ref)
             || ! in_array($status, ['pending', 'processing', 'succeeded', 'failed'], true)
+            || $response->json('data.attributes.payment_id') !== $appointment->booking_payment_ref
+            || $response->json('data.attributes.currency') !== self::CURRENCY
+            || $response->json('data.attributes.livemode') !== $live
             || ! (is_int($amount) || (is_string($amount) && ctype_digit($amount))) || (int) $amount !== $centavos) {
             throw new BillingException(502, 'payment_gateway_invalid_response', 'The provider did not return verifiable refund confirmation. Please contact the clinic before retrying.');
         }
+        return DB::transaction(function () use ($appointment, $refundId, $centavos, $status, $validReason, $reconciliationOnly) {
+            $current = Appointment::whereKey($appointment->id)->lockForUpdate()->firstOrFail();
+            if ($current->booking_payment_ref !== $appointment->booking_payment_ref
+                || $this->billing->centavos((string) $current->booking_fee_php) !== $centavos
+                || ($current->booking_refund_ref !== null && $current->booking_refund_ref !== $refundId)) {
+                throw new BillingException(409, 'refund_capture_changed', 'The original booking capture changed. Review the provider record before proceeding.');
+            }
+            if ($current->booking_payment_status === 'refunded' && $current->booking_refund_ref === $refundId && $current->booking_refunded_at) {
+                return ['refund_id' => $refundId, 'status' => 'refunded'];
+            }
+            if (! in_array($current->booking_payment_status, ['paid', 'forfeited'], true)) {
+                throw new BillingException(409, 'refund_capture_changed', 'The booking payment state changed. Review the provider record before proceeding.');
+            }
+            $priorStatus = \App\Models\AuditLog::where('auditable_type', 'Appointment')
+                ->where('auditable_public_id', $current->public_id)->where('payload->refund_id', $refundId)
+                ->whereIn('action', ['billing.booking_payment_refund_requested', 'billing.booking_refund_failed'])
+                ->latest('id')->first()?->payload['provider_status'] ?? null;
+            if ($priorStatus === $status || ($priorStatus === 'failed' && $status !== 'succeeded')
+                || ($priorStatus === 'processing' && $status === 'pending')) {
+                return ['refund_id' => $refundId, 'status' => $priorStatus];
+            }
+            return $this->recordBookingRefund($current, $refundId, $status, $validReason, $reconciliationOnly);
+        }, 3);
+    }
+
+    private function recordBookingRefund(Appointment $appointment, string $refundId, string $status, string $reason, bool $reconciliationOnly): array
+    {
         $appointment->update([
             'booking_payment_status' => $status === 'succeeded' ? 'refunded' : $appointment->booking_payment_status,
             'booking_refund_ref' => $refundId,
@@ -665,7 +766,7 @@ class PayMongoService
                 'fee' => (string) $appointment->booking_fee_php,
                 'refund_id' => $refundId,
                 'provider_status' => $status,
-                'reason' => $reconciliationOnly ? null : $validReason,
+                'reason' => $reconciliationOnly ? null : $reason,
                 'reconciliation_only' => $reconciliationOnly,
             ],
         ]);
@@ -891,8 +992,12 @@ class PayMongoService
                 return $this->finish($event, 'Settled', null, 200, $appointment->public_id);
             }
 
+            $invoice = $session->invoice()->lockForUpdate()->firstOrFail();
+            if ($invoice->status !== 'Paid' && $session->fresh()?->status !== 'Open') {
+                return $this->review($event, $session, 'invoice_checkout_retired');
+            }
             try {
-                $settled = $this->billing->payOnline($session->invoice, 'PayMongo ('.(self::METHOD_LABELS[$paid['method']] ?? 'ONLINE').')', $paid['id'], $session->initiatedBy()->firstOrFail(), (string) $session->amount);
+                $settled = $this->billing->payOnline($invoice, 'PayMongo ('.(self::METHOD_LABELS[$paid['method']] ?? 'ONLINE').')', $paid['id'], $session->initiatedBy()->firstOrFail(), (string) $session->amount);
             } catch (BillingException $e) {
                 // The provider captured funds the invoice can no longer take: keep the event, flag it, never drop it.
                 return $this->review($event, $session, $e->getCode(), $e->getCode() === 'already_paid' ? 'Duplicate' : 'Needs review');
@@ -920,6 +1025,9 @@ class PayMongoService
         }
         if (! $response->successful()) {
             return 'provider_confirmation_refused';
+        }
+        if ($response->json('data.id') !== $session->provider_session_id) {
+            return 'checkout_session_mismatch';
         }
         if (($response->json('data.attributes.livemode')) !== $this->live()) {
             return 'livemode_mismatch';
