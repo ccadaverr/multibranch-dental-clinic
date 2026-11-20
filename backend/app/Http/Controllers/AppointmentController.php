@@ -9,6 +9,7 @@ use App\Http\Requests\Appointment\CancelAppointmentRequest;
 use App\Http\Requests\Appointment\RecommendationRequest;
 use App\Http\Requests\Appointment\RescheduleAppointmentRequest;
 use App\Http\Requests\Appointment\RefundBookingPaymentRequest;
+use App\Http\Requests\Appointment\ReconcileBookingRefundRequest;
 use App\Http\Requests\Appointment\StoreAppointmentRequest;
 use App\Http\Requests\Appointment\TransitionAppointmentRequest;
 use App\Http\Resources\AppointmentResource;
@@ -241,6 +242,32 @@ class AppointmentController extends Controller
                 ? 'The provider confirmed the booking refund.'
                 : 'The refund is not confirmed. Reconcile the original provider request; do not submit a new refund.',
         ]], $result['status'] === 'unconfirmed' ? 202 : 200)->header('Cache-Control', 'no-store');
+    }
+
+    /** Safe provider GET reconciliation only; never creates a refund. Staff/Owner, branch scoped. */
+    public function reconcileBookingRefund(ReconcileBookingRefundRequest $request, Appointment $appointment): JsonResponse
+    {
+        abort_unless(Gate::allows('refundBookingPayment', $appointment), 404, 'Appointment not found.');
+        $values = $request->validated();
+        $result = $this->appointments->reconcileBookingRefund(
+            $request->user(), $appointment, (int) $values['expected_revision'],
+        );
+        $fresh = $appointment->fresh();
+        $status = $result['status'];
+        $outcome = match ($status) {
+            'refunded' => 'The provider confirmed that this booking refund succeeded.',
+            'failed' => 'The provider reports a failed refund. Review the original payment before any further action.',
+            'pending', 'processing' => 'The provider has not completed this refund. Check again later; do not create another refund.',
+            default => 'Refund outcome is unknown. Reconcile with the provider using the original booking capture. Do not initiate another refund.',
+        };
+        return response()->json(['data' => [
+            'appointment_id' => $fresh->public_id,
+            'booking_payment_status' => $fresh->booking_payment_status,
+            'refund_status' => $status,
+            'provider_ref_known' => (bool) $fresh->booking_refund_ref,
+            'outcome' => $outcome,
+        ]], in_array($status, ['unconfirmed', 'pending', 'processing'], true) ? 202 : 200)
+            ->header('Cache-Control', 'no-store');
     }
 
     /** Appointment-only lifecycle command: the pre-arrival No-show (see AppointmentService::TRANSITIONS). */

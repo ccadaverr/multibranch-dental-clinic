@@ -6,7 +6,7 @@ import { canAccessPage } from '../safeguards.js'
 import { checkInNavigationFor } from '../checkin-navigation.js'
 import { clinicDate } from '../clock.js'
 import { commandKey, selectedFollowupProblem, STAFF_CANCELLATION_REASONS } from '../appointments-api.js'
-import { requestBookingRefund } from '../api-client.js'
+import { requestBookingRefund, reconcileBookingRefund } from '../api-client.js'
 import { publicPatientIdFor } from '../appointment-projection.js'
 import { useDayAvailability } from '../booking-availability.js'
 import { dentistsFor, servicesAt } from '../scheduling.js'
@@ -407,6 +407,18 @@ function BookingRefundDialog({ appointment, onClose }) {
   const [result,setResult]=useState(null)
   const key=useRef(commandKey())
   const submitted=useRef(false)
+  const [checking,setChecking]=useState(false)
+  const checkStatus=async()=>{
+    if(busy||checking)return
+    setChecking(true);setError('')
+    try{
+      const response=await reconcileBookingRefund(appointment.id,{expected_revision:appointment.revision},commandKey())
+      if(response.ok){setResult(response.data)}
+      else setError(response.message||'Could not verify the original provider refund. No new refund was requested.')
+    }catch{
+      setError('The provider status could not be checked. No new refund request was sent.')
+    }finally{setChecking(false)}
+  }
   const submit=async event=>{
     event.preventDefault()
     if(submitted.current || busy || (reason==='others'&&!note.trim()))return
@@ -433,6 +445,8 @@ function BookingRefundDialog({ appointment, onClose }) {
     {result ? <div role="status" aria-live="polite">
       <p>{result.outcome}</p>
       <p><b>Provider outcome:</b> {result.refund_status==='refunded'?'Confirmed refunded':result.refund_status==='unconfirmed'?'Unconfirmed — manual reconciliation needed':result.refund_status}</p>
+      {result.provider_ref_known&&result.refund_status!=='refunded'&&
+        <Button disabled={checking} onClick={checkStatus}>{checking?'Checking provider…':'Check provider again (read-only)'}</Button>}
       <Button onClick={onClose}>Close and refresh</Button>
     </div> : <>
       {error&&<Notice tone="warning" title="Refund not confirmed">{error}</Notice>}
@@ -445,8 +459,11 @@ function BookingRefundDialog({ appointment, onClose }) {
         </select></Field>
         <Field label="Review note" required={reason==='others'}><textarea aria-label="Refund review note" rows={3} maxLength={500} value={note} disabled={busy||submitted.current} onChange={e=>setNote(e.target.value)} required={reason==='others'}/></Field>
         <div className="row-actions">
-          <Button type="button" variant="ghost" disabled={busy} onClick={onClose}>Close</Button>
-          <Button type="submit" disabled={busy||submitted.current||(reason==='others'&&!note.trim())}>{busy?'Checking provider…':'Request PayMongo refund'}</Button>
+          <Button type="button" variant="ghost" disabled={busy||checking} onClick={onClose}>Close</Button>
+          <Button type="button" variant="soft" disabled={busy||checking} onClick={checkStatus}>
+            {checking?'Checking provider…':'Check existing refund status'}
+          </Button>
+          <Button type="submit" disabled={busy||checking||submitted.current||(reason==='others'&&!note.trim())}>{busy?'Checking provider…':'Request PayMongo refund'}</Button>
         </div>
       </form>
       {submitted.current&&error&&<Button onClick={onClose}>Close and refresh</Button>}

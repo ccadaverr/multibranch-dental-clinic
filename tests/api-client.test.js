@@ -188,3 +188,15 @@ test('R23 refund command sends only selected reason, observed revision and stabl
     expected_revision: 8, reason: 'requested_by_customer', note: null,
   })
 })
+
+
+test('R23B booking refund reconciliation is a separate POST with revision but no money inputs', async () => {
+  mockFetch([jsonResponse(200, {}), jsonResponse(202, { data: { refund_status: 'unconfirmed', provider_ref_known: false } })])
+  const result = await api.reconcileBookingRefund('appt-r23', { expected_revision: 3 }, 'r23-reconcile-key')
+  assert.equal(result.ok, true)
+  assert.equal(result.data.refund_status, 'unconfirmed')
+  const command = calls.find(c => c.options?.method === 'POST')
+  assert.match(command.url, /\/api\/appointments\/appt-r23\/booking-refund\/reconcile$/)
+  assert.equal(command.options.headers['Idempotency-Key'], 'r23-reconcile-key')
+  assert.deepEqual(JSON.parse(command.options.body), { expected_revision: 3 })
+})

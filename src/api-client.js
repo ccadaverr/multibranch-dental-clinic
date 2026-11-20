@@ -294,6 +294,8 @@ export function rescheduleAppointment(id, payload, key) { return command(`/api/a
 export function cancelAppointmentRemote(id, payload, key, beforeDispatch) { return command(`/api/appointments/${encodeURIComponent(id)}/cancel`, payload, key, beforeDispatch) }
 // R23A: authorized clinic booking-deposit refund. The server owns amount, provider id and settlement state.
 export function requestBookingRefund(id, payload, key, beforeDispatch) { return command(`/api/appointments/${encodeURIComponent(id)}/booking-refund`, payload, key, beforeDispatch) }
+// R23B: provider GET readback only; the server will never create a second refund from this command.
+export function reconcileBookingRefund(id, payload, key, beforeDispatch) { return command(`/api/appointments/${encodeURIComponent(id)}/booking-refund/reconcile`, payload, key, beforeDispatch) }
 // Appointment-only lifecycle command: the pre-arrival 'no-show' (Check-In and treatment progression are Visit commands).
 export function transitionAppointment(id, name, payload, key) { return command(`/api/appointments/${encodeURIComponent(id)}/${encodeURIComponent(name)}`, payload, key) }
 // Minimal M4 Patient directory (Staff/Owner selection) and front-desk registration (Person + Patient, no login).

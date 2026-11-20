@@ -584,8 +584,21 @@ class PayMongoService
      * Refunds an appointment booking payment (Section 22.3).
      * Used automatically for cancellations >= 24h, or manually by front desk.
      */
-    public function refundAppointment(Appointment $appointment, string $reason = 'requested_by_customer'): array
+    public function reconcileAppointmentRefund(Appointment $appointment): array
     {
+        if (! $appointment->booking_refund_ref) {
+            throw new BillingException(422, 'refund_reference_unavailable',
+                'No provider refund reference is stored. Manual provider reconciliation is required; never initiate another refund.');
+        }
+        // The extra guard inside refundAppointment refuses a POST even if a caller changes later.
+        return $this->refundAppointment($appointment, 'requested_by_customer', true);
+    }
+
+    public function refundAppointment(Appointment $appointment, string $reason = 'requested_by_customer', bool $reconciliationOnly = false): array
+    {
+        if ($reconciliationOnly && ! $appointment->booking_refund_ref) {
+            throw new BillingException(422, 'refund_reference_unavailable', 'A provider refund reference is required for reconciliation.');
+        }
         $secret = $this->secretKey();
         $this->live();
 
@@ -652,7 +665,8 @@ class PayMongoService
                 'fee' => (string) $appointment->booking_fee_php,
                 'refund_id' => $refundId,
                 'provider_status' => $status,
-                'reason' => $validReason,
+                'reason' => $reconciliationOnly ? null : $validReason,
+                'reconciliation_only' => $reconciliationOnly,
             ],
         ]);
 

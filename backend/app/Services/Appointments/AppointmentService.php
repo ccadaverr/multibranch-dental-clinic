@@ -659,6 +659,61 @@ final class AppointmentService
         return $result;
     }
 
+    /**
+     * Reconciliation-only command. Never sends a provider refund POST.
+     * Without a known refund id, the original attempt is unresolved and requires
+     * a provider/operator trace using the captured payment reference.
+     */
+    public function reconcileBookingRefund(User $actor, Appointment $appointment, int $expectedRevision): array
+    {
+        $decision = DB::transaction(function () use ($actor, $appointment, $expectedRevision) {
+            $locked = Appointment::whereKey($appointment->id)->lockForUpdate()->firstOrFail();
+            Gate::forUser($actor)->authorize('refundBookingPayment', $locked);
+            if ($locked->revision !== $expectedRevision) {
+                throw AppointmentCommandException::staleRevision();
+            }
+            if ($locked->booking_payment_status === 'refunded'
+                && $locked->booking_refund_ref && $locked->booking_refunded_at) {
+                return 'refunded';
+            }
+            if (! $locked->booking_refund_ref) {
+                if (! $this->refundAttemptExists($locked)) {
+                    throw AppointmentCommandException::rule('no_refund_to_reconcile',
+                        'No booking refund request is recorded for this appointment.', 'booking_payment_status');
+                }
+                return 'unconfirmed';
+            }
+            if (! in_array($locked->booking_payment_status, ['paid', 'forfeited'], true)) {
+                throw AppointmentCommandException::rule('refund_requires_financial_review',
+                    'The booking payment state cannot be automatically reconciled. Review the original financial record.',
+                    'booking_payment_status');
+            }
+            return 'provider_get';
+        }, self::ATTEMPTS);
+
+        if ($decision === 'refunded') {
+            return ['status' => 'refunded'];
+        }
+        if ($decision === 'unconfirmed') {
+            return ['status' => 'unconfirmed'];
+        }
+
+        $fresh = $appointment->fresh();
+        // Defensive readback: even if the reference is lost between transactions,
+        // a second POST is impossible through this method.
+        if (! $fresh->booking_refund_ref) {
+            return ['status' => 'unconfirmed'];
+        }
+        try {
+            return app(PayMongoService::class)->reconcileAppointmentRefund($fresh);
+        } catch (BillingException $exception) {
+            // A timeout, malformed read or 5xx is not proof of failure/success.
+            $this->recordCancellationRefund($fresh, $actor, 'billing.booking_refund_reconciliation_unconfirmed',
+                $exception->responseBody()['code'] ?? 'provider_read_unavailable');
+            return ['status' => 'unconfirmed'];
+        }
+    }
+
     private function refundAttemptExists(Appointment $appointment): bool
     {
         return AuditLog::where('auditable_type', 'Appointment')

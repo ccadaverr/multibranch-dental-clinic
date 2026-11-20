@@ -387,6 +387,8 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
         Route::post('/{appointment}/cancel', [AppointmentController::class, 'cancel'])->middleware('role:patient,staff,owner');
         Route::post('/{appointment}/booking-refund', [AppointmentController::class, 'refundBookingPayment'])
             ->middleware(['role:staff,owner', 'throttle:10,1']);
+        Route::post('/{appointment}/booking-refund/reconcile', [AppointmentController::class, 'reconcileBookingRefund'])
+            ->middleware(['role:staff,owner', 'throttle:20,1']);
         // The pre-arrival No-show (the Patient did not arrive; no Visit). Check-In and treatment start/completion are
         // Visit commands below — there is no second appointment path for them.
         Route::post('/{appointment}/{command}', [AppointmentController::class, 'transition'])
