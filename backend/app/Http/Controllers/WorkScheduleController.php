@@ -9,6 +9,7 @@ use App\Models\DentistSchedule;
 use App\Models\DentistScheduleException;
 use App\Models\User;
 use App\Models\UserBranchScope;
+use App\Services\Closures\ClosureCalendar;
 use App\Services\Audit\AuditService;
 use App\Services\Automations\AutomationCatalog;
 use App\Services\Automations\MessageTemplates;
@@ -56,6 +57,10 @@ class WorkScheduleController extends Controller
             ->with(['person', 'branches' => fn ($q) => $q->whereIn('branches.id', $allowed)])
             ->whereHas('branches', fn ($q) => $q->whereIn('branches.id', $allowed))
             ->orderBy('id')->get();
+        // Only today's closures for the already-authorized Dentist branches are needed.
+        // Avoid the full-year fallback lookup in ClosureCalendar on this hot dashboard read.
+        $branchIds = $dentists->flatMap(fn (DentistProfile $dentist) => $dentist->branches->pluck('id'))->unique()->values()->all();
+        app(ClosureCalendar::class)->primeRange($branchIds, $today, $today);
         $work = new WorkSchedules();
         $work->preloadCalendar($dentists, $today, $today);
         $rows = $dentists->flatMap(function (DentistProfile $dentist) use ($work, $today) {

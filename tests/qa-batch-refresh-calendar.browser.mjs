@@ -32,7 +32,7 @@ const bundle = await build({ stdin: { contents: source, resolveDir: process.cwd(
   b.onLoad({ filter: /[\\/]src[\\/].*\.(jsx|js|css)$/ }, (args) => {
     const rel = args.path.slice(process.cwd().length + 1).replaceAll('\\', '/');
     let contents = process.env.QA_BASELINE === "1" ? execFileSync("git", ["show", "HEAD:" + rel], { encoding: "utf8" }) : readFileSync(args.path, "utf8");
-    if (rel === "src/pages/StaffOnDuty.jsx") contents = contents.replace("import { workSchedules } from '../api-client.js'", "const workSchedules=()=>{window.batch.calls++;return new Promise(r=>window.batch.resolve=r)}");
+    if (rel === "src/pages/StaffOnDuty.jsx") contents = contents.replace("import { workSchedulesDuty } from '../api-client.js'", "const workSchedulesDuty=()=>{window.batch.calls++;return new Promise(r=>window.batch.resolve=r)}");
     if (rel === "src/pages/Automations.jsx") contents = contents.replace("previewMessageTemplate,", "previewMessageTemplate as unusedPreviewMessageTemplate,") + "\nconst previewMessageTemplate=()=>{window.batch.calls++;return new Promise(r=>window.batch.resolve=r)}";
     return { contents, loader: rel.endsWith(".css") ? "css" : "jsx" };
   });

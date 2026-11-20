@@ -19,7 +19,8 @@ test('public website renders complete semantic sections and a single primary hea
   assert.match(page,/<header/);assert.match(page,/<main/);assert.match(page,/<footer/)
   for(const id of ['home','how-it-works','services','branches','features','faq'])assert.match(page,new RegExp(`id="${id}"`))
   assert.equal((page.match(/<h1[ >]/g)||[]).length,1)
-  for(const heading of ['How to book a visit','Find the care you need','Find the branch near you','Questions patients ask','In an emergency'])assert.ok(page.includes(heading),heading)
+  for(const heading of ['From planning to booking.','Dental services','Find your nearest clinic.','Good to know.','In an emergency'])assert.ok(page.includes(heading),heading)
+  assert.match(page, /id="lp-hero-title"[^>]*>Good care starts/)
 })
 test('public navigation has real anchors, account actions and an accessible mobile menu',()=>{
   const html=render(ui.PublicHeader)
@@ -34,8 +35,9 @@ test('only the clinic name and contact are a built-in fallback; branches, servic
   assert.equal(clinic.phoneDisplay,'0922 878 7341')
   assert.equal(clinic.email,'danaroxas.dentalclinic@gmail.com')
   // Server-rendered (no API): loading states, never invented branches or services.
-  assert.match(page,/aria-label="Loading services"/)
-  assert.match(page,/aria-label="Loading branches"/)
+  assert.match(page,/class="lp-service-loading" role="status"/)
+  assert.match(page,/class="sr-only">Loading services…/)
+  assert.match(page,/role="status" class="lp-branch-loading">Loading clinic locations…/)
   for(const fact of ['MacArthur','0933 867 8725','8:00 PM','Oral Prophylaxis'])assert.ok(!page.includes(fact),fact)
   const source=readFileSync('src/pages/PublicSite.jsx','utf8')+readFileSync('src/pages/PublicChrome.jsx','utf8')
   for(const api of ["usePublicData('branches')","usePublicData('services')","usePublicData('faq')"])assert.ok(source.includes(api),api)
@@ -46,21 +48,30 @@ test('the public site shows only real product features: no HMO, statistics, test
     assert.doesNotMatch(html,/\bHMO\b/i)
     assert.doesNotMatch(html,/testimonial|partner|lorem ipsum|coming soon|illustrative preview|\b\d{2,}\+? (patients|clients|reviews)|★|rating/i)
   }
-  for(const feature of ['Online booking','Email updates','Secure messaging','Online payment with receipt'])assert.ok(page.includes(feature),feature)
+  for(const feature of ['Appointments','Clinic messages','Billing'])assert.ok(page.includes(feature),feature)
+  assert.match(page,/Book a visit or manage an existing appointment/)
+  assert.match(page,/View your invoices, receipts, and available payment options/)
   assert.ok(!readFileSync('index.html','utf8').match(/\bHMO\b/i))
 })
 test('footer has quick links, account links, the RA 10173 note, privacy and terms links and the current year',()=>{
   const html=render(ui.PublicFooter)
   assert.ok(html.includes(`© ${new Date().getFullYear()}`))
   for(const href of ['#services','#branches','#sign-in','#create-account','#privacy','#terms'])assert.ok(html.includes(`href="${href}"`),href)
-  assert.match(html,/RA 10173/)
+  assert.match(html,/Data Privacy Act of 2012 \(RA 10173\)/)
+  assert.match(html,/href="#privacy"[^>]*>Your privacy rights/)
   for(const kind of ['privacy','terms']){const legal=render(ui.PublicLegal,{kind});assert.match(legal,/Draft — to be confirmed by the clinic/);assert.equal((legal.match(/<h1[ >]/g)||[]).length,1)}
+  const terms=render(ui.PublicLegal,{kind:'terms'})
+  assert.match(terms,/online payment may be required before confirmation/)
+  assert.doesNotMatch(terms,/Nothing is charged when you book/)
+  assert.match(terms,/You can update your account name in Profile/)
   assert.equal(publicViewFromHash('#privacy'),'privacy');assert.equal(publicViewFromHash('#terms'),'terms')
 })
 test('auth screens share the landing header, the two-column layout, a website return path and the footer',()=>{
   for(const html of [render(ui.Login,{onLogin:()=>{},onShowRegister:()=>{}}),render(ui.PatientRegister,{onRegister:()=>{},onCancel:()=>{}}),render(ui.EmailVerification,{email:'private@example.test',onVerify:()=>{},onResend:()=>{},onBack:()=>{}})]){
     assert.match(html,/aria-label="Main"/)
-    assert.match(html,/class="lp-container lp-auth-grid"/)
+    assert.match(html,/class="lp-auth auth-shell site-ready"/)
+    assert.match(html,/class="lp-auth-side"/)
+    assert.match(html,/class="auth-card"/)
     assert.match(html,/href="#home"/)
     assert.match(html,/<footer/)
   }
@@ -68,13 +79,13 @@ test('auth screens share the landing header, the two-column layout, a website re
 test('the create-account card: labels, sign-in email, PH phone hint, password help, consent links, full-width button and sign-in link',()=>{
   const html=render(ui.PatientRegister,{onRegister:()=>{},onCancel:()=>{}})
   assert.match(html,/Create your account/)
-  assert.match(html,/Book visits, pay online and message the clinic in one place\./)
+  assert.match(html,/Book and manage your dental visits\./)
   assert.match(html,/Philippines \+63/)
   assert.match(html,/type="tel"/)
   assert.match(html,/inputMode="tel"/)
   assert.match(html,/Philippine mobile, e\.g\. 917 123 4567/)
   assert.match(html,/type="date" required="" max=/)
-  assert.match(html,/This is the email you will sign in with/)
+  assert.match(html,/We’ll send your six-digit verification code to this address\./)
   assert.equal((html.match(/class="auth-password-toggle"/g)||[]).length,2)
   assert.match(html,/At least 8 characters/)
   assert.match(html,/href="#privacy"/);assert.match(html,/href="#terms"/)
@@ -164,11 +175,11 @@ test('every lazy page resolves to its named component export',async()=>{
 test('auth prioritizes forms and removes repeated brand/marketing panels',()=>{
   const login=render(ui.Login,{onLogin:()=>{},onShowRegister:()=>{}})
   assert.match(login,/Welcome back/)
-  assert.match(login,/Sign in to continue to your clinic portal/)
+  assert.match(login,/Sign in to your clinic account\./)
   assert.match(login,/Create an account/)
   for(const html of [login,render(ui.PatientRegister,{onRegister:()=>{},onCancel:()=>{}}),render(ui.EmailVerification,{email:'private@example.test'})]){
     assert.doesNotMatch(html,/auth-intro|auth-mobile-brand|Care, thoughtfully connected|Appointments and visit details|Clinic updates and messages|Billing and receipt history/)
-    assert.match(html,/Back to the clinic website/)
+    assert.match(html,/href="#home"[^>]*>[^<]*<svg[^>]*>[\s\S]*?<\/svg>Clinic website<\/a>/)
   }
 })
 test('create-account validation: required fields, email, phone, password rules, matching passwords and consent',()=>{

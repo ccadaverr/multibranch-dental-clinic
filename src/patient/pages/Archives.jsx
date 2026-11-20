@@ -106,7 +106,7 @@ export function ArchivesPage({ toast, session, getAuthGeneration, onNavigate, fi
     const isCurrent = () => active && owns()
     try {
       const result = await boundedClinicalRead(() => record.isBookingDeposit
-        ? downloadAppointmentReceiptPdf(record.appointmentId, record.appointmentCode, { isCurrent })
+        ? downloadAppointmentReceiptPdf(record.appointmentId, record.appointmentCode, { patientId: record.patient.id, isCurrent })
         : downloadBillingPdf(record.id, kind, { patientId: record.patient.id, receiptId: kind === 'receipt' ? record.receipt.id : null, isCurrent }))
       if (owns() && !result.ok) toast?.(result.message || 'The saved PDF could not be downloaded.', 'warning')
     } finally {

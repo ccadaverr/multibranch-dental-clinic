@@ -108,8 +108,8 @@ export function IconAction({ icon, label, intent = 'neutral', className = '', ty
   return <button type={type} className={`ui-icon-action intent-${intent} ${className}`.trim()} aria-label={label} title={label} {...props}><Icon name={icon} size={18}/></button>
 }
 
-export function Button({ children, variant='primary', size='md', width='content', className='', icon, type='button', ...props }) {
-  return <button type={type} className={`btn ${variant} ${size} ${width==='full'?'btn-full':''} ${className}`.trim()} {...props}>{icon&&<Icon name={icon} size={size==='sm'?15:17}/>}<span>{children}</span></button>
+export function Button({ children, variant='primary', size='md', width='content', className='', icon, type='button', loading=false, disabled=false, ...props }) {
+  return <button type={type} className={`btn ${variant} ${size} ${width==='full'?'btn-full':''} ${className}`.trim()} {...props} disabled={disabled||loading} aria-busy={loading||undefined}>{loading?<span className="btn-progress" aria-hidden="true"/>:icon&&<Icon name={icon} size={size==='sm'?15:17}/>}<span>{children}</span></button>
 }
 
 export function Field({ label, children, hint, required=false, error }) {
@@ -171,7 +171,7 @@ export function Progress({ value=0, label, threshold=100 }) {
   </div>
 }
 
-export function Modal({ open, title, subtitle, onClose, children, wide=false, className='' }) {
+export function Modal({ open, title, subtitle, onClose, children, wide=false, className='', closeDisabled=false }) {
   const ref=useRef(null), closeRef=useRef(onClose), titleId=useId(), subtitleId=useId()
   closeRef.current=onClose
   useEffect(()=>{
@@ -186,11 +186,11 @@ export function Modal({ open, title, subtitle, onClose, children, wide=false, cl
     }
   },[open])
   if (!open) return null
-  return <dialog ref={ref} className={`modal ${wide?'wide':''} ${className}`} aria-labelledby={titleId} aria-describedby={subtitle?subtitleId:undefined} onCancel={e=>{e.preventDefault();closeRef.current?.()}} onClick={e=>{
+  return <dialog ref={ref} className={`modal ${wide?'wide':''} ${className}`} aria-labelledby={titleId} aria-describedby={subtitle?subtitleId:undefined} onCancel={e=>{e.preventDefault();if(!closeDisabled)closeRef.current?.()}} onClick={e=>{
     const r=e.currentTarget.getBoundingClientRect()
-    if(e.target===e.currentTarget&&(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom))closeRef.current?.()
+    if(!closeDisabled&&e.target===e.currentTarget&&(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom))closeRef.current?.()
   }}>
-    <div className="modal-head"><div><h2 id={titleId}>{title}</h2>{subtitle&&<p id={subtitleId}>{subtitle}</p>}</div><button type="button" className="icon-btn" aria-label={`Close ${title}`} onClick={onClose}><Icon name="x" size={19}/></button></div>
+    <div className="modal-head"><div><h2 id={titleId}>{title}</h2>{subtitle&&<p id={subtitleId}>{subtitle}</p>}</div><button type="button" className="icon-btn" aria-label={`Close ${title}`} disabled={closeDisabled} onClick={onClose}><Icon name="x" size={19}/></button></div>
     <div className="modal-body">{children}</div>
   </dialog>
 }
@@ -199,12 +199,19 @@ export function Modal({ open, title, subtitle, onClose, children, wide=false, cl
 export const ShellActionsContext=createContext({openNotifications:null,registerPatientNavListener:null})
 
 // Accessible replacement for native window.confirm: names the consequence and starts on the safe action.
-export function ConfirmDialog({ open, title, children, confirmLabel='Confirm', cancelLabel='Cancel', onConfirm, onCancel, tone='danger', className='' }) {
+export function ConfirmDialog({ open, title, children, confirmLabel='Confirm', cancelLabel='Cancel', onConfirm, onCancel, tone='danger', className='', busy=false, busyLabel='Working…' }) {
   const actions=useRef(null)
-  useEffect(()=>{if(open)actions.current?.querySelector('button')?.focus()},[open])
-  return <Modal open={open} title={title} onClose={onCancel} className={className}>
+  const busyStatus=useRef(null)
+  useEffect(()=>{
+    if(!open)return
+    if(busy)busyStatus.current?.focus({preventScroll:true})
+    else actions.current?.querySelector('button:not(:disabled)')?.focus({preventScroll:true})
+  },[open,busy])
+  const close=()=>{if(!busy)onCancel?.()}
+  return <Modal open={open} title={title} onClose={close} closeDisabled={busy} className={className}>
     <div className="confirm-body">{children}</div>
-    <div className="row-actions confirm-actions" ref={actions}><Button variant="ghost" onClick={onCancel}>{cancelLabel}</Button><Button variant={tone==='danger'?'danger':'primary'} onClick={onConfirm}>{confirmLabel}</Button></div>
+    {busy&&<p ref={busyStatus} tabIndex={-1} className="confirm-busy-status" role="status" aria-live="polite">{busyLabel}</p>}
+    <div className="row-actions confirm-actions" ref={actions}><Button variant="ghost" disabled={busy} onClick={close}>{cancelLabel}</Button><Button variant={tone==='danger'?'danger':'primary'} loading={busy} onClick={onConfirm}>{busy?busyLabel:confirmLabel}</Button></div>
   </Modal>
 }
 

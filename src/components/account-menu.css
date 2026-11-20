@@ -1,0 +1,120 @@
+/* One quiet, bottom-left identity control for Patient, Staff, Dentist and Owner. */
+.account-menu-root { position: relative; width: 100%; border-top: 1px solid var(--line, #dce5eb); padding-top: 10px; flex: none; }
+.account-menu-trigger { width: 100%; min-height: 68px; border: 0; border-radius: 12px; padding: 7px 8px; background: transparent; color: var(--ink, #182b3a); display: flex; align-items: center; gap: 10px; text-align: left; cursor: pointer; }
+.account-menu-trigger:hover, .account-menu-trigger[aria-expanded="true"] { background: var(--surface-2, #f2f6f8); }
+.account-menu-trigger > .icon { flex: none; color: var(--muted, #657786); transform: rotate(-90deg); }
+.account-avatar { width: 38px; height: 38px; flex: none; display: inline-grid; place-items: center; overflow: hidden; background: #e4eef4; color: #315e7b; border-radius: 11px; font-weight: 740; font-size: .75rem; letter-spacing: .015em; }
+.account-avatar img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.account-avatar-large { width: 64px; height: 64px; border-radius: 17px; font-size: 1.125rem; }
+.account-menu-identity { flex: 1; min-width: 0; display: grid; gap: 1px; line-height: 1.22; }
+.account-menu-identity b, .account-menu-identity small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-menu-identity b { font-size: .875rem; font-weight: 720; }
+.account-menu-identity small { color: var(--muted, #62727f); font-size: .7rem; }
+.account-menu-identity .account-menu-role { font-weight: 650; font-size: .7rem; }
+.account-menu-popover { position: absolute; z-index: 80; bottom: calc(100% + 8px); left: 0; right: 0; border: 1px solid var(--line, #dce5eb); background: #fff; padding: 6px; display: grid; border-radius: 14px; box-shadow: 0 12px 36px rgba(18, 41, 58, .14); }
+.account-menu-popover button { min-height: 44px; padding: 8px 10px; border: 0; border-radius: 9px; background: transparent; color: var(--ink, #182b3a); display: flex; align-items: center; gap: 11px; font-size: .875rem; font-weight: 590; text-align: left; }
+.account-menu-popover button:hover, .account-menu-popover button:focus-visible { background: var(--surface-2, #f2f6f8); }
+.account-menu-popover .account-signout-option { border-top: 1px solid var(--line, #dce5eb); border-radius: 0 0 9px 9px; margin-top: 4px; padding-top: 11px; }
+
+/* R26: a single, quiet profile editor for all four roles. No new assets or effects. */
+dialog.modal.account-profile-dialog {
+  width: min(640px, calc(100vw - 24px));
+  max-height: min(92dvh, 860px);
+  border: 1px solid #dce6ec;
+  border-radius: 20px;
+  padding: 0;
+  background: #fff;
+  box-shadow: 0 25px 72px rgba(16, 38, 54, .20);
+}
+dialog.modal.account-profile-dialog .modal-head { padding: 22px 28px 18px; border-bottom: 1px solid #e7edf1; background: #fff; backdrop-filter: none; }
+dialog.modal.account-profile-dialog .modal-head h2 { color: #162c3c; font-size: 21px; font-weight: 760; letter-spacing: -.036em; line-height: 1.25; }
+dialog.modal.account-profile-dialog .modal-head p { color: #647785; margin-top: 4px; font-size: 12px; line-height: 1.4; }
+dialog.modal.account-profile-dialog .modal-head .icon-btn { border-radius: 11px; min-width: 44px; min-height: 44px; }
+dialog.modal.account-profile-dialog .modal-body { padding: 0; }
+.account-editor { color: #192e3b; display: grid; min-width: 0; }
+.account-editor-fieldset { display: block; border: 0; margin: 0; padding: 0; min-width: 0; }
+.account-editor-loading { font-size: 14px; color: #526979; margin: 24px 28px; line-height: 1.6; }
+.account-editor-summary { display: flex; align-items: center; gap: 20px; padding: 26px 28px 12px; min-width: 0; }
+.account-photo-controls { position: relative; width: 94px; height: 94px; flex: none; }
+.account-photo-controls .account-avatar-large { width: 88px; height: 88px; border-radius: 50%; font-size: 25px; font-weight: 740; border: 3px solid #fff; box-shadow: 0 0 0 1px #dde8ee; background: #e7eff4; }
+.account-photo-add { position: absolute; right: 0; bottom: 0; width: 44px; height: 44px; border: 3px solid #fff; border-radius: 50%; display: grid; place-items: center; background: #285b75; color: #fff; cursor: pointer; box-shadow: 0 2px 5px rgba(13, 43, 59, .15); }
+.account-photo-add span { font-size: 23px; font-weight: 400; line-height: 1; transform: translateY(-1px); }
+.account-photo-add:hover { background: #1d445b; }
+.account-photo-add:disabled { opacity: .6; cursor: not-allowed; }
+.account-editor-identity { display: grid; gap: 4px; min-width: 0; }
+.account-editor-eyebrow { font-size: 11px; line-height: 1.3; color: #476a7e; font-weight: 730; letter-spacing: .025em; }
+.account-editor-identity strong { font-size: 20px; letter-spacing: -.025em; font-weight: 760; line-height: 1.3; overflow-wrap: anywhere; }
+.account-editor-email { font-size: 13px; color: #657785; overflow-wrap: anywhere; }
+.account-photo-tools { margin-top: 5px; }
+.account-photo-tools button { min-height: 44px; padding: 3px 0; background: transparent; border: 0; color: #42667a; font-size: 12px; font-weight: 690; cursor: pointer; }
+.account-photo-tools button:hover { text-decoration: underline; text-underline-offset: 2px; }
+.account-editor-photo-hint { margin: 0; padding: 0 28px 24px; font-size: 11px; line-height: 1.5; color: #728491; border-bottom: 1px solid #e7edf1; }
+.account-editor-section { padding: 24px 28px 27px; border-bottom: 1px solid #e7edf1; }
+.account-editor-section-heading { display: flex; gap: 13px; align-items: flex-start; margin-bottom: 20px; }
+.account-editor-step { width: 30px; height: 30px; border: 1px solid #d6e3e9; border-radius: 9px; display: grid; place-items: center; font-size: 10px; font-weight: 750; letter-spacing: .03em; color: #52758a; flex: none; }
+.account-editor-section-heading > div { min-width: 0; }
+.account-editor-section-heading h3 { margin: 0 0 5px; color: #1b3545; font-size: 18px; font-weight: 780; letter-spacing: -.026em; line-height: 1.3; }
+.account-editor-section-heading p { margin: 0; color: #647785; font-size: 12px; line-height: 1.55; max-width: 48ch; }
+.account-editor-two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+.account-editor .field { gap: 7px; }
+.account-editor .field > span { color: #324d5e; font-size: 12px; font-weight: 730; }
+.account-editor .field small { font-size: 11px; line-height: 1.5; }
+.account-editor .field input { min-height: 46px; padding: 11px 13px; font-size: 14px; background: #fcfdfe; border: 1px solid #cddde6; color: #1b3545; border-radius: 10px; outline: none; box-shadow: none; transition: border-color .16s ease, box-shadow .16s ease; }
+.account-editor .field input:hover { border-color: #a7becb; }
+.account-editor .field input:focus-visible { border-color: #356b88; box-shadow: 0 0 0 3px rgba(45, 102, 134, .11); }
+.account-editor .field input:disabled { background: #f5f7f9; color: #748794; }
+.account-security-toggle { display: flex; align-items: center; gap: 13px; width: 100%; min-height: 64px; padding: 12px 14px; border: 1px solid #dce6ed; border-radius: 13px; background: #f8fafb; color: #213e51; text-align: left; cursor: pointer; }
+.account-security-toggle:hover, .account-security-toggle[aria-expanded="true"] { border-color: #b8cdd9; background: #f3f8fa; }
+.account-security-lock { display: grid; place-items: center; width: 38px; height: 38px; background: #e7f0f4; color: #36617b; border-radius: 10px; flex: none; }
+.account-security-label { display: grid; flex: 1; gap: 3px; }
+.account-security-label b { font-size: 13px; font-weight: 740; }
+.account-security-label small { font-size: 11px; color: #6a7f8d; }
+.account-security-toggle > .icon { color: #6e8693; transition: transform .16s ease; }
+.account-security-expanded { transform: rotate(90deg); }
+.account-security-form { display: grid; gap: 14px; padding: 18px 0 0; }
+.account-security-form[hidden] { display: none; }
+.account-editor-verification { display: grid; gap: 11px; padding: 15px; background: #f7fafc; border: 1px solid #e1eaf0; border-radius: 12px; }
+.account-editor-verification > span { font-size: 12px; color: #587080; line-height: 1.5; }
+.account-editor-verification .btn { justify-self: start; min-height: 44px; }
+.account-editor-footer { position: sticky; bottom: 0; z-index: 3; background: #fff; border-top: 1px solid #dfe8ed; padding: 16px 28px calc(16px + env(safe-area-inset-bottom, 0px)); display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.account-editor-footer > .btn { min-height: 46px; border-radius: 11px; font-size: 13px; font-weight: 750; padding: 11px 22px; background: #275b76; border-color: #275b76; box-shadow: none; flex: none; }
+.account-editor-footer > .btn:hover:not(:disabled) { background: #1d4560; }
+.account-editor-footer > .btn:disabled { background: #e6edf1; border-color: #e6edf1; color: #7e909b; }
+.account-editor-footer-status { flex: 1; color: #708391; font-size: 12px; line-height: 1.5; min-width: 0; }
+.account-editor-feedback { margin: 0; color: #285e45; font-size: 12px; line-height: 1.5; font-weight: 650; }
+.account-editor-feedback.is-error { color: #aa3e39; }
+dialog.modal.account-profile-confirm { width: min(455px, calc(100vw - 24px)); border: 1px solid #dce6ed; border-radius: 17px; background: #fff; padding: 0; }
+dialog.modal.account-profile-confirm .modal-head { border-bottom: 1px solid #e5edf1; background: #fff; backdrop-filter: none; padding: 21px 24px 16px; }
+dialog.modal.account-profile-confirm .modal-head h2 { font-size: 20px; font-weight: 760; letter-spacing: -.03em; }
+dialog.modal.account-profile-confirm .modal-head p { font-size: 12px; }
+dialog.modal.account-profile-confirm .modal-body { padding: 21px 24px 24px; }
+.account-confirm-copy { margin: 0; color: #516b7b; font-size: 13px; line-height: 1.65; }
+.account-confirm-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 23px; }
+.account-confirm-actions .btn { min-height: 44px; padding: 9px 12px; font-size: 12px; font-weight: 700; }
+.account-menu-trigger:focus-visible, .account-photo-add:focus-visible, .account-photo-tools button:focus-visible, .account-security-toggle:focus-visible { outline: 3px solid rgba(45, 102, 134, .28); outline-offset: 2px; }
+/* Existing footer styles have tighter button rules. Keep the shared editor independent. */
+.app-shell .sidebar-footer .account-menu-trigger,
+.pp-shell .pp-nav-utility .account-menu-trigger { font-size: .875rem; color: var(--ink, #182b3a); padding: 7px 8px; text-align: left; }
+.app-shell .sidebar-footer .account-menu-popover button,
+.pp-shell .pp-nav-utility .account-menu-popover button { font-size: .875rem; color: var(--ink, #182b3a); padding: 8px 10px; }
+.app-shell .sidebar-footer .account-menu-popover .account-signout-option,
+.pp-shell .pp-nav-utility .account-menu-popover .account-signout-option { padding-top: 11px; }
+.app-shell .sidebar-footer .account-menu-root { border-top: 0; padding-top: 0; }
+@media (max-width: 550px) {
+  dialog.modal.account-profile-dialog { width: min(100vw - 12px, 640px); max-height: min(96dvh, 980px); border-radius: 17px; }
+  dialog.modal.account-profile-dialog .modal-head { padding: 18px 18px 15px; }
+  .account-editor-summary { padding: 20px 18px 12px; gap: 14px; }
+  .account-photo-controls { width: 80px; height: 80px; }
+  .account-photo-controls .account-avatar-large { width: 76px; height: 76px; font-size: 21px; }
+  .account-editor-identity strong { font-size: 17px; }
+  .account-editor-photo-hint { padding: 0 18px 20px; }
+  .account-editor-section { padding: 21px 18px 24px; }
+  .account-editor-two { grid-template-columns: 1fr; gap: 12px; }
+  .account-editor-footer { padding: 13px 18px calc(13px + env(safe-area-inset-bottom, 0px)); }
+  .account-editor-footer > .btn { min-width: 128px; }
+  .account-confirm-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  .account-confirm-actions .btn:last-child { grid-column: 1 / -1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .account-menu-trigger, .account-menu-popover button, .account-photo-add, .account-security-toggle, .account-security-toggle > .icon, .account-editor .field input { transition: none !important; }
+}

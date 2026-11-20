@@ -22,6 +22,10 @@ try{
  assert.equal(await panel.getByText('Off duty',{exact:true}).count(),2,'Manila midnight replaces previous-day duty')
  assert.equal(await panel.getByText('On duty today',{exact:true}).count(),0)
  for(const width of [375,390,430,768,1024,1440]){await page.setViewportSize({width,height:900});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1))}
+ await page.evaluate(()=>{window.stf07.mode='slow'});await refresh.click();await page.clock.runFor(2000)
+ await panel.getByText('Duty status did not load within 2 seconds. Retry when the connection is ready.',{exact:true}).waitFor();assert.equal(await rows.count(),0)
+ await page.evaluate(()=>{window.stf07.mode='ready'});await refresh.click();await rows.nth(1).waitFor()
+ const loadMs=Number(await panel.locator('[data-duty-load-ms]').getAttribute('data-duty-load-ms'));assert.ok(Number.isFinite(loadMs)&&loadMs<=2000,`duty response budget: ${loadMs}ms`)
  await page.evaluate(()=>{window.stf07.mode='error'});await refresh.click()
  await panel.getByText('Duty status could not be verified. Try again.',{exact:true}).waitFor();assert.equal(await rows.count(),0)
  await page.evaluate(()=>{window.stf07.mode='ready'});await refresh.click();await rows.nth(1).waitFor()

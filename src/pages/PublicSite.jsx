@@ -151,9 +151,10 @@ function Branches() {
         <p>Select a clinic to see opening hours, contact details and directions.</p>
       </div>
       <div className={`lp-location-layout${rows.length ? ' has-branches' : ''}`}>
+        {status === 'loading' && !rows.length && <p role="status" className="lp-branch-loading">Loading clinic locations…</p>}
         {currentBranch && <div className="lp-branch-directory">
           <div className="lp-branch-picker" role="group" aria-label="Choose a clinic">
-            {rows.map(branch => <button type="button" key={branch.id} aria-pressed={currentBranch.id === branch.id} onClick={() => setSelected(branch.id)}>{branch.name}</button>)}
+            {rows.map(branch => <button type="button" key={branch.id} aria-pressed={currentBranch.id === branch.id} onClick={() => setSelected(branch.id)}><span>{branch.name}</span>{currentBranch.id === branch.id && <Icon name="check" size={18}/>}</button>)}
           </div>
           <ul className="lp-branch-list"><BranchCard branch={currentBranch} now={now}/></ul>
         </div>}

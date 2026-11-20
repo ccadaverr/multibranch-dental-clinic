@@ -120,6 +120,36 @@ export function me({signal}={}) {
   return request('/api/me',signal?{signal}:{})
 }
 
+// Own-account settings for Patient, Staff, Dentist and Owner. The server derives actor from Sanctum.
+export function updateAccountName(values, beforeDispatch) {
+  return request('/api/me/name', { method: 'PATCH', body: JSON.stringify(values), beforeDispatch })
+}
+export function changeAccountPassword(values, beforeDispatch) {
+  return request('/api/me/password/change', { method: 'POST', body: JSON.stringify(values), beforeDispatch })
+}
+export async function accountPhoto(signal) {
+  try {
+    const response = await rawFetch('/api/me/photo', { signal })
+    if (response?.status === 404) return { ok: true, blob: null }
+    if (!response?.ok) return { ok: false, kind: 'server', message: 'Profile photo could not load.' }
+    const mime = response.headers.get('content-type')?.split(';')[0]
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(mime)) return { ok: false, kind: 'unverified', message: 'Profile photo response was invalid.' }
+    const blob = await response.blob()
+    if (blob.size > 2 * 1024 * 1024) return { ok: false, kind: 'unverified', message: 'Profile photo was too large.' }
+    return { ok: true, blob }
+  } catch {
+    return { ok: false, kind: signal?.aborted ? 'cancelled' : 'network', message: 'Profile photo could not load.' }
+  }
+}
+export function uploadAccountPhoto(file, beforeDispatch) {
+  const body = new FormData()
+  body.append('photo', file)
+  return request('/api/me/photo', { method: 'POST', body, beforeDispatch })
+}
+export function removeAccountPhoto(beforeDispatch) {
+  return request('/api/me/photo', { method: 'DELETE', beforeDispatch })
+}
+
 // Authenticated Staff photo. The image is fetched as a Blob: never a public storage URL.
 export async function staffPhoto(signal) {
   try {
@@ -495,16 +525,21 @@ export function resendBillingReceipt(invoiceId) {
   return request(`/api/invoices/${encodeURIComponent(invoiceId)}/resend-receipt`, { method: 'POST' })
 }
 /** Downloads an appointment booking deposit receipt PDF and saves it in the browser. */
-export async function downloadAppointmentReceiptPdf(appointmentId, code = null, {isCurrent=()=>true} = {}) {
+export async function downloadAppointmentReceiptPdf(appointmentId, code = null, {patientId, signal, isCurrent=()=>true} = {}) {
   if(!isCurrent())return {ok:false,kind:'stale_context'}
   let response
   try {
-    response = await rawFetch(`/api/appointments/${encodeURIComponent(appointmentId)}/receipt-pdf`, { headers: { Accept: 'application/pdf' } })
+    response = await rawFetch(`/api/appointments/${encodeURIComponent(appointmentId)}/receipt-pdf`, { headers: { Accept: 'application/pdf' }, ...(signal ? { signal } : {}) })
   } catch {
     return { ok: false, kind: 'network', message: 'Could not reach the clinic system. Check your connection and try again.' }
   }
   if(!isCurrent())return {ok:false,kind:'stale_context'}
   if (!response.ok) return response.status === 404 ? { ok: false, kind: 'not_found', message: 'This deposit receipt is not available.' } : parseFailure(response)
+  if (response.headers.get('X-Appointment-Id') !== appointmentId ||
+      (patientId && response.headers.get('X-Patient-Id') !== patientId) ||
+      response.headers.get('Content-Type')?.split(';')[0].trim().toLowerCase() !== 'application/pdf') {
+    return { ok: false, kind: 'unverified', message: 'The deposit receipt did not match the selected appointment and Patient. No file was downloaded.' }
+  }
   const name = /filename="([^"]+)"/.exec(response.headers.get('Content-Disposition') || '')?.[1] || `Booking-Deposit-Receipt${code ? `-${code}` : ''}.pdf`
   const blob=await response.blob()
   if(!isCurrent())return {ok:false,kind:'stale_context'}
@@ -540,7 +575,7 @@ export function patientChart(patientId) { return request(`/api/patients/${encode
 export function recordChartEntry(patientId, body, key, beforeDispatch) { return command(`/api/patients/${encodeURIComponent(patientId)}/chart`,body,key,beforeDispatch) }
 export function myChart(patientId = null) { return request(`/api/me/chart${patientId ? `?patient_id=${encodeURIComponent(patientId)}` : ''}`) }
 // M20 Patient Follow-Up
-export function followups(filters = {}) { const q = new URLSearchParams(Object.entries(filters).filter(([, v]) => v)).toString(); return request(`/api/followups${q ? `?${q}` : ''}`) }
+export function followups(filters = {}, { signal } = {}) { const q = new URLSearchParams(Object.entries(filters).filter(([, v]) => v)).toString(); return request(`/api/followups${q ? `?${q}` : ''}`, { signal }) }
 export function patientFollowups(patientId) { return request(`/api/patients/${encodeURIComponent(patientId)}/followups`) }
 export function followupTask(id) { return request(`/api/followups/${encodeURIComponent(id)}`) }
 export function followupBookingReceipt(id) { return request(`/api/followups/${encodeURIComponent(id)}/booking-receipt`) }
@@ -561,7 +596,7 @@ export function updatePrescription(id, body, key, beforeDispatch, context) { ret
 export function issuePrescription(id, revision, key, beforeDispatch, context) { return clinicalRequest(`/api/prescriptions/${encodeURIComponent(id)}/issue`, 'POST', {expected_revision:revision}, key, beforeDispatch, context) }
 export function voidPrescription(id, reason, revision, key, beforeDispatch, context) { return clinicalRequest(`/api/prescriptions/${encodeURIComponent(id)}/void`, 'POST', {reason, expected_revision:revision}, key, beforeDispatch, context) }
 export function savePrescriptionLicense(value, beforeDispatch, context) { return clinicalRequest('/api/me/prescription-license','PUT',{rx_license_no:value},null,beforeDispatch,context) }
-export function getPaymentOptions(invoiceId) { return request(`/api/invoices/${encodeURIComponent(invoiceId)}/payment-options`) }
+export function getPaymentOptions(invoiceId, signal) { return request(`/api/invoices/${encodeURIComponent(invoiceId)}/payment-options`, signal ? { signal } : {}) }
 export function createPayMongoCheckout(invoiceId, payload = {}) {
   return request(`/api/invoices/${encodeURIComponent(invoiceId)}/paymongo-checkout`, {
     method: 'POST',
@@ -632,10 +667,10 @@ export function dispatchAutomationRule(ruleCode, payload) {
 }
 
 // M21 Operational Analytics & Executive Intelligence (Owner only)
-export function getExecutiveSummary(params) { return request(`/api/analytics/executive-summary${query(params)}`) }
+export function getExecutiveSummary(params, { signal } = {}) { return request(`/api/analytics/executive-summary${query(params)}`, { signal }) }
 export function getBranchPerformance(params) { return request(`/api/analytics/branch-performance${query(params)}`) }
-export function getDailyRevenue(params) { return request(`/api/analytics/daily-revenue${query(params)}`) }
-export function getWeeklyRevenueHistogram(params) { return request(`/api/analytics/weekly-histogram${query(params)}`) }
+export function getDailyRevenue(params, { signal } = {}) { return request(`/api/analytics/daily-revenue${query(params)}`, { signal }) }
+export function getWeeklyRevenueHistogram(params, { signal } = {}) { return request(`/api/analytics/weekly-histogram${query(params)}`, { signal }) }
 
 // Scheduled automations (Administration → Automations, Owner). Settings changes carry the revision they were based on.
 export function listAutomations() { return request('/api/automations') }

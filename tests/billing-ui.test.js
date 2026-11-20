@@ -36,8 +36,9 @@ test('a refused or failed checkout is surfaced explicitly (never a simulated red
     assert.ok(result.message.length > 0)
   }
   // Review and Pay redirects only to the checkout_url the server returned; any refusal is shown with the server's message.
-  assert.match(review, /if \(result\.ok && result\.data\?\.checkout_url\) \{ window\.location\.href = result\.data\.checkout_url; return \}/)
-  assert.match(review, /setError\(result\.message \|\| 'The payment could not be started\. No payment was made\.'\)/)
+  assert.match(review, /if \(result\.ok && result\.data\?\.checkout_url\) \{ window\.location\.href = result\.data\.checkout_url; redirecting = true; return \}/)
+  assert.match(review, /Checkout status could not be confirmed\. Return to invoices and refresh before trying again\./)
+  assert.match(review, /result\.message \|\| 'The checkout was refused\. Refresh the invoice before trying again\.'/)
   assert.match(review, /title="Payment not started"/)
 })
 
@@ -60,8 +61,9 @@ test('a failed invoice load is an explicit error with Retry on the Patient page 
   assert.match(page, /Invoices unavailable/)
   assert.match(page, /setAttempt\(attempt\+1\)/)
   assert.doesNotMatch(client.replace(/\/\/.*$/gm, '') + page, /localStorage|sessionStorage/)
-  assert.match(staffPage, /Loading authoritative billing records/)
-  assert.match(staffPage, /No current financial action is available until the server billing records load/)
+  assert.match(staffPage, /Loading payments…/)
+  assert.match(staffPage, /title="Billing records unavailable"/)
+  assert.match(staffPage, /No authoritative invoices are available in this scope/)
 })
 
 test('billing commands go through named server endpoints with idempotency keys and no browser writes', () => {
@@ -103,5 +105,5 @@ test('receipt list requests are cursor-paged and the Pay action is disabled whil
   assert.match(calls.at(-1).url, /\/api\/receipts\/mine\?.*per_page=25/)
   assert.match(calls.at(-1).url, /cursor=zzz/)
   assert.match(review, /disabled=\{busy\}/)
-  assert.match(review, /if \(busy\) return/)
+  assert.match(review, /if \(pendingCheckout\.current \|\| !payable \|\| !options \|\| !owns\(scope\)\) return/)
 })

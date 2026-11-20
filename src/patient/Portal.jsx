@@ -2,10 +2,12 @@ import '../clinic-overlays.css'
 import React, { lazy, Suspense, useEffect, useId, useRef, useState } from 'react'
 import { Button, ConfirmDialog, Icon, Modal } from '../components.jsx'
 import { Brand } from '../Brand.jsx'
+import { AccountMenu, AccountProfileDialog } from '../components/AccountMenu.jsx'
 import { archiveNotification, listNotifications, readAllNotifications, readNotification } from '../api-client.js'
 import { groupNotificationsByDate } from '../notification-date-groups.js'
 import { clinicDate } from '../clock.js'
 import { useVisibleRefresh } from '../use-visible-refresh.js'
+import { createSignOutAttempt } from '../signout-control.js'
 import { ChunkBoundary, StartupLoading } from '../StartupLoading.jsx'
 import { EmptyState, LoadingState } from './ui.jsx'
 import { HomePage } from './pages/Home.jsx'
@@ -26,7 +28,6 @@ export const NAV_SECTIONS = [
   { title: null, items: [['home', 'home', 'Home']] },
   { title: 'Care', items: [['visits', 'calendar', 'Appointments'], ['messages', 'message', 'Messages'], ['prescriptions', 'pill', 'Prescriptions']] },
   { title: 'Records', items: [['teeth', 'tooth', 'My Teeth'], ['archives', 'clock', 'History']] },
-  { title: 'Settings', items: [['profile', 'user', 'Account']] },
 ]
 const TITLES = {
   home: 'Home', book: 'Book appointment', visits: 'Appointments', notifications: 'Notifications',
@@ -46,7 +47,7 @@ export function portalPageFromHash(hash = typeof window !== 'undefined' ? window
   return PAGE_ALIASES[slug] || (PORTAL_PAGES.includes(slug) ? slug : null)
 }
 
-function PortalNavigation({ page, unread, navigate, onSignOut }) {
+function PortalNavigation({ page, unread, navigate, onSignOut, onProfile, me, photoVersion }) {
   const id = useId()
   const sectionPage = { book: 'visits', billing: 'profile', documents: 'profile', security: 'profile' }
   return <>
@@ -73,12 +74,13 @@ function PortalNavigation({ page, unread, navigate, onSignOut }) {
         </div>
       })}
     </nav>
-    <div className="pp-nav-utility"><button type="button" className="pp-nav" onClick={onSignOut}><Icon name="logout" size={20}/>Sign out</button></div>
+    <div className="pp-nav-utility"><AccountMenu accountId={me?.id} name={me?.name || 'Patient'} role="patient" version={photoVersion}
+      onProfile={onProfile} onSignOut={onSignOut}/></div>
   </>
 }
 
 /** The portal owns hash history and keeps record context in memory for the current session. */
-export function PatientPortal({ me, store, initialPage = 'home', initialContext = null, onLogout, onSignedOut }) {
+export function PatientPortal({ me, store, onAccountChanged, initialPage = 'home', initialContext = null, onLogout, onSignedOut }) {
   const [route, setRoute] = useState(() => ({
     page: initialContext && PORTAL_PAGES.includes(initialPage) ? initialPage : portalPageFromHash() || (PORTAL_PAGES.includes(initialPage) ? initialPage : 'home'),
     context: initialContext,
@@ -88,6 +90,17 @@ export function PatientPortal({ me, store, initialPage = 'home', initialContext 
   const [bellOpen, setBellOpen] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
+  const [signingOut, setSigningOut] = useState(false)
+  const [signOutError, setSignOutError] = useState('')
+  const signOutAttempt = useRef(null)
+  if (!signOutAttempt.current) signOutAttempt.current = createSignOutAttempt()
+  const finishSignOut = () => signOutAttempt.current(onLogout, state => {
+    setSigningOut(state.pending)
+    setSignOutError(state.error)
+    if (state.finished) setLogoutConfirmOpen(false)
+  })
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [photoVersion, setPhotoVersion] = useState(0)
   const [historyFilters, setHistoryFilters] = useState({ tab: 'visits', search: '', status: 'all', page: 1 })
   const notes = useNotifications(me, store.session, store.getAuthGeneration)
   const main = useRef(null)
@@ -148,8 +161,8 @@ export function PatientPortal({ me, store, initialPage = 'home', initialContext 
     }
   }, [historyKey])
   useEffect(() => { document.title = `${TITLES[page]} · Patient portal` }, [page])
-  const confirmSignOut = () => { setDrawerOpen(false); setLogoutConfirmOpen(true) }
-  const navProps = { page, unread: notes.unread, navigate, onSignOut: confirmSignOut }
+  const confirmSignOut = () => { setDrawerOpen(false); setSignOutError(''); setLogoutConfirmOpen(true) }
+  const navProps = { page, unread: notes.unread, navigate, me, photoVersion, onSignOut: confirmSignOut, onProfile: () => { setDrawerOpen(false); setProfileOpen(true) } }
   const patientKey = JSON.stringify([store.session?.serverUserId, store.session?.patientPublicId, store.getAuthGeneration?.()])
 
   let content
@@ -160,7 +173,7 @@ export function PatientPortal({ me, store, initialPage = 'home', initialContext 
     case 'messages': content = <div className="pp-page pp-legacy role-patient"><ServerMessagesPage store={store} role="patient" initial={context}/></div>; break
     case 'archives': content = <ArchivesPage key={JSON.stringify([store.session?.serverUserId,store.session?.patientPublicId,store.getAuthGeneration?.()])} toast={toast} session={store.session} getAuthGeneration={store.getAuthGeneration} onNavigate={navigate} filters={historyFilters} setFilters={setHistoryFilters}/>; break
     case 'documents': content = <div className="pp-page pp-legacy role-patient"><PatientMePage store={store} setPage={() => {}} documentsOnly/></div>; break
-    case 'profile': content = <ProfilePage me={me} onNavigate={navigate} toast={toast} onSignedOut={onSignedOut}/>; break
+    case 'profile': content = <ProfilePage me={me} onNavigate={navigate} onOpenProfile={()=>setProfileOpen(true)} toast={toast} onSignedOut={onSignedOut}/>; break
     case 'prescriptions': content = <PrescriptionsPage context={context} toast={toast} session={store.session} getAuthGeneration={store.getAuthGeneration}/>; break
     case 'teeth': content = <TeethPage key={JSON.stringify([store.session?.serverUserId,store.session?.patientPublicId,store.getAuthGeneration?.()])} session={store.session} getAuthGeneration={store.getAuthGeneration}/>; break
     case 'notifications': content = <NotificationPanel inline key={notes.identity} notes={notes}
@@ -214,8 +227,11 @@ export function PatientPortal({ me, store, initialPage = 'home', initialContext 
         <PortalNavigation {...navProps}/>
       </Modal>
     </div>}
-    <ConfirmDialog open={logoutConfirmOpen} title="Sign out?" tone="default" confirmLabel="Sign out" cancelLabel="Cancel" className="patient-logout-dialog clinic-signout-dialog" onConfirm={() => { setLogoutConfirmOpen(false); onLogout() }} onCancel={() => setLogoutConfirmOpen(false)}>
+    <AccountProfileDialog open={profileOpen} accountId={me?.id} role="patient" onClose={()=>setProfileOpen(false)}
+      onUpdated={onAccountChanged} onPhotoChanged={()=>setPhotoVersion(version=>version+1)} onPasswordChanged={onSignedOut}/>
+    <ConfirmDialog open={logoutConfirmOpen} title="Sign out?" tone="default" confirmLabel="Sign out" cancelLabel="Cancel" busy={signingOut} busyLabel="Signing out…" className="patient-logout-dialog clinic-signout-dialog" onConfirm={finishSignOut} onCancel={() => setLogoutConfirmOpen(false)}>
       End your session on this device?
+      {signOutError && <p className="clinic-signout-error" role="alert">{signOutError}</p>}
     </ConfirmDialog>
   </div>
 }

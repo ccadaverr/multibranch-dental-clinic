@@ -1,10 +1,13 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Button, Field, Notice } from '../components.jsx'
 import { clinic } from '../clinic-config.js'
 import { dateLabel } from '../logic.js'
 import { money } from '../patient-view.js'
 import { createPayMongoCheckout, getPaymentOptions } from '../api-client.js'
 import { ADDRESS_LABELS as LABELS, billingAddressErrors } from '../billing-address.js'
+import { startHomeRead } from '../home-read-deadline.js'
+import { paymentOptionsProjection } from '../payment-options-read.js'
+import { moneyMinor } from '../billing-command.js'
 
 
 /**
@@ -12,32 +15,88 @@ import { ADDRESS_LABELS as LABELS, billingAddressErrors } from '../billing-addre
  * checkout. The server builds the amount, the line items and the return URLs; this page only displays what the server returned.
  */
 export function ReviewAndPay({ invoice, onBack }) {
-  const [options, setOptions] = useState(null), [optionsError, setOptionsError] = useState('')
-  const [address, setAddress] = useState(null), [save, setSave] = useState(false)
+  const [optionResult, setOptionResult] = useState(null), [optionAttempt, setOptionAttempt] = useState(0)
+  const [addressState, setAddressState] = useState(null), [save, setSave] = useState(false)
   const [errors, setErrors] = useState({}), [busy, setBusy] = useState(false), [error, setError] = useState('')
-  useEffect(() => {
-    let live = true
-    getPaymentOptions(invoice.id).then(r => {
-      if (!live) return
-      if (r.ok && r.data) { setOptions(r.data); setAddress(r.data.billing_address || { country: 'PH' }) }
-      else setOptionsError(r.message || 'Online payment options could not be loaded.')
-    })
-    return () => { live = false }
-  }, [invoice.id])
+  const scope = JSON.stringify([invoice.id, invoice.patientId, invoice.visitId, invoice.appointmentId, invoice.status, invoice.balance])
+  const live = useRef(false), pendingCheckout = useRef(false), currentScope = useRef(scope)
+  currentScope.current = scope
+  const owns = key => live.current && currentScope.current === key
+  const current = optionResult?.scope === scope && optionResult?.attempt === optionAttempt ? optionResult : null
+  const options = current?.data || null
+  const optionsError = current?.error || ''
+  const address = addressState?.id === invoice.id ? addressState.value : null
+  // Only a currently issued, positive, exact-centavo invoice can open a checkout.
+  // Status is still revalidated by Laravel before any provider call.
+  const payable = invoice.status === 'Issued' && moneyMinor(invoice.balance) > 0
 
-  const set = key => event => setAddress(previous => ({ ...previous, [key]: event.target.value }))
+  useEffect(() => {
+    live.current = true
+    return () => { live.current = false }
+  }, [])
+  useEffect(() => {
+    let active = true
+    const id = invoice.id, attempt = optionAttempt, key = scope
+    setOptionResult(null)
+    if (!payable) return undefined
+    const task = startHomeRead(signal => getPaymentOptions(id, signal), {
+      timeoutMs: 12000, timeoutMessage: 'Payment options took too long to load. Please retry.',
+    })
+    task.response.then(result => {
+      if (!active || !owns(key)) return
+      const projected = result?.ok ? paymentOptionsProjection(result.data) : null
+      if (!projected) {
+        setOptionResult({ scope: key, attempt, error: result?.ok
+          ? 'Payment options could not be verified. No checkout was started.'
+          : result?.message || 'Payment options are unavailable. Please retry.' })
+        return
+      }
+      // Refreshing methods never discards an address the Patient already typed.
+      setAddressState(previous => previous?.id === id ? previous : { id, value: projected.billing_address })
+      setOptionResult({ scope: key, attempt, data: projected })
+    }).catch(failure => {
+      if (active && owns(key)) setOptionResult({ scope: key, attempt, error: failure.message || 'Payment options are unavailable. Please retry.' })
+    })
+    return () => { active = false; task.cancel() }
+  }, [scope, optionAttempt, payable])
+  useEffect(() => { setSave(false); setErrors({}); setError('') }, [invoice.id])
+
+  const set = key => event => {
+    const value = event.target.value, id = invoice.id
+    setAddressState(previous => ({ id, value: {
+      ...(previous?.id === id ? previous.value : options?.billing_address || { country: 'PH' }),
+      [key]: value,
+    } }))
+  }
   const pay = async event => {
     event.preventDefault()
-    if (busy) return
+    if (pendingCheckout.current || !payable || !options || !owns(scope)) return
     const checked = billingAddressErrors(address)
     setErrors(checked.errors)
     if (Object.keys(checked.errors).length) return
+    const id = invoice.id, key = scope
+    pendingCheckout.current = true
     setBusy(true); setError('')
-    const result = await createPayMongoCheckout(invoice.id, checked.address ? { billing_address: checked.address, save_billing_address: save } : {})
-    if (result.ok && result.data?.checkout_url) { window.location.href = result.data.checkout_url; return }
-    if (result.kind === 'validation') setErrors(Object.fromEntries(Object.entries(result.errors || {}).map(([k, v]) => [k.replace('billing_address.', ''), Array.isArray(v) ? v[0] : String(v)])))
-    setError(result.message || 'The payment could not be started. No payment was made.')
-    setBusy(false)
+    // POST is deliberately NOT aborted or automatically repeated: if transport
+    // fails after dispatch, the provider session may already exist.
+    let redirecting = false
+    try {
+      const result = await createPayMongoCheckout(id, checked.address ? { billing_address: checked.address, save_billing_address: save } : {})
+      if (!owns(key)) return
+      if (result.ok && result.data?.checkout_url) { window.location.href = result.data.checkout_url; redirecting = true; return }
+      if (result.kind === 'validation') setErrors(Object.fromEntries(Object.entries(result.errors || {}).map(([k, v]) => [k.replace('billing_address.', ''), Array.isArray(v) ? v[0] : String(v)])))
+      setError(['network', 'stale_context'].includes(result.kind) || result.ok
+        ? 'Checkout status could not be confirmed. Return to invoices and refresh before trying again.'
+        : result.message || 'The checkout was refused. Refresh the invoice before trying again.')
+    } catch {
+      if (owns(key)) setError('Checkout status could not be confirmed. Return to invoices and refresh before trying again.')
+    } finally {
+      // Stay disabled while the browser follows the server-issued checkout URL.
+      if (!redirecting) {
+        pendingCheckout.current = false
+        if (live.current) setBusy(false)
+      }
+    }
   }
 
   const methods = options?.methods || []
@@ -49,11 +108,11 @@ export function ReviewAndPay({ invoice, onBack }) {
       {invoice.branch && <span className="rp-branch">{invoice.branch}</span>}
     </header>
     <div className="rp-body">
-      <p className="rp-eyebrow"><span className="rp-badge">Payment due</span></p>
+      <p className="rp-eyebrow"><span className="rp-badge">{payable ? 'Payment due' : 'Invoice status changed'}</span></p>
       <h1 id="rp-title" className="rp-title">Review and pay</h1>
       <p className="rp-sub">Invoice <b>{invoice.invoiceNo}</b>{invoice.date ? ` · Issued ${dateLabel(invoice.date)}` : ''}{invoice.branch ? ` · ${invoice.branch}` : ''}</p>
 
-      <div className="rp-hero"><span>Amount due</span><b>{money(invoice.balance)}</b></div>
+      <div className="rp-hero"><span>{payable ? 'Amount due' : 'Latest reported balance'}</span><b>{money(invoice.balance)}</b></div>
 
       <ul className="rp-items" aria-label="Itemized charges">
         {invoice.items.map(item => <li key={item.key}><span><b>{item.name}</b><small>{item.quantity} × {money(item.unit)}</small></span><span>{money(item.amount)}</span></li>)}
@@ -63,7 +122,9 @@ export function ReviewAndPay({ invoice, onBack }) {
         <li className="rp-total"><span>Total</span><span>{money(invoice.patientResponsibility ?? invoice.total)}</span></li>
       </ul>
 
-      {optionsError ? <Notice tone="warning" title="Online payment unavailable">{optionsError}</Notice> : !options ? <Notice>Loading payment options…</Notice> : methods.length === 0
+      {!payable ? <Notice tone="warning" title="Review the latest invoice">This invoice is no longer confirmed as payable. Return to invoices and refresh before starting another checkout.</Notice>
+        : optionsError ? <div role="alert"><Notice tone="warning" title="Online payment unavailable">{optionsError}</Notice><Button type="button" size="sm" variant="soft" onClick={() => setOptionAttempt(value => value + 1)}>Retry payment options</Button></div>
+        : !options ? <Notice>Loading payment options…</Notice> : methods.length === 0
         ? <Notice tone="warning" title="Online payment is not set up">The clinic has not turned on online payment. You can pay at the clinic front desk.</Notice>
         : <form className="rp-form" onSubmit={pay} noValidate>
           <fieldset>

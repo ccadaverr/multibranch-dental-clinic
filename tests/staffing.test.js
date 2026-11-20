@@ -43,11 +43,16 @@ test('handover content is shown only when the server sends it; the Owner sees me
   }
 })
 
-test('portal: a reload keeps the page (#p/<page>) and Archives is in the navigation', () => {
+test('portal: a reload preserves the page hash and History stays in navigation', () => {
   const portal = read('src/patient/Portal.jsx')
-  assert.match(portal, /window\.history\.replaceState\(null, '', `#p\/\$\{page\}`\)/)
-  assert.match(portal, /useState\(\(\) => portalPageFromHash\(\) \|\|/)
-  assert.match(portal, /\['archives', 'archive', 'Historical records'\]/)
+  // Current portal retains a history entry per navigation rather than overwriting
+  // every route with a null-state replaceState call.
+  assert.match(portal, /page: initialContext && PORTAL_PAGES\.includes\(initialPage\) \? initialPage : portalPageFromHash\(\) \|\|/)
+  assert.match(portal, /const method = replace \? 'replaceState' : 'pushState'/)
+  assert.match(portal, /window\.history\[method\]\(\{ \.\.\.window\.history\.state, patientPortal: \{ key: historyKey, entry: next\.entry \} \}, '', `#p\/\$\{next\.page\}`\)/)
+  assert.match(portal, /window\.addEventListener\('popstate', sync\)/)
+  assert.match(portal, /window\.addEventListener\('hashchange', sync\)/)
+  assert.match(portal, /\['archives', 'clock', 'History'\]/)
   assert.match(portal, /case 'archives':/)
   assert.doesNotMatch(read('src/patient/pages/Account.jsx'), /<Family\/>/)
 })

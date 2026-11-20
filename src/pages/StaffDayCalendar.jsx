@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Button, Card, ConfirmDialog, Modal, Notice, PageHeader, RefreshButton, Status } from '../components.jsx'
+import { Button, Card, ConfirmDialog, IconAction, Modal, Notice, PageHeader, Status } from '../components.jsx'
 import { displayTime, dateLabel } from '../logic.js'
 import { clinicNow, clinicDate } from '../clock.js'
 import { useVisibleRefresh } from '../use-visible-refresh.js'
 import { calendarLoad, getAppointment } from '../api-client.js'
+import { CALENDAR_CAPACITY_TIMEOUT_MS, calendarCapacityIsComplete } from '../read-performance.js'
 import { commandKey } from '../appointments-api.js'
 import { mapAppointment } from '../appointments-api.js'
 import { appointmentActionProblem, canSchedule, schedulingActorKey, useRequestOwner } from '../appointment-ui.js'
@@ -11,7 +12,7 @@ import { AppointmentForm, StaffCancellationDialog } from './Scheduling.jsx'
 import '../b4-calendar.css'
 import {
   VIEWS, WEEKDAYS, createDayLoader, dayTotals, defaultCalendarDate, groupByDate, isValidClinicDate, monthCells,
-  periodContains, periodTarget, shiftPeriod, sourceLabel, statusMeaning, busynessStatus, COUNT_BUSYNESS_THRESHOLDS,
+  periodContains, periodTarget, shiftPeriod, sourceLabel, statusMeaning,
 } from '../day-calendar.js'
 
 // M6 interactive Staff/Owner Appointment Calendar: clean full monthly calendar by default with indefinite month navigation,
@@ -52,11 +53,10 @@ export function loadBand(day, crowded = 80) {
   return { band, label: `${day.percent}% booked${band === 'crowded' ? ' · crowded' : ''}`, detail: `${day.appointments} appointment${day.appointments === 1 ? '' : 's'}, ${day.booked_minutes} of ${day.capacity_minutes} dentist minutes` }
 }
 
-function LoadBadge({ day, count = 0, crowded = 80 }) {
+function LoadBadge({ day, crowded = 80 }) {
   const b = loadBand(day, crowded)
-  if (b) return <span className={`daycal-load is-${b.band}`} title={b.detail || b.label}><i aria-hidden="true"/>{b.band === 'none' ? 'No hours' : b.label}</span>
-  const fallback = busynessStatus({ dayLoad: day, count, crowded })
-  return <span className={`daycal-load is-${fallback.band}`} title={fallback.detail}><i aria-hidden="true"/>{fallback.shortLabel}</span>
+  if (!b) return null
+  return <span className={`daycal-load is-${b.band}`} title={b.detail || b.label}><i aria-hidden="true"/>{b.band === 'none' ? 'No hours' : b.label}</span>
 }
 
 function AppointmentButton({ a, onSelect, showDentist = false }) {
@@ -163,44 +163,64 @@ function CalendarSession({ store, scopes, authorizationKey }) {
     loader.load(target, sessionKey)
     return () => loader.invalidate()
   }, [target, date, sessionKey, loader])
-  useVisibleRefresh(() => { if (live.current && sessionKey) loader.refresh() }, { active: !!sessionKey, intervalMs: 60000 })
-
   // Staff reach only the branches scoped to them (/api/me branch_scopes); the Owner sees every open branch.
   const branches = useMemo(() => {
     if (session?.role === 'owner') return store.state.branches
     return store.state.branches.filter(b => scopes.includes(b.id))
   }, [store.state.branches, authorizationKey])
 
-  const [load, setLoad] = useState({ key: null, days: {}, crowded: 80, error: '' })
+  const [load, setLoad] = useState({ key: null, status: 'idle', days: {}, crowded: 80, error: '' })
   const [capacityRetry, setCapacityRetry] = useState(0)
+  // The appointment list and Dentist-capacity projection are separate reads. Refresh both
+  // together while visible so a schedule/closure change cannot leave old capacity bands
+  // painted indefinitely after the appointment list has refreshed.
+  useVisibleRefresh(() => {
+    if (live.current && sessionKey) {
+      loader.refresh()
+      setCapacityRetry(value => value + 1)
+    }
+  }, { active: !!sessionKey, intervalMs: 60000 })
   const loadParams = useMemo(() => {
     const branch = branches.length > 1 && branches.some(b => b.id === branchId) ? branchId : null
     const dates = monthCells(date).map(cell => cell.date)
     const from = dates[0], to = dates.at(-1)
     return { key: `${sessionKey}:${from}:${to}:${branch || 'all'}`, from, to, dates, branch }
   }, [date, branchId, branches, sessionKey])
+  // Offline/demo sessions do not issue the capacity request. Do not render a
+  // permanent loading state when there is no authenticated server session.
+  const capacityStatus = !sessionKey ? 'idle' : load.key === loadParams.key ? load.status : 'loading'
+  const capacityError = load.key === loadParams.key ? load.error : ''
 
   useEffect(() => {
     if (!sessionKey || !loadParams?.from || !loadParams?.to) return undefined
     let live = true
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 15000)
-    const failed = () => {
-      if (live) setLoad({ key: loadParams.key, crowded: 80, days: {},
-        error: controller.signal.aborted ? 'Capacity timed out. Retry this month.' : 'Capacity information is unavailable for this month.' })
+    setLoad({ key: loadParams.key, status: 'loading', crowded: 80, days: {}, error: '' })
+    const failed = message => {
+      if (live) setLoad({ key: loadParams.key, status: 'error', crowded: 80, days: {}, error: message })
     }
+    const timeout = setTimeout(() => {
+      controller.abort()
+      failed('Calendar capacity took longer than 15 seconds. Retry this month.')
+    }, CALENDAR_CAPACITY_TIMEOUT_MS)
     calendarLoad({ from: loadParams.from, to: loadParams.to, branch_ref: loadParams.branch || undefined }, controller.signal).then(r => {
       if (!live) return
-      const data = r?.data
-      if (!r?.ok || !Array.isArray(data?.days) || data.days.length !== loadParams.dates.length ||
-        data.days.some((day, index) => day?.date !== loadParams.dates[index]) ||
-        (loadParams.branch && (data.branches?.length !== 1 || data.branches[0]?.id !== loadParams.branch))) return failed()
-      setLoad({ key: loadParams.key, crowded: data.crowded_percent, note: data.capacity_note || null, error: '', days: Object.fromEntries(data.days.map(d => [d.date, d])) })
-    }).catch(failed).finally(() => clearTimeout(timeout))
+      if (controller.signal.aborted) return failed('Calendar capacity took longer than 15 seconds. Retry this month.')
+      if (!r?.ok) return failed(r?.kind === 'forbidden'
+        ? 'Calendar capacity is not available for this branch. Check your branch access and retry.'
+        : 'Calendar capacity could not be loaded. Retry this month.')
+      const data = r.data
+      if (!calendarCapacityIsComplete(data, loadParams.dates, loadParams.branch)) {
+        return failed('Calendar capacity response was incomplete. Retry this month.')
+      }
+      setLoad({ key: loadParams.key, status: 'ready', crowded: data.crowded_percent, note: data.capacity_note || null, error: '', days: Object.fromEntries(data.days.map(d => [d.date, d])) })
+    }).catch(() => failed(controller.signal.aborted
+      ? 'Calendar capacity took longer than 15 seconds. Retry this month.'
+      : 'Calendar capacity could not be loaded. Retry this month.')).finally(() => clearTimeout(timeout))
     return () => { live = false; controller.abort(); clearTimeout(timeout) }
   }, [sessionKey, loadParams?.key, capacityRetry])
 
-  const crowdedThreshold = Number.isFinite(load.crowded) && load.crowded > 50 ? load.crowded : 80
+  const crowdedThreshold = capacityStatus === 'ready' && Number.isFinite(load.crowded) && load.crowded > 0 ? load.crowded : 80
   const [dayStatusFilter, setDayStatusFilter] = useState('All')
   useEffect(() => { setDayStatusFilter('All') }, [selectedDate])
 
@@ -243,13 +263,14 @@ function CalendarSession({ store, scopes, authorizationKey }) {
     const direct = filtered.filter(a => typeof a.date === 'string' && a.date.slice(0, 10) === d)
     return direct.length > grouped.length ? direct : grouped
   }
-  const loadOf = d => (load.key === loadParams.key ? load.days[d] : null)
+  const loadOf = d => (capacityStatus === 'ready' ? load.days[d] : null)
   const canManage = canSchedule(store)
 
   const handleRefresh = () => {
     if (!live.current || !sessionKey) return
     detailGeneration.current++; detailRead.current?.abort(); setResolving(false)
     loader.refresh()
+    setCapacityRetry(value => value + 1)
     store.appointmentFlow?.refresh()
   }
 
@@ -354,7 +375,7 @@ function CalendarSession({ store, scopes, authorizationKey }) {
     <PageHeader
       title="Calendar"
       text="Appointments by clinic date, with authorized details and actions."
-      aside={role==='staff'?undefined:<div className="row-actions"><RefreshButton onClick={handleRefresh}/></div>}
+      aside={<div className="row-actions"><IconAction icon="refresh" label="Refresh" className="daycal-refresh" onClick={handleRefresh} disabled={status === 'loading' || capacityStatus === 'loading'} aria-busy={status === 'loading' || capacityStatus === 'loading'}/></div>}
     />
     {(resolving || actionOwner.busy) && <p role="status">{resolving ? 'Loading selected appointment…' : 'Saving appointment change…'}</p>}
     {actionError && <p role="alert">{actionError}</p>}
@@ -372,8 +393,8 @@ function CalendarSession({ store, scopes, authorizationKey }) {
       </div>
     </Card>
 
-    {role==='staff' && load.key===loadParams.key && load.error &&
-      <p role="alert" className="staff-r15-capacity-status">{load.error} <button type="button" onClick={() => setCapacityRetry(value => value + 1)}>Retry capacity</button></p>}
+    {capacityStatus === 'loading' && <p role="status" aria-live="polite" className="daycal-capacity-status">Loading Dentist capacity…</p>}
+    {capacityStatus === 'error' && <p role="alert" className="daycal-capacity-status is-error">{capacityError} <Button size="sm" variant="ghost" onClick={() => setCapacityRetry(value => value + 1)}>Retry capacity</Button></p>}
     {role==='staff' && <details className="staff-r13-capacity-key"><summary>Capacity key</summary>
     <div className="daycal-legend" aria-label="Scheduled dentist time utilization">
       <span className="daycal-load is-free"><i aria-hidden="true"/>0% booked</span>
@@ -382,7 +403,7 @@ function CalendarSession({ store, scopes, authorizationKey }) {
       <span className="daycal-load is-crowded"><i aria-hidden="true"/>{crowdedThreshold}%+ booked</span>
       <span className="daycal-load is-closed"><i aria-hidden="true"/>Closed</span>
       <small>Booked minutes / published Dentist hours</small>
-      {load.note && <small className="daycal-estimate" role="note">{load.note}</small>}
+      {capacityStatus === 'ready' && load.note && <small className="daycal-estimate" role="note">{load.note}</small>}
     </div></details>}
     {role!=='staff' && <div className="daycal-legend" aria-label="Scheduled dentist time utilization">
       <span className="daycal-load is-free"><i aria-hidden="true"/>0% booked</span>
@@ -391,7 +412,7 @@ function CalendarSession({ store, scopes, authorizationKey }) {
       <span className="daycal-load is-crowded"><i aria-hidden="true"/>{crowdedThreshold}%+ booked</span>
       <span className="daycal-load is-closed"><i aria-hidden="true"/>Closed</span>
       <small>Booked minutes / published Dentist hours</small>
-      {load.note && <small className="daycal-estimate" role="note">{load.note}</small>}
+      {capacityStatus === 'ready' && load.note && <small className="daycal-estimate" role="note">{load.note}</small>}
     </div>}
 
     <h2 id="daycal-heading" className="daycal-heading" tabIndex={-1} aria-live="polite" aria-atomic="true">
@@ -409,7 +430,7 @@ function CalendarSession({ store, scopes, authorizationKey }) {
 
     <div className="daycal-master-detail">
       <div className="daycal-calendar-pane">
-        <div ref={calendarRef} key={role === 'staff' ? target : undefined} className="daycal-month-grid" role="grid" aria-busy={status === 'loading'} aria-label={`${monthTitle(date)} by day`}>
+        <div ref={calendarRef} key={role === 'staff' ? target : undefined} className="daycal-month-grid" role="grid" aria-busy={status === 'loading' || capacityStatus === 'loading'} aria-label={`${monthTitle(date)} by day`}>
           {WEEKDAYS.map(w => <div key={w} className="daycal-weekday" aria-hidden="true">{w.slice(0, 3)}</div>)}
           {monthCells(date).map(c => {
             if (!c.fetched) return <div key={c.date} className="daycal-cell is-outside" role="gridcell">
@@ -452,7 +473,7 @@ function CalendarSession({ store, scopes, authorizationKey }) {
               </div>
 
               {(band?.band === 'closed' || band?.band === 'none') && <div className="daycal-cell-meta">
-                <LoadBadge day={loadOf(c.date)} count={list.length} crowded={crowdedThreshold}/>
+                <LoadBadge day={loadOf(c.date)} crowded={crowdedThreshold}/>
               </div>}
 
               <div className="daycal-cell-chips daycal-avatars-row" aria-label={`${list.length} appointments`}>

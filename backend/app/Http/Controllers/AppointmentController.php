@@ -149,6 +149,8 @@ class AppointmentController extends Controller
         return response($documents->bookingDepositPdf($appointment), 200, [
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => 'attachment; filename="'.BillingDocuments::bookingDepositFileName($appointment).'"',
+            'X-Appointment-Id' => $appointment->public_id,
+            'X-Patient-Id' => $appointment->patient->public_id,
             'Cache-Control' => 'private, no-store',
             'X-Content-Type-Options' => 'nosniff',
         ]);

@@ -72,6 +72,12 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
     Route::post('/gemini/stream', [\App\Http\Controllers\GeminiChatController::class, 'stream'])->middleware(['role:patient', 'throttle:m7-assistant']);
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy']);
     Route::get('/me', [CurrentUserController::class, 'show']);
+    // Unified private account settings, scoped to the authenticated actor for every role.
+    Route::patch('/me/name', [\App\Http\Controllers\AccountSettingsController::class, 'updateName'])->middleware('throttle:10,1');
+    Route::post('/me/password/change', [\App\Http\Controllers\AccountSettingsController::class, 'changePassword'])->middleware(['role:staff,dentist,owner', 'throttle:5,1']);
+    Route::get('/me/photo', [\App\Http\Controllers\AccountPhotoController::class, 'show']);
+    Route::post('/me/photo', [\App\Http\Controllers\AccountPhotoController::class, 'store'])->middleware('throttle:10,1');
+    Route::delete('/me/photo', [\App\Http\Controllers\AccountPhotoController::class, 'destroy'])->middleware('throttle:10,1');
     // Private photo for the authenticated Staff account only; never exposes employee files publicly.
     Route::get('/me/staff-photo', [\App\Http\Controllers\StaffPhotoController::class, 'show'])->middleware('role:staff');
     Route::post('/me/staff-photo', [\App\Http\Controllers\StaffPhotoController::class, 'store'])->middleware(['role:staff', 'throttle:10,1']);

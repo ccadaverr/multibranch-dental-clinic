@@ -9,3 +9,5 @@
 .stf07-duty-status .fd-badge.is-muted { background: var(--surface-3); color: var(--text); }
 .stf07-duty-asof { display: block; margin-top: var(--space-3); }
 @media (max-width: 390px) { .stf07-duty-list li { align-items: flex-start; flex-direction: column; } .stf07-duty-status { justify-items: start; text-align: left; } }
+
+.stf07-duty .stf07-duty-refresh { min-width: 44px; min-height: 44px; }

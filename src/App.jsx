@@ -381,7 +381,7 @@ function AppBody() {
   // The Patient portal (src/patient) reads the clinic server only; the legacy local-state patient screens are not used.
   if(role==='patient'&&serverMe?.patient?.id)return <>
     <ChunkBoundary><Suspense fallback={<StartupLoading label="Opening your portal…"/>}>
-      <PatientPortal me={serverMe} store={store} initialPage={['billing','visits','book'].includes(page)?page:'home'} initialContext={['billing','visits','book'].includes(page)?context:null} onLogout={logout} onSignedOut={signedOutForSecurity}/>
+      <PatientPortal me={serverMe} onAccountChanged={setServerMe} store={store} initialPage={['billing','visits','book'].includes(page)?page:'home'} initialContext={['billing','visits','book'].includes(page)?context:null} onLogout={logout} onSignedOut={signedOutForSecurity}/>
     </Suspense></ChunkBoundary>
     <ToastStack toasts={store.toasts}/>
   </>
@@ -431,7 +431,7 @@ function AppBody() {
   }
 
   return <>
-    <ClinicalNavigation.Provider value={clinicalNav.register}><Shell role={role} page={page} setPage={setPage} onLogout={()=>clinicalNav.request(logout)} activeBranch={branch} setActiveBranch={setActiveBranch} store={store}>{storageWarnings.length>0&&<Notice tone="warning">{[...new Set(storageWarnings)].join(" ")}</Notice>}<ChunkBoundary key={page}><Suspense fallback={<StartupLoading compact label="Loading this page…"/>}>{content}</Suspense></ChunkBoundary></Shell>{clinicalNav.dialog}</ClinicalNavigation.Provider>
+    <ClinicalNavigation.Provider value={clinicalNav.register}><Shell role={role} page={page} setPage={setPage} serverUser={serverMe} onAccountChanged={setServerMe} onSecuritySignOut={signedOutForSecurity} onLogout={()=>clinicalNav.request(logout)} activeBranch={branch} setActiveBranch={setActiveBranch} store={store}>{storageWarnings.length>0&&<Notice tone="warning">{[...new Set(storageWarnings)].join(" ")}</Notice>}<ChunkBoundary key={page}><Suspense fallback={<StartupLoading compact label="Loading this page…"/>}>{content}</Suspense></ChunkBoundary></Shell>{clinicalNav.dialog}</ClinicalNavigation.Provider>
     <ToastStack toasts={store.toasts}/>
   </>
 }

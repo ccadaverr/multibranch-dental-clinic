@@ -129,3 +129,11 @@
   .role-staff .daycal-avatar-face.is-compact { width: 13px; height: 13px; font-size: 0; }
   .role-staff .daycal-avatar-badge.daycal-more-avatar { width: auto; min-width: 17px; font-size: 8px; padding: 0 2px; border-width: 1px; }
 }
+
+/* DW-10: capacity is a separate server read from the appointment list. */
+.daycal-capacity-status { margin: 8px 0 12px; color: var(--muted, #596675); font-size: 12px; }
+.daycal-capacity-status.is-error { color: #785a33; }
+.daycal-capacity-status .btn { margin-inline-start: 8px; }
+
+/* Keep the calendar's Owner refresh action at the shared 44px target. */
+.daycal-refresh { min-width: 44px; min-height: 44px; }

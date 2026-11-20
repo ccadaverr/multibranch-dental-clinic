@@ -3,6 +3,7 @@ import { Button, Icon, Modal, Notice, ReadState as SharedReadState, Status } fro
 import { clinicDate } from '../clock.js'
 import { createDayLoader, mapDayAppointment, periodTarget, statusMeaning } from '../day-calendar.js'
 import { fetchAppointment } from '../appointments-api.js'
+import { startHomeRead, HomeReadDeadlineError } from '../home-read-deadline.js'
 import { useVisibleRefresh } from '../use-visible-refresh.js'
 import { clinicDateLabel, dentistScopeKey, ownDentistRows } from '../dentist-workspace.js'
 import { displayTime } from '../logic.js'
@@ -56,30 +57,46 @@ export function AppointmentAgenda({ rows, onOpen, empty = 'No appointments sched
 
 export function AppointmentDetails({ id, store, onClose }) {
   const scope = dentistScopeKey(store.state, store.session)
-  const [read, setRead] = useState({ status: 'loading' })
+  const [read, setRead] = useState({ scope, status: 'loading' })
   const [attempt, setAttempt] = useState(0)
   useEffect(() => {
     let live = true
-    setRead({ status: 'loading' })
+    setRead({ scope, status: scope ? 'loading' : 'error', error: scope ? '' : 'Your current Dentist access could not be verified.' })
     if (!scope) return () => { live = false }
-    fetchAppointment(id).then(result => {
-      if (!live) return
-      if (!result.ok) return setRead({ status: 'error', error: result.message })
-      const row = mapDayAppointment(result.row)
-      if (row.id !== id || !ownDentistRows([row], store.state, store.session).length) return setRead({ status: 'error', error: 'This appointment is outside your current access.' })
-      setRead({ status: 'ready', row })
+    const task = startHomeRead(signal => fetchAppointment(id, { signal }), {
+      timeoutMs: 12000,
+      timeoutMessage: 'Appointment details took too long to load.',
     })
-    return () => { live = false }
+    task.response.then(result => {
+      if (!live) return
+      if (!result?.ok || !result.row) throw new Error('The appointment could not be verified.')
+      const row = mapDayAppointment(result.row)
+      if (row.id !== id || !ownDentistRows([row], store.state, store.session).length) {
+        throw new Error('This appointment is outside your current access.')
+      }
+      setRead({ scope, status: 'ready', row })
+    }).catch(error => {
+      if (!live) return
+      setRead({ scope, status: 'error', error: error instanceof HomeReadDeadlineError
+        ? 'Appointment details took too long to load. Retry to check the current record.'
+        : 'The appointment could not be verified for your current access. Retry or close this view.' })
+    })
+    return () => { live = false; task.cancel() }
   }, [id, scope, attempt])
-  const row = read.row
+  // Access can be revoked before effects run. Never show the previous Dentist's
+  // patient details during that transition, even for a single render.
+  const current = read.scope === scope && scope ? read : { status: 'error', error: 'Your current Dentist access could not be verified.' }
+  const row = current.row
   return <Modal open title="Appointment details" onClose={onClose} className="den-detail-dialog"><div className="den-workspace den-details">
-    {read.status === 'loading' && <SharedReadState state="loading" compact message="Loading appointment…"/>}
-    {read.status === 'error' && <SharedReadState state="error" compact message={read.error || 'Appointment unavailable.'} onRetry={() => setAttempt(a => a + 1)}/>}
-    {read.status === 'ready' && <><h2>{row.patientName || 'Patient name unavailable'}</h2><Status>{row.status}</Status><p>{statusMeaning(row.status)}</p><dl>
+    {current.status === 'loading' && <SharedReadState state="loading" compact message="Loading appointment…"/>}
+    {current.status === 'error' && <SharedReadState state="error" compact message={current.error || 'Appointment unavailable.'} onRetry={scope ? () => setAttempt(a => a + 1) : undefined}/>}
+    {current.status === 'ready' && <><h2>{row.patientName || 'Patient name unavailable'}</h2><Status>{row.status}</Status><p>{statusMeaning(row.status)}</p><dl>
       <div><dt>When</dt><dd>{clinicDateLabel(row.date)} | {displayTime(row.start)}{row.end ? ` - ${displayTime(row.end)}` : ''}</dd></div>
       <div><dt>Service</dt><dd>{row.serviceName || 'Unavailable'}</dd></div><div><dt>Branch</dt><dd>{row.branchName || 'Unavailable'}</dd></div>
       {row.intendedServiceName && <div><dt>Intended treatment</dt><dd>{row.intendedServiceName}</dd></div>}
       <div><dt>Reference</dt><dd>{row.code || 'Unavailable'}</dd></div>
-    </dl><p className="den-muted">Appointment status does not indicate payment settlement. Clinical care opens from the admitted encounter in My Queue.</p></>}
+    </dl><p className="den-muted">Appointment status does not indicate payment settlement. Clinical care opens from the admitted encounter in My Queue.</p>
+      <div className="den-details-footer"><Button size="sm" variant="ghost" onClick={() => setAttempt(a => a + 1)}>Refresh details</Button></div>
+    </>}
   </div></Modal>
 }

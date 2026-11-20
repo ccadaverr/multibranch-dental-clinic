@@ -24,7 +24,7 @@ const row = (id, branch) => ({
 })
 const fixture = window.cal02 = {
   rows: [row('A', 'a'), row('B', 'b')], reads: [], commands: [], feedback: [],
-  holdLists: params.has('hold'), holdLoads: params.has('hold'), holdDetails: false,
+  holdLists: params.has('hold') || params.has('holdLists'), holdLoads: params.has('hold') || params.has('holdLoads'), holdDetails: false, capacityMode: 'ok', session: null,
   listRequests: [], loadRequests: [], detailRequests: [], refreshes: 0,
 }
 if (params.has('missing')) {
@@ -54,7 +54,29 @@ window.fetch = async (url, options = {}) => {
     return reply(fixture.listRequests, fixture.holdLists, { data: fixture.rows, meta: { current_page: 1, last_page: 1 } })
   }
   if (parsed.pathname === '/api/calendar/load') {
-    return reply(fixture.loadRequests, fixture.holdLoads, { data: { crowded_percent: 80, capacity_note: 'Synthetic current capacity', days: [{ date: '2026-11-06', percent: 25, appointments: 1, booked_minutes: 30, capacity_minutes: 120 }] } })
+    if (fixture.capacityMode === 'error') return Response.json({ message: 'Synthetic capacity outage' }, { status: 503 })
+    const selected = parsed.searchParams.get('branch_ref')
+    const scope = (fixture.session?.role === 'owner' ? ['a', 'b'] : (fixture.session?.branchScopes || [])).slice().sort()
+    const branchIds = selected ? [selected] : scope
+    const branches = branchIds.map(id => ({ id, name: `Synthetic Branch ${id}` }))
+    const from = parsed.searchParams.get('from'), to = parsed.searchParams.get('to')
+    const dates = []
+    for (let date = new Date(`${from}T00:00:00Z`), end = new Date(`${to}T00:00:00Z`); date <= end; date.setUTCDate(date.getUTCDate() + 1)) dates.push(date.toISOString().slice(0, 10))
+    const days = dates.map(date => {
+      const dayBranches = branches.map(branch => {
+        const appointments = fixture.rows.filter(item => item.date === date && item.branch.id === branch.id).length
+        const booked_minutes = appointments * 30, capacity_minutes = 120
+        return { id: branch.id, name: branch.name, closed: false, reason: null, partial_hours: null, appointments, booked_minutes, capacity_minutes, percent: Math.round(booked_minutes * 100 / capacity_minutes) }
+      })
+      const appointments = dayBranches.reduce((sum, branch) => sum + branch.appointments, 0)
+      const booked_minutes = dayBranches.reduce((sum, branch) => sum + branch.booked_minutes, 0)
+      const capacity_minutes = dayBranches.reduce((sum, branch) => sum + branch.capacity_minutes, 0)
+      const percent = capacity_minutes ? Math.round(booked_minutes * 100 / capacity_minutes) : null
+      return { date, branches: dayBranches, closed: false, appointments, booked_minutes, capacity_minutes, percent, crowded: percent !== null && percent >= 80 }
+    })
+    const payload = { data: { branches, days, crowded_percent: 80, capacity_estimated: false, capacity_note: null } }
+    if (fixture.capacityMode === 'partial') payload.data.days.pop()
+    return reply(fixture.loadRequests, fixture.holdLoads, payload)
   }
   if (parsed.pathname.startsWith('/api/appointments/')) {
     const selected = fixture.rows.find(r => r.id === decodeURIComponent(parsed.pathname.split('/').at(-1)))
@@ -70,7 +92,8 @@ if (params.has('empty')) initial.branchScopes = []
 if (params.has('absent')) delete initial.branchScopes
 function Fixture() {
   const [session, setSession] = useState(initial)
-  fixture.setSession = patch => flushSync(() => setSession(previous => ({ ...previous, ...patch })))
+  fixture.setSession = patch => flushSync(() => setSession(previous => { const next = { ...previous, ...patch }; fixture.session = next; return next }))
+  fixture.session = session
   const store = {
     session,
     state: { branches: [{ id: 'a', name: 'Synthetic Branch a' }, { id: 'b', name: 'Synthetic Branch b' }], appointments: [], patients: [], services: [], dentists: [],

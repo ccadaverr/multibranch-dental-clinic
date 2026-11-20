@@ -2,68 +2,11 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Button, Field, Icon, Modal } from '../../components.jsx'
 import { PasswordField } from '../../pages/PasswordField.jsx'
 import { getPatientRecord, myHmo, patientHome, requestPasswordReset, changePatientPassword, updateOwnProfile, saveMyHmo } from '../../api-client.js'
-import { dateLong, initials, money } from '../format.js'
+import { dateLong, money } from '../format.js'
+import { AccountAvatar } from '../../components/AccountMenu.jsx'
 import { ErrorState, PageHead, LoadingState, useLoad } from '../ui.jsx'
 
-function AvatarUpload({ me, toast }) {
-  const [avatar, setAvatar] = useState(() => {
-    try {
-      return localStorage.getItem(`patient_avatar_${me?.patient?.id || me?.id}`) || null
-    } catch { return null }
-  })
-  const fileInputRef = useRef(null)
-
-  const onFileChange = e => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    e.target.value = ''
-    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
-      toast?.('Please select an image file (JPG, PNG, or WebP).', 'warning')
-      return
-    }
-    if (file.size > 2 * 1024 * 1024) {
-      toast?.('Image must be under 2MB.', 'warning')
-      return
-    }
-    const reader = new FileReader()
-    reader.onload = () => {
-      const dataUri = reader.result
-      try {
-        localStorage.setItem(`patient_avatar_${me?.patient?.id || me?.id}`, dataUri)
-        setAvatar(dataUri)
-        window.dispatchEvent(new CustomEvent('patient-avatar-updated', { detail: dataUri }))
-        toast?.('Profile picture updated successfully.', 'success')
-      } catch {
-        toast?.('Could not save photo to browser storage.', 'warning')
-      }
-    }
-    reader.onerror = () => toast?.('Could not read this photo.', 'warning')
-    reader.readAsDataURL(file)
-  }
-
-  const removeAvatar = () => {
-    try {
-      localStorage.removeItem(`patient_avatar_${me?.patient?.id || me?.id}`)
-      setAvatar(null)
-      window.dispatchEvent(new CustomEvent('patient-avatar-updated', { detail: null }))
-      toast?.('Profile picture removed.', 'info')
-    } catch { /* noop */ }
-  }
-
-  return <div className="patient-avatar-row">
-    <div className="patient-avatar" aria-hidden="true">{avatar ? <img src={avatar} alt=""/> : initials(me?.name || 'Patient')}</div>
-    <div>
-      <div className="pp-actions">
-        <input type="file" ref={fileInputRef} accept="image/png, image/jpeg, image/webp" onChange={onFileChange} hidden/>
-        <Button size="sm" variant="soft" onClick={() => fileInputRef.current?.click()}>{avatar ? 'Change photo' : 'Upload photo'}</Button>
-        {avatar && <Button size="sm" variant="ghost" onClick={removeAvatar}>Remove photo</Button>}
-      </div>
-      <p className="pp-hint">JPG, PNG or WebP up to 2 MB. Saved in this browser.</p>
-    </div>
-  </div>
-}
-
-export function ProfilePage({ me, onNavigate, toast, onSignedOut }) {
+export function ProfilePage({ me, onNavigate, onOpenProfile, toast, onSignedOut }) {
   const id = me.patient.id
   const record = useLoad(async signal => {
     const result = await getPatientRecord(id, signal)
@@ -91,9 +34,9 @@ export function ProfilePage({ me, onNavigate, toast, onSignedOut }) {
     <div className="patient-account-layout">
       <section className="patient-profile" aria-labelledby="patient-profile-title">
         <h2 id="patient-profile-title">Profile</h2>
-        <AvatarUpload me={me} toast={toast}/>
+        <div className="patient-avatar-row"><AccountAvatar accountId={me?.id} name={me?.name} large/><Button variant="soft" size="sm" onClick={onOpenProfile}>Edit name, photo & password</Button></div>
         <dl className="patient-profile-fields">
-          <div><dt>Name on clinic records</dt><dd>{r?.name || me.name}</dd></div>
+          <div><dt>Name on clinic records</dt><dd>{me.name || r?.name}</dd></div>
           <div><dt>Registered email</dt><dd>{me.email}</dd></div>
           {fields.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value || <span className="pp-muted">Not on file</span>}</dd></div>)}
         </dl>
@@ -101,7 +44,7 @@ export function ProfilePage({ me, onNavigate, toast, onSignedOut }) {
         {record.error && <ErrorState text={record.error} onRetry={record.reload}/>}
         {r && <div className="patient-profile-update">
           <ContactEditor key={r.id + ':' + r.revision} record={r} reload={record.reload}/>
-          <p className="pp-hint">For name or identity corrections, contact the front desk.</p>
+          <p className="pp-hint">You can update your account name from Profile. Name changes are recorded for clinic review.</p>
           <Button variant="soft" size="sm" icon="message" onClick={() => onNavigate('messages', { compose: true })}>Contact front desk</Button>
         </div>}
         <HmoDetails/>

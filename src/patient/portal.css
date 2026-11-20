@@ -1,16 +1,14 @@
-/*
- * Patient portal (src/patient). Design A: soft mint and light-blue tints, rounded cards, confident numbers, the brand accent.
- * Mobile-first (390px), sidebar from 960px. Every animation is inside prefers-reduced-motion: no-preference.
- */
-:root { --pp-r: 20px; --pp-edge: #dbe8ef; --pp-mint: #eaf5f2; --pp-sky: #eaf3fd; }
-.pp-shell { min-height: 100vh; background: linear-gradient(180deg, #f3f8fb 0%, var(--bg) 320px); }
+/* Patient portal: calm clinical surfaces, one Roxas-blue accent and compact task hierarchy.
+ * Mobile-first; all motion remains behind prefers-reduced-motion: no-preference. */
+:root { --pp-r: 16px; --pp-edge: #dce5eb; --pp-mint: #edf5f2; --pp-sky: #edf3f9; }
+.pp-shell { min-height: 100vh; background: #f7f8f7; }
 .link-button { border: 0; background: none; padding: 0; color: var(--brand); font-weight: 650; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .link-button:disabled { color: var(--muted-2); text-decoration: none; }
 
 /* Sidebar (desktop) */
 .pp-side { display: none; }
 .pp-body { min-width: 0; }
-.pp-top { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 12px; height: 60px; padding: 0 16px; background: rgba(255,255,255,.88); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+.pp-top { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 12px; height: 60px; padding: 0 16px; background: #fff; border-bottom: 1px solid var(--line); }
 .pp-top-title { flex: 1; margin: 0; font-size: 1.125rem; font-weight: 720; color: var(--ink); }
 .pp-main { padding: 16px 16px calc(96px + env(safe-area-inset-bottom)); outline: none; }
 .pp-icon-btn { position: relative; display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 14px; border: 1px solid var(--line); background: #fff; color: var(--ink); }
@@ -18,9 +16,12 @@
 .pp-badge-count { position: absolute; top: 4px; right: 4px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--red); color: #fff; font-size: 11px; font-weight: 750; line-height: 18px; text-align: center; }
 
 @media (min-width: 960px) {
-  .pp-shell { display: grid; grid-template-columns: 264px minmax(0, 1fr); }
+  .pp-shell { display: grid; grid-template-columns: 216px minmax(0, 1fr); }
   .pp-side { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 16px; padding: 10px 14px 20px; background: #fff; border-right: 1px solid var(--line); }
-  .pp-brand { padding: 0 8px 8px; }
+  .pp-brand { padding: 0 6px 8px; align-items: center; }
+  .pp-brand .clinic-logo { width: 42px; height: 42px; }
+  .pp-brand strong { font-size: .8125rem; line-height: 1.3; overflow-wrap: anywhere; }
+  .pp-brand span { font-size: .6875rem; }
   .pp-side nav { flex: 1; overflow-y: auto; }
   .pp-nav-groups { display: flex; flex-direction: column; }
   .pp-nav-group { display: grid; }
@@ -47,10 +48,10 @@
 }
 .pp-danger { color: var(--red) !important; }
 .pp-danger-solid { background: var(--red) !important; color: #fff !important; }
-.pp-avatar { flex: none; display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(140deg, var(--pp-sky), var(--pp-mint)); color: var(--brand-3); font-weight: 750; font-size: .8125rem; }
+.pp-avatar { flex: none; display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--brand-soft); color: var(--brand-3); font-weight: 750; font-size: .8125rem; }
 
 /* Phone bottom navigation and the More sheet */
-.pp-bottom { position: fixed; z-index: 30; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: repeat(5, 1fr); padding: 6px 6px calc(6px + env(safe-area-inset-bottom)); background: rgba(255,255,255,.96); backdrop-filter: blur(10px); border-top: 1px solid var(--line); }
+.pp-bottom { position: fixed; z-index: 30; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: repeat(5, 1fr); padding: 6px 6px calc(6px + env(safe-area-inset-bottom)); background: #fff; border-top: 1px solid var(--line); }
 .pp-tab { display: grid; justify-items: center; gap: 2px; min-height: 52px; padding: 6px 2px; border: 0; border-radius: 12px; background: none; color: var(--muted); font-size: var(--font-sm); line-height: 1.3; overflow-wrap: anywhere; font-weight: 650; }
 .pp-tab:focus-visible { outline-offset: -2px; }
 .pp-tab.is-active { color: var(--brand); background: var(--brand-soft); }
@@ -101,7 +102,7 @@ dialog.modal.pp-more-dialog::backdrop { background: rgba(15,32,48,.36); }
 /* Page building blocks */
 .pp-page { max-width: 880px; margin: 0 auto; display: grid; gap: 16px; }
 .pp-page.pp-legacy { max-width: 1040px; display: block; }
-.pp-card { background: #fff; border: 1px solid var(--pp-edge); border-radius: var(--pp-r); padding: 18px; box-shadow: 0 1px 2px rgba(16,37,54,.04); }
+.pp-card { background: #fff; border: 1px solid var(--pp-edge); border-radius: var(--pp-r); padding: 18px; box-shadow: 0 1px 2px rgba(16,37,54,.035); }
 .pp-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--pp-edge); }
 .pp-head-title { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; }
 .pp-head h1, .pp-hello h1 { margin: 0; font-size: clamp(1.25rem, 3.2vw, 1.55rem); letter-spacing: -.02em; color: var(--ink); line-height: 1.25; }
@@ -128,17 +129,17 @@ dialog.modal.pp-more-dialog::backdrop { background: rgba(15,32,48,.36); }
 /* Skeleton, empty and error states */
 .pp-skeleton { display: grid; gap: 12px; }
 .pp-shimmer { display: block; height: 14px; border-radius: 8px; background: linear-gradient(90deg, #edf2f6 0%, #f6f9fb 50%, #edf2f6 100%); background-size: 200% 100%; }
-.pp-empty { display: grid; justify-items: center; gap: 6px; padding: 32px 20px; text-align: center; background: linear-gradient(160deg, var(--pp-sky) 0%, #f4faf8 60%, #fff 100%); }
+.pp-empty { display: grid; justify-items: center; gap: 6px; padding: 28px 20px; text-align: center; background: #fff; }
 .pp-empty h3 { margin: 6px 0 0; font-size: 1.125rem; color: var(--ink); }
 .pp-empty p { margin: 0; max-width: 420px; color: var(--text); }
-.pp-empty-icon { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 18px; background: #fff; color: var(--brand); box-shadow: var(--shadow-sm); }
+.pp-empty-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: var(--surface-2); color: var(--brand); }
 .pp-empty-actions { margin-top: 10px; }
 .pp-error { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; border-color: #f0d3d6; background: var(--red-soft); color: var(--red); }
 .pp-error > div { flex: 1; min-width: 180px; }
 .pp-error p { margin: 2px 0 0; color: var(--text); }
 
 /* Home */
-.pp-next { background: linear-gradient(160deg, var(--pp-sky) 0%, #eef8f5 55%, #fff 100%); padding: 22px; }
+.pp-next { background: #fff; padding: 22px; border-top: 3px solid var(--brand); }
 .pp-next h2 { margin: 0; font-size: clamp(1.375rem, 5vw, 1.875rem); font-weight: 800; letter-spacing: -.02em; color: var(--ink); }
 .pp-next-what { margin: 6px 0 0; font-weight: 600; color: var(--text); }
 .pp-next-where { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0 0; color: var(--muted); }
@@ -160,7 +161,7 @@ dialog.modal.pp-more-dialog::backdrop { background: rgba(15,32,48,.36); }
 .pp-steps li.is-done .pp-step-dot { border-color: var(--brand); background: var(--brand-soft); color: var(--brand); }
 @media (max-width: 520px) { .pp-step-label { display: none; } .pp-steps li.is-current .pp-step-label { display: block; position: absolute; } .pp-steps li { position: relative; } .pp-steps li.is-current .pp-step-label { top: 32px; white-space: nowrap; } .pp-steps { padding-bottom: 18px; } }
 .pp-progress { height: 4px; border-radius: 4px; background: var(--line); overflow: hidden; }
-.pp-progress span { display: block; height: 100%; background: linear-gradient(90deg, var(--brand), var(--a-teal, #0c9b8e)); border-radius: 4px; }
+.pp-progress span { display: block; height: 100%; background: var(--brand); border-radius: 4px; }
 .pp-step h2 { margin: 0 0 12px; font-size: 1.25rem; color: var(--ink); outline: none; }
 .pp-step-nav { display: flex; justify-content: space-between; margin-top: 16px; }
 .pp-search { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: 14px; background: #fff; color: var(--muted); }
@@ -169,11 +170,20 @@ dialog.modal.pp-more-dialog::backdrop { background: rgba(15,32,48,.36); }
 .pp-group { margin-top: 16px; }
 .pp-group-title { margin: 0 0 8px; font-size: .8125rem; font-weight: 750; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 .pp-options { display: grid; gap: 10px; }
-@media (min-width: 720px) { .pp-options { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pp-branch.is-recommended { grid-column: 1 / -1; } }
+@media (min-width: 720px) { .pp-options { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* The clinic's three branch choices have equal visual weight at desktop sizes.
+   Keep one column on phones and two on tablets; never stretch one branch card
+   across both columns or recommend a branch without server evidence. */
+.pp-branch-grid { grid-template-columns: minmax(0, 1fr); }
+.pp-branch-grid .pp-branch { min-width: 0; height: 100%; }
+.pp-branch-grid .pp-option-body { gap: 5px; }
+.pp-branch-grid .pp-option-body :is(small, em) { line-height: 1.45; overflow-wrap: anywhere; }
+@media (min-width: 660px) { .pp-branch-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 960px) { .pp-branch-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .pp-option { position: relative; display: flex; align-items: flex-start; gap: 12px; width: 100%; min-height: 64px; padding: 14px; border: 1.5px solid var(--pp-edge); border-radius: 16px; background: #fff; text-align: left; color: var(--text); transition: border-color .15s ease, background .15s ease; }
 .pp-option:hover { border-color: #b9d3e6; background: #fbfdff; }
 .pp-option.is-selected { border-color: var(--brand); background: var(--brand-soft); }
-.pp-option.is-recommended { border-color: #9fd4cb; background: linear-gradient(160deg, var(--pp-mint), #fff 70%); }
+.pp-option.is-recommended { border-color: #bad8cf; background: #f6faf8; }
 .pp-option-icon { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: var(--brand-soft); color: var(--brand); }
 .pp-option-body { min-width: 0; display: grid; gap: 3px; }
 .pp-option-body b { color: var(--ink); font-size: 1rem; }
@@ -234,7 +244,7 @@ dialog.modal.pp-more-dialog::backdrop { background: rgba(15,32,48,.36); }
 .pp-chip.is-unavailable small { color: #8c9ba5; }
 
 /* Success */
-.pp-success-card { display: grid; justify-items: center; text-align: center; padding: 32px 20px; background: linear-gradient(160deg, var(--pp-mint) 0%, var(--pp-sky) 60%, #fff 100%); }
+.pp-success-card { display: grid; justify-items: center; text-align: center; padding: 30px 20px; background: #fff; }
 .pp-success-card h1 { margin: 12px 0 4px; font-size: 1.75rem; color: var(--ink); }
 .pp-success-mark { display: grid; place-items: center; width: 72px; height: 72px; border-radius: 50%; background: var(--green); color: #fff; box-shadow: 0 10px 30px rgba(35,100,65,.25); }
 .pp-success .pp-actions { justify-content: center; }
@@ -252,7 +262,7 @@ dialog.modal.pp-more-dialog::backdrop { background: rgba(15,32,48,.36); }
 .pp-visit-body { min-width: 0; flex: 1; }
 .pp-visit-body h3 { margin: 0; color: var(--ink); font-size: 1.0625rem; }
 .pp-visit-body p { margin: 3px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.pp-balance { display: grid; gap: 2px; background: linear-gradient(160deg, var(--amber-soft), #fff 70%); border-left: 4px solid var(--amber); }
+.pp-balance { display: grid; gap: 2px; background: #fff; border-left: 3px solid var(--amber); }
 .pp-balance span { color: var(--muted); font-weight: 650; }
 .pp-balance b { font-size: 1.75rem; font-weight: 800; letter-spacing: -.02em; color: var(--ink); }
 .pp-invoice-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
@@ -315,7 +325,7 @@ dialog.modal.pp-more-dialog::backdrop { background: rgba(15,32,48,.36); }
 .aa-item-head { display: flex; flex-wrap: wrap; gap: 6px; }
 .aa-keywords { display: flex; flex-wrap: wrap; gap: 6px; }
 .aa-keywords span { padding: 2px 9px; border-radius: 999px; background: var(--surface-3); color: var(--text); font-size: .75rem; }
-.aa-test { background: linear-gradient(160deg, var(--pp-sky), #fff 70%); }
+.aa-test { background: #fff; }
 .aa-test-form { display: flex; gap: 8px; }
 .aa-test-form input { flex: 1; min-width: 0; min-height: 44px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: 12px; font-size: 1rem; }
 .aa-test-form input:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }

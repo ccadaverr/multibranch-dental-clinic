@@ -28,10 +28,11 @@ test('decision 1: a verified email opens sign-in with the address filled in and 
   assert.match(html, /type="password"[^>]*value=""/)
 })
 
-test('Account sends profile corrections to the front desk and keeps email read-only', () => {
+test('Patient contact edits remain scoped while unified Profile handles audited name changes', () => {
   const account = read('src/patient/pages/Account.jsx')
   assert.match(account, /Edit contact details/)
   assert.match(account, /onNavigate\('messages', \{ compose: true \}\)/)
+  assert.match(account, /onOpenProfile/)
   assert.doesNotMatch(account, /updatePatientRecordRemote|requestEmailChange|first_name:/)
   assert.match(account, /Registered email/)
   assert.match(account, /Code from your email/)
@@ -119,9 +120,10 @@ test('patient portal sidebar segregation: navigation is grouped with section hea
   assert.match(portal, /pp-nav-groups/)
   assert.match(portal, /pp-nav-group-title/)
   const expected = [[null, ['Home']], ['Care', ['Appointments', 'Messages', 'Prescriptions']],
-    ['Records', ['My Teeth', 'History']], ['Settings', ['Account']]]
+    ['Records', ['My Teeth', 'History']]]
   assert.deepEqual(ui.NAV_SECTIONS.map(section => [section.title, section.items.map(item => item[2])]), expected)
   assert.match(portal, /aria-labelledby=\{title \? headingId/)
+  assert.match(portal, /<AccountMenu accountId=\{me\?\.id\}/)
 
   const css = read('src/patient/portal.css')
   assert.match(css, /\.pp-nav-groups/)

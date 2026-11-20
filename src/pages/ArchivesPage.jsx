@@ -284,7 +284,7 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
     setDocumentError('')
     try {
       const result = booking
-        ? await downloadAppointmentReceiptPdf(record.bookingCredit.appointment_id, null, { isCurrent })
+        ? await downloadAppointmentReceiptPdf(record.bookingCredit.appointment_id, null, { patientId: record.patientId, isCurrent })
         : await downloadBillingPdf(record.id, 'receipt', { receiptId: record.receiptId, patientId: record.patientId, isCurrent })
       if (isCurrent() && !result.ok) setDocumentError(result.message || 'The selected receipt could not be opened.')
     } catch {

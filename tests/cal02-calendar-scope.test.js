@@ -46,6 +46,11 @@ test('CAL-02 authenticated Staff with empty or absent scopes fails closed despit
   }
 })
 
+test('CAL-02 offline Owner does not show an endless capacity-loading state', async () => {
+  const html = await render({ role: 'owner', branchScopes: [] })
+  assert.doesNotMatch(html, /Loading Dentist capacity…/)
+})
+
 test('CAL-02 Owner retains clinic-wide first paint with no Staff scopes', async () => {
   const html = await render({ serverUserId: 'synthetic-owner', role: 'owner', branchScopes: [] })
   assert.match(html, /Loading appointments|Previous month|Next month/)
@@ -84,7 +89,7 @@ export async function runCal02CalendarScope(page, base, runCase = async (_name, 
   const names = () => avatar().evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label')))
   const ready = async () => {
     await avatar().first().waitFor()
-    await page.waitForFunction(() => !document.body.textContent.includes('Loading appointments'))
+    await page.waitForFunction(() => !document.body.textContent.includes('Loading appointments') && !document.body.textContent.includes('Loading Dentist capacity'))
   }
   const fresh = async (query = '') => {
     errors.length = 0
@@ -187,7 +192,7 @@ export async function runCal02CalendarScope(page, base, runCase = async (_name, 
       await fresh(); await ready()
       await page.evaluate(() => { window.cal02.holdLists = true })
       await page.getByRole('button', { name: 'Refresh', exact: true }).click()
-      await page.waitForFunction(() => window.cal02.listRequests.length === 2)
+      await page.waitForFunction(() => window.cal02.listRequests.length === 2 && window.cal02.loadRequests.length === 2)
       await page.evaluate(() => window.cal02.setSession({ branchScopes: [] }))
       await page.getByText('Calendar access unavailable', { exact: true }).waitFor()
       await page.evaluate(() => {
@@ -339,6 +344,34 @@ export async function runCal02CalendarScope(page, base, runCase = async (_name, 
       assert.deepEqual(await page.evaluate(() => window.cal02.commands), [])
       assert.equal(await page.evaluate(() => window.cal02.reads.every(read => read.method === 'GET')), true)
       assert.equal(await page.getByText('No-show', { exact: true }).count(), 0)
+      assertHealthy()
+    })
+
+    await runCase('13. partial capacity responses never paint stale bands and can be retried', async () => {
+      await fresh('all'); await ready()
+      assert.ok(await page.locator('.daycal-cell.load-light').count() > 0)
+      await page.evaluate(() => { window.cal02.capacityMode = 'partial' })
+      await page.getByRole('combobox', { name: 'Branch', exact: true }).selectOption('b')
+      await page.getByText('Calendar capacity response was incomplete. Retry this month.', { exact: true }).waitFor()
+      assert.equal(await page.locator('.daycal-cell.load-light, .daycal-cell.load-busy, .daycal-cell.load-crowded').count(), 0)
+      await page.evaluate(() => { window.cal02.capacityMode = 'ok' })
+      await page.getByRole('button', { name: 'Retry capacity', exact: true }).click()
+      await page.locator('.daycal-cell.load-light').first().waitFor()
+      assertHealthy()
+    })
+
+    await runCase('14. slow capacity reads terminate at the finite timeout and recover on Retry', async () => {
+      await page.clock.install()
+      await fresh('holdLoads')
+      await avatar().first().waitFor()
+      await page.waitForFunction(() => window.cal02.loadRequests.length === 1)
+      await page.getByText('Loading Dentist capacity…', { exact: true }).waitFor()
+      await page.clock.runFor(15000)
+      await page.getByText('Calendar capacity took longer than 15 seconds. Retry this month.', { exact: true }).waitFor()
+      assert.equal(await page.locator('.daycal-cell.load-light, .daycal-cell.load-busy, .daycal-cell.load-crowded').count(), 0)
+      await page.evaluate(() => { window.cal02.holdLoads = false; window.cal02.capacityMode = 'ok' })
+      await page.getByRole('button', { name: 'Retry capacity', exact: true }).click()
+      await page.locator('.daycal-cell.load-light').first().waitFor()
       assertHealthy()
     })
   } finally {

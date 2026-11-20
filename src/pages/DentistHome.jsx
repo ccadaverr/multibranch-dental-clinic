@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Button, Card, Icon, Notice, RefreshButton, Status } from '../components.jsx'
 import { followups } from '../api-client.js'
+import { startHomeRead, HomeReadDeadlineError } from '../home-read-deadline.js'
 import { useVisibleRefresh } from '../use-visible-refresh.js'
 import { useQueueVisibility, QueueCountsNotice } from './QueueCounts.jsx'
 import { clinicDateLabel, dentistScopeKey, homeClinicalWork, dayAgenda } from '../dentist-workspace.js'
@@ -14,15 +15,31 @@ function BranchFollowups({ store, setPage, scope, refreshKey }) {
   React.useEffect(() => {
     let live = true
     setRead({ status: 'loading' })
-    followups({ status: 'active', due: 'all', branch_ref: branchId }).then(r => {
-      if (live) setRead(r.ok ? { status: 'ready', rows: (r.data || []).filter(t => t.branch?.id === branchId && ['Open', 'Contacted'].includes(t.status)) } : { status: 'error' })
+    const task = startHomeRead(
+      signal => followups({ status: 'active', due: 'all', branch_ref: branchId }, { signal }),
+      { timeoutMs: 12000, timeoutMessage: 'Follow-ups took too long to load.' },
+    )
+    task.response.then(result => {
+      if (!live) return
+      if (!result?.ok || !Array.isArray(result.data)) throw new Error('Follow-ups are unavailable.')
+      // The server owns this scope. Fail closed instead of silently accepting
+      // a mixed-branch projection in the clinical workspace.
+      if (result.data.some(row => !row?.branch || String(row.branch.id) !== String(branchId))) {
+        throw new Error('The returned follow-ups did not match your branch.')
+      }
+      setRead({ status: 'ready', rows: result.data.filter(row => ['Open', 'Contacted'].includes(row.status)) })
+    }).catch(error => {
+      if (!live) return
+      setRead({ status: 'error', message: error instanceof HomeReadDeadlineError
+        ? 'Follow-ups took too long to load. Try again.'
+        : 'Follow-ups could not be verified for this branch. Try again.' })
     })
-    return () => { live = false }
+    return () => { live = false; task.cancel() }
   }, [scope, branchId, attempt, refreshKey])
   useVisibleRefresh(() => setAttempt(a => a + 1), { active: !!scope })
   return <Card className="den-panel den-followup-panel" title="Branch follow-ups" subtitle="Shared with the front desk" actions={<Button size="sm" variant="ghost" onClick={() => setPage('followups')}>View all follow-ups</Button>}>
     {read.status === 'loading' && <p className="den-muted" role="status">Loading follow-ups...</p>}
-    {read.status === 'error' && <p role="alert">Follow-ups are unavailable. <Button size="sm" variant="ghost" onClick={() => setAttempt(a => a + 1)}>Try again</Button></p>}
+    {read.status === 'error' && <div className="den-home-error" role="alert"><p>{read.message}</p><Button size="sm" variant="ghost" onClick={() => setAttempt(a => a + 1)}>Retry follow-ups</Button></div>}
     {read.status === 'ready' && (read.rows.length ? <ul className="den-followups">{read.rows.slice(0, 3).map(t => <li key={t.id}><div><strong>{t.patient?.name || 'Patient name unavailable'}</strong><small>{t.due_on ? `Due ${clinicDateLabel(t.due_on, { month: 'short', day: 'numeric', year: 'numeric' })}` : 'Due date unavailable'}</small></div><Status>{t.status}</Status></li>)}</ul> : <p className="den-muted">No open follow-ups returned for this branch.</p>)}
   </Card>
 }
@@ -48,7 +65,7 @@ export function DentistHome({ store, setPage }) {
   const pending = dayRows.filter(a => ['Pending', 'Confirmed'].includes(a.status))
   const refresh = () => { setRefreshKey(key => key + 1); return Promise.all([appointments.retry(), store.appointmentFlow?.refresh()]) }
   return <section className="den-workspace dentist-home" aria-label="Dentist Home">
-    <header className="den-page-heading"><div><p className="den-eyebrow">{clinicDateLabel(date, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })} | Asia/Manila</p><h1>Home</h1><p>{branch?.name || 'Assigned branch unavailable'}</p></div><div className="den-heading-actions"><span className="den-duty">{doctor?.on_duty_today === true ? 'On duty today' : doctor?.on_duty_today === false ? 'Off duty today' : 'Duty status unavailable'}</span><RefreshButton ariaLabel="Refresh Home" onClick={refresh}/></div></header>
+    <header className="den-page-heading"><div><p className="den-eyebrow">{clinicDateLabel(date, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })} | Asia/Manila</p><h1>Home</h1><p className="den-home-branch">{branch?.name || 'Assigned branch unavailable'}</p></div><div className="den-heading-actions"><span className="den-duty" role="status">{doctor?.on_duty_today === true ? 'On duty today' : doctor?.on_duty_today === false ? 'Off duty today' : 'Duty status unavailable'}</span><RefreshButton ariaLabel="Refresh Home" onClick={refresh}/></div></header>
     <div className="den-home-layout">
         <Card className={`den-panel den-current ${current ? 'has-encounter' : ''}`} title={active ? 'Treatment in progress' : next ? 'Ready for your review' : 'Current encounter'}>
           {!clinicalReady && <><QueueCountsNotice vis={visibility} store={store}/>{['ready', 'demo'].includes(visibility.mode) && <p role="status">{store.appointmentsTruncated ? 'Clinical records are incomplete. Refresh before opening an encounter.' : 'Loading clinical records...'}</p>}</>}

@@ -49,3 +49,35 @@
 @media (max-width: 1000px) { .owner-revenue-grid { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 700px) { .owner-kpi-grid { grid-template-columns: minmax(0, 1fr); } .owner-kpi { padding: 18px; } }
 @media (prefers-reduced-motion: reduce) { .owner-revenue-bar { transition: none; } }
+
+/* R24A — Executive overview: restrained type, real data, clear recovery.
+   No decorative gradients, manufactured totals or color-only trends. */
+.owner-performance .owner-performance-heading { align-items: end; gap: 14px; }
+.owner-performance .owner-performance-heading h2 { font-weight: 720; line-height: 1.13; letter-spacing: -.045em; }
+.owner-performance .owner-period-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; }
+.owner-performance .owner-period-actions .btn { min-height: 40px; }
+.owner-performance .owner-period-chip { font-variant-numeric: tabular-nums; white-space: normal; line-height: 1.5; }
+.owner-performance .owner-comparison-note { font-size: 13px; line-height: 1.55; max-width: 82ch; margin-top: 12px; }
+.owner-performance .owner-kpi-grid { gap: clamp(10px, 1.3vw, 16px); }
+.owner-performance .owner-kpi { padding: clamp(18px, 2vw, 24px); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 1px 3px #182b4108; }
+.owner-performance .owner-kpi h3,
+.owner-performance .owner-kpi-placeholder > span { font-size: 13px; font-weight: 650; color: var(--muted); margin: 0 0 14px; display: block; }
+.owner-performance .owner-kpi-value { align-items: baseline; gap: 8px 12px; }
+.owner-performance .owner-kpi-value strong { font-variant-numeric: tabular-nums; font-weight: 710; letter-spacing: -.045em; line-height: 1.16; }
+.owner-performance .owner-growth { font-variant-numeric: tabular-nums; }
+.owner-performance .owner-kpi p { margin-top: 14px; }
+.owner-performance .owner-kpi small { margin-top: 4px; }
+.owner-performance .owner-kpi-placeholder > p { margin: 10px 0 0; font-size: 12px; }
+.owner-performance .owner-kpi-skeleton { height: 32px; width: min(72%, 225px); border-radius: 6px; background: var(--surface-3); }
+@media (max-width: 700px) {
+  .owner-performance .owner-performance-heading { align-items: stretch; }
+  .owner-performance .owner-period-actions { justify-content: space-between; }
+  .owner-performance .owner-period-actions .btn { flex: 0 0 auto; }
+  .owner-performance .owner-kpi { padding: 18px; }
+}
+
+/* R24C: measured, finite report loading without shifting chart geometry. */
+.owner-report-loading { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding-block: 20px 28px; color: var(--muted); font-size: 13px; }
+.owner-report-skeleton { display: block; width: min(100%, 280px); height: 30px; border-radius: 6px; background: var(--surface-3); }
+.owner-revenue .card-actions .btn { min-height: 40px; }
+@media (prefers-reduced-motion: reduce) { .owner-report-loading, .owner-report-skeleton { animation: none; } }

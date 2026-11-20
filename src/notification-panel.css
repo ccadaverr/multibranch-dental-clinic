@@ -42,7 +42,12 @@ dialog.modal.a12-notifications {
   border-bottom: 1px solid var(--line); font-size: var(--font-xs);
 }
 .a12-notifications .notification-row { padding: var(--space-4) var(--space-5); gap: var(--space-3); background: var(--surface); }
-.a12-notifications .notification-row.unread { background: var(--brand-soft); }
+/* Unread status is a slim edge cue and a dot, not a full blue panel.
+   Preserve the underlying read/archive actions and recipient-scoped data. */
+.a12-notifications .notification-row.unread {
+  background: var(--surface);
+  box-shadow: inset 2px 0 0 var(--brand);
+}
 .a12-notifications .notification-dot { margin-top: var(--space-2); background: transparent; }
 .a12-notifications .notification-row.unread .notification-dot { background: var(--brand); }
 .a12-notifications .notification-row b { font-weight: var(--weight-strong); line-height: 1.5; }

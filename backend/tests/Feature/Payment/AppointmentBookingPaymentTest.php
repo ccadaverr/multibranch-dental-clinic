@@ -299,6 +299,9 @@ class AppointmentBookingPaymentTest extends TestCase
         // Patient can download the deposit receipt PDF from the API
         $pdfRes = $this->get("/api/appointments/{$fresh->public_id}/receipt-pdf");
         $pdfRes->assertOk();
+        $pdfRes->assertHeader('X-Appointment-Id', $fresh->public_id);
+        $pdfRes->assertHeader('X-Patient-Id', $fresh->patient->public_id);
+        $pdfRes->assertHeader('Cache-Control', 'private, no-store');
         $this->assertSame('application/pdf', $pdfRes->headers->get('Content-Type'));
         $this->assertStringContainsString('Booking-Deposit-Receipt', (string) $pdfRes->headers->get('Content-Disposition'));
     }

@@ -11,6 +11,7 @@ import './landing.css'
 import './automations.css'
 import './clinic-workflows.css'
 import './unified-workspace-r17.css'
+import './action-system.css'
 
 import { loadBranding } from './clinic-config.js'
 

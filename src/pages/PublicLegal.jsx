@@ -32,14 +32,14 @@ const PRIVACY = [
 const TERMS = [
   ['Your account', [
     'Use your own email and keep your password private. You sign in only after confirming your email with the 6-digit code we send.',
-    'Please keep your details correct; to correct your legal name, message the front desk.',
+    'You can update your account name in Profile. The clinic records the change in its audit history. To correct clinical records, contact the front desk.',
   ]],
   ['Booking', [
-    'Only open times are offered. A booking is confirmed by email. Nothing is charged when you book.',
+    'Only available times are offered. Your booking review shows the available payment choices and any amount due. Depending on the service and available payment methods, an online payment may be required before confirmation.',
     'Cancellation and late-arrival rules are to be confirmed by the clinic.',
   ]],
   ['Payments', [
-    'After your visit the clinic issues your invoice. You can pay online through PayMongo or at the clinic. An invoice is marked paid only after PayMongo confirms the payment.',
+    'When online booking payment is available, PayMongo handles the checkout. After your visit, the clinic issues an invoice reflecting any verified booking payment. Available invoice payment methods are shown in Billing; payment status follows the clinic’s verified records.',
   ]],
   ['Messages and the Clinic Assistant', [
     'Messages are not for emergencies. In an emergency, call the clinic or go to the nearest emergency room.',

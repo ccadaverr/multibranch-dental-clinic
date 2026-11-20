@@ -226,12 +226,13 @@ test('Module 23 metadata: Archives & Historical Records Management', () => {
   assert.equal(DOMAIN_MODULE.archives, 23, 'archives domain key maps to Module 23')
 })
 
-test('Patient portal: Family tab is removed and Archives tab is active', () => {
+test('Patient portal keeps History as the active Records destination without a separate Family tab', () => {
   const portalCode = readFileSync('src/patient/Portal.jsx', 'utf8')
   assert.doesNotMatch(portalCode, /\['family',\s*'user',\s*'Family'\]/)
   assert.doesNotMatch(portalCode, /\['feedback',\s*'star',\s*'Feedback'\]/)
-  assert.match(portalCode, /\['archives',\s*'archive',\s*'Historical records'\]/)
-  assert.match(portalCode, /case 'archives':/)
+  assert.match(portalCode, /\['archives',\s*'clock',\s*'History'\]/)
+  assert.match(portalCode, /archives: 'History'/)
+  assert.match(portalCode, /case 'archives': content = <ArchivesPage/)
 })
 
 test('Staff, Dentist, and Owner navigation include Archives & Records', () => {
@@ -375,7 +376,9 @@ test('Role 1 (Patient): paid PayMongo booking deposit appears in Archived Receip
   assert.equal(paidDeposits[0].receipt.reference, 'pay_test_xyz123')
 
   // Trigger booking deposit receipt PDF download
-  stubFetch(json(200, {}))
+  const verifiedDepositPdf = json(200, {})
+  verifiedDepositPdf.headers.set('X-Appointment-Id', depositAppt.id)
+  stubFetch(verifiedDepositPdf)
   const depositPdfRes = await api.downloadAppointmentReceiptPdf(depositAppt.id, depositAppt.code)
   assert.equal(depositPdfRes.ok, true)
   const lastDepositCall = calls.find(c => c.url.includes(`/api/appointments/${depositAppt.id}/receipt-pdf`))
@@ -547,35 +550,25 @@ test('Compliance CSV Export: exports archive tables and protects against formula
 // ====================================================================================================
 // 9. COMPONENT CONTRACT & RESILIENCE VERIFICATION
 // ====================================================================================================
-test('Archives component source contracts: verify PDF triggers, empty states, and accessibility', () => {
+test('Archives component source contracts: patient/staff receipt identity and read-only recovery', () => {
   const patientPage = readFileSync('src/patient/pages/Archives.jsx', 'utf8')
   const staffPage = readFileSync('src/pages/ArchivesPage.jsx', 'utf8')
-
-  // Patient Archives contract
-  assert.match(patientPage, /downloadPrescriptionPdf\(id,\s*number,\{isCurrent\}\)/)
-  assert.match(patientPage, /handleDownloadRx\(p\.id,\s*p\.number\)/)
-  assert.match(patientPage, /downloadBillingPdf\(inv\.id,\s*kind,\{patientId:inv\.patient\.id/)
-  assert.match(patientPage, /handleDownloadPdf\(inv,\s*'receipt'\)/)
-  assert.match(patientPage, /handleDownloadPdf\(inv,\s*'invoice'\)/)
-  assert.match(patientPage, /downloadAppointmentReceiptPdf/)
-  assert.match(patientPage, /handleDownloadBookingDeposit/)
-  assert.match(patientPage, /isBookingDeposit/)
-  assert.match(patientPage, /Deposit Paid/)
-  assert.match(patientPage, /role="tablist"/)
-  assert.match(patientPage, /role="tab"/)
-  assert.match(patientPage, /EmptyState icon="calendar"/)
-  assert.match(patientPage, /EmptyState icon="pill"/)
-  assert.match(patientPage, /EmptyState icon="receipt"/)
-
-  // Staff / Dentist / Owner ArchivesPage contract
-  assert.match(staffPage, /title="Archives & Historical Records Management"/)
+  assert.match(patientPage, /readOwnedArchive/)
+  assert.match(patientPage, /invoiceMatches/)
+  assert.match(patientPage, /downloadBillingPdf\(record\.id, kind, \{ patientId: record\.patient\.id/)
+  assert.match(patientPage, /downloadAppointmentReceiptPdf\(record\.appointmentId, record\.appointmentCode, \{ patientId: record\.patient\.id, isCurrent \}\)/)
+  assert.match(patientPage, /isBookingDeposit: true/)
+  assert.match(patientPage, /role="group"|aria-label="History categories"|patient-history-toolbar/)
+  assert.match(patientPage, /ErrorState text=\{error\} onRetry=\{refresh\}/)
+  assert.match(patientPage, /EmptyState icon=\{tab === 'visits' \? 'calendar' : 'receipt'\}/)
+  assert.match(staffPage, /title="Archives & Records"/)
   assert.match(staffPage, /makeCsv/)
   assert.match(staffPage, /Export Archive CSV/)
-  assert.match(staffPage, /archivedVisits/)
-  assert.match(staffPage, /archivedPrescriptions/)
-  assert.match(staffPage, /archivedInvoices/)
+  for (const variable of ['archivedVisits', 'archivedPrescriptions', 'archivedInvoices']) {
+    assert.ok(staffPage.includes(variable))
+  }
   assert.match(staffPage, /archive\.viewed/)
-  assert.match(staffPage, /Permanent deletion/)
+  assert.match(staffPage, /Records cannot be restored or permanently deleted here\./)
 })
 
 // ARC-01 source guards. These do not establish rendered or backend authorization acceptance.
@@ -590,14 +583,10 @@ test('ARC-01: unsupported restoration has no confirmation, success event or loca
   for (const call of successCalls) assert.match(call, /exported to CSV/)
 })
 
-test('ARC-01: disabled restore explains unavailability in visible keyboard-focusable text', () => {
+test('ARC-01: read-only archive visibly explains why restoration is unavailable', () => {
   const page = readFileSync('src/pages/ArchivesPage.jsx', 'utf8')
-  const button = page.match(/<Button[^>]*aria-describedby="archive-restore-unavailable"[^>]*>[^<]*<\/Button>/)?.[0]
-  assert.ok(button, 'Restore control references its explanation')
-  assert.match(button, /\bdisabled\b/)
-  assert.doesNotMatch(button, /onClick|type="submit"/)
-  assert.match(button, /Retrieve \/ Restore \(unavailable\)/)
-  assert.match(page, /<p[^>]*id="archive-restore-unavailable" tabIndex=\{0\}>Read-only records\. Restoration is unavailable\. Permanent deletion is disabled\.<\/p>/)
+  assert.match(page, /id="archive-restore-unavailable">Archives are read-only\. Records cannot be restored or permanently deleted here\.<\/p>/)
+  assert.doesNotMatch(page, /handleConfirmRestore|onClick=\{handleRestore|restoreTarget|setRestore/)
 })
 
 test('ARC-01: read-only viewing and existing role restrictions remain in place', () => {

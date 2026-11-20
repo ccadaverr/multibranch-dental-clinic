@@ -2,6 +2,7 @@ import React, { useEffect, useId, useState } from 'react'
 import { Button, Card, Field, Notice } from '../components.jsx'
 import { fetchDailyRevenue, fetchWeeklyRevenueHistogram } from '../analytics-api.js'
 import { clinicDate, validDate } from '../clock.js'
+import { startHomeRead, HomeReadDeadlineError } from '../home-read-deadline.js'
 import { exactPeso, revenueGeometry, validateRevenueReport, validateRevenueScope, weeklyChartAvailable } from '../owner-revenue-data.js'
 import { OwnerPerformanceOverview } from './OwnerPerformanceOverview.jsx'
 import '../owner-revenue.css'
@@ -66,23 +67,38 @@ function RevenueReport({ weekly = false, params, today }) {
   const [result, setResult] = useState({ loading: true })
   const [retry, setRetry] = useState(0)
   const [preview, setPreview] = useState(false)
+  // The parent also keys reports by filter. Keep explicit dependencies so a future
+  // reuse without remounting cannot display another branch or week by accident.
+  const branchId = params.branch_id, period = params.period
+  const dateFrom = params.date_from, dateTo = params.date_to, weekDate = params.date
   useEffect(() => {
     let active = true
     setResult({ loading: true })
+    const requested = { branch_id: branchId, period, date_from: dateFrom, date_to: dateTo, date: weekDate }
     const fetcher = weekly ? fetchWeeklyRevenueHistogram : fetchDailyRevenue
-    fetcher(params).then(value => {
-      const data = validateRevenueScope(validateRevenueReport(value, weekly, params), params.branch_id)
+    const task = startHomeRead(signal => fetcher(requested, { signal }), {
+      timeoutMs: 12000,
+      timeoutMessage: 'Revenue took too long to load.',
+    })
+    task.response.then(value => {
+      const data = validateRevenueScope(validateRevenueReport(value, weekly, requested), branchId)
       if (active) setResult({ data })
-    }).catch(() => { if (active) setResult({ error: true }) })
-    return () => { active = false }
-  }, [retry]) // The parent keys each resource by every request filter, including branch and period/date.
+    }).catch(error => {
+      if (!active) return
+      setResult({ error: error instanceof HomeReadDeadlineError
+        ? 'The report took too long to load. Retry to check the latest figures.'
+        : 'The requested amounts could not be verified. No figures are shown.' })
+    })
+    return () => { active = false; task.cancel() }
+  }, [retry, weekly, branchId, period, dateFrom, dateTo, weekDate])
   const { data } = result
   const available = !weekly || !data || weeklyChartAvailable(data, today, preview)
   const empty = data && data.totals.payments_count === 0 && data.totals.refunds_count === 0
   return <Card title={weekly ? 'Monday–Saturday revenue summary' : 'Daily revenue'}
-    subtitle={data ? (weekly ? data.week_label : data.period_label) : 'Collections and refunds from the clinic server'}>
-    {result.loading && <p role="status" aria-busy="true">Loading {weekly ? 'weekly' : 'daily'} revenue…</p>}
-    {result.error && <Notice tone="warning" title="Revenue unavailable">Could not verify figures for this selection. <Button size="sm" onClick={() => setRetry(n => n + 1)}>Retry revenue</Button></Notice>}
+    subtitle={data ? (weekly ? data.week_label : data.period_label) : 'Collections and refunds from the clinic server'}
+    actions={data ? <Button size="sm" variant="ghost" aria-label={`Refresh ${weekly ? 'weekly' : 'daily'} revenue`} onClick={() => setRetry(n => n + 1)}>Refresh</Button> : null}>
+    {result.loading && <div className="owner-report-loading" role="status" aria-busy="true"><span className="owner-report-skeleton" aria-hidden="true"/><span>Loading {weekly ? 'weekly' : 'daily'} revenue…</span></div>}
+    {result.error && <Notice tone="warning" title="Revenue unavailable">{result.error} <Button size="sm" variant="soft" onClick={() => setRetry(n => n + 1)}>Retry revenue</Button></Notice>}
     {data && weekly && <p className="owner-revenue-week-status" role="status">{data.is_finalized ? 'Week finalized — Saturday has passed.' : data.week_end_date === today ? 'Saturday summary — in progress until the reporting day ends.' : 'In progress — not finalized.'}</p>}
     {data && !available && <Notice>Saturday summary is available on {data.week_end_date}. <Button size="sm" variant="soft" onClick={() => setPreview(true)}>Preview in-progress week</Button></Notice>}
     {data && available && <>

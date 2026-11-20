@@ -103,6 +103,10 @@ export function PublicFooter() {
         <ul className="lp-footer-links"><li><a href="#privacy">Privacy Policy</a></li><li><a href="#terms">Terms of Use</a></li></ul>
       </nav>
     </div>
-    <div className="lp-container lp-footer-bottom">© {year} {clinic.name}</div>
+    <div className="lp-container lp-footer-bottom">
+      <span>© {year} {clinic.name}</span>
+      <span> · </span>
+      <a href="#privacy">Your privacy rights under the Data Privacy Act of 2012 (RA 10173)</a>
+    </div>
   </footer>
 }

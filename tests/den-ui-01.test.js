@@ -111,10 +111,23 @@ test('DEN-UI-01: unknown calendar counts are never advertised as zero', () => {
 })
 
 test('DEN-UI-01: loading/error/incomplete/stale read states are distinct from empty appointments', () => {
-  assert.match(render(ui.ReadState, { read: { status: 'loading' } }), /role="status"/)
-  for (const read of [{ status: 'error', error: 'Unavailable' }, { status: 'ready', complete: false }, { status: 'ready', complete: true, stale: true }]) {
+  const loading = render(ui.ReadState, { read: { status: 'loading' } })
+  assert.match(loading, /role="status"/)
+  assert.doesNotMatch(loading, /ui-retry/)
+  assert.doesNotMatch(render(ui.ReadState, { read: { status: 'error', error: 'Unavailable' } }), /ui-retry/)
+
+  // Use the shared ReadState's actual action label and severity contract.
+  // Stale information is announced as a status; failed or incomplete reads are alerts.
+  for (const [read, role, message] of [
+    [{ status: 'error', error: 'Unavailable' }, 'alert', 'Unavailable'],
+    [{ status: 'ready', complete: false }, 'alert', 'Some appointments may be missing'],
+    [{ status: 'ready', complete: true, stale: true }, 'status', 'latest update failed'],
+  ]) {
     const html = render(ui.ReadState, { read: { ...read, retry() {} } })
-    assert.ok(html.includes('Try again')); assert.ok(html.includes('role="alert"')); assert.doesNotMatch(html, /No appointments scheduled/)
+    assert.ok(html.includes(`role="${role}"`), `${read.status}: correct announcement severity`)
+    assert.match(html, /<button[^>]*class="ui-retry"[^>]*>Retry<\/button>/)
+    assert.ok(html.includes(message), `${read.status}: truthful explanation`)
+    assert.doesNotMatch(html, /No appointments scheduled/)
   }
 })
 

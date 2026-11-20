@@ -126,8 +126,8 @@ export async function loadAppointments(today) {
   return { ok: true, rows, truncated: true }
 }
 
-export async function fetchAppointment(id) {
-  const result = await api.getAppointment(id)
+export async function fetchAppointment(id, { signal } = {}) {
+  const result = await api.getAppointment(id, signal)
   return result.ok ? { ok: true, row: result.data } : normalizeFailure(result)
 }
 

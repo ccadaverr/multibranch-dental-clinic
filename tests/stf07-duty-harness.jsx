@@ -9,8 +9,9 @@ let instant = '2026-10-29T02:00:00Z'
 setClockSource(() => new Date(instant))
 window.stf07 = { mode: 'ready', calls: 0, setInstant(value) { instant = value } }
 
-window.fetch = async () => {
+window.fetch = async (_url, options = {}) => {
   window.stf07.calls++
+  if (window.stf07.mode === 'slow') return new Promise(() => {})
   if (window.stf07.mode === 'forbidden') return { ok: false, status: 403, json: async () => ({ message: 'Forbidden' }) }
   if (window.stf07.mode === 'error') return { ok: false, status: 500, json: async () => ({ message: 'Unavailable' }) }
   let rows = window.stf07.mode === 'empty' ? [] : [

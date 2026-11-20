@@ -214,7 +214,7 @@ dialog.modal.clinic-notifications {
 }
 dialog.modal.clinic-signout-dialog .modal-head,
 dialog.modal.clinic-notifications .modal-head { background: transparent; }
-.pp-shell .pp-main { background: linear-gradient(180deg,#e9eff1 0%,#f0f3f3 300px); }
+.pp-shell .pp-main { background: #f7f8f7; }
 .pp-shell .pp-quick-item { background: var(--clinic-elevated); border-color: var(--clinic-line); border-radius: 12px; }
 .pp-shell .pp-quick-item:hover { border-color: #a8c0cc; background: #f0f6f7; }
 .pp-shell .pp-primary { border-radius: var(--clinic-radius-sm); }

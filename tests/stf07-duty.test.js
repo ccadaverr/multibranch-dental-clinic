@@ -4,7 +4,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { build } from 'esbuild'
 import React from 'react'
 import { renderToString } from 'react-dom/server'
-import { workSchedules } from '../src/api-client.js'
+import { workSchedulesDuty } from '../src/api-client.js'
 
 const bundle = await build({ stdin: { contents: "export { StaffOnDuty } from './src/pages/StaffOnDuty.jsx'", resolveDir: process.cwd() },
   bundle: true, write: false, platform: 'node', format: 'esm', external: ['react', 'react-dom'], loader: { '.css': 'empty' } })
@@ -30,10 +30,12 @@ test('Staff on-duty panel waits for server evidence before showing a status', ()
   assert.doesNotMatch(html, /class="fd-badge/)
 })
 
-test('work-schedule client keeps the read-only duty projection and explicit forbidden failure', async () => {
-  globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ data: { duty: { date: '2026-10-29', rows: [{ dentist_id: 'd1', branch_id: 'b1', on_duty_today: false }] } } }) })
-  const result = await workSchedules()
+test('Staff duty uses the dedicated read-only endpoint and preserves explicit forbidden failure', async () => {
+  let path = ''
+  globalThis.fetch = async url => { path = new URL(url).pathname; return { ok: true, status: 200, json: async () => ({ data: { duty: { date: '2026-10-29', rows: [{ dentist_id: 'd1', branch_id: 'b1', on_duty_today: false }] } } }) } }
+  const result = await workSchedulesDuty()
+  assert.equal(path, '/api/work-schedules/duty')
   assert.deepEqual(result.data.duty.rows, [{ dentist_id: 'd1', branch_id: 'b1', on_duty_today: false }])
   globalThis.fetch = async () => ({ ok: false, status: 403, json: async () => ({ message: 'Forbidden' }) })
-  assert.equal((await workSchedules()).kind, 'forbidden')
+  assert.equal((await workSchedulesDuty()).kind, 'forbidden')
 })

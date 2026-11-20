@@ -6,8 +6,8 @@ import { requestClinicCsv, saveClinicCsv } from './clinic-csv.js'
 
 export { saveClinicCsv }
 
-export async function fetchExecutiveSummary(params = {}) {
-  const res = await api.getExecutiveSummary(params)
+export async function fetchExecutiveSummary(params = {}, { signal } = {}) {
+  const res = await api.getExecutiveSummary(params, { signal })
   if (!res.ok) throw normalizeFailure(res)
   return res.data
 }
@@ -18,14 +18,14 @@ export async function fetchBranchPerformance(params = {}) {
   return res.data
 }
 
-export async function fetchDailyRevenue(params = {}) {
-  const res = await api.getDailyRevenue(params)
+export async function fetchDailyRevenue(params = {}, { signal } = {}) {
+  const res = await api.getDailyRevenue(params, { signal })
   if (!res.ok) throw normalizeFailure(res)
   return res.data
 }
 
-export async function fetchWeeklyRevenueHistogram(params = {}) {
-  const res = await api.getWeeklyRevenueHistogram(params)
+export async function fetchWeeklyRevenueHistogram(params = {}, { signal } = {}) {
+  const res = await api.getWeeklyRevenueHistogram(params, { signal })
   if (!res.ok) throw normalizeFailure(res)
   return res.data
 }

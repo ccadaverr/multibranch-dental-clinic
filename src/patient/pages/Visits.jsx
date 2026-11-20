@@ -1,7 +1,8 @@
 import { SelectionDetailsNotice } from '../../selection-details.jsx'
+import { startHomeRead } from '../../home-read-deadline.js'
 import React, { useEffect, useRef, useState } from 'react'
 import { Button, Icon, Modal } from '../../components.jsx'
-import { acceptSlotOffer, getAppointment, listAppointments, mySlotOffers, sayOnMyWay } from '../../api-client.js'
+import { acceptSlotOffer, downloadAppointmentReceiptPdf, getAppointment, listAppointments, mySlotOffers, sayOnMyWay } from '../../api-client.js'
 import { cancelAppointment, commandKey, rescheduleAppointment } from '../../appointments-api.js'
 import { clinic } from '../../clinic-config.js'
 import { BookingCalendar, TimeSlots } from '../BookingCalendar.jsx'
@@ -117,6 +118,8 @@ export function AppointmentDetails({ id, onClose, onChanged, onNavigate, toast, 
           <Button size="sm" variant="ghost" onClick={() => setAction('reschedule')}>Reschedule</Button>
           <Button size="sm" variant="ghost" className="pp-danger" onClick={() => setAction('cancel')}>Cancel appointment</Button>
         </div>}
+        {a.booking_payment_status === 'paid' && Number(a.booking_fee_php) > 0 && a.patient?.id &&
+          <BookingDepositReceipt appointment={a} toast={toast}/>}
         {['Checked In', 'In Treatment', 'Completed'].includes(a.status) && <Button size="sm" variant="soft" icon="receipt" onClick={() => onNavigate('billing', { appointmentId: a.id, patientId: a.patient?.id, receiptOnly: true })}>Invoice and receipt</Button>}
       </>}
     </Modal>
@@ -133,6 +136,39 @@ export function AppointmentDetails({ id, onClose, onChanged, onNavigate, toast, 
         refresh()
       }}/>}
   </>
+}
+
+/** A booking deposit receipt is not the post-Visit invoice or its settlement receipt. */
+function BookingDepositReceipt({ appointment, toast }) {
+  const [busy, setBusy] = useState(false)
+  const pending = useRef(null)
+  const live = useRef(false)
+  useEffect(() => {
+    live.current = true
+    return () => { live.current = false; pending.current?.cancel() }
+  }, [])
+  const download = async () => {
+    if (pending.current || !live.current) return
+    const task = startHomeRead(signal => downloadAppointmentReceiptPdf(appointment.id, appointment.code, {
+      patientId: appointment.patient.id, signal, isCurrent: () => live.current && !signal.aborted,
+    }), { timeoutMs: 12000, timeoutMessage: 'The booking receipt took too long to load. Please retry.' })
+    pending.current = task
+    setBusy(true)
+    try {
+      const result = await task.response
+      if (live.current && !result.ok) toast?.(result.message || 'The booking deposit receipt could not be verified.', 'warning')
+    } catch (error) {
+      if (live.current) toast?.(error.message || 'The booking deposit receipt is unavailable. Try again.', 'warning')
+    } finally {
+      if (pending.current === task) pending.current = null
+      if (live.current) setBusy(false)
+    }
+  }
+  return <div className="pp-actions">
+    <Button size="sm" variant="soft" icon="download" disabled={busy} onClick={download}>
+      {busy ? 'Preparing deposit receipt…' : 'Download booking deposit receipt'}
+    </Button>
+  </div>
 }
 
 function CancelDialog({ selectionDetailsAvailable = false, appointment, onClose, onDone }) {
