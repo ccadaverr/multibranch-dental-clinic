@@ -1,4 +1,11 @@
 const canonical=value=>JSON.stringify(value,(_,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.fromEntries(Object.keys(v).sort().map(k=>[k,v[k]])):v)
+const dutyTime = value => typeof value === 'string' && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value)
+export function validStaffDuty(row, staff, branch, date) {
+  return row?.staff_ref === staff && row.branch_ref === branch && row.date === date &&
+    Array.isArray(row.windows) && Array.isArray(row.approved_leave) && row.available === (row.windows.length > 0) &&
+    row.windows.every(window => dutyTime(window?.start_time) && dutyTime(window.end_time) && window.start_time < window.end_time &&
+      typeof window.publication_id === 'string' && !!window.publication_id && Number.isSafeInteger(window.revision) && window.revision > 0)
+}
 export function validRoster(row,staff,date) {
   return row?.staff_ref===staff && row.date===date && typeof row.id==='string' && !!row.id &&
     Number.isSafeInteger(row.revision)&&row.revision>0&&['Draft','Pending','Approved','Published'].includes(row.status)&&

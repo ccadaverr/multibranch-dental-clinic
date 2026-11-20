@@ -32,7 +32,7 @@ class NotificationController extends Controller
             ($prepareDone - $schemaDone) / 1_000_000,
             ($done - $prepareDone) / 1_000_000,
             ($done - $started) / 1_000_000);
-        return $response->header('Cache-Control', 'private, no-store')->header('Server-Timing', $timing);
+        return $response->header('Server-Timing', $timing);
     }
 
     /** @return array{query: Builder<UserNotification>, archival: bool, collection: string} */
@@ -94,7 +94,7 @@ class NotificationController extends Controller
             'meta' => ['unread' => (int) $result->first()->active_unread_count,
                 'collection' => $collection, 'archive_available' => $archival,
                 'has_more' => $page->count() > 50, 'next_before' => $page->count() > 50 ? $rows->last()->public_id : null] + $receipt,
-        ]);
+        ])->header('Cache-Control', 'private, no-store');
     }
 
     public function read(Request $request, string $notification): JsonResponse
@@ -159,6 +159,7 @@ class NotificationController extends Controller
 
     private function unavailable(): JsonResponse
     {
-        return response()->json(['code' => 'notification_archive_unavailable', 'message' => 'Notification archival is not available on this server. Your notification was retained.'], 503);
+        return response()->json(['code' => 'notification_archive_unavailable', 'message' => 'Notification archival is not available on this server. Your notification was retained.'], 503)
+            ->header('Cache-Control', 'private, no-store');
     }
 }

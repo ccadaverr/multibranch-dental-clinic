@@ -313,11 +313,15 @@ store={...store,state:{...recoveryBase,patients:[]}}
 assert.ok(render('patients','staff').includes('New Patient'))
 store={...store,state:recoveryBase}
 console.log('PASS: empty patient registry retains the Staff registration recovery action')
-assert.ok(render('checkin','staff').includes('Select an appointment to check the patient in.'))
-assert.doesNotMatch(render('checkin','staff'),/Confirm arrival<\/button>/)
+const noArrivals={...store.state,appointments:[]}
+const checkinWithoutSelection=render('checkin','staff',null,{},{state:noArrivals,appointmentsStatus:'offline'})
+assert.ok(checkinWithoutSelection.includes('Scheduled arrivals'))
+assert.ok(checkinWithoutSelection.includes('Today’s arrivals have not been verified'))
+assert.doesNotMatch(checkinWithoutSelection,/Confirm arrival<\/button>/)
+assert.match(render('checkin','staff',null,{},{state:noArrivals,appointmentsStatus:'ready'}),/No arrivals waiting/)
 // Malformed earlier browser HMO history renders safely as read-only history and never as a live server case.
 store={...store,state:{...recoveryBase,hmo:[...recoveryBase.hmo.filter(h=>h.server),{id:'legacy-bad',legacy:true,legacyAppointment:true,preServer:true,server:false,patientId:'p1',branchId:'b1',status:'Pending',contacts:{malformed:true},requirements:'bad'}]}}
-{const page=render('hmo','staff');assert.ok(page.includes('HMO Management'));assert.ok(!/legacy-bad/.test(page))}
+{const page=render('hmo','staff');assert.ok(page.includes('HMO claims'));assert.ok(!/legacy-bad/.test(page))}
 store={...store,state:recoveryBase}
 console.log('PASS: explicit arrival selection and malformed HMO history recovery render')
 

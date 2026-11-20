@@ -26,7 +26,8 @@ class NotificationHistoryTest extends TestCase
 
     public function test_history_pages_remain_recipient_scoped_complete_and_stable_after_new_inserts(): void
     {
-        $first = $this->getJson('/api/notifications')->assertOk()->assertJsonCount(50, 'data')->assertJsonPath('meta.unread', 103)->assertJsonPath('meta.has_more', true)->json();
+        $first = $this->getJson('/api/notifications')->assertOk()->assertHeader('Cache-Control', 'no-store, private')
+            ->assertJsonCount(50, 'data')->assertJsonPath('meta.unread', 103)->assertJsonPath('meta.has_more', true)->json();
         app(NotificationCenter::class)->staffNotice($this->u['staffB1'], 'record_shared', 'Newer notice', null, 'leave', null, 'history-new');
         $second = $this->getJson('/api/notifications?before='.$first['meta']['next_before'])->assertOk()->assertJsonCount(50, 'data')->json();
         $third = $this->getJson('/api/notifications?before='.$second['meta']['next_before'])->assertOk()->assertJsonCount(3, 'data')
@@ -44,7 +45,8 @@ class NotificationHistoryTest extends TestCase
     public function test_older_read_receipt_identifies_the_target_and_retry_keeps_first_timestamp(): void
     {
         $oldest = UserNotification::where('user_id', $this->u['staffB1']->id)->oldest('id')->firstOrFail();
-        $this->postJson('/api/notifications/'.$oldest->public_id.'/read')->assertOk()->assertJsonPath('meta.read_id', $oldest->public_id)->assertJsonPath('meta.unread', 102);
+        $this->postJson('/api/notifications/'.$oldest->public_id.'/read')->assertOk()->assertHeader('Cache-Control', 'no-store, private')
+            ->assertJsonPath('meta.read_id', $oldest->public_id)->assertJsonPath('meta.unread', 102);
         $firstRead = $oldest->fresh()->read_at;
         $this->travel(1)->minutes();
         $this->postJson('/api/notifications/'.$oldest->public_id.'/read')->assertOk()->assertJsonPath('meta.read_id', $oldest->public_id);

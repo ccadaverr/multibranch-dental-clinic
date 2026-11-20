@@ -117,9 +117,10 @@ function CalendarSession({ store, scopes, authorizationKey }) {
   const hasAccess = session?.active !== false && (session?.role === 'owner' || (session?.role === 'staff' && scopes.length > 0))
   const sessionKey = serverSession && hasAccess ? authorizationKey : null
   const live = useRef(false)
+  const detailRead = useRef(null)
   React.useLayoutEffect(() => {
     live.current = true
-    return () => { live.current = false }
+    return () => { live.current = false; detailRead.current?.abort() }
   }, [])
   const today = useClinicToday()
   const [date, setDate] = useState(defaultCalendarDate)
@@ -143,7 +144,7 @@ function CalendarSession({ store, scopes, authorizationKey }) {
   const loader = loaderRef.current
   const target = periodTarget('month', date)
   React.useLayoutEffect(() => {
-    detailGeneration.current++; actionOwner.invalidate()
+    detailGeneration.current++; detailRead.current?.abort(); actionOwner.invalidate()
     setResolving(false); setReschedule(null); setCancelling(null); setMissed(null); setActionError('')
   }, [target, branchId, selectedDate])
 
@@ -174,9 +175,9 @@ function CalendarSession({ store, scopes, authorizationKey }) {
   const [capacityRetry, setCapacityRetry] = useState(0)
   const loadParams = useMemo(() => {
     const branch = branches.length > 1 && branches.some(b => b.id === branchId) ? branchId : null
-    const cells = monthCells(date)
-    const r = { from: cells[0]?.date, to: cells[cells.length - 1]?.date }
-    return { key: `${sessionKey}:${r.from}:${r.to}:${branch || 'all'}`, from: r.from, to: r.to, branch }
+    const dates = monthCells(date).map(cell => cell.date)
+    const from = dates[0], to = dates.at(-1)
+    return { key: `${sessionKey}:${from}:${to}:${branch || 'all'}`, from, to, dates, branch }
   }, [date, branchId, branches, sessionKey])
 
   useEffect(() => {
@@ -184,11 +185,18 @@ function CalendarSession({ store, scopes, authorizationKey }) {
     let live = true
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 15000)
+    const failed = () => {
+      if (live) setLoad({ key: loadParams.key, crowded: 80, days: {},
+        error: controller.signal.aborted ? 'Capacity timed out. Retry this month.' : 'Capacity information is unavailable for this month.' })
+    }
     calendarLoad({ from: loadParams.from, to: loadParams.to, branch_ref: loadParams.branch || undefined }, controller.signal).then(r => {
       if (!live) return
-      setLoad(r.ok ? { key: loadParams.key, crowded: r.data.crowded_percent, note: r.data.capacity_note || null, error: '', days: Object.fromEntries((r.data.days || []).map(d => [d.date, d])) } :
-        { key: loadParams.key, crowded: 80, days: {}, error: controller.signal.aborted ? 'Capacity timed out. Retry this month.' : 'Capacity information is unavailable for this month.' })
-    }).finally(() => clearTimeout(timeout))
+      const data = r?.data
+      if (!r?.ok || !Array.isArray(data?.days) || data.days.length !== loadParams.dates.length ||
+        data.days.some((day, index) => day?.date !== loadParams.dates[index]) ||
+        (loadParams.branch && (data.branches?.length !== 1 || data.branches[0]?.id !== loadParams.branch))) return failed()
+      setLoad({ key: loadParams.key, crowded: data.crowded_percent, note: data.capacity_note || null, error: '', days: Object.fromEntries(data.days.map(d => [d.date, d])) })
+    }).catch(failed).finally(() => clearTimeout(timeout))
     return () => { live = false; controller.abort(); clearTimeout(timeout) }
   }, [sessionKey, loadParams?.key, capacityRetry])
 
@@ -240,13 +248,13 @@ function CalendarSession({ store, scopes, authorizationKey }) {
 
   const handleRefresh = () => {
     if (!live.current || !sessionKey) return
-    detailGeneration.current++; setResolving(false)
+    detailGeneration.current++; detailRead.current?.abort(); setResolving(false)
     loader.refresh()
     store.appointmentFlow?.refresh()
   }
 
-  const resolveAppointment = async row => {
-    const res = await getAppointment(row.id)
+  const resolveAppointment = async (row, signal) => {
+    const res = await getAppointment(row.id, signal)
     if (!res.ok) throw Error(res.message || 'The appointment could not be loaded. Refresh and try again.')
     if (res.data?.id !== row.id || res.data.branch?.id !== row.branchId || !res.data.patient?.id ||
       !res.data.service?.id || !Number.isInteger(res.data.revision) || res.data.revision < 1) {
@@ -258,10 +266,15 @@ function CalendarSession({ store, scopes, authorizationKey }) {
   const startAction = async (a, action, select) => {
     if (!canSchedule(store, a.branchId)) return
     const request = ++detailGeneration.current, auth = store.getAuthGeneration?.()
+    detailRead.current?.abort()
+    const controller = new AbortController()
+    detailRead.current = controller
+    const timeout = setTimeout(() => controller.abort(), 15000)
     actionOwner.invalidate(); setActionError(''); setResolving(true)
     setReschedule(null); setCancelling(null); setMissed(null)
     try {
-      const full = await resolveAppointment(a)
+      const full = await resolveAppointment(a, controller.signal)
+      if (controller.signal.aborted) throw Error('Appointment details took too long to load. Try the action again.')
       if (!live.current || request !== detailGeneration.current || auth !== store.getAuthGeneration?.()) return
       const currentRow = latestRows.current.find(row => row.id === a.id && row.branchId === full.branchId)
       if (!currentRow || currentRow.status !== full.status) { setActionError('This appointment changed. Refresh and review it again.'); return }
@@ -269,18 +282,25 @@ function CalendarSession({ store, scopes, authorizationKey }) {
       if (problem) { setActionError(problem); return }
       select(full)
     } catch (error) {
-      if (live.current && request === detailGeneration.current && auth === store.getAuthGeneration?.()) setActionError(error.message || 'The appointment could not be loaded. Refresh and try again.')
-    } finally { if (live.current && request === detailGeneration.current) setResolving(false) }
+      if (live.current && request === detailGeneration.current && auth === store.getAuthGeneration?.()) {
+        setActionError(controller.signal.aborted ? 'Appointment details took too long to load. Try the action again.' :
+          error.message || 'The appointment could not be loaded. Refresh and try again.')
+      }
+    } finally {
+      clearTimeout(timeout)
+      if (detailRead.current === controller) detailRead.current = null
+      if (live.current && request === detailGeneration.current) setResolving(false)
+    }
   }
   const onStartReschedule = a => startAction(a, 'reschedule', setReschedule)
   const onStartCancel = a => startAction(a, 'cancel', setCancelling)
   const onStartNoShow = a => startAction(a, 'noShow', setMissed)
 
   const selectDetail = id => {
-    detailGeneration.current++; actionOwner.invalidate(); setResolving(false); setSelectedId(id)
+    detailGeneration.current++; detailRead.current?.abort(); actionOwner.invalidate(); setResolving(false); setSelectedId(id)
   }
   const openNewAppointment = () => {
-    detailGeneration.current++; actionOwner.invalidate(); setResolving(false)
+    detailGeneration.current++; detailRead.current?.abort(); actionOwner.invalidate(); setResolving(false)
     setReschedule(null); setCancelling(null); setMissed(null); setNewOpen(true)
   }
   const runAction = async (action, a, close, command, keepOpen = false) => {

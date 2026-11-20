@@ -78,6 +78,27 @@ class FollowupTest extends TestCase
         FollowupTask::query()->delete();
     }
 
+    public function test_follow_up_creation_rejects_an_unknown_selected_service_and_recovers_the_original_task(): void
+    {
+        $this->completedTreatment();
+        $this->actingAsUser('staffB1');
+        $headers = ['Idempotency-Key' => 'followup-staff-recovery'];
+        $request = [
+            'patient_id' => $this->p['A']->public_id, 'branch_ref' => 'b1',
+            'reason' => 'Schedule follow-up', 'due_on' => '2026-10-05',
+        ];
+        $this->postJson('/api/followups', $request + ['service_ref' => 'unknown-service'], $headers)
+            ->assertUnprocessable()->assertJsonValidationErrors('service_ref');
+        $this->assertSame(0, FollowupTask::count());
+        $request['service_ref'] = 'svc1';
+        $saved = $this->postJson('/api/followups', $request, $headers)->assertCreated()->json('data.id');
+        $this->postJson('/api/followups', $request, $headers)->assertCreated()
+            ->assertHeader('Idempotent-Replayed', 'true')->assertJsonPath('data.id', $saved)
+            ->assertJsonPath('data.patient.id', $request['patient_id'])->assertJsonPath('data.branch.id', 'b1')
+            ->assertJsonPath('data.due_on', '2026-10-05')->assertJsonPath('data.service.id', 'svc1');
+        $this->assertSame(1, FollowupTask::count());
+    }
+
     public function test_dentist_scope_keyed_creation_and_required_revision(): void
     {
         $task = Followups::fromTreatment($this->completedTreatment());

@@ -10,7 +10,7 @@ const slice=(from,to)=>{const a=source.indexOf(from),b=source.indexOf(to,a);asse
 const helpers=slice('const firstError','// One selection lifetime')
 const listCode=slice('function useFollowupList(','/**')
 const rowCode=slice('function FollowupRow(','  return <li')+'return {act, error, busy, setNote, note, setClosing, closing, setBooking, bookingToken, closeBooking, ownsBooking, bookingStore};\n}'
-const panelCode=slice('function PatientFollowupPanel(','  return <section')+'return {add, err, busy, f, setF, setReasonCategory, setCustomReason, customReason, setAdding, adding, rows, error, load, reload, needsReload};\n}'
+const panelCode=slice('function PatientFollowupPanel(','  return <section')+'return {add, retryCreation, err, busy, f, setF, setReasonCategory, setCustomReason, customReason, setAdding, adding, rows, error, load, reload, needsReload};\n}'
 const reasons=slice('function matchesFollowupSelection','/** The follow-up tasks')
 const wire=x=>JSON.parse(JSON.stringify(x))
 const deferred=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b});return {promise,resolve,reject}}
@@ -25,7 +25,7 @@ function hooks(code,name,globals,initial,{deferEffects=false}={}){
  const memo=(fn,deps)=>{const i=cursor++,old=cells[i];if(!old||deps.some((d,j)=>d!==old.deps[j]))cells[i]={deps,value:fn};return cells[i].value}
  const effect=(run,deps,queue=effects)=>{const i=cursor++,old=cells[i];if(!old||deps.some((d,j)=>d!==old.deps[j])){old?.cleanup?.();cells[i]={deps};queue.push(()=>{cells[i].cleanup=run()})}}
  const React={useRef:ref,useState:state,useCallback:memo,useEffect:effect,useLayoutEffect:(run,deps)=>effect(run,deps,layoutEffects)}
- const fn=runInNewContext(helpers+listCode+reasons+code+'\n'+name,{React,useState:state,useEffect:effect,commandKey:()=> 'synthetic-create-key',...globals})
+ const fn=runInNewContext(helpers+listCode+reasons+code+'\n'+name,{React,useState:state,useEffect:effect,setTimeout,clearTimeout,commandKey:()=> 'synthetic-create-key',...globals})
  const render=patch=>{props={...props,...patch};cursor=0;value=fn(props);for(const run of layoutEffects.splice(0))run();if(!deferEffects)for(const run of effects.splice(0))run();return value}
  render()
  return {render,flushEffects(count=effects.length){for(const run of effects.splice(0,count))run()},get value(){return value},unmount(){for(const cell of cells)cell?.cleanup?.()}}
@@ -36,9 +36,13 @@ function row({respond=async()=>ok(task('A',{status:'Contacted'})),current=()=>tr
  return {...h, get value(){return h.value},calls,feedback,get reloads(){return reloads}}
 }
 function panel({respond=async()=>ok(task()),read=async()=>ok([]),lifetime,auth=syntheticAuth,deferEffects=false,selectionDetailsAvailable=true}={}){
- const calls=[],feedback=[],reads=[]
- const h=hooks(panelCode,'PatientFollowupPanel',{createFollowup:body=>{calls.push(wire(body));return respond(body)},patientFollowups:id=>{reads.push(id);return read(id)}},{patientId:'A',branches:[{id:'b1'}],role:'staff',lifetime,store:{session:{selectionDetailsAvailable},getAuthGeneration:auth},toast:(...a)=>feedback.push(a)},{deferEffects})
- return {...h,get value(){return h.value},calls,feedback,reads}
+ const calls=[],keys=[],feedback=[],reads=[]
+ const h=hooks(panelCode,'PatientFollowupPanel',{createFollowup:async(body,key)=>{
+   calls.push(wire(body));keys.push(key)
+   const result=await respond(body)
+   return result?.ok && result.data ? {...result,data:{due_on:body.due_on,...result.data}} : result
+ },patientFollowups:id=>{reads.push(id);return read(id)}},{patientId:'A',branches:[{id:'b1'}],role:'staff',lifetime,store:{session:{selectionDetailsAvailable},getAuthGeneration:auth},toast:(...a)=>feedback.push(a)},{deferEffects})
+ return {...h,get value(){return h.value},calls,keys,feedback,reads}
 }
 const submit=e=>e.value.add({preventDefault(){}})
 function list(read,lifetime=null){return hooks('', 'props => useFollowupList(props.key, props.read, props.patient, props.owner, props.lifetime)',{}, {key:'A',patient:'A',owner:false,read,lifetime})}
@@ -238,6 +242,18 @@ test('CLIN-12-R2 an uncertain Add survives panel ABA; a known similar task is no
  const old=panel({lifetime,respond:async()=>({ok:false,kind:'network'})});await submit(old);old.unmount()
  const replacement=panel({lifetime,read:async()=>ok([task()])});await replacement.value.reload();replacement.render();await submit(replacement)
  assert.equal(replacement.calls.length,0);assert.equal(pendingTasks.creates.size,1);assert.equal(replacement.value.needsReload,true);replacement.unmount()
+})
+test('PC-04 retries an uncertain Add with its original patient, values and command key after remount', async () => {
+ const pendingTasks=operations(), lifetime={pendingTasks,isCurrent:()=>true}
+ const first=panel({lifetime,respond:async()=>({ok:false,kind:'network'})})
+ await submit(first); first.unmount()
+ const replacement=panel({lifetime,read:async()=>ok([task()])})
+ replacement.value.setF({branch_ref:'b1',due_on:'2030-01-01'}); replacement.render()
+ await replacement.value.retryCreation()
+ assert.deepEqual(replacement.calls,first.calls)
+ assert.deepEqual(replacement.keys,first.keys)
+ assert.equal(replacement.feedback.length,1)
+ replacement.unmount()
 })
 test('CLIN-12-R2 authentication replacement suppresses Add adoption without a rerender',async()=>{
  let generation=1;const write=deferred(),e=panel({auth:()=>generation,respond:()=>write.promise})

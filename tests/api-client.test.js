@@ -207,6 +207,7 @@ test('R23 Cash review and checkout closure send only the original observed revis
     [api.requestCashCorrection, 'cash-correction-review', { expected_revision: 3, reason: 'refund_requested' }],
     [api.acknowledgeCashCorrection, 'cash-correction-acknowledgement', { expected_revision: 4 }],
   ]) {
+    calls.length = 0
     api.__resetCsrfCacheForTests()
     mockFetch([jsonResponse(200, {}), jsonResponse(200, { data: {} })])
     assert.equal((await command('invoice-one', payload, 'finance-command')).ok, true)

@@ -329,7 +329,7 @@ export function CheckInPage({ store, context, setPage }) {
             ? <p className="checkin-inline-state" role="status">Loading today's arrivals…</p>
             : store.appointmentsStatus === 'error'
             ? <p className="checkin-inline-state is-error">Arrivals could not be verified. Use Retry above before admitting a patient.</p>
-            : <div className="checkin-empty" role="status"><Icon name="calendar" size={20}/><div><strong>No arrivals waiting</strong></div></div>}
+            : <div className="checkin-empty" role="status"><Icon name="calendar" size={20}/><div><strong>{store.appointmentsStatus === 'ready' ? 'No arrivals waiting' : 'Today’s arrivals have not been verified'}</strong></div></div>}
         </div>
         {selectedAppointment?<div className="arrival-card"><div className="avatar large">{patientName(selectedAppointment.patientId,state.patients).split(' ').map(x=>x[0]).slice(0,2).join('')}</div><div className="arrival-main"><span>Arriving patient</span><h2>{patientName(selectedAppointment.patientId,state.patients)}</h2><p>{selectedAppointment.service} • {selectedAppointment.dentistName||dentistName(selectedAppointment.dentistId,state.dentists)}</p><div className="arrival-meta"><span><Icon name="calendar" size={15}/>{displayTime(selectedAppointment.start)}</span><span><Icon name="building" size={15}/>{selectedAppointment.branch}</span><span>{selectedAppointment.appointmentNo}</span></div></div><div className="arrival-action">
             <Status>{selectedAppointment.status}</Status>

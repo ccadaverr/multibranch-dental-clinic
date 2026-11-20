@@ -126,13 +126,13 @@ test('a server Staff session sees a server Patient as in scope; a local Patient 
   assert.equal(patientInScope({ ...serverPatient, serverProjection: false }, state, staff), false)
 })
 
-test('the Patients page and My Profile read the clinic server with loading, error and retry, and hold no demo fallback', () => {
+test('Staff Patient Records and Patient Account load the exact authorized profile with recovery', () => {
   const clinical = readFileSync(new URL('../src/pages/Clinical.jsx', import.meta.url), 'utf8')
-  const me = readFileSync(new URL('../src/pages/PatientMe.jsx', import.meta.url), 'utf8')
+  const account = readFileSync(new URL('../src/patient/pages/Account.jsx', import.meta.url), 'utf8')
   assert.match(clinical, /function ServerPatientSummary/)
-  assert.match(clinical, /Loading the patient record from the clinic server/)
-  assert.match(clinical, /Patient record unavailable/)
-  assert.match(clinical, />Retry</)
+  assert.match(clinical, /state="loading" compact message="Opening patient record/)
+  assert.match(clinical, /state="error" compact\s+message=.*onRetry/)
+  assert.match(clinical, /setIndexAttempt\(value=>value\+1\)\}>Retry</)
   assert.match(clinical, /Allergies, medical history and dental history are not stored on the clinic server yet/)
   assert.match(clinical, /serverPatient=serverSession&&!!patient\?\.serverProjection/)
   // Server sessions list only authoritative server Patients; there is no read-only "earlier browser record" path left.
@@ -141,8 +141,9 @@ test('the Patients page and My Profile read the clinic server with loading, erro
   assert.match(clinical, /Patient search unavailable/)
   assert.match(clinical, /Full patient record not available to Dentists yet/)
   assert.doesNotMatch(clinical, /patient\?\.patientCode \|\| patient\?\.id/, 'documents are addressed by public id only')
-  assert.match(me, /loadPatientRecord\(session\.patientPublicId\)/)
-  assert.match(me, /We couldn’t load your profile/)
+  assert.match(account, /getPatientRecord\(id, signal\)/)
+  assert.match(account, /result\.data\?\.id !== id/)
+  assert.match(account, /onRetry=\{record\.reload\}/)
   // The server summary component never reads the browser clinical fields.
   const summary = clinical.slice(clinical.indexOf('function ServerPatientSummary'), clinical.indexOf('function PatientDocumentsTab'))
   assert.doesNotMatch(summary.slice(0, summary.indexOf('function StaffPatientSummary')), /loadPatientRecord/, 'a Dentist session never requests the generic Patient record')

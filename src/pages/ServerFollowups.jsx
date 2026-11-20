@@ -392,6 +392,7 @@ export { clinicalBookingSelection, currentFollowupReview, recoveredFollowupRecei
 function matchesFollowupSelection(result, body) {
   return result?.ok === true && result.data?.id && result.data.patient?.id === body.patient_id &&
     result.data.branch?.id === body.branch_ref && result.data.status === 'Open' &&
+    result.data.due_on === body.due_on &&
     Number.isSafeInteger(result.data.revision) && result.data.revision > 0 &&
     (body.reason_category ? result.data.reason_category === body.reason_category && (result.data.reason_detail ?? null) === (body.reason_detail ?? null) : result.data.reason === body.reason)
 }
@@ -463,19 +464,15 @@ function PatientFollowupPanel({ patientId, branches = [], toast, store, role, li
     creation.promise.then(() => { if (current && live.current && isCurrent()) reload() })
     return () => { current = false }
   }, [creation])
-  const add = async e => {
-    e.preventDefault()
-    if (!live.current || !isCurrent() || pending.current || pendingTasks.creates.has(patientId) || !canCreate) return
+  const sendCreation = async operation => {
     setErr('')
-    if (!effectiveReason) { setOtherTouched(true); return setErr('Please select or enter a reason for follow-up.') }
-    if (!branchRef || !f.due_on) return setErr('Choose a branch and due date.')
-    const body = {patient_id: patientId, ...(store.session?.selectionDetailsAvailable ? {reason_category: reasonCategory, ...(reasonCategory === 'Other' ? { reason_detail: effectiveReason } : {})} : {reason:effectiveReason}), ...f, branch_ref: branchRef}
-    const operation = {kind: 'request', phase: 'pending', body, key: commandKey(), token: {}, owner: pending}
+    operation.kind = 'request'; operation.phase = 'pending'; operation.owner = pending
+    const {body} = operation
     pendingTasks.creates.set(patientId, operation)
     pending.current = operation; setBusy(true)
     operation.promise = (async () => {
       let result
-      try { result = await createFollowup(body, operation.key) }
+      try { result = await createFollowup(body, operation.key, () => live.current && isCurrent()) }
       catch { result = {ok: false, kind: 'network', message: 'The follow-up result could not be confirmed. Reload the list before retrying.'} }
       if (pendingTasks.creates.get(patientId)?.token === operation.token) {
         pendingTasks.settlement++
@@ -501,6 +498,20 @@ function PatientFollowupPanel({ patientId, branches = [], toast, store, role, li
     pending.current = operation; setNeedsReload(true)
     await reload()
   }
+  const add = async e => {
+    e.preventDefault()
+    if (!live.current || !isCurrent() || pending.current || pendingTasks.creates.has(patientId) || !canCreate) return
+    if (!effectiveReason) { setOtherTouched(true); return setErr('Please select or enter a reason for follow-up.') }
+    if (!branchRef || !f.due_on) return setErr('Choose a branch and due date.')
+    const body = {patient_id: patientId, ...(store.session?.selectionDetailsAvailable ? {reason_category: reasonCategory, ...(reasonCategory === 'Other' ? { reason_detail: effectiveReason } : {})} : {reason:effectiveReason}), ...f, branch_ref: branchRef}
+    return sendCreation({ body, key: commandKey(), token: {} })
+  }
+  const retryCreation = () => {
+    const operation = pendingTasks.creates.get(patientId)
+    if (!canCreate || !live.current || !isCurrent() || operation?.phase !== 'recovery' ||
+      operation.body.patient_id !== patientId || !branches.some(branch => branch.id === operation.body.branch_ref)) return
+    return sendCreation(operation)
+  }
   return <section className="st-panel" ref={recoveryRoot} tabIndex={-1} aria-labelledby={`fu-${patientId}`}>
     <h3 id={`fu-${patientId}`} className="st-sub">Follow-ups</h3>
     {canCreate&&<SelectionDetailsNotice available={store.session?.selectionDetailsAvailable}/>}
@@ -508,7 +519,11 @@ function PatientFollowupPanel({ patientId, branches = [], toast, store, role, li
     {error && <Notice tone="error" title="Follow-ups unavailable">{error} <Button variant="soft" onClick={reload}>Reload follow-ups</Button></Notice>}
     {!rows ? !error && <p className="au-muted" role="status">Loading follow-ups…</p> : !rows.length ? <p className="au-muted" role="status">No follow-ups for this patient.</p>
       : <ul className="fd-list">{rows.map(t => <FollowupRow key={JSON.stringify([t.id, t.patient?.id, t.branch?.id, t.revision, t.service?.id, t.due_on, schedulingActorKey(store)])} t={t} pendingTasks={pendingTasks} owner={owner} role={role} store={store} toast={toast} onChanged={reload} onReload={reload} isCurrent={isCurrent}/>)}</ul>}
-    {creation && !adding && <Notice tone="warning" title={creation.phase === 'pending' ? 'Follow-up Add pending' : 'Follow-up Add needs review'}>The earlier Add remains protected. Reload to review the list; do not assume an empty list means it failed. <Button variant="soft" onClick={reload}>Reload follow-ups</Button></Notice>}
+    {creation && !adding && <Notice tone="warning" title={creation.phase === 'pending' ? 'Follow-up being saved' : 'Follow-up result unconfirmed'}>
+      <p>Check the current list or retry the original request for this patient.</p>
+      <Button variant="soft" onClick={reload}>Reload follow-ups</Button>
+      {creation.phase === 'recovery' && canCreate && <Button variant="ghost" onClick={retryCreation}>Retry original follow-up</Button>}
+    </Notice>}
     {canCreate && (adding ? <form className="au-form" aria-busy={busy} onSubmit={add}>
       <Field label="Branch" required><select required disabled={busy || needsReload} value={branchRef} onChange={e => setF(x => ({ ...x, branch_ref: e.target.value }))}>{!branches.length && <option value="">No available branch</option>}{branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>
       <Field label="Follow-up reason" required hint="Seen by the branch team only, never by the patient.">
@@ -521,6 +536,7 @@ function PatientFollowupPanel({ patientId, branches = [], toast, store, role, li
       {err && <p className="au-error" role="alert">{err}</p>}
       {busy && <p className="au-muted" role="status">Adding follow-up for this patient…</p>}
       {err && <Button variant="soft" disabled={busy} onClick={reload}>Reload follow-ups</Button>}
+      {creation?.phase === 'recovery' && <Button variant="ghost" disabled={busy} onClick={retryCreation}>Retry original follow-up</Button>}
       <div className="ns-actions"><Button type="submit" size="sm" disabled={busy || needsReload || !effectiveReason || !branchRef || !f.due_on}>{busy ? 'Adding follow-up…' : 'Add follow-up'}</Button><Button size="sm" variant="ghost" disabled={busy || needsReload} onClick={() => setAdding(false)}>Cancel</Button></div>
     </form> : <Button size="sm" variant="soft" disabled={needsReload || !!creation || !branches.length} onClick={() => setAdding(true)}>Add a follow-up</Button>)}
   </section>

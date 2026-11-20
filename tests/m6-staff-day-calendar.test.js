@@ -243,14 +243,15 @@ test('offline demo shows an honest notice and no calendar; a server session pain
   assert.match(live, /Loading this month(?:&#x27;|')s appointments/)
   assert.match(live, /Previous month/); assert.match(live, /Next month/); assert.match(live, /Today/)
   assert.match(live, /September 2026/)
-  assert.match(live, /All my branches/) // several branches: a filter exists
+  assert.match(live, /aria-label="Filter calendar by authorized branch"/)
+  assert.match(live, /All authorized branches/) // several branches: a filter exists
   // Day, Week, and Month view-switching controls are removed (AC2)
   assert.doesNotMatch(live, /class="[^"]*daycal-views/)
   assert.doesNotMatch(live, /aria-label="Calendar view"/)
   assert.doesNotMatch(live, />Day</)
   assert.doesNotMatch(live, />Week</)
   const single = renderToString(React.createElement(ui.StaffDayCalendar, { store: store({ role: 'staff', serverUserId: 'u1', branchScopes: ['b1'] }) }))
-  assert.doesNotMatch(single, /All my branches/)
+  assert.doesNotMatch(single, /All authorized branches/)
 })
 
 // ======================================= Week / Month views ========================================================================

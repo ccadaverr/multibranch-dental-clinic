@@ -61,7 +61,8 @@ class StaffRosterController extends Controller
         $this->ready();$d=$r->validate(['date'=>self::DATE,'branch_ref'=>['required','string','max:50'],'from'=>['sometimes','date_format:H:i'],'until'=>['required_with:from','date_format:H:i','after:from']]);
         if(isset($d['until'])&&!isset($d['from']))throw ValidationException::withMessages(['from'=>['Specify both interval boundaries.']]);
         $branch=Branch::where('legacy_ref',$d['branch_ref'])->firstOrFail();$this->access($r->user(),$staffProfile,$branch);
-        return response()->json(['data'=>$duty->resolve($staffProfile,$branch,$d['date'],$d['from']??null,$d['until']??null)]);
+        return response()->json(['data'=>$duty->resolve($staffProfile,$branch,$d['date'],$d['from']??null,$d['until']??null)])
+            ->header('Cache-Control', 'private, no-store');
     }
 
     public function history(Request $r, StaffProfile $staffProfile)

@@ -134,7 +134,8 @@ class FollowupController extends Controller
             $user = $actor;
             $data = $request->validate(['patient_id' => ['required', 'string', 'max:40'], 'branch_ref' => ['required', 'string', 'max:50'], 'reason' => ['nullable', 'required_without:reason_category', 'string', 'max:500', 'not_in:Other', 'prohibits:reason_category'],
                 ...ReasonSelection::rules('reason_category', 'reason_detail', ReasonSelection::FOLLOWUP, 500),
-                'due_on' => ['required', 'date_format:Y-m-d'], 'service_ref' => ['nullable', 'string', 'max:50'], 'assign_to_me' => ['sometimes', 'boolean']]);
+                'due_on' => ['required', 'date_format:Y-m-d'], 'service_ref' => ['nullable', 'string', 'max:50', 'exists:services,legacy_ref'],
+                'assign_to_me' => ['sometimes', 'boolean']]);
             $patient = Patient::where('public_id', $data['patient_id'])->firstOrFail();
             $branch = Branch::where('legacy_ref', $data['branch_ref'])->firstOrFail();
             abort_unless(in_array($branch->id, $this->branchIds($user), true), 403, 'You can add follow-ups for your own branches only.');

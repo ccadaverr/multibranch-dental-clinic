@@ -241,7 +241,7 @@ function StaffPatientSummary({ patient, role, branches, toast, store }) {
   const [index,setIndex]=useState(null)
   const [saving,setSaving]=useState(false)
   const [problem,setProblem]=useState(null)
-  const [attempt,setAttempt]=useState(0)
+  const [attempt,setAttempt]=useState(0),[indexAttempt,setIndexAttempt]=useState(0)
   const [profilePhase,setProfilePhase]=useState('idle'),[reloadOpen,setReloadOpen]=useState(false),[linkedError,setLinkedError]=useState('')
   const command=React.useRef(null),pending=React.useRef(false),live=React.useRef(false),latest=React.useRef(store),feedback=React.useRef(null)
   latest.current=store
@@ -251,12 +251,9 @@ function StaffPatientSummary({ patient, role, branches, toast, store }) {
   React.useLayoutEffect(()=>{live.current=true;return()=>{live.current=false}},[])
   React.useEffect(()=>{if(['unknown','refused','verified'].includes(profilePhase))feedback.current?.focus()},[profilePhase])
   React.useEffect(()=>{
-    let current=true,profileTimer,indexTimer,profileLoaded=false
+    let current=true,profileTimer
     const profileController = new AbortController()
-    const indexController = new AbortController()
-    setLoad({status:'loading',record:null,message:''});setProblem(null);setIndex(null);setLinkedError('')
-    // The record is the primary task. The linked-record index is optional supporting data:
-    // never fail the entire Patient profile because the index was slow or unavailable.
+    setLoad({status:'loading',record:null,message:''});setProblem(null)
     const profileTimeout={ok:false,message:'Patient details took too long to load.'}
     Promise.race([
       Promise.resolve().then(()=>loadPatientRecord(patient.id, profileController.signal)),
@@ -268,27 +265,29 @@ function StaffPatientSummary({ patient, role, branches, toast, store }) {
         setLoad({status:'error',record:null,message:record?.message||'Could not load patient details.'})
         return
       }
-      profileLoaded=true
       setLoad({status:'ready',record:record.record,message:''})
       setForm(record.record)
-      // Load ancillary counts AFTER the usable profile appears. A failed index does not
-      // erase its identity, editable fields, or clinical links.
-      return Promise.race([
-        Promise.resolve().then(()=>loadPatientRecordIndex(patient.id, indexController.signal)),
-        new Promise(resolve=>{indexTimer=setTimeout(()=>{indexController.abort();resolve({ok:false,message:'Related records took too long to load.'})},15000)}),
-      ]).then(linked=>{
-        clearTimeout(indexTimer)
-        if(!current||!owns())return
-        if(linked?.ok){setIndex(linked);setLinkedError('')}
-        else setLinkedError(linked?.message||'Related records could not load.')
-      })
     }).catch(()=>{
       if(!current||!owns())return
-      if(profileLoaded)setLinkedError('Related records could not load.')
-      else setLoad({status:'error',record:null,message:'Could not load patient details.'})
+      setLoad({status:'error',record:null,message:'Could not load patient details.'})
     })
-    return ()=>{current=false;profileController.abort();indexController.abort();clearTimeout(profileTimer);clearTimeout(indexTimer)}
+    return ()=>{current=false;profileController.abort();clearTimeout(profileTimer)}
   },[patient.id,attempt,owner])
+  React.useEffect(()=>{
+    setIndex(null);setLinkedError('')
+    if(load.status!=='ready'||load.record?.id!==patient.id)return
+    let current=true,timeout
+    const controller=new AbortController()
+    Promise.race([
+      Promise.resolve().then(()=>loadPatientRecordIndex(patient.id,controller.signal)),
+      new Promise(resolve=>{timeout=setTimeout(()=>{controller.abort();resolve({ok:false,message:'Related records took too long to load.'})},15000)}),
+    ]).then(linked=>{
+      if(!current||!owns())return
+      if(linked?.ok)setIndex(linked)
+      else setLinkedError(linked?.message||'Related records could not load.')
+    }).catch(()=>{if(current&&owns())setLinkedError('Related records could not load.')}).finally(()=>clearTimeout(timeout))
+    return ()=>{current=false;controller.abort();clearTimeout(timeout)}
+  },[patient.id,owner,load.status,indexAttempt])
   if(load.status==='loading')return <ReadState state="loading" compact message="Opening patient record…"/>
   if(load.status==='error')return <ReadState state="error" compact
     message={load.message || 'Patient details could not be loaded.'} onRetry={()=>setAttempt(attempt+1)}/>
@@ -342,11 +341,11 @@ function StaffPatientSummary({ patient, role, branches, toast, store }) {
       </div></fieldset>
       <div className="span-2"><Notice tone="info" title="Clinical history">Allergies, medical history and dental history are not stored on the clinic server yet, so they are not shown or editable here. They change only through an authorized Dentist workflow.</Notice></div>
       {counts&&<div className="span-2"><Notice tone="info" title="Linked records">{[['appointments','appointments'],['visits','visits'],['treatments','treatments'],['invoices','invoices'],['hmo_cases','HMO cases']].map(([key,label])=>`${counts[key]} ${label}`).join(' • ')}{index.limit&&Object.values(counts).some(n=>n>=index.limit)?` (showing up to ${index.limit} per list)`:''}. These records are kept in their own modules and open from the tabs above.</Notice></div>}
-      {linkedError&&<div className="span-2 staff-linked-error" role="status">Related records couldn't load. <button type="button" onClick={()=>setAttempt(attempt+1)}>Retry</button></div>}
+      {linkedError&&<div className="span-2 staff-linked-error" role="status">{linkedError} <button type="button" onClick={()=>setIndexAttempt(value=>value+1)}>Retry</button></div>}
       <div className="span-2" ref={feedback} tabIndex={-1} role={profilePhase==='unknown'||profilePhase==='refused'?'alert':'status'}>
         {problem&&<Notice tone={problem.tone} title={problem.conflict?'Record changed':'Save not confirmed'}>{problem.message}</Notice>}
         {profilePhase==='unknown'&&<Button variant="soft" disabled={saving} onClick={()=>submit(command.current)}>Retry same profile save</Button>}
-        {(profilePhase==='unknown'||problem?.conflict||linkedError)&&<Button size="sm" variant="ghost" disabled={saving} onClick={()=>setReloadOpen(true)}>Review current record</Button>}
+        {(profilePhase==='unknown'||problem?.conflict)&&<Button size="sm" variant="ghost" disabled={saving} onClick={()=>setReloadOpen(true)}>Review current record</Button>}
         {profilePhase==='verified'&&<p>Profile save verified for {record.patientCode}, revision {record.revision}.</p>}
       </div>
       {editable&&<Button className="span-2" disabled={profilePending||!dirty} onClick={save}>{saving?'Saving…':'Save changes'}</Button>}

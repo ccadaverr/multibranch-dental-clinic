@@ -3,7 +3,7 @@ import {Button,ConfirmDialog,Field,Notice,RefreshButton,Status} from '../compone
 import {staffRoster,staffRosterCommand,staffRosterHistory,staffDuty} from '../api-client.js'
 import {commandKey} from '../appointments-api.js'
 import {clinicDate} from '../clock.js'
-import {confirmedRoster,validRoster} from '../staff-roster-workflow.js'
+import {confirmedRoster,validRoster,validStaffDuty} from '../staff-roster-workflow.js'
 import '../staff-roster-operations.css'
 
 const message=r=>Object.values(r?.errors||{})[0]?.[0]||r?.message||'The schedule could not be confirmed.'
@@ -18,8 +18,10 @@ export function StaffRosterWorkflow({staff,branches,role,canRequest,getAuthGener
   const [loading,setLoading]=useState(false),[busy,setBusy]=useState(false),[uncertain,setUncertain]=useState(false),[conflict,setConflict]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('')
   const [duty,setDuty]=useState(null),[dutyBusy,setDutyBusy]=useState(false),[dutyError,setDutyError]=useState(''),[history,setHistory]=useState(null),[cursor,setCursor]=useState(null),[historyBusy,setHistoryBusy]=useState(false),[confirm,setConfirm]=useState(null)
   const live=useRef(false),pending=useRef(false),retained=useRef(null),generation=useRef(0),dutyGeneration=useRef(0),reading=useRef(false),historyPending=useRef(false)
+  const dutyRead=useRef(null)
   const auth=getAuthGeneration?.(),context=JSON.stringify([staff.id,date,auth]),current=useRef(context);current.current=context
   const dutyKey=JSON.stringify([staff.id,branch,dutyDate,auth]),currentDuty=useRef(dutyKey);currentDuty.current=dutyKey
+  const effectiveDuty=duty?.key===dutyKey ? duty.row : null
   const owns=(key,observedAuth)=>live.current&&current.current===key&&observedAuth===getAuthGeneration?.()
   const editable=role==='owner'||canRequest
   const dirty=!!row&&['branch_ref','kind','effective_from','effective_until','start_time','end_time','weekdays','exceptions'].some(k=>JSON.stringify(form[k])!==JSON.stringify(row[k]))
@@ -39,17 +41,27 @@ export function StaffRosterWorkflow({staff,branches,role,canRequest,getAuthGener
   const loadDuty=async()=>{
     if(!branch||!dutyDate)return
     const key=dutyKey,ticket=++dutyGeneration.current,observedAuth=auth
+    dutyRead.current?.abort()
+    const controller=new AbortController()
+    dutyRead.current=controller
+    const timeout=setTimeout(()=>controller.abort(),15000)
     setDutyBusy(true);setDutyError('')
+    const stillCurrent=()=>live.current&&key===currentDuty.current&&ticket===dutyGeneration.current&&observedAuth===getAuthGeneration?.()
     try{
-      const r=await staffDuty(staff.id,branch,dutyDate)
-      if(!live.current||key!==currentDuty.current||ticket!==dutyGeneration.current||observedAuth!==getAuthGeneration?.())return
-      if(!r.ok||r.data?.staff_ref!==staff.id||r.data?.branch_ref!==branch||r.data?.date!==dutyDate||!Array.isArray(r.data.windows)){setDuty(null);setDutyError(message(r));return}
-      setDuty(r.data)
-    }catch{if(live.current&&key===currentDuty.current&&ticket===dutyGeneration.current&&observedAuth===getAuthGeneration?.())setDutyError('Duty could not be refreshed. Try again.')}
-    finally{if(live.current&&key===currentDuty.current&&ticket===dutyGeneration.current)setDutyBusy(false)}
+      const r=await staffDuty(staff.id,branch,dutyDate,controller.signal)
+      if(!stillCurrent())return
+      if(controller.signal.aborted||!r.ok||!validStaffDuty(r.data,staff.id,branch,dutyDate))throw Error(message(r))
+      setDuty({key,row:r.data})
+    }catch(error){if(stillCurrent()){setDuty(null);setDutyError(controller.signal.aborted?'Duty status took too long to load. Retry.':error.message||'Duty could not be refreshed. Try again.')}}
+    finally{clearTimeout(timeout);if(dutyRead.current===controller)dutyRead.current=null;if(stillCurrent())setDutyBusy(false)}
   }
   layout(()=>{live.current=true;reading.current=false;historyPending.current=false;setHistoryBusy(false);setRow(null);setRevision(null);setHistory(null);setNotice('');load();return()=>{live.current=false;generation.current++;reading.current=false}},[context,editable])
-  useEffect(()=>{setDuty(null);loadDuty();return()=>{dutyGeneration.current++}},[dutyKey])
+  useEffect(()=>{
+    setDuty(null)
+    if(branch&&dutyDate)loadDuty()
+    else{setDutyBusy(false);setDutyError('')}
+    return()=>{dutyGeneration.current++;dutyRead.current?.abort()}
+  },[dutyKey])
   const perform=async(action)=>{
     if(pending.current||(!retained.current&&(revision===null||conflict)))return
     if(!retained.current&&action!=='save'&&dirty)return
@@ -83,7 +95,7 @@ export function StaffRosterWorkflow({staff,branches,role,canRequest,getAuthGener
     <div className="st-pair"><Field label="Duty branch"><select aria-label="Duty branch" value={branch} disabled={busy||uncertain} onChange={e=>setBranch(e.target.value)}>{branches.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></Field><Field label="Duty date"><input type="date" value={dutyDate} disabled={busy||uncertain} onChange={e=>setDutyDate(e.target.value)}/></Field></div>
     <RefreshButton recovery={Boolean(dutyError)} title="Refresh Staff duty" ariaLabel="Refresh Staff duty" loading={dutyBusy} onClick={loadDuty}/>
     {dutyError&&<p role="alert">{dutyError}</p>}
-    {dutyBusy?<p role="status">Loading published duty…</p>:duty&&<div role="region" aria-label="Effective Staff duty"><p><b>{duty.available?'Scheduled and available':'Unavailable / unscheduled'}</b> · {duty.date}</p>{duty.windows.map((w,i)=><p key={i}>{w.start_time}–{w.end_time} · Published revision {w.revision}</p>)}{duty.approved_leave.length>0&&<Notice>Approved leave applies to this date. Only the remaining available hours are shown.</Notice>}{!duty.windows.length&&<p>No effective working hours for this branch and date.</p>}</div>}
+    {dutyBusy?<p role="status">Loading published duty…</p>:effectiveDuty&&<div role="region" aria-label="Effective Staff duty"><p><b>{effectiveDuty.available?'Scheduled and available':'Unavailable / unscheduled'}</b> · {effectiveDuty.date}</p>{effectiveDuty.windows.map((w,i)=><p key={i}>{w.start_time}–{w.end_time} · Published revision {w.revision}</p>)}{effectiveDuty.approved_leave.length>0&&<Notice>Approved leave applies to this date. Only the remaining available hours are shown.</Notice>}{!effectiveDuty.windows.length&&<p>No effective working hours for this branch and date.</p>}</div>}
     </div>
     {editable&&<div className="staff-roster-review">
       <h3>{role==='owner'?'Staff roster approval and publication':'My schedule change request'}</h3>
