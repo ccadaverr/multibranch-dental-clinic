@@ -34,6 +34,51 @@ class WorkScheduleController extends Controller
 
     private const AFFECTED_DAYS = 90;
 
+    /**
+     * Small read-only duty projection for Today. Do not load the full weekly roster,
+     * exceptions, Staff profiles, or unneeded Owner data just to paint this widget.
+     * Scoping is enforced on the server even if the browser supplies a branch name.
+     */
+    public function duty(Request $request): JsonResponse
+    {
+        $started = hrtime(true);
+        $actor = $request->user();
+        abort_unless($actor && $actor->role->value === 'staff' && $actor->account_status === 'Active', 403);
+        $allowed = UserBranchScope::where('user_id', $actor->id)->pluck('branch_id');
+        $today = ClinicClock::today();
+        $now = ClinicClock::now();
+        if ($allowed->isEmpty()) {
+            return response()->json(['data' => ['duty' => ['date' => $today,
+                'as_of' => $now->toIso8601String(), 'rows' => []]]])->header('Cache-Control', 'private, no-store')
+                ->header('Server-Timing', 'app;dur='.round((hrtime(true) - $started) / 1_000_000, 1));
+        }
+        $dentists = DentistProfile::query()
+            ->with(['person', 'branches' => fn ($q) => $q->whereIn('branches.id', $allowed)])
+            ->whereHas('branches', fn ($q) => $q->whereIn('branches.id', $allowed))
+            ->orderBy('id')->get();
+        $work = new WorkSchedules();
+        $work->preloadCalendar($dentists, $today, $today);
+        $rows = $dentists->flatMap(function (DentistProfile $dentist) use ($work, $today) {
+            return $dentist->branches->map(function (Branch $branch) use ($dentist, $work, $today) {
+                $minutes = $dentist->available && $branch->status === 'Open' && ! $branch->archived_at
+                    ? $work->minutes($dentist, $branch, $today) : 0;
+                return [
+                    'dentist_id' => $dentist->legacy_ref,
+                    'dentist_name' => $this->name($dentist),
+                    'branch_id' => $branch->legacy_ref,
+                    'branch_name' => $branch->name,
+                    'on_duty_today' => $minutes > 0,
+                    'working_now' => $minutes > 0 && $work->workingNow($dentist, $branch),
+                    'working_minutes' => $minutes,
+                    'estimated' => $work->usesProfileHours($dentist),
+                ];
+            });
+        })->values();
+        return response()->json(['data' => ['duty' => ['date' => $today,
+            'as_of' => $now->toIso8601String(), 'rows' => $rows]]])->header('Cache-Control', 'private, no-store')
+            ->header('Server-Timing', 'app;dur='.round((hrtime(true) - $started) / 1_000_000, 1));
+    }
+
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -50,6 +95,9 @@ class WorkScheduleController extends Controller
         }
         $dentists = $dentistQuery->orderBy('id')->get();
         $work = new WorkSchedules;
+        // Prime today's exception and approved-leave windows once for the authorized dentist pool.
+        // The existing minutes()/workingNow() business rules remain the authority.
+        $work->preloadCalendar($dentists, ClinicClock::today(), ClinicClock::today());
         $weekly = DentistSchedule::whereIn('dentist_profile_id', $dentists->pluck('id'))->where('status', 'active')
             ->when($visibleBranchIds !== null, fn ($q) => $q->whereIn('branch_id', $visibleBranchIds))
             ->with('branch')->orderBy('weekday')->orderBy('start_time')->get()->groupBy('dentist_profile_id');

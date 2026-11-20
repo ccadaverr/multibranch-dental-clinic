@@ -101,3 +101,14 @@ test('demo seed accounts keep their existing explicit mapping', () => {
   assert.equal(staff.session.userId, data.ROLE_INFO.staff.userId)
   assert.equal(h.bridge({ id: '01KOWN2', role: 'owner', email: 'second.owner@example.test' }).ok, false) // no additional Owner mapping (PI-01)
 })
+
+test('demo employees use their real profile links when a development database assigns different profiles', () => {
+  const h = harness()
+  const staff = h.bridge(staffMe({ email: 'staff.reception@example.test' }))
+  const dentist = h.bridge(dentistMe({ email: 'dentist@example.test' }))
+
+  assert.deepEqual([staff.session.userId, staff.session.staffId, staff.session.branchId], [UID, 's-01knew', 'b2'])
+  assert.deepEqual([dentist.session.userId, dentist.session.dentistId, dentist.session.branchId], [DUID, 'd-01knew', 'b1'])
+  assert.equal(validSession(h.state, staff.session), true)
+  assert.equal(validSession(h.state, dentist.session), true)
+})

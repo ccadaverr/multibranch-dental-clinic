@@ -25,6 +25,7 @@ class BranchServiceController extends Controller
     public function store(SetBranchServiceRequest $request)
     {
         $branch = Branch::where('legacy_ref', $request->validated('branch_ref'))->firstOrFail();
+        abort_if($branch->archived_at !== null, 409, 'Restore this branch before editing its services.');
         $service = Service::where('legacy_ref', $request->validated('service_ref'))->firstOrFail();
 
         $attributes = ['active' => $request->validated('active')];

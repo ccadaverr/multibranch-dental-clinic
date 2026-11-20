@@ -59,3 +59,37 @@
 @media (prefers-reduced-motion: reduce) {
   .a12-shell :is(.main-nav button, .sidebar-footer button, .top-icon-btn, .patient-mobile-nav button) { transition: none; }
 }
+
+/* DENTALOPS STAFF SHELL R01 */
+/* Staff-only layout: preserve Patient, Dentist and Owner shells. */
+
+@media (min-width: 1025px) {
+  .app-shell.a12-shell.role-staff {
+    --sidebar: 216px;
+  }
+
+  .app-shell.a12-shell.role-staff > .sidebar .role-card {
+    display: none;
+  }
+}
+
+.app-shell.a12-shell.role-staff .nav-group {
+  margin-bottom: 10px;
+}
+
+.app-shell.a12-shell.role-staff .nav-group-label {
+  font-size: 10.5px;
+  letter-spacing: 0.025em;
+  color: #596775;
+  padding-bottom: 5px;
+}
+
+@media (min-width: 1025px) {
+  .app-shell.a12-shell.role-staff .main-nav button {
+    height: 40px;
+    min-height: 40px;
+    gap: 9px;
+    padding-inline: 9px;
+    font-size: 13px;
+  }
+}

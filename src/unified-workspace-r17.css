@@ -1,0 +1,237 @@
+/* R17 — shared clinic workspace language. This layer is role-scoped and never
+   changes access, server state, clinical lifecycle, payment state or command flow.
+   Neutral surfaces communicate structure; semantic colors communicate outcomes. */
+:where(.app-shell, .pp-shell) {
+  --clinic-canvas: #edf1f2;
+  --clinic-elevated: #f9faf9;
+  --clinic-surface: #ffffff;
+  --clinic-inset: #f2f5f5;
+  --clinic-ink: #203340;
+  --clinic-muted: #5b6e79;
+  --clinic-line: #d7e0e2;
+  --clinic-line-strong: #bbcbd0;
+  --clinic-accent: #28556f;
+  --clinic-accent-hover: #20475e;
+  --clinic-accent-soft: #dfeaf0;
+  --clinic-focus: #216b89;
+  --clinic-danger: #933a42;
+  --clinic-danger-soft: #fcf0f0;
+  --clinic-radius-sm: 8px;
+  --clinic-radius: 12px;
+  --clinic-radius-lg: 15px;
+  --clinic-shadow: 0 1px 3px rgba(22,49,60,.035),0 8px 22px rgba(22,49,60,.025);
+  --bg: var(--clinic-canvas);
+  --surface: var(--clinic-surface);
+  --surface-2: var(--clinic-inset);
+  --line: var(--clinic-line);
+  --line-strong: var(--clinic-line-strong);
+  --ink: var(--clinic-ink);
+  --muted: var(--clinic-muted);
+  --brand: var(--clinic-accent);
+  --brand-2: #336e89;
+  --brand-3: #1c455a;
+  --brand-soft: var(--clinic-accent-soft);
+  --radius: var(--clinic-radius);
+  --radius-lg: var(--clinic-radius-lg);
+  color: var(--clinic-ink);
+}
+
+/* Materials: a softly tinted canvas separates content from its navigation.
+   Dense data stays opaque; glass is limited to nonclinical chrome. */
+.app-shell .content {
+  background: radial-gradient(750px 380px at 95% -8%,rgba(202,220,227,.52),transparent 80%),var(--clinic-canvas);
+}
+.app-shell .sidebar,
+.pp-shell .pp-side {
+  background: linear-gradient(165deg,rgba(251,253,253,.98),rgba(239,245,246,.95));
+  border-right: 1px solid var(--clinic-line);
+}
+.app-shell .topbar,
+.pp-shell .pp-top {
+  background: rgba(249,251,252,.95);
+  border-bottom: 1px solid var(--clinic-line);
+  -webkit-backdrop-filter: saturate(110%) blur(12px);
+  backdrop-filter: saturate(110%) blur(12px);
+}
+.app-shell .topbar .branch-lock,
+.app-shell .top-user { color: var(--clinic-ink); }
+
+/* Active destinations are part of the navigation rail, never a floating white CTA. */
+.app-shell .main-nav button {
+  border-radius: var(--clinic-radius-sm);
+  transition: background-color 150ms ease,color 150ms ease;
+}
+.app-shell .main-nav button[aria-current="page"],
+.app-shell .main-nav button.active {
+  background: var(--clinic-accent-soft);
+  color: #204b61;
+  box-shadow: inset 3px 0 #386d83;
+  font-weight: 690;
+}
+.app-shell .main-nav button:not(.active):hover { background: #e8eff1; }
+.app-shell .main-nav .nav-group-label { color: #607580; }
+.pp-shell .pp-nav.is-active,
+.pp-shell .pp-nav[aria-current="page"] {
+  background: var(--clinic-accent-soft);
+  color: #204b61;
+  box-shadow: inset 3px 0 #386d83;
+}
+.pp-shell .pp-nav:not(.is-active):hover { background: #e7edf0; }
+
+/* Surfaces and grouped lists. Shadow is restrained and never used to suggest
+   an interaction where none exists. */
+.app-shell .card,
+.pp-shell .pp-card {
+  background: var(--clinic-elevated);
+  border: 1px solid var(--clinic-line);
+  border-radius: var(--clinic-radius-lg);
+  box-shadow: var(--clinic-shadow);
+}
+.app-shell .card .card,
+.pp-shell .pp-card .pp-card {
+  box-shadow: none;
+  background: var(--clinic-surface);
+}
+.app-shell :is(.card-head h2,.page-header h1),
+.pp-shell .pp-card h2 { color: var(--clinic-ink); letter-spacing: -.018em; }
+.app-shell .card-head p,
+.app-shell .muted-copy,
+.pp-shell .pp-card small { color: var(--clinic-muted); }
+.app-shell .stats-grid,
+.app-shell .queue-count-grid { gap: 10px; }
+.app-shell .stats-grid .stat-card,
+.app-shell .queue-count-grid .stat-card {
+  border: 1px solid var(--clinic-line);
+  border-radius: 11px;
+  background: var(--clinic-elevated);
+  box-shadow: none;
+}
+/* Dashboard illustrations are decorative, not semantic state. Actual status
+   badges and their color meanings remain visible. */
+.app-shell .stat-card .stat-icon { display: none; }
+.app-shell .stat-card .stat-value { color: var(--clinic-ink); font-variant-numeric: tabular-nums; }
+.app-shell .stat-card .stat-label { color: #4f6573; }
+
+/* Controls: predictable targets and grouping for all working roles. */
+.app-shell :is(.btn,.icon-btn,.top-icon-btn,.ui-icon-action),
+.pp-shell :is(.pp-icon-btn,.pp-primary,.pp-nav) { -webkit-tap-highlight-color: transparent; }
+.app-shell .btn { border-radius: var(--clinic-radius-sm); box-shadow: none; }
+.app-shell .btn.primary { background: var(--clinic-accent); border-color: var(--clinic-accent); color: #fff; }
+.app-shell .btn.primary:hover:not(:disabled) { background: var(--clinic-accent-hover); border-color: var(--clinic-accent-hover); }
+.app-shell .btn.soft,
+.app-shell .btn.ghost { border-color: var(--clinic-line-strong); color: var(--clinic-accent); background: #f5f8f9; }
+.app-shell .btn.soft:hover:not(:disabled),
+.app-shell .btn.ghost:hover:not(:disabled) { background: var(--clinic-accent-soft); }
+.app-shell .btn.danger { color: var(--clinic-danger); border-color: #e3bac0; background: var(--clinic-danger-soft); }
+.app-shell .btn.danger:hover:not(:disabled) { background: #f8e3e5; }
+.app-shell .ui-icon-action { border: 1px solid transparent; background: transparent; color: #345c70; }
+.app-shell .ui-icon-action:hover:not(:disabled) { background: var(--clinic-accent-soft); border-color: transparent; }
+.app-shell .ui-icon-action.intent-danger { color: var(--clinic-danger); }
+.app-shell .ui-icon-action.intent-danger:hover:not(:disabled) { background: var(--clinic-danger-soft); }
+.app-shell :is(.filter-bar,.filter-bar-controls) { min-width: 0; }
+.app-shell .filter-bar {
+  background: var(--clinic-inset);
+  border: 1px solid var(--clinic-line);
+  border-radius: var(--clinic-radius);
+  box-shadow: none;
+}
+.app-shell :is(input:not([type="checkbox"]):not([type="radio"]),select,textarea),
+.pp-shell :is(input:not([type="checkbox"]):not([type="radio"]),select,textarea) {
+  border-radius: var(--clinic-radius-sm);
+  border-color: var(--clinic-line-strong);
+  background-color: var(--clinic-surface);
+  color: var(--clinic-ink);
+}
+.app-shell :is(input,select,textarea):focus-visible,
+.pp-shell :is(input,select,textarea):focus-visible {
+  outline: 2px solid var(--clinic-focus);
+  outline-offset: 2px;
+}
+.app-shell :is(input,select,textarea)[aria-invalid="true"],
+.pp-shell :is(input,select,textarea)[aria-invalid="true"] { border-color: #b44e5a; }
+.app-shell .tabs { border-radius: var(--clinic-radius-sm); }
+.app-shell .tabs button.active { color: var(--clinic-accent); }
+.pp-shell .pp-tabs { background: var(--clinic-inset); }
+.pp-shell .pp-tabs button.is-active { background: var(--clinic-elevated); color: var(--clinic-accent); }
+
+/* Dense tables retain legible, stable actions; narrow screens can scroll
+   inside the table region rather than clipping controls off the page. */
+.app-shell .table-wrap { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
+.app-shell .table-wrap :is(td,th) { vertical-align: middle; }
+.app-shell .table-wrap th { background: #edf3f5; color: #47606f; }
+.app-shell .table-wrap tbody tr:hover { background: #f0f5f6; }
+.app-shell .table-wrap .row-actions { display: flex; align-items: center; gap: 6px; }
+.app-shell .table-wrap .row-actions button { flex: 0 0 auto; }
+.app-shell :is(.status,.fd-badge) { line-height: 1.25; font-variant-numeric: tabular-nums; }
+.app-shell .ui-notice { box-shadow: none; }
+.app-shell .empty-state { padding: 15px; }
+
+/* Shared, finite read states used by queue, arrivals and duty (and reusable by
+   Owner/Dentist pages). No invented zeroes or hidden failures. */
+.app-shell .ui-read-state,
+.pp-shell .ui-read-state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px;
+  min-height: 42px;
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--clinic-line);
+  border-radius: var(--clinic-radius-sm);
+  background: var(--clinic-inset);
+  color: #516776;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.app-shell .ui-read-state.is-compact { padding: 7px 10px; min-height: 36px; }
+.app-shell .ui-read-state.is-error,
+.pp-shell .ui-read-state.is-error { border-color: #e1bfc1; background: #fcf4f3; color: #833940; }
+.app-shell .ui-read-state.is-stale,
+.pp-shell .ui-read-state.is-stale { border-color: #ebd8b6; background: #fdf8ee; color: #705528; }
+.app-shell .ui-read-indicator,
+.pp-shell .ui-read-indicator {
+  display: inline-block;
+  width: 9px; height: 9px; flex: none;
+  border-radius: 50%; background: #628ba1;
+}
+.app-shell .ui-read-message { flex: 1 1 170px; }
+.app-shell .ui-read-state .ui-retry,
+.pp-shell .ui-read-state .ui-retry {
+  flex: none; min-height: 34px;
+  background: #fff; border: 1px solid currentColor;
+  color: inherit; border-radius: 8px;
+}
+
+/* Modal and notification glass is permitted; all form fields and patient
+   details remain solid and fully opaque for reading and focus. */
+dialog.modal.clinic-signout-dialog,
+dialog.modal.clinic-notifications {
+  background: rgba(250,252,252,.98);
+  border-radius: var(--clinic-radius-lg,15px);
+  border-color: #ccdade;
+  box-shadow: 0 24px 64px rgba(20,43,55,.22);
+}
+dialog.modal.clinic-signout-dialog .modal-head,
+dialog.modal.clinic-notifications .modal-head { background: transparent; }
+.pp-shell .pp-main { background: linear-gradient(180deg,#e9eff1 0%,#f0f3f3 300px); }
+.pp-shell .pp-quick-item { background: var(--clinic-elevated); border-color: var(--clinic-line); border-radius: 12px; }
+.pp-shell .pp-quick-item:hover { border-color: #a8c0cc; background: #f0f6f7; }
+.pp-shell .pp-primary { border-radius: var(--clinic-radius-sm); }
+.pp-shell .pp-sheet { background: var(--clinic-elevated); }
+
+@media (max-width: 760px) {
+  .app-shell .content { padding-inline: clamp(12px,3vw,20px); }
+  .app-shell .card { padding: clamp(12px,2.5vw,18px); }
+  .app-shell .filter-bar-controls { flex-wrap: wrap; }
+  .app-shell .table-wrap .row-actions { flex-wrap: nowrap; }
+  .pp-shell .pp-card { padding: 14px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .app-shell :is(.btn,.ui-icon-action,.main-nav button),
+  .pp-shell :is(.pp-nav,.pp-quick-item) { transition: background-color 150ms ease,color 150ms ease,border-color 150ms ease; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-shell :is(.btn,.ui-icon-action,.main-nav button),
+  .pp-shell :is(.pp-nav,.pp-quick-item) { transition: none !important; animation: none !important; }
+}

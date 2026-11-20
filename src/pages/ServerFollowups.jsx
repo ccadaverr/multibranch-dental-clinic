@@ -135,9 +135,14 @@ function useFollowupList(key, request, patientId = null, owner = false, lifetime
     if (!isCurrent()) return false
     const serial = ++sequence.current, fetch = fetchRows.current, settlement = pendingTasks.settlement
     setResult({scope, rows: null, meta: {}, error: ''})
-    let r
-    try { r = await fetch() }
-    catch { r = {ok: false, message: 'Follow-ups could not be confirmed. Reload the list before retrying a command.'} }
+    let r, timeout
+    try {
+      r = await Promise.race([
+        Promise.resolve().then(fetch),
+        new Promise(resolve => { timeout = setTimeout(() => resolve({ ok:false, kind:'network', message:'Follow-ups took too long to load. Try again.' }), 18000) }),
+      ])
+    } catch { r = {ok: false, message: 'Follow-ups could not load. Try again.'} }
+    finally { clearTimeout(timeout) }
     if (!isCurrent() || sequence.current !== serial) return false
     if (pendingTasks.settlement !== settlement) {
       setResult({scope, rows: null, meta: {}, error: 'A follow-up update settled after this reload began. Reload again to check its current status.'})
@@ -184,9 +189,13 @@ function FollowupsBody({ store, role, context, setPage, lifetime }) {
   const owner = role === 'owner'
   const branches = (store?.state?.branches || []).filter(b => b.status !== 'Closed')
   const [filters, setFilters] = useState({ status: 'active', due: 'all', branch_ref: '' })
+  const [search, setSearch] = useState('')
+  const [searchTerm, setSearchTerm] = useState('')
+  useEffect(() => { const delay = setTimeout(() => setSearchTerm(search.trim()), 280); return () => clearTimeout(delay) }, [search])
+  const requestFilters = { ...filters, ...(searchTerm ? { search: searchTerm } : {}) }
   const [booked, setBooked] = useState(null)
   const patientId = context?.patientPublicId || context?.patientId || null
-  const {rows, meta, error, load, isCurrent, pendingTasks} = useFollowupList(JSON.stringify([patientId, filters]), () => patientId ? patientFollowups(patientId) : followups({...filters}), patientId, owner, lifetime)
+  const {rows, meta, error, load, isCurrent, pendingTasks} = useFollowupList(JSON.stringify([patientId, requestFilters]), () => patientId ? patientFollowups(patientId) : followups(requestFilters), patientId, owner, lifetime)
   const recoveryRoot = React.useRef(null), recoveryFocus = React.useRef(false)
   const reload = () => { recoveryFocus.current = true; return load() }
   React.useLayoutEffect(() => {
@@ -201,21 +210,20 @@ function FollowupsBody({ store, role, context, setPage, lifetime }) {
   return <div className="st-page" ref={recoveryRoot} tabIndex={-1}>
     {context?.returnEncounter&&<Button variant="ghost" onClick={()=>setPage('treatment',context.returnEncounter)}>Return to encounter</Button>}
     {patientId&&<Notice>Patient follow-up tasks. A recommendation is not a booked appointment; tasks are not linked to a specific treatment in this response.</Notice>}
-    <PageHeader kicker={owner ? 'Administration' : 'Patients'} title="Follow-ups"
-      text={followupDescription(owner)}/>
+    <PageHeader title="Follow-ups" text={owner ? followupDescription(true) : undefined}/>
     {booked && role === 'staff' && canSchedule(store, booked.branchId) && <Notice tone="success" title="Booking receipt">
       Appointment created: {booked.code}. The selected follow-up was linked to this appointment. This confirms the booking request; review the current task for any later changes.
     </Notice>}
-    {role === 'staff' && <BookingRecoveryNotice/>}
-    {!patientId&&<p className="fu-counts" aria-live="polite"><b>{c.open ?? '…'}</b> open · <b className={c.overdue ? 'is-bad' : ''}>{c.overdue ?? '…'}</b> overdue · <b>{c.due_today ?? '…'}</b> due today</p>}
-    {error && <Notice tone="error" title="Follow-ups unavailable">{error} <RefreshButton title="Reload follow-ups" ariaLabel="Reload follow-ups" onClick={reload}/></Notice>}
+    {role === 'staff' && hasUnverifiedFollowup(pendingTasks) && <BookingRecoveryNotice/>}
+    {!patientId && rows && <p className="fu-counts" aria-live="polite"><b>{c.open ?? 0}</b> open · <b className={c.overdue ? 'is-bad' : ''}>{c.overdue ?? 0}</b> overdue · <b>{c.due_today ?? 0}</b> due today</p>}
+    {error && <Notice tone="error" title="Follow-ups unavailable">{error} <RefreshButton recovery title="Reload follow-ups" ariaLabel="Reload follow-ups" onClick={reload}/></Notice>}
     <Card>
-      {!patientId&&<FilterBar className="st-filters" ariaLabel="Follow-up filters" onClear={(filters.status !== 'active' || filters.due !== 'all' || filters.branch_ref) ? () => setFilters({ status: 'active', due: 'all', branch_ref: '' }) : null}>
+      {!patientId&&<FilterBar className="st-filters staff-followup-filters" ariaLabel="Follow-up search and filters" search={search} onSearchChange={setSearch} searchPlaceholder="Find patient or patient ID…" onClear={(search || filters.status !== 'active' || filters.due !== 'all' || filters.branch_ref) ? () => {setSearch('');setSearchTerm('');setFilters({ status: 'active', due: 'all', branch_ref: '' })} : null}>
         <Field label="Status"><select value={filters.status} onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}><option value="active">Open and contacted</option>{['Open', 'Contacted', 'Booked', 'Closed'].map(s => <option key={s}>{s}</option>)}</select></Field>
         <Field label="Due"><select value={filters.due} onChange={e => setFilters(f => ({ ...f, due: e.target.value }))}><option value="all">Any date</option><option value="overdue">Overdue</option><option value="today">Today</option><option value="week">Within 7 days</option></select></Field>
         <Field label="Branch"><select value={filters.branch_ref} onChange={e => setFilters(f => ({ ...f, branch_ref: e.target.value }))}><option value="">All my branches</option>{branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>
       </FilterBar>}
-      {!rows ? !error && <p className="au-muted" role="status">Loading follow-ups…</p> : !rows.length ? <p className="au-muted" role="status">No follow-ups here.</p>
+      {!rows ? !error && <p className="au-muted" role="status">Loading follow-ups…</p> : !rows.length ? <p className="au-muted" role="status">{searchTerm ? 'No patients or IDs match your search.' : 'No follow-ups match these filters.'}</p>
         : <ul className="fd-list">{rows.map(t => <FollowupRow key={JSON.stringify([t.id, t.patient?.id, t.branch?.id, t.revision, t.service?.id, t.due_on, schedulingActorKey(store)])} t={t} pendingTasks={pendingTasks} owner={owner} role={role} store={store} toast={toast} onChanged={load} onReload={reload} onBooked={setBooked} isCurrent={isCurrent}/>)}</ul>}
     </Card>
   </div>
@@ -317,8 +325,8 @@ function FollowupRow({ t, pendingTasks, owner, role, store, toast, onChanged, on
       {!owner && t.appointment && <span>Booked: {t.appointment.code} · {t.appointment.when}</span>}
       {!owner && t.close_note && <span>Closed: {t.close_note}</span>}
       {closing && <Field label="Why is it closed without a booking?" required><input value={note} disabled={!!busy || needsReload || !!taskRequest || staleRow} maxLength={500} onChange={e => setNote(e.target.value)}/></Field>}
-      {staleRow && !taskRequest && <div role="alert"><p>This follow-up changed. Reload the list before continuing.</p><RefreshButton title="Reload follow-ups" ariaLabel="Reload follow-ups" onClick={onReload}/></div>}
-      {taskRequest && taskRequest.phase !== 'pending' && <div role="alert"><p>The earlier follow-up update needs verification. An unchanged task does not confirm that it failed. Reload the list; if it remains unresolved, ask the branch team to review it before another action.</p><RefreshButton title="Reload follow-ups" ariaLabel="Reload follow-ups" onClick={onReload}/></div>}
+      {staleRow && !taskRequest && <div role="alert"><p>This follow-up changed. Reload the list before continuing.</p><RefreshButton recovery title="Reload follow-ups" ariaLabel="Reload follow-ups" onClick={onReload}/></div>}
+      {taskRequest && taskRequest.phase !== 'pending' && <div role="alert"><p>The earlier follow-up update needs verification. An unchanged task does not confirm that it failed. Reload the list; if it remains unresolved, ask the branch team to review it before another action.</p><RefreshButton recovery title="Reload follow-ups" ariaLabel="Reload follow-ups" onClick={onReload}/></div>}
       {(busy || taskRequest?.phase === 'pending') && <span role="status">{busy === 'review' ? 'Loading current follow-up state…' : (busy || taskRequest?.submitted.action) === 'close' ? 'Closing follow-up…' : 'Recording contact…'}</span>}
       {review && <div ref={reviewFeedback} tabIndex={-1} role={review.unavailable ? 'alert' : 'status'}>
         {review.unavailable ? <p>The current task could not be verified from this authorized list. Missing, stale or inaccessible data does not prove that an earlier booking failed. Ask the front desk to reconcile it.</p>
@@ -326,7 +334,7 @@ function FollowupRow({ t, pendingTasks, owner, role, store, toast, onChanged, on
             {review.receipt ? <p>Original booking confirmed: {review.receipt.code} · {review.receipt.date} {review.receipt.start}. This receipt records the earlier booking; the current task status above may have changed.</p>
               : <p>{review.appointment ? 'This shows the current relationship; it does not verify the original booking command.' : 'No linked appointment is shown in this response. This does not prove an earlier booking failed.'} No original booking receipt was recovered for your account. Do not create a replacement for an unresolved booking.</p>}</>}
       </div>}
-      {error && !taskRequest && !staleRow && <div role="alert"><p className="au-error">{error}</p><RefreshButton title="Reload follow-ups" ariaLabel="Reload follow-ups" onClick={onReload}/></div>}
+      {error && !taskRequest && !staleRow && <div role="alert"><p className="au-error">{error}</p><RefreshButton recovery title="Reload follow-ups" ariaLabel="Reload follow-ups" onClick={onReload}/></div>}
     </div>
     {canWork && <div className="ns-actions">
       {t.can_book && role === 'staff' && <Button size="sm" disabled={!selection || !!busy || needsReload || !!taskRequest || staleRow} onClick={() => {
@@ -372,8 +380,11 @@ function SelectedFollowupBooking({booking, role, store, onSaved, submitLabel}) {
     serverFollowupSelection={booking.selection} verifiedFollowupBackend={backend} onSaved={onSaved} submitLabel={submitLabel}/>
 }
 
+function hasUnverifiedFollowup(pendingTasks) {
+  return [...pendingTasks.tasks.values(), ...pendingTasks.creates.values()].some(operation => operation.phase === 'recovery')
+}
 function BookingRecoveryNotice() {
-  return <Notice tone="warning" title="Unverified earlier booking?">A booking whose result was not verified may already exist. Choose Review current task to recover your account’s original booking receipt after reloading or signing in again. If no receipt is available, ask the branch team to reconcile it before starting a replacement.</Notice>
+  return <p className="staff-followup-recovery" role="status">A previous booking could not be confirmed. Review its current task before trying again.</p>
 }
 
 export { clinicalBookingSelection, currentFollowupReview, recoveredFollowupReceipt }
@@ -493,7 +504,7 @@ function PatientFollowupPanel({ patientId, branches = [], toast, store, role, li
   return <section className="st-panel" ref={recoveryRoot} tabIndex={-1} aria-labelledby={`fu-${patientId}`}>
     <h3 id={`fu-${patientId}`} className="st-sub">Follow-ups</h3>
     {canCreate&&<SelectionDetailsNotice available={store.session?.selectionDetailsAvailable}/>}
-    {role === 'staff' && <BookingRecoveryNotice/>}
+    {role === 'staff' && hasUnverifiedFollowup(pendingTasks) && <BookingRecoveryNotice/>}
     {error && <Notice tone="error" title="Follow-ups unavailable">{error} <Button variant="soft" onClick={reload}>Reload follow-ups</Button></Notice>}
     {!rows ? !error && <p className="au-muted" role="status">Loading follow-ups…</p> : !rows.length ? <p className="au-muted" role="status">No follow-ups for this patient.</p>
       : <ul className="fd-list">{rows.map(t => <FollowupRow key={JSON.stringify([t.id, t.patient?.id, t.branch?.id, t.revision, t.service?.id, t.due_on, schedulingActorKey(store)])} t={t} pendingTasks={pendingTasks} owner={owner} role={role} store={store} toast={toast} onChanged={reload} onReload={reload} isCurrent={isCurrent}/>)}</ul>}

@@ -11,28 +11,6 @@
 .booking-payment-badge.is-unpaid { border-style: dashed; }
 .booking-payment-badge.is-attention { color: var(--warning-fg, #764900); border-color: currentColor; }
 
-.lp-site .lp-hero { background: var(--lp-mint, #f1f7f4); min-height: 0; padding: clamp(2.25rem, 5vw, 5rem) 0; border-bottom: 1px solid var(--lp-edge); }
-.lp-site .lp-hero-grid { grid-template-columns: minmax(0, 1fr); gap: clamp(1.75rem, 5vw, 4rem); padding-block: 0; }
-.lp-site .lp-hero h1 { max-width: none; font-size: clamp(2.1rem, 5vw, 3.9rem); line-height: 1.05; }
-.lp-site .lp-hero h1 span { font-size: .65em; margin-top: .2em; }
-.lp-site .lp-hero .lp-lead { margin: 0 0 1rem; font-size: clamp(1rem, 2vw, 1.18rem); }
-.lp-site .lp-hero .lp-link { min-height: 44px; }
-.lp-visit-directory { min-width: 0; }
-.lp-visit-directory h2 { font-size: 1rem; margin: 0 0 .25rem; }
-.lp-visit-directory a {
-  display: grid; grid-template-columns: 1.25rem minmax(0, 1fr) 1rem; gap: .75rem; align-items: center;
-  min-height: 3.75rem; padding-block: .5rem; border-bottom: 1px solid var(--lp-edge);
-  text-decoration: none; color: var(--lp-ink);
-}
-.lp-visit-directory a:hover b { text-decoration: underline; text-underline-offset: .18em; }
-.lp-visit-directory a > .icon { color: var(--lp-brand); }
-.lp-visit-directory small { display: block; color: var(--lp-muted); }
-.lp-site #how-it-works { padding-block: clamp(1.75rem, 4vw, 3.5rem); }
-.lp-site .lp-steps .lp-step { padding-block: .8rem; gap: .25rem .85rem; }
-@media (min-width: 760px) {
-  .lp-site .lp-hero-grid { grid-template-columns: minmax(0, 1fr) minmax(15rem, .52fr); }
-}
-
 .clinic-notifications .notification-controls { border-bottom: 1px solid var(--line); flex: none; }
 .clinic-notifications .notification-controls .notification-toolbar { padding-block: 0; border: 0; gap: .25rem; }
 .clinic-notifications .notification-controls .notification-toolbar button,

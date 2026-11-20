@@ -55,6 +55,9 @@ class TreatmentResource extends JsonResource
             'dentist' => ['id' => $t->dentist->legacy_ref, 'name' => $t->dentist->person?->fullName()],
             'appointment' => $appointment ? ['id' => $appointment->public_id, 'code' => $appointment->appointment_code, 'status' => $appointment->status] : null,
             'requested_service' => $requested ? ['id' => $requested->legacy_ref, 'name' => $requested->name] : null,
+            ...($appointment?->intended_service_id ? ['intended_service' => [
+                'id' => $appointment->intendedService->legacy_ref, 'name' => $appointment->intendedService->name,
+            ]] : []),
             'prescription_required' => $t->prescription_required,
             'followup_required' => $t->followup_required,
             'procedures' => $t->procedures->map(fn ($line) => [

@@ -4,7 +4,12 @@ export const chartReady = data => data?.write_contract?.version===2 && data.writ
 export function chartMatches(data,patientId){
  return data?.patient?.id===patientId && Array.isArray(data.current) && Array.isArray(data.summary) && (data.history===null||Array.isArray(data.history))
 }
-export function patientChartMatches(data,patientId){return !!patientId&&chartMatches(data,patientId)&&data.history===null&&data.current.every(e=>!Object.hasOwn(e,'note')&&!Object.hasOwn(e,'treatment_id')&&!Object.hasOwn(e,'visit_id'))}
+export function patientChartMatches(data, patientId) {
+  const safe = entry => entry && Object.keys(entry).every(key => ['id','tooth','surfaces','status','recorded_on','dentist','planned_service_ref','completed_procedure_ref','visit_ref','service_name'].includes(key))
+  return !!patientId && chartMatches(data, patientId) && data.current.every(safe) &&
+    data.summary.every(group => group && Object.keys(group).every(key => ['status','count','teeth'].includes(key)) && Array.isArray(group.teeth) && group.teeth.every(safe)) &&
+    (data.history === null || Array.isArray(data.history) && data.history.every(safe))
+}
 export function chartReceiptMatches(result,patientId,payload,dentistId){
  const row=result?.data,proof=result?.meta?.chart_receipt
  if(!result?.ok||!chartMatches(row,patientId)||!Array.isArray(row.history)||!row.tooth_revisions||![1,2].includes(row.write_contract?.version)||row.write_contract.revision_scheme!=='tooth_entry_count'||row.write_contract.idempotency!==true||proof?.patient_id!==patientId||proof.tooth!==payload.tooth||
@@ -12,7 +17,7 @@ export function chartReceiptMatches(result,patientId,payload,dentistId){
    (proof.treatment_id??null)!==(payload.treatment_id??null)||payload.branch_ref&&proof.branch_ref!==payload.branch_ref||
    payload.expected_treatment_revision&&proof.treatment_revision!==payload.expected_treatment_revision)return false
  const entry=row.history.find(e=>e.id===proof.entry_id)
- return !!entry && entry.tooth===payload.tooth && entry.status===payload.status && entry.recorded_on===payload.recorded_on &&
+ return !!entry && entry.tooth===payload.tooth && entry.status===payload.status && (entry.planned_service_ref??null)===(payload.planned_service_ref??null) && (entry.completed_procedure_ref??null)===(payload.completed_procedure_ref??null) && entry.recorded_on===payload.recorded_on &&
    (entry.note||null)===(payload.note||null)&&entry.branch?.id===proof.branch_ref&&entry.dentist_id===dentistId&&
    (entry.treatment_id??null)===(proof.treatment_id??null)&&(entry.visit_id??null)===(proof.visit_id??null)&&
    JSON.stringify([...(entry.surfaces||[])].sort())===JSON.stringify([...new Set(payload.surfaces||[])].sort())

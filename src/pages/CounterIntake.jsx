@@ -263,7 +263,7 @@ function PatientIdCheck({ patientId, toast, getAuthGeneration }) {
     : r?.kind === 'forbidden' ? 'You do not have permission to view or record this patient’s ID check.'
     : r?.kind === 'validation' ? r.message || 'Check the highlighted fields and try again.'
     : r?.kind === 'server' ? 'The request could not be confirmed. Reload ID status before retrying.' : firstError(r)
-  if (loadError) return <div ref={controls} tabIndex={-1} className="ci-idcheck"><p className="au-error" role="alert">{accessError(loadError)}</p><RefreshButton title="Reload ID status" ariaLabel="Reload ID status" onClick={reload}/></div>
+  if (loadError) return <div ref={controls} tabIndex={-1} className="ci-idcheck"><p className="au-error" role="alert">{accessError(loadError)}</p><RefreshButton recovery title="Reload ID status" ariaLabel="Reload ID status" onClick={reload}/></div>
   if (!record) return <p ref={controls} tabIndex={-1} className="au-muted" role="status">Loading patient ID status…</p>
   // Identity-only projections deliberately omit verification details. Missing
   // details must not be presented as an unchecked, writable record.
@@ -307,7 +307,7 @@ function PatientIdCheck({ patientId, toast, getAuthGeneration }) {
       <div className="au-actions"><Button variant="soft" disabled={busy || blocked || (type === 'other' && !otherText.trim())} onClick={go}>{busy ? 'Recording ID check…' : 'ID checked'}</Button></div>
     </div>
     {busy && <p className="au-muted" role="status">Recording the ID check for this patient…</p>}
-    {failure && <><p className="au-error" role="alert">{accessError(failure)}</p><RefreshButton title="Reload ID status" ariaLabel="Reload ID status" disabled={busy} onClick={reload}/></>}
+    {failure && <><p className="au-error" role="alert">{accessError(failure)}</p><RefreshButton recovery title="Reload ID status" ariaLabel="Reload ID status" disabled={busy} onClick={reload}/></>}
     <p className="au-muted">This records the ID check only. Check-in is a separate action.</p>
   </div>
 }

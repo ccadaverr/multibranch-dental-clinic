@@ -1,5 +1,5 @@
 import React from 'react'
-import { Card, Icon, MetricRow, Notice, RefreshButton, StatCard } from '../components.jsx'
+import { Card, Icon, MetricRow, Notice, ReadState, RefreshButton, StatCard } from '../components.jsx'
 import { clinicNow } from '../clock.js'
 import { countQueue, queueVisibility } from '../queue-counts.js'
 
@@ -25,12 +25,14 @@ export function useQueueVisibility(store) {
 /** Loading / failure / stale / incomplete notice. Null when counts are ready or the session is the offline demo. */
 export function QueueCountsNotice({ vis, store }) {
   if (vis.mode === 'ready' || vis.mode === 'demo') return null
-  const tone = vis.mode === 'error' || vis.mode === 'incomplete' ? 'warning' : 'info'
-  return <Notice tone={tone} title={vis.mode === 'loading' ? 'Loading live queue' : 'Live queue counts unavailable'}>{vis.message}{vis.mode !== 'loading' && <> <RefreshButton title="Refresh live queue counts" ariaLabel="Refresh live queue counts" onClick={async () => {
-    // The store owns projection errors and latest-read adoption. Keep its
-    // unavailable notice on an unexpected read failure; never infer zero counts.
-    try { await store.appointmentFlow?.refresh() } catch { /* The current unavailable notice remains. */ }
-  }}/></>}</Notice>
+  // A stale read must never display invented zeroes; refresh happens via the
+  // existing visibility hook. Only confirmed failures offer manual recovery.
+  if (vis.mode === 'loading' || vis.mode === 'stale') {
+    return <ReadState compact state="loading" message="Updating queue…"/>
+  }
+  return <ReadState compact state="error"
+    message={vis.mode === 'incomplete' ? 'Queue results are incomplete. Counts are hidden.' : 'Queue is temporarily unavailable.'}
+    onRetry={() => store.appointmentFlow?.refresh?.()}/>
 }
 
 const branchOf = (state, activeBranch) => state.branches.find(b => b.name === activeBranch) || null
@@ -40,15 +42,17 @@ export function QueueStatusCounts({ store, activeBranch, vis }) {
   const { state } = store
   const branch = branchOf(state, activeBranch)
   if (vis.mode !== 'ready') return <QueueCountsNotice vis={vis} store={store}/>
+  const staff = store.session?.role === 'staff'
+  if (staff && (!branch || branch.id !== store.session?.branchId)) return <Notice tone="warning">Assigned branch unavailable. Refresh the queue or contact the clinic Owner.</Notice>
   const c = countQueue(state.queue, { branchId: branch?.id ?? null, date: clinicNow().date })
   return <>
     <div className="stats-grid queue-count-grid" aria-label="Live queue counts for today">
-      <StatCard label="Waiting" value={c.waiting} hint="Checked in, not yet called" tone="blue" icon={<Icon name="queue" size={18}/>}/>
-      <StatCard label="Called" value={c.called} hint="Called, not yet ready" icon={<Icon name="queue" size={18}/>}/>
-      <StatCard label="Treatment Ready" value={c.treatmentReady} hint="Ready for the Dentist" icon={<Icon name="queue" size={18}/>}/>
-      <StatCard label="Temporarily Away" value={c.away} hint="Kept open; not counted as awaiting" tone="amber" icon={<Icon name="queue" size={18}/>}/>
+      <StatCard label="Waiting" value={c.waiting} hint={staff?undefined:'Checked in, not yet called'} tone="blue" icon={<Icon name="queue" size={18}/>}/>
+      <StatCard label="Called" value={c.called} hint={staff?undefined:'Called, not yet ready'} icon={<Icon name="queue" size={18}/>}/>
+      <StatCard label="Treatment Ready" value={c.treatmentReady} hint={staff?undefined:'Ready for the Dentist'} icon={<Icon name="queue" size={18}/>}/>
+      <StatCard label="Temporarily Away" value={c.away} hint={staff?undefined:'Kept open; not counted as awaiting'} tone="amber" icon={<Icon name="queue" size={18}/>}/>
     </div>
-    <p className="muted-copy">Awaiting treatment = Waiting + Called + Treatment Ready: <b>{c.awaiting}</b>. Open queue entries = awaiting + Temporarily Away: <b>{c.active}</b>. Served patients are not counted. Counts are today’s entries (clinic day {clinicNow().date}) from the clinic server, within the records you can see; the clinic has not set any waiting-time or capacity limits, so none is shown.</p>
+    {!staff&&<p className="muted-copy">Awaiting treatment = Waiting + Called + Treatment Ready: <b>{c.awaiting}</b>. Open queue entries = awaiting + Temporarily Away: <b>{c.active}</b>. Served patients are not counted. Counts are today’s entries (clinic day {clinicNow().date}) from the clinic server, within the records you can see; the clinic has not set any waiting-time or capacity limits, so none is shown.</p>}
   </>
 }
 

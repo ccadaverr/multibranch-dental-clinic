@@ -14,14 +14,14 @@ import { clinicNow } from './clock.js'
 // array, picks "the first" of anything, or guesses.
 const DEMO_IDENTITY_MAP = {
   'owner@example.test': { role: 'owner', kind: 'role-info', roleInfoKey: 'owner' },
-  'staff.reception@example.test': { role: 'staff', kind: 'role-info', roleInfoKey: 'staff' },
+  'staff.reception@example.test': { role: 'staff', kind: 'role-info', roleInfoKey: 'staff', legacyProfileRef: 's1' },
   // staff.assistant@example.test is deliberately NOT mapped: ROLE_INFO defines exactly one local Staff
   // operational identity (Alyssa Cruz / u2), already claimed above. Mapping a second, distinct backend person
   // to that same local identity would mean two different backend people sharing one local Staff account —
   // exactly what must never happen. This account fails closed (see bridgeFromBackend below) until a second
   // local Staff identity exists to map it to. staff.reception@example.test alone is sufficient for an
   // end-to-end Staff demo.
-  'dentist@example.test': { role: 'dentist', kind: 'role-info', roleInfoKey: 'dentist' },
+  'dentist@example.test': { role: 'dentist', kind: 'role-info', roleInfoKey: 'dentist', legacyProfileRef: 'd1' },
   // Explicit alignment, not a rename of the backend seed and not a name/fuzzy match: the Backend 1A demo
   // Patient account is declared here to represent the existing, already-populated local Patient (Maria
   // Santos, p1/u12), so signing in through the real backend still demonstrates her existing care history
@@ -41,6 +41,10 @@ export function createIdentityBridge({ getState, commit, clock = clinicNow }) {
       const session = mapped.kind === 'role-info'
         ? sessionForRole(mapped.roleInfoKey, state)
         : sessionForUser(state, mapped.userId)
+      if (mapped.legacyProfileRef && me.employee
+        && (me.employee.profile_id !== mapped.legacyProfileRef || me.employee.branch_id !== session?.branchId)) {
+        return bridgeEmployee(me, { getState, commit })
+      }
       return session?.role === me.role ? { ok: true, session } : { ok: false, reason: 'no-local-identity' }
     }
     // Any backend account not in the explicit table above fails closed unless it is a Patient — any number

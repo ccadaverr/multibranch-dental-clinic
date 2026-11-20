@@ -204,7 +204,11 @@ function ReviewStep({ state, mode, form, notes, onNotes, onBack, onConfirm, onPi
       {label:'Time',value:form.start?displayTime(form.start):null},
       {label:'Dentist',value:form.dentist?`${form.dentist} (currently available)`:'Assigned when you confirm'},
     ]}/>
-    <p className="pt-hint">The clinic assigns an eligible Dentist when you confirm. Booking fee is paid securely via PayMongo (GCash, Maya, Card) with a 15-minute slot hold. Cancellations at least 24h prior are fully refunded.</p>
+    <div className="pt-booking-payment-guidance">
+      <strong>Pay online when available</strong>
+      <p>Online payment can reduce time spent paying the booking fee at the clinic. The slot is held temporarily during checkout; confirmation depends on verified payment. You still need to check in when you arrive.</p>
+      <p>Check the branch, date, time and service before continuing. Cancellation and rescheduling follow clinic policy. Refunds depend on eligibility and verified payment status, and are not guaranteed.</p>
+    </div>
     <Field label="Optional note"><textarea value={notes} placeholder="Anything the clinic should know before your visit?" onChange={event=>onNotes(event.target.value)}/></Field>
     {failure&&<Notice tone="danger" title="This time couldn’t be booked">{failure.message}
       {!!failure.alternatives?.length&&<div className="row-actions top-gap" role="group" aria-label="Other times on this date">{failure.alternatives.map(time=><Button key={time} size="sm" variant="soft" onClick={()=>onPickAlternative(time)}>{displayTime(time)}</Button>)}</div>}
@@ -321,7 +325,7 @@ export function PatientBookingPage({ store, setPage, context }) {
 
   const timeStage=mode==='smart'?'smart-schedule':'manual-time'
   return <div className="pt-page is-wide pt-book-flow">
-    <PageHeader kicker="Online booking" title="Book your visit" text="Choose how you’d like to book. Only real available times are shown. Online payment via GCash, Maya, or Card holds your slot."/>
+    <PageHeader kicker="Online booking" title="Book your visit" text="Choose an available slot. Online payment, when available, confirms your booking after the provider verifies payment."/>
     {!resumeDismissed&&stage==='mode'&&<DraftBanner status={status} onResume={resumeDraft} onDiscard={discardDraft}/>}
     {stage==='mode'&&<ModeChoice onChoose={chooseMode}/>}
     <BookProgress mode={mode} stage={stage}/>

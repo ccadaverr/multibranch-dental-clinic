@@ -65,7 +65,9 @@ test('marking read names the newest displayed message and nothing else; with not
   const page = read('src/pages/ServerMessages.jsx')
   // Read state follows the newest DISPLAYED server message of the selected conversation (pending sends are not server messages).
   assert.match(page, /const newestShown = thread\?\.messages\?\.length \? thread\.messages\[thread\.messages\.length - 1\]\.id : null/)
-  assert.match(page, /markRead\(selectedId, newestShown, \(\) => owns\(\) && selectedRef.current===selectedId\)\.then\(r => \{ if \(current && owns\(\) && r\.ok\) refreshList\(\) \}\)/)
+  assert.match(page, /markRead\(selectedId, newestShown, \(\) => owns\(\) && selectedRef.current===selectedId\)\.then\(r => \{/)
+  assert.match(page, /if \(deniedRead\(selectedId,r\)\) return/)
+  assert.match(page, /if \(current && r\.ok\) refreshList\(\)/)
   assert.doesNotMatch(page, /unread: 0/, 'the browser never decides the unread count; it re-reads the server')
 })
 

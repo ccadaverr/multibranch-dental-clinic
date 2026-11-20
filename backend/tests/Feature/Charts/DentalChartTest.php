@@ -74,7 +74,8 @@ class DentalChartTest extends TestCase
         $this->actingAsUser('patientA');
         $mine = $this->getJson('/api/me/chart')->assertOk();
         $this->assertSame('Caries', $mine->json('data.current.0.status'));
-        $this->assertNull($mine->json('data.history'));
+        $this->assertIsArray($mine->json('data.history'));
+        foreach ($mine->json('data.history') as $entry) $this->assertArrayNotHasKey('note', $entry);
         $this->assertStringNotContainsString('Deep lesion', $mine->getContent());
         $this->actingAsUser('patientB');
         $this->getJson('/api/me/chart?patient_id='.$this->p['A']->public_id)->assertNotFound();
@@ -138,7 +139,8 @@ class DentalChartTest extends TestCase
 
         // 2. Patient GET /api/me/chart has no notes and no branch data
         $mine = $this->getJson('/api/me/chart')->assertOk();
-        $this->assertNull($mine->json('data.history'));
+        $this->assertIsArray($mine->json('data.history'));
+        foreach ($mine->json('data.history') as $entry) $this->assertArrayNotHasKey('note', $entry);
         $this->assertStringNotContainsString('Confidential clinical observation', $mine->getContent());
         $this->assertArrayNotHasKey('note', $mine->json('data.current.0'));
         $this->assertArrayNotHasKey('branch_id', $mine->json('data.current.0'));
@@ -187,12 +189,13 @@ class DentalChartTest extends TestCase
         $this->assertTrue($staffSummary->has('Caries'));
         $this->assertTrue($staffSummary->has('Filled'));
 
-        // 3. Patient view (same active findings, no notes, history is null)
+        // 3. Patient view (same active findings, no notes, patient-safe history)
         $this->actingAsUser('patientA');
         $patientView = $this->getJson('/api/me/chart')->assertOk();
         $patientCurrent = collect($patientView->json('data.current'));
         $this->assertCount(2, $patientCurrent->where('tooth', '16'));
-        $this->assertNull($patientView->json('data.history'));
+        $this->assertIsArray($patientView->json('data.history'));
+        foreach ($patientView->json('data.history') as $entry) $this->assertArrayNotHasKey('note', $entry);
         $this->assertArrayNotHasKey('note', $patientCurrent->firstWhere('status', 'Caries'));
         $this->assertArrayNotHasKey('note', $patientCurrent->firstWhere('status', 'Filled'));
 
@@ -322,7 +325,8 @@ class DentalChartTest extends TestCase
         $this->assertCount(1, $patientCurrent->where('tooth', '15'));
         $this->assertCount(1, $patientCurrent->where('tooth', '16'));
         $this->assertCount(2, $patientCurrent->where('tooth', '17'));
-        $this->assertNull($patientView->json('data.history'));
+        $this->assertIsArray($patientView->json('data.history'));
+        foreach ($patientView->json('data.history') as $entry) $this->assertArrayNotHasKey('note', $entry);
         $this->assertArrayNotHasKey('note', $patientCurrent->firstWhere('tooth', '14'));
 
         $patientSummary = collect($patientView->json('data.summary'))->keyBy('status');
@@ -389,7 +393,8 @@ class DentalChartTest extends TestCase
         $this->assertEmpty($patientView->json('data.summary'), 'Patient summary must exclude Healthy/Sound');
         $patientCurrent = collect($patientView->json('data.current'));
         $this->assertTrue($patientCurrent->contains('tooth', '31'));
-        $this->assertNull($patientView->json('data.history'));
+        $this->assertIsArray($patientView->json('data.history'));
+        foreach ($patientView->json('data.history') as $entry) $this->assertArrayNotHasKey('note', $entry);
     }
 
     public function test_status_code_category_classification_and_fallback(): void

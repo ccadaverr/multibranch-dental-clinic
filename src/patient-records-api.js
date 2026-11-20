@@ -43,8 +43,8 @@ export function changedFields(record, form) {
   return changes
 }
 
-export async function loadPatientRecord(id) {
-  const result = await api.getPatientRecord(id)
+export async function loadPatientRecord(id, signal) {
+  const result = await api.getPatientRecord(id, signal)
   if (!result.ok) return normalizeFailure(result)
   if (result.data?.id !== id || !['full','identity'].includes(result.data.profile_access)) return {ok:false,kind:'unverified',message:'The returned profile did not identify the selected Patient. No record was adopted.'}
   return { ok: true, record: mapPatientRecord(result.data) }
@@ -67,8 +67,8 @@ export async function savePatientRecord(record, form, {key,beforeDispatch} = {})
 }
 
 /** The read-only index of linked records: counts per family plus the families that have no server source yet. */
-export async function loadPatientRecordIndex(id) {
-  const result = await api.getPatientRecordIndex(id)
+export async function loadPatientRecordIndex(id, signal) {
+  const result = await api.getPatientRecordIndex(id, signal)
   if (!result.ok) return normalizeFailure(result)
   const d = result.data
   const families = ['appointments', 'visits', 'treatments', 'invoices', 'hmo_cases']

@@ -91,3 +91,36 @@ test('the chat screen renders text only and the socket client never handles mess
   const realtime = readFileSync(new URL('../src/realtime.js', import.meta.url), 'utf8')
   assert.doesNotMatch(realtime, /\.body\b/)
 })
+
+// DEN-14: Losing a scoped Dentist grant has the same 404 as a missing thread.
+// Polling and realtime share loadNewerMessages; their result must never be
+// interpreted as an empty-but-authorized conversation.
+test('revoked Dentist message reads retain the server 404 denial', async () => {
+  const original=globalThis.fetch
+  try {
+    globalThis.fetch=async () => json(404, {message:'Conversation not found.'})
+    for (const read of [
+      () => loadNewerMessages('revoked-conversation','message-1'),
+      () => loadNewerMessages('revoked-conversation',null),
+    ]) {
+      const result=await read()
+      assert.equal(result.ok,false)
+      assert.equal(result.kind,'not_found')
+      assert.equal('rows' in result,false)
+    }
+  } finally { globalThis.fetch=original }
+})
+
+test('revoked Dentist view invalidates stale reads and hides cached data', () => {
+  const page=readFileSync(new URL('../src/pages/ServerMessages.jsx', import.meta.url),'utf8')
+  assert.match(page,/\['forbidden','unauthenticated','not_found'\]\.includes\(result\?\.kind\)/)
+  assert.match(page,/accessVersions\.current\.set\(id,accessVersion\(id\)\+1\)/)
+  assert.match(page,/listRequest\.current\+\+/)
+  assert.match(page,/reads\.current\.delete\(id\)/)
+  assert.match(page,/delete next\[id\]/)
+  assert.match(page,/drafts\.current\.clear\(id\)/)
+  assert.match(page,/if \(deniedRead\(conversationId,result\)\) return/)
+  assert.match(page,/if \(deniedRead\(selectedId,r\)\) return/)
+  assert.match(page,/if \(deniedThreads\.current\.has\(id\)\) return/)
+  assert.match(page,/accessVersion\(id\)!==version/)
+})

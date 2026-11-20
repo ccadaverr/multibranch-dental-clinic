@@ -501,13 +501,17 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
       setServerAppointmentRows([]);setServerVisitRows([]);setServerQueueRows([]);setMyQueue(null);setMyTreatmentsCursor(null);setServerTreatmentRows([]);setMyTreatmentRows([]);setServerHmoRows([]);setMyHmoRows([]);setClaimDecisionRows([]);setDirectoryPatients([]);setQueueSnapshot(null);setAppointmentsStatus('idle');setAppointmentsError('')
       return
     }
+    // Authenticated Patient routes load their own scoped summaries, records and
+    // messages. The legacy workspace projection otherwise queues four unused
+    // private requests ahead of the portal's first booking or conversation.
+    if (session.role === 'patient' && session.patientPublicId && session.serverUserId) return
     if(refDataStatus!=='ready')return
     refreshAppointments()
     if(['staff','owner'].includes(session.role))searchPatientDirectory('')
     const onFocus=()=>{if(sessionRef.current)refreshAppointments()}
     window.addEventListener('focus',onFocus)
     return ()=>window.removeEventListener('focus',onFocus)
-  },[session?.role,session?.userId,refDataStatus,initialServerAppointments,initialServerVisits,initialServerQueue,initialServerTreatments])
+  },[session?.role,session?.userId,session?.patientPublicId,session?.serverUserId,refDataStatus,initialServerAppointments,initialServerVisits,initialServerQueue,initialServerTreatments])
 
   // M9 one-time local evidence re-anchor (compatibility only; remove with the M5/M11 backends). Once server Visits and
   // the server queue are loaded for a Staff/Dentist/Owner session, local treatments and invoices that reach a server

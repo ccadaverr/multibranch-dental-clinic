@@ -278,35 +278,6 @@ dialog.modal.pp-more-dialog::backdrop { background: rgba(15,32,48,.36); }
 .chat-to { margin: 0 0 12px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); color: var(--text); }
 .chat-to b { color: var(--ink); }
 
-/* Assistant */
-.pp-ai-launch { position: fixed; z-index: 35; right: 16px; bottom: calc(84px + env(safe-area-inset-bottom)); display: inline-flex; align-items: center; gap: 8px; min-height: 52px; padding: 0 18px 0 10px; border: 0; border-radius: 999px; background: var(--brand); color: #fff; font-weight: 700; box-shadow: 0 12px 30px rgba(24,101,172,.32); }
-.pp-ai-launch img { border-radius: 50%; background: #fff; padding: 2px; }
-@media (min-width: 960px) { .pp-ai-launch { bottom: 24px; right: 24px; } }
-.pp-ai { position: fixed; z-index: 45; inset: 0; display: flex; flex-direction: column; background: #fff; }
-@media (min-width: 600px) { .pp-ai { inset: auto 24px 24px auto; width: 400px; height: min(640px, calc(100vh - 48px)); border: 1px solid var(--line); border-radius: 24px; box-shadow: var(--shadow-lg); overflow: hidden; } }
-.pp-ai-head { display: flex; align-items: center; gap: 10px; padding: 12px 12px 12px 16px; border-bottom: 1px solid var(--line); background: linear-gradient(160deg, var(--pp-sky, #eaf3fd), #fff); }
-.pp-ai-head div { flex: 1; }
-.pp-ai-head h2 { margin: 0; font-size: 1rem; color: var(--ink); }
-.pp-ai-head p { margin: 0; font-size: .75rem; color: var(--muted); }
-.pp-ai-avatar { flex: none; border-radius: 50%; background: #fff; border: 1px solid var(--line); }
-.pp-ai-log { flex: 1; overflow-y: auto; padding: 16px; display: grid; align-content: start; gap: 12px; }
-.pp-ai-welcome p { margin: 0 0 12px; color: var(--text); }
-.pp-ai-welcome .pp-chip { min-width: 0; text-align: left; }
-.pp-bubble { display: flex; gap: 8px; max-width: 92%; }
-.pp-bubble p { margin: 0; padding: 10px 14px; border-radius: 16px; white-space: pre-wrap; overflow-wrap: anywhere; }
-.pp-bubble.user { justify-self: end; }
-.pp-bubble.user p { background: var(--brand); color: #fff; border-bottom-right-radius: 6px; }
-.pp-bubble.assistant p { background: var(--surface-3); color: var(--ink); border-bottom-left-radius: 6px; }
-.pp-ai-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.pp-typing { display: inline-flex; gap: 4px; padding: 14px; border-radius: 16px; background: var(--surface-3); }
-.pp-typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted-2); }
-.pp-ai-form { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--line); }
-.pp-ai-form input { flex: 1; min-width: 0; min-height: 44px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: 14px; font-size: 1rem; }
-.pp-ai-form input:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }
-.pp-send { background: var(--brand); color: #fff; border-color: var(--brand); }
-.pp-send:hover { background: var(--brand-3); }
-.pp-ai-note { margin: 0; padding: 0 14px calc(10px + env(safe-area-inset-bottom)); font-size: .75rem; color: var(--muted); }
-
 /* Motion: page transitions, fade-in, shimmer, press feedback, calendar and step changes. Off for reduced motion. */
 @media (prefers-reduced-motion: no-preference) {
   .pp-enter { animation: pp-enter .28s ease both; }
@@ -318,9 +289,6 @@ dialog.modal.pp-more-dialog::backdrop { background: rgba(15,32,48,.36); }
   .pp-progress span { transition: width .3s ease; }
   .pp-press, .pp-option, .pp-chip, .pp-cal-day, .pp-tab, .pp-quick-item { transition: transform .12s ease, border-color .15s ease, background .15s ease; }
   .pp-press:active, .pp-option:active, .pp-chip:active, .pp-cal-day:not(:disabled):active, .pp-tab:active, .pp-quick-item:active { transform: scale(.98); }
-  .pp-typing i { animation: pp-dot 1.1s ease-in-out infinite; }
-  .pp-typing i:nth-child(2) { animation-delay: .15s; }
-  .pp-typing i:nth-child(3) { animation-delay: .3s; }
   .pp-success-mark { animation: pp-pop .4s cubic-bezier(.2,1.4,.4,1) both; }
 }
 @keyframes pp-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
@@ -332,12 +300,6 @@ dialog.modal.pp-more-dialog::backdrop { background: rgba(15,32,48,.36); }
 
 /* Desktop: no phone navigation (kept last so it wins over the phone rules above). */
 @media (min-width: 960px) { .pp-bottom, .pp-sheet-backdrop:not(.pp-notes-backdrop) { display: none; } .pp-main { padding-bottom: 64px; } }
-/* Phones: the assistant button is a compact circle and pages can scroll clear of it, so it never covers a primary action. */
-@media (max-width: 599px) {
-  .pp-ai-launch { width: 52px; padding: 0; justify-content: center; }
-  .pp-ai-launch span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-  .pp-main { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
-}
 .pp-hint svg, .pp-muted svg { display: inline-block; vertical-align: -2px; margin-right: 4px; }
 
 /* Administration → Assistant answers (Owner), in the same design A language; phone friendly. */
@@ -364,7 +326,6 @@ dialog.modal.pp-more-dialog::backdrop { background: rgba(15,32,48,.36); }
 @media (min-width: 640px) { .aa-form-row { grid-template-columns: 1fr 1fr; } }
 .aa-check { display: flex; align-items: center; gap: 8px; min-height: 44px; color: var(--text); }
 .aa-check input { width: 20px; height: 20px; }
-.pp-ai-suggest { margin-top: 8px; } .pp-ai-suggest .pp-chip { min-width: 0; text-align: left; font-weight: 600; }
 .pp-card form.aa-test-form { display: flex; max-width: none; }
 @media (max-width: 520px) { .aa-toolbar .pp-tabs button { font-size: .8125rem; padding: 0 4px; } }
 /* Owner: per-day opening hours editor */

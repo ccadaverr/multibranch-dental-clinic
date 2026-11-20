@@ -21,6 +21,7 @@ export function mapPriceVersion(row) {
     amount: row.amount ?? null,
     effectiveFrom: row.effective_from,
     source: row.source,
+    developmentSample: row.development_sample === true,
     createdAt: row.created_at,
     createdBy: row.created_by?.name ?? '',
     retractedAt: row.retracted_at ?? null,

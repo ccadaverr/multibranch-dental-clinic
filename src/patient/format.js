@@ -30,11 +30,18 @@ export function greeting(now = new Date()) {
 export const initials = name => String(name || '').split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0].toUpperCase()).join('') || '•'
 
 const ACTIVE = ['Confirmed', 'Pending', 'Checked In', 'In Treatment']
-/** Upcoming = an active appointment that starts in the future, soonest first. */
+/** The patient API classifies records against the clinic day, including in-progress visits. */
 export function splitAppointments(rows, now = new Date()) {
   const list = Array.isArray(rows) ? rows : []
-  const upcoming = list.filter(a => ACTIVE.includes(a.status) && (new Date(a.starts_at) > now || a.date === todayManila(now) || ['Checked In', 'In Treatment'].includes(a.status))).sort((a, b) => String(a.starts_at || a.date || '').localeCompare(String(b.starts_at || b.date || '')))
-  const past = list.filter(a => !upcoming.includes(a)).sort((a, b) => String(b.starts_at || b.date || '').localeCompare(String(a.starts_at || a.date || '')))
+  const clinicDay = todayManila(now)
+  const isUpcoming = a => a.is_upcoming ?? (ACTIVE.includes(a.status) &&
+    (['Checked In', 'In Treatment'].includes(a.status) || (a.date || a.starts_at?.slice(0, 10) || '') >= clinicDay))
+  const upcoming = [], past = []
+  for (const row of list) (isUpcoming(row) ? upcoming : past).push(row)
+  const start = row => String(row.starts_at || row.date || '')
+  upcoming.sort((a, b) => Number(['Checked In', 'In Treatment'].includes(b.status)) - Number(['Checked In', 'In Treatment'].includes(a.status)) ||
+    start(a).localeCompare(start(b)) || String(a.id).localeCompare(String(b.id)))
+  past.sort((a, b) => start(b).localeCompare(start(a)))
   return { upcoming, past }
 }
 

@@ -84,6 +84,7 @@ export function ServicesPricingPage({ store }) {
   return <>
     <PageHeader title="Services & Pricing" text="Confirmed prices are entered by the Owner and take effect on a chosen date. Each change adds a new version; earlier versions are kept."/>
     <Notice tone="info" title="Confirmed prices">A <b>confirmed price</b> is one you enter and confirm here; billing will use only confirmed prices. A service with no confirmed price is reported as unavailable for billing.</Notice>
+    {versions?.some(v => v.developmentSample) && <Notice>Development catalog prices are approved for demonstration billing. Treatment estimates still require clinical assessment and a separate quote.</Notice>}
     {error && <Notice tone="warning" title="Prices could not be loaded">{error} <Button size="sm" onClick={load}>Retry</Button></Notice>}
     {!versions && !error && <Notice>Loading prices…</Notice>}
     {versions && !complete && <Notice tone="warning" title="Only part of the price history is loaded">Older price versions exist. Current prices are shown only once the whole history is loaded. {moreError && <span role="alert">{moreError} </span>}<Button size="sm" variant="soft" disabled={loadingMore} onClick={loadOlder}>{moreError ? 'Retry' : loadingMore ? 'Loading…' : 'Load older price versions'}</Button></Notice>}

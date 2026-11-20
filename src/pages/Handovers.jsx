@@ -199,15 +199,15 @@ function HandoverInbox({ store, role, access }) {
       text={access.owner ? 'When a patient’s care moves to another branch or dentist. You see who, when, from and to; clinical notes are visible only to the sending and receiving teams.' : 'Open a handover sent to you to view it. Eligible receiving users automatically acknowledge it on opening.'}/>
     {!access.enabled ? <Notice tone="warning">Handovers require an active authorized clinic-server session.</Notice> : <>
       {list.error && <Notice tone="error" title="Handovers unavailable">{list.error} <Button variant="ghost" onClick={list.reload}>Retry handovers</Button></Notice>}
-      {!access.owner && <div className="st-tabs" role="tablist" aria-label="Handovers">
-        <button type="button" role="tab" aria-selected={tab === 'todo'} className={tab === 'todo' ? 'is-on' : ''} onClick={() => setTab('todo')}>To acknowledge ({list.status === 'ready' ? todo.length : '—'})</button>
-        <button type="button" role="tab" aria-selected={tab === 'all'} className={tab === 'all' ? 'is-on' : ''} onClick={() => setTab('all')}>All</button>
+      {!access.owner && <div className="st-tabs staff-segmented" role="group" aria-label="Filter handovers">
+        <button type="button" aria-pressed={tab === 'todo'} className={tab === 'todo' ? 'is-on' : ''} onClick={() => setTab('todo')}>Needs review {list.status === 'ready' && <span className="staff-tab-count">{todo.length}</span>}</button>
+        <button type="button" aria-pressed={tab === 'all'} className={tab === 'all' ? 'is-on' : ''} onClick={() => setTab('all')}>All handovers</button>
       </div>}
       <Card>
         {list.status === 'loading' ? <p className="au-muted" role="status">Loading handovers…</p> : list.status === 'ready' && (!shown.length ? <p className="au-muted">{tab === 'todo' && !access.owner ? 'Nothing to acknowledge.' : 'No handovers yet.'}</p>
           : <ul className="fd-list">{shown.map(h => <li key={h.id}>
             <div><b>{h.patient.name} · {h.patient.code}</b><span>{route(h)}</span><span>{h.status}{h.acknowledged ? ` by ${h.acknowledged.by}, ${when(h.acknowledged.at)}` : ''} · sent {when(h.created_at)}{h.from.by ? ` by ${h.from.by}` : ''}</span></div>
-            {!access.owner && <Button size="sm" variant={h.can_acknowledge ? 'primary' : 'soft'} onClick={event => { opener.current = event.currentTarget; setOpenId({ id: h.id, patientId: h.patient.id }) }}>{h.can_acknowledge ? 'Open (Auto-accept)' : 'Open'}</Button>}
+            {!access.owner && <Button size="sm" variant={h.can_acknowledge ? 'primary' : 'soft'} onClick={event => { opener.current = event.currentTarget; setOpenId({ id: h.id, patientId: h.patient.id }) }}>{h.can_acknowledge ? 'Review & acknowledge' : 'View'}</Button>}
           </li>)}</ul>)}
       </Card>
       {openId && !list.denied && <HandoverDialog id={openId.id} patientId={openId.patientId} access={access} toast={store?.toast} onClose={() => setOpenId(null)} onChanged={list.reload}/>}
@@ -289,7 +289,7 @@ function PatientHandovers({ patientId, toast, access }) {
       {list.status === 'loading' && <p className="au-muted" role="status">Loading handovers…</p>}
       {list.status === 'ready' && (!list.data.length ? <p className="au-muted">No handovers for this patient.</p>
         : <ul className="fd-list">{list.data.map(h => <li key={h.id}><div><b>{route(h)}</b><span>{h.status} · {when(h.created_at)}</span></div>
-          {!access.owner && <Button size="sm" variant={h.can_acknowledge ? 'primary' : 'soft'} onClick={event => { opener.current = event.currentTarget; setOpenId(h.id) }}>{h.can_acknowledge ? 'Open (Auto-accept)' : 'Open'}</Button>}</li>)}</ul>)}
+          {!access.owner && <Button size="sm" variant={h.can_acknowledge ? 'primary' : 'soft'} onClick={event => { opener.current = event.currentTarget; setOpenId(h.id) }}>{h.can_acknowledge ? 'Review & acknowledge' : 'View'}</Button>}</li>)}</ul>)}
       {!list.denied && access.clinical && (creating ? <HandoverForm key={patientId} patientId={patientId} access={access} toast={toast} onCancel={closeForm} onDone={() => { closeForm(); list.reload() }}/>
         : <div ref={createControl}><Button size="sm" variant="soft" onClick={() => setCreating(true)}>Hand over care</Button></div>)}
       {openId && !list.denied && <HandoverDialog id={openId} patientId={patientId} access={access} toast={toast} onClose={() => setOpenId(null)} onChanged={list.reload}/>}

@@ -1,0 +1,47 @@
+/* Staff R05 — coordinated operations UI. Keep all rules role-scoped.
+   Future Dentist/Owner adaptations may share design tokens, not Staff-specific selectors. */
+.role-staff .page-header { padding-bottom: 10px; margin-bottom: 14px; border-bottom: 1px solid var(--staff-line); align-items: center; }
+.role-staff .page-header .page-kicker { display: none; }
+.role-staff .page-header h1 { font-size: clamp(1.3rem,1.8vw,1.55rem); line-height: 1.3; letter-spacing: -.025em; }
+.role-staff .page-header-right { margin: 0; }
+.role-staff .page-header .btn { width: auto; }
+.role-staff .content { color: var(--staff-ink); }
+.role-staff .card-head h3 { font-size: .975rem; }
+.role-staff :is(.search-input-wrap, .filter-bar, .filter-row, .hmo-filters) { min-width: 0; }
+.role-staff .search-input-wrap { max-width: 100%; }
+.role-staff :is(.search-input-wrap input, .filter-select, .filter-bar select) { font-size: .875rem; min-height: 42px; border-radius: 8px; }
+.role-staff .field > span { font-size: .8125rem; font-weight: 650; }
+.role-staff .tabs { background: #eeefed; border-color: transparent; border-radius: 10px; max-width: 100%; overflow-x: auto; }
+.role-staff .tabs button { white-space: nowrap; }
+.role-staff .notice.info { background: transparent; border-color: var(--staff-line); }
+.role-staff .notice.warning { background: #faf8f3; border-color: #e4dbcd; color: var(--staff-ink); }
+.role-staff .notice.warning .notice-icon { background: transparent; border-color: transparent; }
+.role-staff .staff-record-state { min-height: 72px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 16px; background: var(--staff-paper); border: 1px solid var(--staff-line); border-radius: 12px; color: var(--staff-muted); font-size: .875rem; }
+.role-staff .staff-record-state.is-error { color: var(--staff-ink); }
+.role-staff .staff-record-state details { width: 100%; font-size: .8rem; color: var(--staff-muted); }
+.role-staff .staff-record-state details summary { display: list-item; width: fit-content; padding: 5px 0; cursor: pointer; }
+.role-staff .staff-record-state .btn { min-height: 34px; }
+.role-staff .staff-record-spinner { flex: none; width: 15px; height: 15px; border: 2px solid #c8d1d7; border-top-color: var(--staff-blue); border-radius: 50%; animation: staff-spin .9s linear infinite; }
+.role-staff .staff-linked-error { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 9px 0; font-size: .8125rem; color: var(--staff-muted); }
+.role-staff .staff-linked-error button { border: 0; border-bottom: 1px solid currentColor; padding: 2px; cursor: pointer; background: none; color: var(--staff-blue); font: inherit; }
+/* Patient directory: one legible row per person, never a miniature tile grid. */
+.role-staff .records-layout { grid-template-columns: minmax(270px,305px) minmax(0,1fr); align-items: start; gap: 14px; }
+.role-staff .records-layout > div { min-width: 0; }
+.role-staff .records-layout .patient-list { min-width: 0; padding: 14px; }
+.role-staff .patient-list .search-input-wrap { margin-bottom: 8px; padding: 0; border: 0; }
+.role-staff .patient-list .search-input-wrap input { width: 100%; }
+.role-staff .patient-list-scroll { display: grid; grid-template-columns: minmax(0,1fr); gap: 2px; max-height: min(65vh,680px); overflow-y: auto; margin-top: 8px; }
+.role-staff .patient-list-scroll > button { display: grid; grid-template-columns: 38px minmax(0,1fr); align-items: center; gap: 10px; min-height: 58px; width: 100%; padding: 8px 10px; border: 0; border-radius: 8px; border-inline-start: 2px solid transparent; text-align: left; background: transparent; }
+.role-staff .patient-list-scroll > button:hover { background: #f5f5f2; }
+.role-staff .patient-list-scroll > button[aria-pressed="true"] { border-inline-start-color: var(--staff-blue); background: #eef3f8; }
+.role-staff .patient-list-scroll > button .avatar { width: 36px; height: 36px; border-radius: 10px; background: #e9eeed; color: var(--staff-blue); font-size: 12px; }
+.role-staff .patient-list-scroll > button > div { min-width: 0; }
+.role-staff .patient-list-scroll > button b { font-size: .875rem; line-height: 1.25; overflow-wrap: anywhere; }
+.role-staff .patient-list-scroll > button small { font-size: .75rem; line-height: 1.25; font-variant-numeric: tabular-nums; }
+.role-staff .patient-header-card { min-height: auto; padding: 16px 18px; }
+.role-staff .patient-record-head { margin: 0; min-width: 0; }
+.role-staff .patient-record-head h2 { font-size: 1.2rem; line-height: 1.3; margin: 0; overflow-wrap: anywhere; }
+.role-staff .patient-record-head p { font-size: .8125rem; color: var(--staff-muted); margin: 4px 0; }
+.role-staff .patient-record-head .avatar.xl { width: 48px; height: 48px; font-size: 14px; border-radius: 12px; }
+@media (max-width: 1050px) { .role-staff .records-layout { grid-template-columns: minmax(0,1fr); } .role-staff .patient-list-scroll { max-height: 260px; } }
+@media (prefers-reduced-motion: reduce) { .role-staff .staff-record-spinner { animation: none; } }

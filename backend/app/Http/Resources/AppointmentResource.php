@@ -17,12 +17,15 @@ class AppointmentResource extends JsonResource
         $start = ClinicClock::local($this->starts_at);
         $end = ClinicClock::local($this->ends_at);
         $iso = fn ($value) => $value ? ClinicClock::local($value)->toIso8601String() : null;
+        $dentistConversationState = $this->resource->getAttributes()['dentist_conversation_state'] ?? null;
 
         return [
             'id' => $this->public_id,
             // Server-generated, immutable human-readable reference (never derived by React).
             'code' => $this->appointment_code,
             'status' => $this->status,
+            'is_upcoming' => $this->when($request->user()?->role?->value === 'patient',
+                fn () => $this->resource->isUpcomingForPatient($request->attributes->get('appointment_day_start') ?? ClinicClock::now()->startOfDay())),
             'source' => $this->source,
             'assignment_method' => $this->assignment_method,
             'revision' => $this->revision,
@@ -33,8 +36,13 @@ class AppointmentResource extends JsonResource
             'ends_at' => $end->toIso8601String(),
             'duration_minutes' => $this->duration_minutes,
             'patient' => ['id' => $this->patient->public_id, 'code' => $this->patient->patient_code, 'name' => $this->patient->person?->fullName()],
-            'branch' => ['id' => $this->branch->legacy_ref, 'name' => $this->branch->name],
+            'branch' => ['id' => $this->branch->legacy_ref, 'public_id' => $this->branch->public_id, 'name' => $this->branch->name],
             'service' => ['id' => $this->service->legacy_ref, 'name' => $this->service->name],
+            ...($this->intended_service_id ? ['intended_service' => [
+                'id' => $this->intendedService->legacy_ref, 'name' => $this->intendedService->name,
+            ]] : []),
+            ...($this->dentist_conversation_id ? ['dentist_conversation_id' => $this->dentist_conversation_id] : []),
+            ...($dentistConversationState ? ['dentist_conversation_state' => $dentistConversationState] : []),
             'dentist' => ['id' => $this->dentist->legacy_ref, 'name' => $this->dentist->person?->fullName()],
             'notes' => $this->notes,
             'booking_fee_php' => $this->booking_fee_php !== null ? (string) $this->booking_fee_php : null,

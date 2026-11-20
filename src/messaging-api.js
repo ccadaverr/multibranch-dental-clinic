@@ -37,6 +37,7 @@ export function mapConversation(row) {
     assignedToMe: row.assigned?.mine === true,
     participants: (row.participants || []).map(p => ({ name: p.name ?? '', role: p.role ?? '' })),
     unread: Number.isInteger(row.unread) ? row.unread : 0,
+    preview: typeof row.preview === 'string' ? row.preview : '',
     lastMessageAt: row.last_message_at ?? null,
     closed: row.status === 'Closed',
   }
@@ -47,9 +48,9 @@ export function mapMessage(row) {
   return { id: row.id, body: row.body ?? '', senderName: row.sender?.name ?? '', senderRole: row.sender?.role ?? '', mine: row.mine === true, sentAt: row.sent_at }
 }
 
-export async function loadConversations(cursor = null, search = '') {
+export async function loadConversations(cursor = null, search = '', includePreview = false) {
   const q = String(search || '').trim()
-  const result = await boundedMessageRead(()=>api.listConversations({ per_page: 25, ...(cursor ? { cursor } : {}), ...(q ? { q } : {}) }))
+  const result = await boundedMessageRead(()=>api.listConversations({ per_page: 25, ...(includePreview ? {include_preview:1} : {}), ...(cursor ? { cursor } : {}), ...(q ? { q } : {}) }))
   if (!result.ok) return normalizeFailure(result)
   if (!validRows(result.data, row => identifier(row?.id) && Array.isArray(row.participants ?? []) && (row.participants ?? []).every(p=>p&&typeof p==='object') && (row.last_message_at == null || typeof row.last_message_at === 'string'))) return unavailable()
   return { ok: true, rows: result.data.map(mapConversation), nextCursor: result.meta?.next_cursor ?? null, channels: Array.isArray(result.meta?.channels) ? result.meta.channels : [] }
@@ -128,9 +129,9 @@ export async function addDentist(conversationId, dentistId, beforeDispatch, gran
 export function sendPresence() { return api.conversationPresence() }
 
 /** Newest-first page (the server order). `cursor` continues to OLDER messages; a failed page is an error, never a shorter history. */
-export async function loadMessages(conversationId, cursor = null, search = '', expectedContext = null) {
+export async function loadMessages(conversationId, cursor = null, search = '', expectedContext = null, perPage = PAGE_SIZE) {
   const q = String(search || '').trim()
-  const result = await boundedMessageRead(()=>api.listConversationMessages(conversationId, { per_page: PAGE_SIZE, ...(cursor ? { cursor } : {}), ...(q ? { q } : {}) }))
+  const result = await boundedMessageRead(()=>api.listConversationMessages(conversationId, { per_page: perPage, ...(cursor ? { cursor } : {}), ...(q ? { q } : {}) }))
   if (!result.ok) return normalizeFailure(result)
   if (!messageContext(result,conversationId,expectedContext) || !validRows(result.data, messageReceipt)) return {ok:false,kind:'unverified',message:'The returned messages did not confirm the selected conversation and Patient. No messages were adopted.'}
   return { ok: true, rows: result.data.map(mapMessage), nextCursor: result.meta?.next_cursor ?? null }

@@ -22,8 +22,13 @@ export async function loadPatientAppointments(fetchPage) {
   while (true) {
     const result = await fetchPage({ per_page: 100, page })
     if (!result.ok) return result
-    rows.push(...(result.data || []))
-    if (page >= (result.meta?.last_page || 1)) return { ...result, data: rows }
+    const last = result.meta?.last_page ?? 1
+    if (!Array.isArray(result.data) || !Number.isSafeInteger(last) || last < page ||
+        (result.meta?.current_page != null && result.meta.current_page !== page)) {
+      return { ok: false, message: 'The appointment list could not be verified. Try again.' }
+    }
+    rows.push(...result.data)
+    if (page === last) return { ...result, data: rows }
     page++
   }
 }
@@ -31,11 +36,17 @@ export async function loadPatientAppointments(fetchPage) {
 export async function loadTreatmentHistory(fetchPage) {
   const rows = []
   let cursor = null
+  const seen = new Set()
   do {
     const result = await fetchPage({ per_page: 100, ...(cursor ? { cursor } : {}) })
     if (!result.ok) return result
-    rows.push(...(result.data || []))
+    if (!Array.isArray(result.data)) return { ok: false, message: 'Treatment history could not be verified.' }
+    rows.push(...result.data)
     cursor = result.meta?.next_cursor || null
+    if (cursor !== null && (typeof cursor !== 'string' || seen.has(cursor))) {
+      return { ok: false, message: 'Treatment history repeated a page. Try again.' }
+    }
+    if (cursor) seen.add(cursor)
   } while (cursor)
   return { ok: true, data: rows }
 }

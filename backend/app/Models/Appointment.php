@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Support\ClinicClock;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
@@ -16,7 +18,9 @@ class Appointment extends Model
 {
     use HasUlids;
 
-    public const ACTIVE_STATUSES = ['Pending', 'Confirmed', 'Checked In', 'In Treatment'];
+    public const SCHEDULED_STATUSES = ['Pending', 'Confirmed'];
+    public const IN_PROGRESS_STATUSES = ['Checked In', 'In Treatment'];
+    public const ACTIVE_STATUSES = [...self::SCHEDULED_STATUSES, ...self::IN_PROGRESS_STATUSES];
 
     public const TERMINAL_STATUSES = ['Completed', 'Cancelled', 'No-show'];
 
@@ -83,6 +87,11 @@ class Appointment extends Model
         return $this->belongsTo(Service::class);
     }
 
+    public function intendedService(): BelongsTo
+    {
+        return $this->belongsTo(Service::class, 'intended_service_id');
+    }
+
     public function dentist(): BelongsTo
     {
         return $this->belongsTo(DentistProfile::class, 'dentist_profile_id');
@@ -112,6 +121,19 @@ class Appointment extends Model
     public function scopeActive(Builder $query): Builder
     {
         return $query->whereIn('status', self::ACTIVE_STATUSES);
+    }
+
+    public function scopeUpcomingForPatient(Builder $query, CarbonImmutable $dayStart): Builder
+    {
+        return $query->where(fn (Builder $q) => $q->whereIn('status', self::IN_PROGRESS_STATUSES)
+            ->orWhere(fn (Builder $scheduled) => $scheduled->whereIn('status', self::SCHEDULED_STATUSES)
+                ->where('starts_at', '>=', $dayStart->toIso8601String())));
+    }
+
+    public function isUpcomingForPatient(CarbonImmutable $dayStart): bool
+    {
+        return in_array($this->status, self::IN_PROGRESS_STATUSES, true)
+            || (in_array($this->status, self::SCHEDULED_STATUSES, true) && ClinicClock::local($this->starts_at)->gte($dayStart));
     }
 
     /** The authorization read scope (AppointmentPolicy::view expressed as a query). */

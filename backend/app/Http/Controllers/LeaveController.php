@@ -25,7 +25,7 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * M15 Leave Management. A dentist or staff member asks for leave (vacation, sick, other; full or partial days; an optional private
- * note). The approver (the Owner, or also the front desk of the requester's branch when the Owner allows it) approves or declines;
+ * note). The Owner approves or declines;
  * the requester may cancel. Both sides get an in-app notice and an email in the Owner-approved wording (never the note or the
  * type). Approved dentist leave blocks that dentist's booking time through M3; approving shows the appointments it leaves without
  * their dentist first, with suggested cover and one action to email those patients a reschedule link, and never cancels anything.
@@ -114,7 +114,7 @@ class LeaveController extends Controller
         $rows=$page->take(300)->filter(fn(LeaveRequest $l)=>$this->canDecide($user,$l))->values();
 
         return response()->json(['data' => $rows->map(fn (LeaveRequest $l) => $this->view($l, $user))->values(), 'meta' => ['types' => LeaveRequest::TYPES,
-            'approver' => AutomationCatalog::setting('staffing')?->settings['leave_approver'] ?? 'owner', 'wording_approved' => MessageTemplates::approved(ScheduleNotices::TEMPLATE), 'commands_available'=>LeaveCommands::available(), 'has_more'=>$page->count()>300, 'limit'=>300]]);
+            'approver' => 'owner', 'wording_approved' => MessageTemplates::approved(ScheduleNotices::TEMPLATE), 'commands_available'=>LeaveCommands::available(), 'has_more'=>$page->count()>300, 'limit'=>300]]);
     }
 
     /** Team calendar strip: who is away (approved) or asked to be (pending) in a date range. Names and dates only. */
@@ -139,6 +139,15 @@ class LeaveController extends Controller
 
         return response()->json(['data' => ['appointments' => $this->conflicting($leaveRequest, $user)->map(fn (Appointment $a) => ScheduleNotices::view($a))->values(),
             'wording_approved' => MessageTemplates::approved(ScheduleNotices::TEMPLATE)]]);
+    }
+
+    /** Owner-only advisory from published Staff shifts and approved coworker leave. Never grants approval. */
+    public function coverage(Request $request, LeaveRequest $leaveRequest): JsonResponse
+    {
+        abort_unless($request->user()->account_status === 'Active' && $this->canDecide($request->user(), $leaveRequest), 403);
+
+        return response()->json(['data' => app(\App\Services\Scheduling\StaffLeaveCoverage::class)->review($leaveRequest)])
+            ->header('Cache-Control', 'no-store');
     }
 
     public function decide(Request $request, LeaveRequest $leaveRequest): JsonResponse
@@ -192,7 +201,9 @@ class LeaveController extends Controller
     public function notify(Request $request, LeaveRequest $leaveRequest): JsonResponse
     {
         $user = $request->user();
-        abort_unless($this->canDecide($user, $leaveRequest), 403);
+        // Front-desk Staff may still notify patients affected within their authorized branch.
+        // This does not grant leave approval, cancellation, or private-note access.
+        abort_unless($this->canNotifyAffected($user, $leaveRequest), 403);
         abort_unless($leaveRequest->status === 'Approved', 422, 'Only approved leave affects bookings.');
         $counts = ScheduleNotices::notify($this->conflicting($leaveRequest, $user), $user);
         if ($counts === null) {
@@ -227,14 +238,9 @@ class LeaveController extends Controller
         };
     }
 
-    private function frontDeskApproves(): bool
-    {
-        return (AutomationCatalog::setting('staffing')?->settings['leave_approver'] ?? 'owner') === 'owner_or_front_desk';
-    }
-
     private function isApproverRole(User $user): bool
     {
-        return $user->role->value === 'owner' || ($user->role->value === 'staff' && $this->frontDeskApproves());
+        return $user->role->value === 'owner';
     }
 
     /** @return int[] the requester's branches (a dentist's assigned branches, or the staff member's branch) */
@@ -271,11 +277,15 @@ class LeaveController extends Controller
 
     private function canDecide(User $user, LeaveRequest $l): bool
     {
-        if ($l->requester_user_id === $user->id) return false; // nobody approves their own leave
-        if ($user->role->value === 'owner') return true;
-        if ($user->role->value !== 'staff' || ! $this->frontDeskApproves()) return false;
+        // Staff may request and cancel their own leave but never decide anyone else's.
+        return $user->role->value === 'owner' && $l->requester_user_id !== $user->id;
+    }
 
-        return UserBranchScope::where('user_id', $user->id)->whereIn('branch_id', $this->branchIds($l))->exists();
+    private function canNotifyAffected(User $user, LeaveRequest $leave): bool
+    {
+        if ($user->role->value === 'owner') return true;
+        if ($user->role->value !== 'staff') return false;
+        return UserBranchScope::where('user_id', $user->id)->whereIn('branch_id', $this->branchIds($leave))->exists();
     }
 
     private function sharesBranch(User $user, LeaveRequest $l): bool
@@ -293,11 +303,8 @@ class LeaveController extends Controller
     /** @return Collection<int,User> who may decide this request */
     private function approvers(LeaveRequest $l): Collection
     {
-        $owners = User::where('role', 'owner')->where('account_status', 'Active')->get();
-        if (! $this->frontDeskApproves()) return $owners;
-        $desk = User::where('role', 'staff')->where('account_status', 'Active')->whereIn('id', UserBranchScope::select('user_id')->whereIn('branch_id', $this->branchIds($l)))->get();
-
-        return $owners->merge($desk)->reject(fn (User $u) => $u->id === $l->requester_user_id)->unique('id')->values();
+        return User::where('role', 'owner')->where('account_status', 'Active')->get()
+            ->reject(fn (User $u) => $u->id === $l->requester_user_id)->values();
     }
 
     /** Booked appointments of a dentist's leave period (pending: what approval would affect; approved: what it does affect). */

@@ -78,6 +78,15 @@ final class VisitService
             if ($current->booking_payment_status === 'held') {
                 throw VisitCommandException::rule('booking_payment_pending', 'This booking is awaiting verified payment confirmation.', 'booking_payment_status');
             }
+            // An earlier manual refund may have reached PayMongo while the provider's answer
+            // was lost. Keep the admission/credit path frozen until this is reconciled.
+            if ($current->booking_payment_status === 'paid' &&
+                ($current->booking_refund_ref || \App\Models\AuditLog::where('auditable_type', 'Appointment')
+                    ->where('auditable_public_id', $current->public_id)
+                    ->where('action', 'billing.booking_refund_attempt_started')->exists())) {
+                throw VisitCommandException::rule('booking_refund_reconciliation_required',
+                    'A booking refund is pending or uncertain. Reconcile the original provider transaction before check-in.', 'booking_payment_status');
+            }
             if ($current->status === 'Pending' && $current->source === 'patient_portal'
                 && AttendancePolicy::needsConfirmation($current->patient)) {
                 throw VisitCommandException::rule('appointment_confirmation_required', 'Confirm this booking before recording arrival.', 'status');

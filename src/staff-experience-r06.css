@@ -1,0 +1,84 @@
+/* DentalOps Staff R06 — premium, quieter Roxas Dental operational visual language.
+   Only Staff is styled; Owner, Dentist and Patient remain unchanged. */
+.role-staff {
+  --staff-canvas: #f3f1ec;
+  --staff-paper: #fefdfb;
+  --staff-subtle: #f0eee8;
+  --staff-line: #e3ded6;
+  --staff-control: #c6c8c6;
+  --staff-ink: #24313d;
+  --staff-muted: #5c6871;
+  --staff-blue: #18598e;
+  --bg: var(--staff-canvas);
+  --surface: var(--staff-paper);
+  --surface-2: #f7f6f2;
+  --surface-3: var(--staff-subtle);
+  --ink: var(--staff-ink);
+  --text: #3a4752;
+  --muted: var(--staff-muted);
+  --line: var(--staff-line);
+  --line-strong: var(--staff-control);
+  --brand: var(--staff-blue);
+  --brand-2: #286aa0;
+  --brand-3: #17466f;
+  --brand-soft: #edf3f6;
+}
+.role-staff .main-shell, .role-staff .content { background: var(--staff-canvas); }
+.role-staff .topbar, .role-staff > .sidebar { background: #fdfcf9; }
+.role-staff .card { background: var(--staff-paper); border: 1px solid var(--staff-line); box-shadow: none; }
+.role-staff .page-header h1 { font-weight: 720; color: var(--staff-ink); }
+.role-staff .btn.primary { background: var(--staff-blue); }
+.role-staff .btn.soft { background: #edf2f4; border-color: #dce5e9; color: #214a65; }
+.role-staff .btn.ghost { background: transparent; }
+.role-staff .btn:disabled { cursor: not-allowed; opacity: .65; }
+.role-staff :is(input, select, textarea):disabled { background: #f1eee8; }
+.role-staff :is(.btn,.main-nav button) { transition-duration: 120ms; }
+
+/* Check-in: the active arrival task and recent activity sit together on wide screens.
+   No clinical actions or authorization checks change. */
+.role-staff .checkin-workspace { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(320px, .92fr); align-items: start; gap: 14px; }
+.role-staff .checkin-workspace.is-walkin { grid-template-columns: minmax(0, 1fr); }
+.role-staff .checkin-workspace > *, .role-staff .checkin-workspace .checkin-shell { min-width: 0; max-width: none; }
+.role-staff .checkin-workspace .checkin-recorded { min-width: 0; }
+.role-staff .checkin-recorded .card { margin: 0; padding: 16px; }
+.role-staff .checkin-workspace .checkin-mode { margin-bottom: 10px; padding: 3px; background: #ebeae6; }
+.role-staff .checkin-workspace .checkin-mode button { min-width: 0; min-height: 40px; border-radius: 8px; }
+.role-staff .checkin-workspace .checkin-mode button.active { background: var(--staff-paper); color: var(--staff-blue); }
+.role-staff .checkin-workspace .checkin-focus-card { border-radius: 13px; padding: 14px 16px; }
+.role-staff .checkin-workspace .checkin-focus-card .card-head { margin-bottom: 8px; }
+.role-staff .checkin-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 10px; color: var(--staff-muted); font-size: 12px; }
+.role-staff .checkin-list-heading span { font-weight: 600; }
+.role-staff .checkin-list-heading strong { font-size: 13px; color: var(--staff-ink); font-variant-numeric: tabular-nums; }
+.role-staff .checkin-empty { min-height: 94px; display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--staff-line); color: var(--staff-ink); }
+.role-staff .checkin-empty > .icon { flex: 0 0 auto; color: #7b918d; }
+.role-staff .checkin-empty > div { display: grid; gap: 4px; min-width: 0; }
+.role-staff .checkin-empty strong { font-size: 13px; font-weight: 680; }
+.role-staff .checkin-empty span { font-size: 12px; line-height: 1.4; color: var(--staff-muted); }
+.role-staff .checkin-help { padding-top: 9px; margin-top: 8px; border-top: 1px solid var(--staff-line); color: var(--staff-muted); font-size: 12px; }
+.role-staff .checkin-help summary { display: flex; align-items: center; gap: 7px; width: fit-content; min-height: 38px; cursor: pointer; color: var(--staff-muted); font-weight: 600; }
+.role-staff .checkin-help p { margin: 4px 0 6px; line-height: 1.5; max-width: 68ch; }
+.role-staff .checkin-help summary:focus-visible { outline: 2px solid var(--staff-blue); outline-offset: 2px; }
+.role-staff .checkin-arrival-options { max-height: min(44vh, 420px); border-color: var(--staff-line); }
+.role-staff .checkin-arrival-option { background: transparent; }
+.role-staff .checkin-arrival-option.is-selected { background: #ebf3f5; box-shadow: inset 3px 0 var(--staff-blue); }
+.role-staff .checkin-arrival-option:hover:not(:disabled) { background: #f2f5f3; }
+.role-staff .checkin-shell .arrival-card { background: var(--staff-subtle); border-color: var(--staff-line); }
+.role-staff .checkin-recorded :is(.fd-list,.fd-grid) { min-width: 0; }
+.role-staff .checkin-recorded .fd-list > li { padding-block: 10px; }
+.role-staff .checkin-recorded :is(.btn, button) { max-width: 100%; }
+.role-staff .checkin-refresh-state { margin: 10px 0; color: var(--staff-muted); font-size: 12px; }
+.role-staff .walkin-panel-transition { max-width: 920px; }
+.role-staff .walkin-admission-panel { padding: 16px 18px; }
+.role-staff .walkin-action { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; }
+.role-staff .walkin-action .clinic-inline-help { flex: 1 1 240px; max-width: 480px; margin: 0; }
+.role-staff .walkin-action .btn { flex: 0 0 auto; }
+@media (max-width: 1200px) {
+  .role-staff .checkin-workspace { grid-template-columns: minmax(0, 1fr); }
+  .role-staff .checkin-workspace .checkin-recorded { max-width: none; }
+}
+@media (max-width: 640px) {
+  .role-staff .checkin-workspace { gap: 10px; }
+  .role-staff .checkin-workspace .checkin-focus-card { padding: 12px; }
+  .role-staff .walkin-action .btn { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { .role-staff :is(.btn,.main-nav button) { transition: none; } }

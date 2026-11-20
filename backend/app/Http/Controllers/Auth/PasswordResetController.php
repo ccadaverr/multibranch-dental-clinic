@@ -173,19 +173,35 @@ class PasswordResetController extends Controller
             return response()->json(['message' => 'Your password was reset. Sign in with your new password.']);
         }
 
+        return $this->resetWithCode($request);
+    }
+
+    public function change(Request $request)
+    {
+        $request->validate(['current_password' => ['required', 'string', 'max:256']]);
+        return $this->resetWithCode($request, $request->user());
+    }
+
+    private function resetWithCode(Request $request, ?User $actor = null)
+    {
         $data = $request->validate([
-            'email' => ['required', 'email:rfc', 'max:255'],
+            'email' => $actor ? ['prohibited'] : ['required', 'email:rfc', 'max:255'],
             'otp' => ['required', 'digits:6'],
             'password' => ['required', 'string', new \App\Rules\PasswordInput(), 'max:72', 'confirmed', Password::min(8)->letters()->numbers()],
         ]);
-        $email = strtolower(trim($data['email']));
+        $email = $actor?->email ?? strtolower(trim($data['email']));
 
-        $result = DB::transaction(function () use ($email, $data) {
+        $result = DB::transaction(function () use ($email, $data, $actor, $request) {
             $user = User::where('email', $email)->lockForUpdate()->first();
             if (! $user || $user->account_status !== 'Active' || $user->pending_claim) {
                 Hash::check($data['otp'], '$2y$12$H5ntb6FLY.qFGr/Rba08b.Dt0raoSs2QEEhzAIt5grrYJ3L8/f/q2');
 
                 return ['failure' => self::GENERIC_FAILURE];
+            }
+
+            if ($actor && ($user->id !== $actor->id || $user->auth_version !== $actor->auth_version ||
+                ! Hash::check($request->input('current_password'), $user->password))) {
+                return ['failure' => ['invalid_current_password', 'The current password is incorrect.', 'current_password']];
             }
 
             $check = $this->codes->check($user, EmailVerificationOtp::PASSWORD_RESET, $data['otp']);

@@ -33,7 +33,7 @@ export function BranchAccessDialog({ user, branches, onClose, onSaved }) {
     {(status === 'ready' || status === 'saving') && <>
       <fieldset className="scope-list" disabled={status === 'saving'}>
         <legend className="field-label">Branches</legend>
-        {branches.map(b => <label key={b.id} className="scope-option"><input type="checkbox" checked={selected.includes(b.id)} onChange={() => toggle(b.id)}/> <span>{b.name}</span></label>)}
+        {branches.map(b => <label key={b.id} className="scope-option"><input type="checkbox" checked={selected.includes(b.id)} disabled={b.archived && !selected.includes(b.id)} onChange={() => toggle(b.id)}/> <span>{b.name}{b.archived ? ' (archived — historical access only)' : ''}</span></label>)}
       </fieldset>
       {selected.length === 0 && <Notice tone="warning" title="No branch access">With no branch, this Staff member sees no clinic records.</Notice>}
       {error && <Notice tone="warning" title="Not saved">{error}</Notice>}

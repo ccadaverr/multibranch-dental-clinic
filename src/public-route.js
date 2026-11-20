@@ -1,2 +1,3 @@
 export const publicViewFromHash=hash=>hash.startsWith('#respond')?'respond':hash.startsWith('#p/')?'login':hash.startsWith('#join/')?'join':hash.startsWith('#claim-account')?'claim':hash.startsWith('#accept-invitation')?'accept':hash==='#create-account'?'register':hash==='#verify-email'?'verify':hash.startsWith('#forgot-password')?'forgot':hash==='#sign-in'?'login':hash==='#privacy'?'privacy':hash==='#terms'?'terms':'home'
 export const publicSections=new Set(['home','how-it-works','services','branches','features','faq','public-main'])
+export const isPublicAuthView=view=>['login','register','verify','forgot','claim'].includes(view)

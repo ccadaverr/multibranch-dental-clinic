@@ -81,7 +81,7 @@ class StaffProfileController extends Controller
 
             if ($request->has('branch_ref')) {
                 $attributes['branch_id'] = $request->validated('branch_ref')
-                    ? Branch::where('legacy_ref', $request->validated('branch_ref'))->firstOrFail()->id
+                    ? Branch::where('legacy_ref', $request->validated('branch_ref'))->whereNull('archived_at')->firstOrFail()->id
                     : null;
             }
 

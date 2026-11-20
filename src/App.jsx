@@ -6,11 +6,10 @@ import React, { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { ClinicProvider, useClinic } from './store.jsx'
 import { Brand, Login, Shell, ToastStack } from './layout.jsx'
 import { EmailVerification } from './pages/EmailVerification.jsx'
-import { PublicSite } from './pages/PublicSite.jsx'
 import { PublicLegal } from './pages/PublicLegal.jsx'
-import { publicViewFromHash, publicSections } from './public-route.js'
+import { isPublicAuthView, publicViewFromHash, publicSections } from './public-route.js'
 import { ChunkBoundary, StartupLoading } from './StartupLoading.jsx'
-import { AuthShell } from './pages/AuthShell.jsx'
+import { AuthShell, PublicAccountEntry } from './pages/AuthShell.jsx'
 import { AcceptInvitation } from './pages/AcceptInvitation.jsx'
 import { PasswordReset } from './pages/PasswordReset.jsx'
 import { RespondLink } from './pages/RespondLink.jsx'
@@ -117,13 +116,29 @@ function AppBody() {
   const invoiceLink=useRef(undefined)
   const [activeBranch,setActiveBranch]=useState('All Branches')
   const [publicView,setPublicView]=useState(()=>publicViewFromHash(typeof window==='undefined'?'':window.location.hash))
-  const showRegister=publicView==='register'
   const setShowRegister=value=>{window.location.hash=value?'create-account':'sign-in';setPublicView(value?'register':'login')}
+  const navigatePublicAuth=(hash, fromLanding=false)=>{
+    if(window.location.hash===hash)return
+    const previous=window.history.state
+    const depth=fromLanding?1:previous?.clinicAuthDepth&&previous.clinicAuthDepth+1
+    window.location.hash=hash
+    if(depth)window.history.replaceState({...previous,clinicAuthDepth:depth},'')
+  }
+  const dismissPublicAuth=()=>{
+    const depth=window.history.state?.clinicAuthDepth
+    if(depth){window.history.go(-depth);return}
+    window.history.replaceState(null,'','#home')
+    setVerification(null)
+    setPublicView('home')
+  }
   useEffect(()=>{
-    const navigate=()=>clinicalNavRef.current.request(()=>{
+    const navigate=event=>clinicalNavRef.current.request(()=>{
       const hash=window.location.hash
-      setPublicView(publicViewFromHash(hash))
+      const nextView=publicViewFromHash(hash)
+      const previousView=publicViewFromHash(new URL(event.oldURL).hash)
+      setPublicView(nextView)
       setVerification(null)
+      if(isPublicAuthView(nextView)||(nextView==='home'&&isPublicAuthView(previousView)))return
       const section=hash.slice(1)
       requestAnimationFrame(()=>{
         if(publicSections.has(section))document.getElementById(section)?.scrollIntoView()
@@ -141,7 +156,7 @@ function AppBody() {
     if(authPhase==='checking'||publicView!=='home')return
     const section=window.location.hash.slice(1)
     if(publicSections.has(section))requestAnimationFrame(()=>document.getElementById(section)?.scrollIntoView())
-  },[authPhase,publicView])
+  },[authPhase]) // Subsequent hash navigation is handled above.
 
   // Backend role is authoritative, always. This is a *derived* value, never independent state a stale login
   // could leave behind — see identity-bridge.js for how it gets here.
@@ -195,7 +210,12 @@ function AppBody() {
     setAuthPhase(result.kind==='unauthenticated'?'unauthenticated':'error')
   }
   // Session restoration on load/refresh comes only from the backend session, never from localStorage.
-  useEffect(()=>{checkSession()},[])
+  useEffect(()=>{
+    let active=true
+    // React's development remount should not enqueue a second request on the local API.
+    queueMicrotask(()=>{if(active)checkSession()})
+    return()=>{active=false}
+  },[])
 
   const login=async(email,password,{isCurrent=()=>true}={})=>{
     const ticket=authenticationOwner.current.begin(isCurrent)
@@ -207,10 +227,10 @@ function AppBody() {
     if(!result.ok){
       if(result.kind==='email_verification_required'){
         setVerification({email})
-        window.history.replaceState(null,'','#verify-email')
+        window.history.replaceState(window.history.state,'','#verify-email')
       }
       const message=result.kind==='validation'?(Object.values(result.errors||{})[0]?.[0]||result.message):result.message
-      return {ok:false,message:message||'Something went wrong. Try again.'}
+      return {ok:false,kind:result.kind,message:message||'We couldn’t sign you in. Please try again.'}
     }
     const bridge=store.actions.bridgeBackendIdentity(result.data)
     if(!bridge.ok){
@@ -223,23 +243,23 @@ function AppBody() {
     return {ok:true}
   }
 
-  const register=async form=>{
+  const register=async (form,isCurrent)=>{
     setAuthError('')
     const result=await api.register(form)
-    if(!result.ok)return result
+    if(!result.ok||!isCurrent())return result
     setVerification({email:result.data.email,resendAvailableAt:result.data.resend_available_at})
     setPublicView('login')
-    window.history.replaceState(null,'','#verify-email')
-    window.scrollTo(0,0)
+    window.history.replaceState(window.history.state,'','#verify-email')
     return {ok:true}
   }
 
   const verifyRegistration=async ({email,otp})=>{
+    const hash=window.location.hash
     const result=await api.verifyRegistrationEmail(email,otp)
-    if(!result.ok)return result
+    if(!result.ok||window.location.hash!==hash)return result
     setVerification(null)
     setSignInNotice({email:result.data?.email||email,message:'Your account is verified. Please sign in.'})
-    window.history.replaceState(null,'','#sign-in');setPublicView('login')
+    window.history.replaceState(window.history.state,'','#sign-in');setPublicView('login')
     return {ok:true}
   }
 
@@ -308,31 +328,47 @@ function AppBody() {
   const setPage=(next,record=null)=>{if(role&&canAccessPage(store.state,store.session,next)){clinicalNav.request(()=>{setContext(record);setPageState(next)})}}
 
   // F1–F3 one-time email links work without signing in (and whether or not someone is signed in on this browser).
+  const accountView=isPublicAuthView(publicView)
   if(publicView==='respond')return <RespondLink hash={typeof window==='undefined'?'':window.location.hash}/>
-  if(authPhase==='checking')return <AuthChecking/>
-  if(authPhase==='error'&&publicView!=='home')return <AuthUnavailable onRetry={checkSession}/>
+  const restoringPortal = typeof window !== 'undefined' && window.location.hash.startsWith('#p/')
+  if(authPhase==='checking'&&(!accountView||role||restoringPortal))return <AuthChecking/>
+  if(authPhase==='error'&&publicView!=='home'&&(!accountView||role))return <AuthUnavailable onRetry={checkSession}/>
   // Counter registration (poster QR): public, also for a signed-in patient (who joins with their account).
   if(publicView==='join')return <ChunkBoundary><Suspense fallback={<AuthShell><StartupLoading compact label="Opening registration…"/></AuthShell>}><JoinPage hash={window.location.hash} signedInPatient={role==='patient'}/></Suspense></ChunkBoundary>
 
   const storageWarnings=Object.values(store.persistenceErrors||{})
   if(storageWarnings.some(message=>message.includes('could not be read')))return <Notice title="Saved workspace needs recovery">{storageWarnings.join(' ')}</Notice>
 
-  if (!role) return <>
-    {authError&&<Notice tone="warning">{authError}</Notice>}
-    {publicView==='accept'
-      ?<AcceptInvitation hash={typeof window==='undefined'?'':window.location.hash} onSignIn={()=>{window.location.hash='sign-in';setPublicView('login')}}/>
-      :publicView==='forgot'
-      ?<PasswordReset onSignIn={()=>{window.location.hash='sign-in';setPublicView('login')}}/>
-      :verification||publicView==='verify'
-      ?<EmailVerification email={verification?.email} initialResendAvailableAt={verification?.resendAvailableAt} onVerify={verifyRegistration} onResend={resendRegistration} onBack={()=>{setVerification(null);setShowRegister(false)}}/>
-      :showRegister
-      ?<ChunkBoundary><Suspense fallback={<AuthShell><StartupLoading compact label="Opening registration…"/></AuthShell>}><PatientRegister onRegister={register} onCancel={()=>{setAuthError('');setShowRegister(false)}}/></Suspense></ChunkBoundary>
-      :publicView==='claim'?<ClaimAccount onVerified={email=>{setSignInNotice({email,message:'Your account is verified. Please sign in.'});window.history.replaceState(null,'','#sign-in');setPublicView('login')}}/>
-      :publicView==='privacy'||publicView==='terms'?<PublicLegal kind={publicView}/>
-      :publicView==='home'?<PublicSite/>
-      :<Login key={signInNotice?.email||'login'} initialEmail={signInNotice?.email} notice={signInNotice?.message} onLogin={login} onShowRegister={()=>{setAuthError('');setShowRegister(true)}} onForgotPassword={()=>{setAuthError('');window.location.hash='forgot-password';setPublicView('forgot')}}/>}
-    <ToastStack toasts={store.toasts}/>
-  </>
+  if (!role) {
+    const signIn=()=>{setAuthError('');navigatePublicAuth('#sign-in')}
+    const connectionNotice=(authPhase==='checking'||authPhase==='error')&&<div className="lp-auth-connection">
+      <p role="status">{authPhase==='checking'?'Checking your session…':'Couldn’t connect to the clinic system.'}</p>
+      {authPhase==='error'&&<button className="text-link" type="button" onClick={checkSession}>Retry connection</button>}
+    </div>
+    const entryForm=publicView==='register'||(publicView==='login'&&!verification)
+    let accountContent
+    if(accountView) {
+      if(!entryForm&&authPhase==='checking')accountContent=<StartupLoading compact label="Checking your session…"/>
+      else if(!entryForm&&authPhase==='error')accountContent=<AuthUnavailable onRetry={checkSession}/>
+      else if(verification||publicView==='verify')accountContent=<EmailVerification email={verification?.email} initialResendAvailableAt={verification?.resendAvailableAt} onVerify={verifyRegistration} onResend={resendRegistration} onBack={()=>{setVerification(null);signIn()}}/>
+      else if(publicView==='forgot')accountContent=<PasswordReset onSignIn={signIn}/>
+      else if(publicView==='register')accountContent=<ChunkBoundary><Suspense fallback={<p role="status">Opening registration…</p>}><PatientRegister onRegister={register} onCancel={signIn} connectionNotice={connectionNotice}/></Suspense></ChunkBoundary>
+      else if(publicView==='claim')accountContent=<ClaimAccount onVerified={email=>{setSignInNotice({email,message:'Your account is verified. Please sign in.'});window.history.replaceState(window.history.state,'','#sign-in');setPublicView('login')}}/>
+      else accountContent=<Login key={signInNotice?.email||'login'} initialEmail={signInNotice?.email} notice={signInNotice?.message} onLogin={login} onShowRegister={()=>{setAuthError('');navigatePublicAuth('#create-account')}} onForgotPassword={()=>{setAuthError('');navigatePublicAuth('#forgot-password')}} connectionNotice={connectionNotice}/>
+    }
+
+    return <>
+      {!accountView&&authError&&<Notice tone="warning">{authError}</Notice>}
+      {publicView==='accept'
+        ?<AcceptInvitation hash={typeof window==='undefined'?'':window.location.hash} onSignIn={signIn}/>
+        :publicView==='privacy'||publicView==='terms'
+        ?<PublicLegal kind={publicView}/>
+        :<PublicAccountEntry onNavigate={navigatePublicAuth} onDismiss={dismissPublicAuth}>
+          {accountView&&<>{authError&&<Notice tone="warning">{authError}</Notice>}{accountContent}</>}
+        </PublicAccountEntry>}
+      <ToastStack toasts={store.toasts}/>
+    </>
+  }
 
   // Phase 2A: gate on reference data before validSession/branch lookups run — otherwise a still-loading
   // (empty) branches collection could be misread as "your branch access changed" rather than "still
@@ -345,7 +381,7 @@ function AppBody() {
   // The Patient portal (src/patient) reads the clinic server only; the legacy local-state patient screens are not used.
   if(role==='patient'&&serverMe?.patient?.id)return <>
     <ChunkBoundary><Suspense fallback={<StartupLoading label="Opening your portal…"/>}>
-      <PatientPortal me={serverMe} store={store} initialPage={['billing','visits','book'].includes(page)?page:'home'} initialContext={['billing','visits'].includes(page)?context:null} onLogout={logout} onSignedOut={signedOutForSecurity}/>
+      <PatientPortal me={serverMe} store={store} initialPage={['billing','visits','book'].includes(page)?page:'home'} initialContext={['billing','visits','book'].includes(page)?context:null} onLogout={logout} onSignedOut={signedOutForSecurity}/>
     </Suspense></ChunkBoundary>
     <ToastStack toasts={store.toasts}/>
   </>

@@ -51,6 +51,9 @@ class UpdateBranchRequest extends FormRequest
             'public_id' => ['prohibited'],
             'operating_data_status' => ['prohibited'],
             'id' => ['prohibited'],
+            'archived_at' => ['prohibited'],
+            'archived_by_user_id' => ['prohibited'],
+            'archive_reason' => ['prohibited'],
         ];
     }
 }

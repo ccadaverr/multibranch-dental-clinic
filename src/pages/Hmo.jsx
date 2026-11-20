@@ -263,11 +263,11 @@ function HmoWorkspace({ role, activeBranch, store, context }) {
   if (role !== 'dentist' && !canAccessPage(state, session, 'hmo')) return <Notice tone="warning">HMO access is unavailable for this account.</Notice>
   if (role === 'patient') return <PatientHmoPage store={store} context={context}/>
   return <>
-    <PageHeader title="HMO Management" text={staff ? 'Server HMO cases for visits in your branches: memberships, requirements, external submission, provider responses and follow-up.' : 'Clinic-wide HMO case oversight (read-only).'}/>
-    <Notice tone="info">No provider is contacted by this application. Staff record what happened outside it; a provider decision exists only once Staff record the response received from the provider.</Notice>
+    <PageHeader title="HMO claims" text={staff ? 'Memberships, claim decisions, and follow-ups for your assigned branches.' : 'Clinic-wide HMO case oversight (read-only).'}/>
+    <details className="ui-context-help"><summary>HMO process</summary><p>Record only responses received from the provider. DentalOps does not contact providers automatically.</p></details>
 
     {feedback && !operation && !decision && <p ref={feedbackRef} role={feedback.tone === 'warning' ? 'alert' : 'status'} tabIndex={0}>{feedback.message}</p>}
-    {staff && reloadNeeded && <Notice tone="warning" title="Latest view unavailable"><RefreshButton title="Reload HMO view" ariaLabel="Reload HMO view" loading={busy} disabled={busy} onClick={reload}/></Notice>}
+    {staff && reloadNeeded && <Notice tone="warning" title="Latest view unavailable"><RefreshButton recovery title="Reload HMO view" ariaLabel="Reload HMO view" loading={busy} disabled={busy} onClick={reload}/></Notice>}
     {staff && <ClaimDecisions rows={claimDecisions} busy={busy || reloadNeeded} onOpen={d => { if (decisionCurrent(d)) run(guard => hmoApi.openCase(d.visitId, directKey('open', d.visitId, { visitId: d.visitId }), () => guard() && decisionCurrent(d)), 'HMO case opened.', r => setSelectedId(r.row?.id || ''), () => true, undefined, r => hmoReceiptMatches({...d,patientPublicId:d.patientPublicId || d.patientId},r.row,{mode:'open'})) }} onSelfPay={d => { if (!runner.pending() && !reloadNeeded) { operationTrigger.current = typeof document === 'undefined' ? null : document.activeElement; setFeedback(null); setDecision({ ...d, intent: {}, reason: '', key: commandKey() }) } }}/>}
     {staff && <MembershipPanel store={store} busy={busy || reloadNeeded} run={run} pending={() => runner.pending()} onSelection={() => setFeedback(null)}/>}
 
@@ -306,7 +306,7 @@ function HmoWorkspace({ role, activeBranch, store, context }) {
     </FilterBar>
     <div className="hmo-workspace">
       <section className="hmo-case-list" aria-label="HMO cases">
-        {!shown.length && <Notice>{live.length ? 'No cases match this view.' : 'No server HMO cases are available in your scope.'}</Notice>}
+        {!shown.length && <p className="staff-empty-state">{live.length ? 'No cases match these filters.' : 'No HMO cases for your assigned branches yet.'}</p>}
         {shown.map(h => <button type="button" className={`hmo-case-row${selectedId === h.id ? ' selected' : ''}`} key={h.id} disabled={busy} onClick={() => chooseCase(h.id)} aria-pressed={selectedId === h.id}>
           <span className="hmo-case-identity"><b>{h.patientName || patientName(h.patientId, state.patients)}</b><small>{h.branch} • visit {h.clinicDate}</small></span>
           <span>{providerOf(h)}</span>
@@ -314,7 +314,7 @@ function HmoWorkspace({ role, activeBranch, store, context }) {
           <span className="hmo-case-age">{attention(h).elapsed !== null ? `${Math.floor(attention(h).elapsed)}h pending` : ''}</span>
           <span className="hmo-case-attention">{attention(h).label}</span><span aria-hidden="true">›</span>
         </button>)}
-        {history.length > 0 && <details className="hmo-history"><summary>Earlier browser records ({history.length}) — read-only history, not used for billing</summary>
+        {history.length > 0 && <details className="hmo-history"><summary>Legacy demo history ({history.length}) · not used for billing</summary>
           {history.map(h => <button type="button" className={`hmo-case-row${selectedId === h.id ? ' selected' : ''}`} key={h.id} disabled={busy} onClick={() => chooseCase(h.id)}>
             <span className="hmo-case-identity"><b>{patientName(h.patientId, state.patients)}</b><small>Historical record</small></span><span>{providerOf(h)}</span><Status>{label(h)}</Status>
           </button>)}
@@ -358,10 +358,11 @@ function HmoWorkspace({ role, activeBranch, store, context }) {
 }
 
 function ClaimDecisions({ rows, busy, onOpen, onSelfPay }) {
+  if (!rows.length) return null
   return <section className="hmo-case-detail" aria-label="Claim decisions needed">
     <h2 className="hmo-section-title">Claim decisions needed</h2>
-    <p className="block-muted">Visits whose Patient has an HMO membership on file but no HMO case yet. Billing is held until you open a case or record self-pay.</p>
-    {!rows.length ? <Notice>No visits need a claim decision.</Notice> : rows.map(d => <div className="clinical-history" key={d.visitId}>
+    <p className="block-muted">Choose HMO case or self-pay to release billing.</p>
+    {rows.map(d => <div className="clinical-history" key={d.visitId}>
       <div><b>{d.patientName}</b><small className="block-muted">Visit {d.clinicDate} • {d.branchName}{d.appointmentCode ? ` • ${d.appointmentCode}` : ' • Walk-in'}</small></div>
       <div className="row-actions"><Button size="sm" disabled={busy} onClick={() => onOpen(d)}>Open HMO case</Button><Button size="sm" variant="ghost" disabled={busy} onClick={() => onSelfPay(d)}>Proceed self-pay</Button></div>
     </div>)}
@@ -456,7 +457,7 @@ export function VisitMembership({ visit, busy, run, pending, getAuthGeneration }
   const membership = loaded.membership
   return <div ref={controls} tabIndex={-1} aria-busy={busy || loaded.loading}>
     {loaded.loading && <p role="status">Loading the selected Patient’s membership…</p>}
-    {(loaded.error || stale) && <div role="alert" tabIndex={0}><p>{loaded.error || 'This membership changed. Reload and review it before saving; your draft has been kept.'}</p><RefreshButton title="Reload membership" ariaLabel="Reload membership" loading={loaded.loading} disabled={busy} onClick={reloadMembership}/></div>}
+    {(loaded.error || stale) && <div role="alert" tabIndex={0}><p>{loaded.error || 'This membership changed. Reload and review it before saving; your draft has been kept.'}</p><RefreshButton recovery title="Reload membership" ariaLabel="Reload membership" loading={loaded.loading} disabled={busy} onClick={reloadMembership}/></div>}
     {membership && <>
       <p><b>{visit.patientName}</b> — {membership.active ? <>Active: {membership.active.provider_name} • {membership.active.member_number}</> : 'No active HMO membership'}</p>
       <fieldset disabled={busy || stale} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>

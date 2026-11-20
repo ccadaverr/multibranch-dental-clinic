@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Support\ClinicClock;
+use App\Support\DevelopmentClinicCatalog;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -23,6 +24,8 @@ class ServicePriceResource extends JsonResource
             'amount' => $this->amount !== null ? (string) $this->amount : null,
             'effective_from' => $this->effective_from->format('Y-m-d'),
             'source' => $this->source,
+            'development_sample' => app()->environment('local')
+                && DevelopmentClinicCatalog::isCatalogService($this->service),
             'created_at' => $iso($this->created_at),
             'created_by' => ['name' => $this->createdBy?->person?->fullName()],
             'retracted_at' => $iso($this->retracted_at),

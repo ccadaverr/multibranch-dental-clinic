@@ -1,36 +1,52 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { hasClinicCoordinates } from '../clinic-map-options.js'
 
-export function LocationMap({ branches = [] }) {
-  const frame=useRef(null),canvas=useRef(null)
-  const [status,setStatus]=useState('waiting')
-  const [near,setNear]=useState(false)
-  useEffect(()=>{
-    if(!('IntersectionObserver' in window)){setNear(true);return}
-    const observer=new IntersectionObserver(entries=>{
-      if(entries.some(entry=>entry.isIntersecting)){setNear(true);observer.disconnect()}
-    },{rootMargin:'240px'})
-    observer.observe(frame.current)
-    return()=>observer.disconnect()
-  },[])
-  const pinned=branches.filter(b=>b.latitude!==null&&b.longitude!==null)
-  useEffect(()=>{
-    if(!near||!pinned.length)return
-    let active=true,cleanup
-    setStatus('loading')
-    const timeout=setTimeout(()=>{if(active)setStatus('error')},12000)
-    import('../clinic-map.js').then(({mountClinicMap})=>{
-      if(!active)return
-      cleanup=mountClinicMap(canvas.current,pinned,
-        ()=>{clearTimeout(timeout);if(active)setStatus(current=>current==='error'?current:'ready')},
-        ()=>{if(active)setStatus('error')})
-    }).catch(()=>{if(active)setStatus('error')})
-    return()=>{active=false;clearTimeout(timeout);cleanup?.()}
-  },[near,pinned.length])
-  return <figure className={`site-location-map map-${status}`} ref={frame}>
-    <div className="site-map-canvas" ref={canvas} aria-hidden="true"/>
-    {status!=='ready'&&<div className="site-map-state"><span>{status==='error'?'Map unavailable':'Clinic locations'}</span><p>{status==='error'?'Find each clinic’s address below.':places(branches)}</p></div>}
-    <figcaption className="site-map-caption"><span>{branches.length?`${branches.length} location${branches.length===1?'':'s'}`:'Our locations'}</span><span>© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a></span></figcaption>
+export function LocationMap({ branches, branchStatus, reload, selectedBranch, onSelectBranch }) {
+  const canvas = useRef(null)
+  const selectBranch = useRef(onSelectBranch)
+  selectBranch.current = onSelectBranch
+  const [map, setMap] = useState(null)
+  const [status, setStatus] = useState('loading')
+  const [retried, setRetried] = useState(false)
+  const geographicPreview = !branches.some(hasClinicCoordinates)
+  const showBranchNotice = branchStatus === 'error' || (branchStatus === 'loading' && retried)
+
+  useEffect(() => {
+    let active = true
+    let instance
+    import('../clinic-map.js').then(({ mountClinicMap }) => {
+      if (!active) return
+      instance = mountClinicMap(canvas.current, next => { if (active) setStatus(next) }, id => selectBranch.current?.(id))
+      setMap(instance)
+    }).catch(() => { if (active) setStatus('error') })
+
+    return () => {
+      active = false
+      instance?.destroy()
+    }
+  }, [])
+
+  useEffect(() => { map?.setBranches(branches) }, [map, branches])
+  useEffect(() => { if (selectedBranch) map?.focusBranch(selectedBranch) }, [map, branches, selectedBranch])
+
+  return <figure className="site-location-map">
+    <div className="site-map-frame">
+      <div className="site-map-canvas" ref={canvas} role="region" aria-label={geographicPreview ? 'Bocaue area map preview' : 'Interactive clinic locations map'}/>
+      {status === 'error' && <p className="site-map-notice" role="status">Map tiles couldn't be loaded.</p>}
+    </div>
+    <figcaption className="site-map-caption">
+      <div className="site-map-meta">
+        <span>{geographicPreview ? 'Bocaue area · Regional map preview' : 'Clinic locations map'}</span>
+        {status === 'ready' && <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap contributors</a>}
+      </div>
+      {showBranchNotice && <div className="site-map-branch-status">
+        <p role="status">{branchStatus === 'error' ? 'Clinic locations are temporarily unavailable.' : 'Loading clinic locations…'}</p>
+        <button type="button" className="lp-retry" aria-disabled={branchStatus === 'loading'} onClick={() => {
+          if (branchStatus === 'loading') return
+          setRetried(true)
+          reload()
+        }}>{branchStatus === 'loading' ? 'Retrying…' : 'Retry'}</button>
+      </div>}
+    </figcaption>
   </figure>
 }
-
-const places=branches=>{const cities=[...new Set(branches.map(b=>b.address.split(',').map(p=>p.trim()).filter(Boolean).slice(-2).join(', ')).filter(Boolean))];return cities.slice(0,3).join(' · ')||'Find a clinic near you'}

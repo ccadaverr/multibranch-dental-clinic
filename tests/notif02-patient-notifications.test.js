@@ -33,14 +33,14 @@ test('NOTIF-02 initial confirmed load preserves total unread beyond the latest w
   feed.stop()
 })
 
-test('NOTIF-02 read changes only after confirmation; failure retains state and retries the same operation', async () => {
+test('NOTIF-02 reads update optimistically, roll back on failure and retry the same operation', async () => {
   const pending = deferred()
   let attempt = 0
   const { feed } = fixture({ read: () => ++attempt === 1 ? pending.promise : Promise.resolve(response(true)) })
   await feed.start(() => {})
   const reading = feed.markRead('notice-a')
-  assert.equal(feed.snapshot().items[0].read, false)
-  assert.equal(feed.snapshot().unread, 72)
+  assert.equal(feed.snapshot().items[0].read, true)
+  assert.equal(feed.snapshot().unread, 71)
   pending.resolve(fail)
   assert.equal(await reading, false)
   assert.equal(feed.snapshot().items[0].read, false)
@@ -63,6 +63,32 @@ test('NOTIF-02 read-all failure retains confirmed values; success adopts server 
   assert.equal(await feed.retry(), true)
   assert.equal(feed.snapshot().items[0].read, true)
   assert.equal(feed.snapshot().unread, 3)
+  feed.stop()
+})
+
+test('Notification archive rolls back an optimistic removal and verifies the retried archive receipt', async () => {
+  const pending = deferred()
+  const meta = { collection: 'active', archive_available: true, has_more: false, next_before: null }
+  let attempts = 0
+  const feed = createFeed({
+    list: async () => ({ ok: true, data: [{ ...row(), archived: false }], meta: { ...meta, unread: 1 } }),
+    archive: async id => ++attempts === 1 ? pending.promise : ({
+      ok: true, data: [], meta: { ...meta, unread: 0, archive_receipt: {
+        id, archived: true, replayed: false, archived_at: '2026-11-06T09:00:00+08:00',
+      } },
+    }),
+  })
+  await feed.start(() => {})
+  const archiving = feed.archive('notice-a')
+  assert.deepEqual(feed.snapshot().items, [])
+  assert.equal(feed.snapshot().unread, 0)
+  pending.resolve(fail)
+  assert.equal(await archiving, false)
+  assert.equal(feed.snapshot().items[0].id, 'notice-a')
+  assert.equal(feed.snapshot().unread, 1)
+  assert.equal(await feed.retry(), true)
+  assert.deepEqual(feed.snapshot().items, [])
+  assert.equal(feed.snapshot().unread, 0)
   feed.stop()
 })
 
@@ -165,7 +191,7 @@ test('NOTIF-02 recognized targets use only their established context type', () =
   assert.deepEqual(go('appointment_booked', 'visits'), { page: 'visits', context: { appointmentId: 'public-record-id' } })
   assert.deepEqual(go('invoice_issued', 'billing').context, { invoiceId: 'public-record-id' })
   assert.deepEqual(go('message_received', 'messages').context, { conversationId: 'public-record-id' })
-  assert.deepEqual(go('prescription_ready', 'visits'), { page: 'prescriptions', context: null })
+  assert.deepEqual(go('prescription_ready', 'visits'), { page: 'prescriptions', context: { prescriptionId: 'public-record-id' } })
   assert.deepEqual(go('no_show_rebook', 'book'), { page: 'book', context: null })
   assert.equal(go('unknown_kind', 'visits').context, null)
 })
@@ -192,7 +218,7 @@ test('NOTIF-02 source guard keeps account eligibility, awaited navigation and ke
   assert.match(source, /!await notes.markRead\(n.id\) \|\| !notes.isCurrent\(\)/)
   assert.match(source, /e.key === 'Tab'/)
   assert.match(source, /e.key === 'Escape'/)
-  assert.match(source, /bellButton.current\?\.focus\(\)/)
+  assert.match(source, /main\.current\?\.focus\(\{ preventScroll: true \}\)/)
 })
 
 for(const operation of ['read','all'])test('GEN-10 Patient '+operation+' refuses a successful response that still contains unread evidence',async()=>{

@@ -72,7 +72,7 @@ export function StaffRosterDraft({staff,branches,getAuthGeneration,enabled,onPen
     {error&&<p role="alert">{error}</p>}
     {!uncertain&&(conflict
       ? <Button variant="soft" disabled={saving||loading||!enabled} onClick={load}>Discard entries and reload draft</Button>
-      : <RefreshButton title="Reload dated draft" ariaLabel="Reload dated draft" loading={loading} disabled={saving||!enabled} onClick={load}/>)}
+      : <RefreshButton recovery={Boolean(error)} title="Reload dated draft" ariaLabel="Reload dated draft" loading={loading} disabled={saving||!enabled} onClick={load}/>)}
     {ready&&<form onSubmit={save} aria-label={`Prepare dated Staff draft for ${staff.name}`} aria-busy={saving}>
       <fieldset disabled={saving||uncertain||conflict} style={{border:0,padding:0,minWidth:0}}>
         <Field label="Draft branch"><select aria-label="Draft branch" required value={branch} onChange={e=>setBranch(e.target.value)}><option value="">Choose a branch</option>{branches.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>

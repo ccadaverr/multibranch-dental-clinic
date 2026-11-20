@@ -23,3 +23,5 @@ photographer and the licence (Unsplash License / Pexels License) here.
 | jsQR 1.4.0 | Reads the PhilID / ePhilID QR code on the device (name and birth date only) | https://github.com/cozmo/jsQR | Apache-2.0 |
 | bacon/bacon-qr-code 3 | The QR code on the branch counter poster (PDF) | https://github.com/Bacon/BaconQrCode | BSD-2-Clause |
 | Synthetic specimen ID images (`docs/ui-review/intake/specimens/`) | Scan accuracy tests | Drawn for this project with fake names, marked "SPECIMEN — NOT A REAL ID" | Project's own work |
+
+The four original parametric tooth meshes in `public/models/dental-crowns.glb` were generated for this project and are released under CC0 1.0. They illustrate tooth position and type. They are independent of individual patients’ scans.

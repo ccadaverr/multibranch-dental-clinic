@@ -12,8 +12,9 @@ export async function readPatientPrescriptions(read, family, patientId, isCurren
     return await boundedClinicalRead(async () => {
       const [r, f] = await Promise.all([read(), family()])
       if (!active || !isCurrent()) return {ok:false, kind:'stale_context'}
-      if (!r?.ok || !f?.ok) return {ok:false, message:r?.message || f?.message || 'Your prescriptions could not be verified. Retry to read saved records.'}
-      if (f.meta?.me?.id !== patientId || !Array.isArray(f.data) || f.data.some(p => typeof p?.id !== 'string' || !p.id.trim())) return {ok:false, message:'Your family access could not be verified. Retry to read saved records.'}
+      if (!r?.ok || !f?.ok) return {ok:false, kind: !r?.ok ? r?.kind : f?.kind,
+        message:r?.message || f?.message || 'Your prescriptions could not be verified. Retry to read saved records.'}
+      if (f.meta?.me?.id !== patientId || !Array.isArray(f.data) || f.data.some(p => typeof p?.id !== 'string' || !p.id.trim())) return {ok:false, kind:'unverified', message:'Your authorized patient records could not be verified. Retry to read saved records.'}
       const allowed=new Set([patientId, ...f.data.map(p=>p.id)])
       if (!Array.isArray(r.data) || new Set(r.data.map(p=>p?.id)).size!==r.data.length || r.data.some(p =>
         !text(p?.id) || !allowed.has(p.patient?.id) || !optionalText(p.patient.name) || !text(p.visit) || !text(p.branch_id) ||
@@ -22,7 +23,7 @@ export async function readPatientPrescriptions(read, family, patientId, isCurren
         (p.status==='Void' && !p.voided) || (p.voided!=null && (!timestamp(p.voided.at) || !text(p.voided.reason))) ||
         !Array.isArray(p.lines) || p.lines.some(l=>!text(l?.medicine) ||
           !['dosage','frequency','duration','instructions'].every(field=>optionalText(l[field]))))) {
-        return {ok:false, message:'The returned prescriptions did not confirm your Patient and visit identities. No records were adopted.'}
+        return {ok:false, kind:'unverified', message:'The returned prescriptions did not confirm your Patient and visit identities. No records were adopted.'}
       }
       const complete = r.data.filter(p => p.lines.length > 0)
       return { ...r, data: complete, unavailableCount: r.data.length - complete.length }

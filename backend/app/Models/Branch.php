@@ -52,6 +52,7 @@ class Branch extends Model
         'longitude',
         'operating_days',
         'weekly_hours',
+        // Archive fields are managed by Owner-only lifecycle commands, never mass assignment.
     ];
 
     protected function casts(): array
@@ -62,6 +63,7 @@ class Branch extends Model
             'longitude' => 'decimal:7',
             'operating_days' => 'array',
             'weekly_hours' => 'array',
+            'archived_at' => 'immutable_datetime',
         ];
     }
 
@@ -92,6 +94,7 @@ class Branch extends Model
      */
     public function hoursOnDay(int $isoDay): ?array
     {
+        if ($this->archived_at !== null) return null;
         if (is_array($this->weekly_hours) && $this->weekly_hours) {
             $day = $this->weekly_hours[(string) $isoDay] ?? $this->weekly_hours[$isoDay] ?? null;
 

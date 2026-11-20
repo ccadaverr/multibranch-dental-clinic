@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Button, Card, Notice } from '../components.jsx'
+import { Button, Card, Notice, ReadState } from '../components.jsx'
 import { confirmAppointment, frontDeskToday, undoNoShow, useFreeTimeForWalkIn } from '../api-client.js'
 
 const REPLY = { on_my_way: ['On my way', 'is-ok'], attending: ['I’ll be there', 'is-ok'], cant_make_it: ['Can’t make it', 'is-late'], move_up_accepted: ['Took an earlier time', 'is-info'] }
@@ -17,7 +17,7 @@ export function FrontDeskToday({ toast = () => {}, onChanged }) {
   const read = useRef(0)
   const load = async () => {
     const generation = ++read.current
-    setReadState(previous => previous === 'ready' ? 'ready' : 'loading')
+    setReadState(previous => ['ready', 'stale'].includes(previous) ? 'ready' : 'loading')
     try {
       const result = await frontDeskToday()
       if (generation !== read.current) return
@@ -29,7 +29,7 @@ export function FrontDeskToday({ toast = () => {}, onChanged }) {
     } catch {
       // A failed read has the same recovery as a non-success response.
     }
-    if (generation === read.current) setReadState('error')
+    if (generation === read.current) setReadState(previous => ['ready', 'stale'].includes(previous) ? 'stale' : 'error')
   }
   useEffect(() => {
     load()
@@ -43,11 +43,12 @@ export function FrontDeskToday({ toast = () => {}, onChanged }) {
     if (!r.ok) { toast(firstError(r), 'warning'); return load() }
     toast(done, 'success'); load(); onChanged?.()
   }
-  if (readState === 'error') return <Notice tone="warning" title="Front Desk Today could not be loaded"><Button size="sm" onClick={load}>Retry</Button></Notice>
-  if (readState === 'loading' || !data) return <p role="status">Loading Front Desk Today?</p>
+  if (readState === 'error' && !data) return <ReadState state="error" compact message="Today’s front-desk updates could not be loaded." onRetry={load}/>
+  if (!data) return <ReadState state="loading" compact message="Checking late arrivals and front-desk updates…"/>
   const s = data.settings
   const replied = data.replies.filter(r => !data.late.some(l => l.appointment_id === r.appointment_id))
   return <div className="fd-grid">
+    {readState === 'stale' && <ReadState state="stale" compact message="Showing the last loaded updates. A fresh read failed." onRetry={load}/>}
     {data.late.length > 0 && <Card className="fd-card-late" title={`Late (${data.late.length})`} subtitle={s ? `Not checked in ${s.late_minutes}+ minutes after the start. ${s.release_mode === 'automatic' ? `Released automatically at ${s.release_minutes} minutes.` : `Flagged for you at ${s.release_minutes} minutes.`} A late patient who checks in goes to the end of the dentist’s queue.` : null}>
       <ul className="fd-list">{data.late.map(a => <li key={a.appointment_id}>
         <div><b>{a.patient}<span className="fd-badge is-late">Late {a.minutes_late} min</span>{a.reply && <span className={`fd-badge ${REPLY[a.reply]?.[1] || 'is-info'}`}>{REPLY[a.reply]?.[0] || a.reply}</span>}</b>

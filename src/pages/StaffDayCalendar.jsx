@@ -54,18 +54,30 @@ export function loadBand(day, crowded = 80) {
 
 function LoadBadge({ day, count = 0, crowded = 80 }) {
   const b = loadBand(day, crowded)
-  if (b) return <span className={`daycal-load is-${b.band}`} title={b.detail}><i aria-hidden="true"/>{b.label}</span>
+  if (b) return <span className={`daycal-load is-${b.band}`} title={b.detail || b.label}><i aria-hidden="true"/>{b.band === 'none' ? 'No hours' : b.label}</span>
   const fallback = busynessStatus({ dayLoad: day, count, crowded })
   return <span className={`daycal-load is-${fallback.band}`} title={fallback.detail}><i aria-hidden="true"/>{fallback.shortLabel}</span>
 }
 
 function AppointmentButton({ a, onSelect, showDentist = false }) {
   return <button type="button" className="daycal-chip" aria-haspopup="dialog" onClick={e => { e.stopPropagation(); onSelect(a.id) }}>
-    <span className="daycal-avatar" aria-hidden="true" style={{ background: avatarColour(a.patientId || a.patientCode) }}>{initials(a.patientName)}</span>
+    <PatientAvatar a={a}/>
     <span className="daycal-chip-time">{displayTime(a.start)}</span>
     <span className="daycal-chip-name">{appointmentName(a)}{a.serviceName ? <small> · {a.serviceName}</small> : null}</span>
     <span className="daycal-chip-status">{a.status}{showDentist && a.dentistName ? ` · ${a.dentistName}` : ''}</span>
   </button>
+}
+
+function PatientAvatar({ a, compact = false }) {
+  const [failed, setFailed] = useState(false)
+  // Only reuse a same-origin, authenticated image URL supplied by an authorized API.
+  // Never synthesize a patient's photo URL or load remote tracking images.
+  const value = a.patientPhotoUrl || a.patientAvatarUrl
+  const photo = typeof value === 'string' && value.startsWith('/') && !value.startsWith('//') ? value : null
+  return <span className={compact ? 'daycal-avatar-face is-compact' : 'daycal-avatar-face'}
+    style={{ background: avatarColour(a.patientId || a.patientCode) }} aria-hidden="true">
+    {photo && !failed ? <img src={photo} alt="" loading="lazy" onError={()=>setFailed(true)}/> : initials(a.patientName)}
+  </span>
 }
 
 function AppointmentAvatarButton({ a, onSelect }) {
@@ -75,13 +87,12 @@ function AppointmentAvatarButton({ a, onSelect }) {
     <button
       type="button"
       className="daycal-avatar-badge"
-      style={{ background: avatarColour(a.patientId || a.patientCode) }}
       title={tooltip}
       aria-label={`View appointment details: ${tooltip}`}
       aria-haspopup="dialog"
       onClick={e => { e.stopPropagation(); onSelect(a.id) }}
     >
-      {initials(a.patientName)}
+      <PatientAvatar a={a} compact />
     </button>
   )
 }
@@ -112,7 +123,7 @@ function CalendarSession({ store, scopes, authorizationKey }) {
   }, [])
   const today = useClinicToday()
   const [date, setDate] = useState(defaultCalendarDate)
-  const [branchId, setBranchId] = useState('all')
+  const [branchId, setBranchId] = useState(() => role === 'staff' ? session?.branchId || 'all' : 'all')
   const [selectedId, setSelectedId] = useState(null)
   const [selectedDate, setSelectedDate] = useState(() => clinicNow().date)
   const [newOpen, setNewOpen] = useState(false)
@@ -159,7 +170,8 @@ function CalendarSession({ store, scopes, authorizationKey }) {
     return store.state.branches.filter(b => scopes.includes(b.id))
   }, [store.state.branches, authorizationKey])
 
-  const [load, setLoad] = useState({ key: null, days: {}, crowded: 80 })
+  const [load, setLoad] = useState({ key: null, days: {}, crowded: 80, error: '' })
+  const [capacityRetry, setCapacityRetry] = useState(0)
   const loadParams = useMemo(() => {
     const branch = branches.length > 1 && branches.some(b => b.id === branchId) ? branchId : null
     const cells = monthCells(date)
@@ -170,12 +182,17 @@ function CalendarSession({ store, scopes, authorizationKey }) {
   useEffect(() => {
     if (!sessionKey || !loadParams?.from || !loadParams?.to) return undefined
     let live = true
-    calendarLoad({ from: loadParams.from, to: loadParams.to, branch_ref: loadParams.branch || undefined }).then(r => {
-      if (live && r.ok) setLoad({ key: loadParams.key, crowded: r.data.crowded_percent, note: r.data.capacity_note || null, days: Object.fromEntries((r.data.days || []).map(d => [d.date, d])) })
-    })
-    return () => { live = false }
-  }, [sessionKey, loadParams?.key])
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 15000)
+    calendarLoad({ from: loadParams.from, to: loadParams.to, branch_ref: loadParams.branch || undefined }, controller.signal).then(r => {
+      if (!live) return
+      setLoad(r.ok ? { key: loadParams.key, crowded: r.data.crowded_percent, note: r.data.capacity_note || null, error: '', days: Object.fromEntries((r.data.days || []).map(d => [d.date, d])) } :
+        { key: loadParams.key, crowded: 80, days: {}, error: controller.signal.aborted ? 'Capacity timed out. Retry this month.' : 'Capacity information is unavailable for this month.' })
+    }).finally(() => clearTimeout(timeout))
+    return () => { live = false; controller.abort(); clearTimeout(timeout) }
+  }, [sessionKey, loadParams?.key, capacityRetry])
 
+  const crowdedThreshold = Number.isFinite(load.crowded) && load.crowded > 50 ? load.crowded : 80
   const [dayStatusFilter, setDayStatusFilter] = useState('All')
   useEffect(() => { setDayStatusFilter('All') }, [selectedDate])
 
@@ -211,7 +228,13 @@ function CalendarSession({ store, scopes, authorizationKey }) {
     }
   }
 
-  const rowsOn = d => byDate.get(d) || []
+  const rowsOn = d => {
+    const grouped = byDate.get(d) || []
+    // Date-only values are authoritative clinic dates. Don't construct a browser-local
+    // Date (which could move a booking to another day around midnight).
+    const direct = filtered.filter(a => typeof a.date === 'string' && a.date.slice(0, 10) === d)
+    return direct.length > grouped.length ? direct : grouped
+  }
   const loadOf = d => (load.key === loadParams.key ? load.days[d] : null)
   const canManage = canSchedule(store)
 
@@ -292,79 +315,92 @@ function CalendarSession({ store, scopes, authorizationKey }) {
     if (dayStatusFilter !== 'All' && a.status !== dayStatusFilter) return false
     return true
   })
+  const monthControls = <>
+    <Button variant="ghost" onClick={() => goto(shiftPeriod('month', date, -1))} aria-label="Previous month">‹ <span className="daycal-nav-text">Previous</span></Button>
+    <label className="daycal-date">
+      <span>Month</span>
+      <input
+        type="month"
+        value={date.slice(0, 7)}
+        onChange={e => /^\d{4}-\d{2}$/.test(e.target.value) && goto(`${e.target.value}-01`)}
+        aria-describedby="daycal-heading"
+      />
+    </label>
+    <Button variant="ghost" onClick={() => goto(shiftPeriod('month', date, 1))} aria-label="Next month"><span className="daycal-nav-text">Next</span> ›</Button>
+    <Button variant="soft" disabled={containsToday} onClick={() => goto(today, today)}>Today</Button>
+  </>
 
   return <>
     <PageHeader
-      kicker="Scheduling"
-      title="Appointment Calendar"
-      text="An interactive monthly calendar of clinic appointments with daily busyness, patient details, and booking controls."
-      aside={<div className="row-actions">
-        <RefreshButton onClick={handleRefresh}/>
-      </div>}
+      title="Calendar"
+      text="Appointments by clinic date, with authorized details and actions."
+      aside={role==='staff'?undefined:<div className="row-actions"><RefreshButton onClick={handleRefresh}/></div>}
     />
     {(resolving || actionOwner.busy) && <p role="status">{resolving ? 'Loading selected appointment…' : 'Saving appointment change…'}</p>}
     {actionError && <p role="alert">{actionError}</p>}
 
     <Card className="daycal-controls">
       <div className="daycal-bar">
-        <Button variant="ghost" onClick={() => goto(shiftPeriod('month', date, -1))}>Previous month</Button>
-        <label className="daycal-date">
-          <span>Month</span>
-          <input
-            type="month"
-            value={date.slice(0, 7)}
-            onChange={e => /^\d{4}-\d{2}$/.test(e.target.value) && goto(`${e.target.value}-01`)}
-            aria-describedby="daycal-heading"
-          />
-        </label>
-        <Button variant="ghost" onClick={() => goto(shiftPeriod('month', date, 1))}>Next month</Button>
-        <Button variant="soft" disabled={containsToday} onClick={() => goto(today, today)}>Today</Button>
+        {role === 'staff' ? <div className="daycal-period-controls">{monthControls}</div> : monthControls}
         {branches.length > 1 && <label className="daycal-branch">
-          <span>Branch</span>
-          <select value={activeBranch ?? 'all'} onChange={e => setBranchId(e.target.value)}>
-            <option value="all">All my branches</option>
+          <span className="sr-only">Authorized branch</span>
+          <select aria-label="Filter calendar by authorized branch" title="Only branches assigned to your account appear here" value={activeBranch ?? 'all'} onChange={e => setBranchId(e.target.value)}>
+            <option value="all">All authorized branches</option>
             {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
         </label>}
       </div>
     </Card>
 
-    <p className="daycal-legend" aria-label="Load legend">
-      <span className="daycal-load is-free"><i aria-hidden="true"/>0% free</span>
-      <span className="daycal-load is-light"><i aria-hidden="true"/>under 50%</span>
-      <span className="daycal-load is-busy"><i aria-hidden="true"/>50% or more</span>
-      <span className="daycal-load is-crowded"><i aria-hidden="true"/>{load.crowded}% or more: crowded</span>
+    {role==='staff' && load.key===loadParams.key && load.error &&
+      <p role="alert" className="staff-r15-capacity-status">{load.error} <button type="button" onClick={() => setCapacityRetry(value => value + 1)}>Retry capacity</button></p>}
+    {role==='staff' && <details className="staff-r13-capacity-key"><summary>Capacity key</summary>
+    <div className="daycal-legend" aria-label="Scheduled dentist time utilization">
+      <span className="daycal-load is-free"><i aria-hidden="true"/>0% booked</span>
+      <span className="daycal-load is-light"><i aria-hidden="true"/>1–49%</span>
+      <span className="daycal-load is-busy"><i aria-hidden="true"/>50–{crowdedThreshold - 1}%</span>
+      <span className="daycal-load is-crowded"><i aria-hidden="true"/>{crowdedThreshold}%+ booked</span>
       <span className="daycal-load is-closed"><i aria-hidden="true"/>Closed</span>
-      <small>Booked minutes against the dentists’ hours at the branch.</small>
+      <small>Booked minutes / published Dentist hours</small>
       {load.note && <small className="daycal-estimate" role="note">{load.note}</small>}
-    </p>
+    </div></details>}
+    {role!=='staff' && <div className="daycal-legend" aria-label="Scheduled dentist time utilization">
+      <span className="daycal-load is-free"><i aria-hidden="true"/>0% booked</span>
+      <span className="daycal-load is-light"><i aria-hidden="true"/>1–49%</span>
+      <span className="daycal-load is-busy"><i aria-hidden="true"/>50–{crowdedThreshold - 1}%</span>
+      <span className="daycal-load is-crowded"><i aria-hidden="true"/>{crowdedThreshold}%+ booked</span>
+      <span className="daycal-load is-closed"><i aria-hidden="true"/>Closed</span>
+      <small>Booked minutes / published Dentist hours</small>
+      {load.note && <small className="daycal-estimate" role="note">{load.note}</small>}
+    </div>}
 
     <h2 id="daycal-heading" className="daycal-heading" tabIndex={-1} aria-live="polite" aria-atomic="true">
       {monthTitle(date)}{containsToday && <span className="daycal-today"> · This month</span>}
     </h2>
 
-    {status === 'loading' && <Notice tone="info" title="Loading appointments">Reading this month’s appointments from the clinic server…</Notice>}
+    {status === 'loading' && <p className="daycal-loading" role="status">Loading this month's appointments…</p>}
     {status === 'error' && <Notice tone="warning" title="Appointments couldn’t be loaded">{current.error} <Button size="sm" variant="ghost" onClick={() => loader.retry()}>Try again</Button></Notice>}
     {status === 'ready' && !current.complete && <Notice tone="warning" title="Only part of this month was loaded">This month has more appointments than this screen reads at once, so what is shown may be missing some. No totals are shown, and a date without appointments here is not confirmed empty. <Button size="sm" variant="ghost" onClick={() => loader.retry()}>Reload</Button></Notice>}
     {status === 'ready' && current.stale && <Notice tone="warning" title="Showing the last loaded list">The latest refresh failed: {current.error} This list may be out of date. <Button size="sm" variant="ghost" onClick={() => loader.retry()}>Try again</Button></Notice>}
 
-    {complete && filtered.length === 0 && <Card><p className="muted-copy" role="status">{activeBranch && rows.length ? `No appointments for this branch this month (${rows.length} at your other branches).` : 'No appointments this month.'}</p></Card>}
-    {complete && filtered.length > 0 && <p className="muted-copy" role="status">{filtered.length} appointment{filtered.length === 1 ? '' : 's'} this month</p>}
+    {complete && <p className="daycal-month-summary" role="status">
+      {filtered.length ? `${filtered.length} appointment${filtered.length === 1 ? '' : 's'} this month` : activeBranch && rows.length ? `No appointments at this branch; ${rows.length} at other assigned branches` : 'No appointments scheduled this month'}
+    </p>}
 
     <div className="daycal-master-detail">
       <div className="daycal-calendar-pane">
-        <div ref={calendarRef} className="daycal-month-grid" role="grid" aria-label={`${monthTitle(date)} by day`}>
+        <div ref={calendarRef} key={role === 'staff' ? target : undefined} className="daycal-month-grid" role="grid" aria-busy={status === 'loading'} aria-label={`${monthTitle(date)} by day`}>
           {WEEKDAYS.map(w => <div key={w} className="daycal-weekday" aria-hidden="true">{w.slice(0, 3)}</div>)}
           {monthCells(date).map(c => {
             if (!c.fetched) return <div key={c.date} className="daycal-cell is-outside" role="gridcell">
               <button type="button" className="daycal-daylink" data-calendar-date={c.date}
                 aria-label={`Show calendar for ${longDate(c.date)}`}
                 onClick={() => goto(c.date, c.date)}>{Number(c.date.slice(8))}</button>
-              <span className="daycal-none daycal-unverified">Not loaded</span>
+              <span className="sr-only">Outside displayed month</span>
             </div>
             const list = rowsOn(c.date)
             const shown = list.slice(0, 3)
-            const band = loadBand(loadOf(c.date), load.crowded)
+            const band = loadBand(loadOf(c.date), crowdedThreshold)
             const isSelected = selectedDate === c.date
             const isPrior = c.date < today
 
@@ -387,7 +423,7 @@ function CalendarSession({ store, scopes, authorizationKey }) {
                   aria-controls="daycal-day-details"
                   aria-current={c.date === today ? 'date' : undefined}
                   onClick={e => { e.stopPropagation(); setSelectedDate(prev => prev === c.date ? null : c.date) }}
-                  aria-label={`${isSelected ? 'Hide' : 'Show'} appointments for ${longDate(c.date)}`}
+                  aria-label={`${isSelected ? 'Hide' : 'Show'} ${longDate(c.date)}: ${verified ? `${list.length} appointment${list.length === 1 ? '' : 's'}` : 'appointment count not confirmed'}${band ? `, ${band.label}` : ''}`}
                 >
                   {Number(c.date.slice(8))}
                 </button>
@@ -395,19 +431,13 @@ function CalendarSession({ store, scopes, authorizationKey }) {
                 {totals && list.length > 0 && <span className="daycal-count" aria-label={`${list.length} appointment${list.length === 1 ? '' : 's'}`}>{list.length}</span>}
               </div>
 
-              <div className="daycal-cell-meta">
-                {totals && (
-                  list.length > 0
-                    ? <span className="daycal-count-label">{list.length} {list.length === 1 ? 'appointment' : 'appointments'}</span>
-                    : <span className="daycal-none">No appointments</span>
-                )}
-                {!totals && list.length === 0 && <span className="daycal-none daycal-unverified">Not verified</span>}
-                <LoadBadge day={loadOf(c.date)} count={list.length} crowded={load.crowded}/>
-              </div>
+              {(band?.band === 'closed' || band?.band === 'none') && <div className="daycal-cell-meta">
+                <LoadBadge day={loadOf(c.date)} count={list.length} crowded={crowdedThreshold}/>
+              </div>}
 
               <div className="daycal-cell-chips daycal-avatars-row" aria-label={`${list.length} appointments`}>
                 {shown.map(a => <AppointmentAvatarButton key={a.id} a={a} onSelect={selectDetail}/>)}
-                {totals && list.length > shown.length && <button type="button" className="daycal-avatar-badge daycal-more-avatar" title={`+${list.length - shown.length} more appointments`} aria-label={`Show ${list.length - shown.length} more appointments for ${longDate(c.date)}`} aria-controls="daycal-day-details" aria-expanded={isSelected} onClick={e => { e.stopPropagation(); setSelectedDate(c.date) }}>+{list.length - shown.length}</button>}
+                {complete && list.length > shown.length && <button type="button" className="daycal-avatar-badge daycal-more-avatar" title={`+${list.length - shown.length} more appointments`} aria-label={`Show ${list.length - shown.length} more appointments for ${longDate(c.date)}`} aria-controls="daycal-day-details" aria-expanded={isSelected} onClick={e => { e.stopPropagation(); setSelectedDate(c.date) }}>+{list.length - shown.length}</button>}
               </div>
             </div>
           })}
@@ -420,7 +450,7 @@ function CalendarSession({ store, scopes, authorizationKey }) {
             <div className="daycal-expanded-header">
               <div>
                 <h3 id="daycal-selected-heading" className="daycal-expanded-title">
-                  Appointments for {longDate(selectedDate)}
+                  {longDate(selectedDate)}
                   {selectedDate === today && <span className="daycal-today daycal-today-tag">Today</span>}
                 </h3>
                 <p className="daycal-expanded-meta">
@@ -440,17 +470,16 @@ function CalendarSession({ store, scopes, authorizationKey }) {
 
             {verified && selectedRows.length === 0 && <div className="daycal-expanded-empty">
               <p className="muted-copy">No appointments are scheduled for this date.</p>
-              {canManage && <Button size="sm" variant="soft" onClick={openNewAppointment} icon="plusCalendar">Book an appointment on {shortDay(selectedDate)}</Button>}
+              {canManage && !selectedLoad?.closed && <Button size="sm" variant="soft" onClick={openNewAppointment} icon="plusCalendar">New appointment</Button>}
             </div>}
 
-            {selectedRows.length > 0 && <div className="daycal-day-filter" style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px' }}>
+            {selectedRows.length > 0 && <div className="daycal-day-filter">
               <select
                 id="daycal-status-filter"
                 className="filter-select"
                 aria-label="Filter selected day appointments by status"
                 value={dayStatusFilter}
                 onChange={e => setDayStatusFilter(e.target.value)}
-                style={{ fontSize: '13px' }}
               >
                 <option value="All">All statuses ({selectedRows.length})</option>
                 <option value="Confirmed">Confirmed</option>
@@ -468,7 +497,7 @@ function CalendarSession({ store, scopes, authorizationKey }) {
             {visibleDayRows.length > 0 && <ul className="daycal-expanded-list">
               {visibleDayRows.map(a => <li key={a.id} className="daycal-expanded-card">
                 <div className="daycal-expanded-main">
-                  <span className="daycal-avatar" aria-hidden="true" style={{ background: avatarColour(a.patientId || a.patientCode) }}>{initials(a.patientName)}</span>
+                  <PatientAvatar a={a}/>
                   <div className="daycal-expanded-info">
                     <div className="daycal-expanded-patient">
                       <strong>{appointmentName(a)}</strong>
@@ -524,7 +553,7 @@ function CalendarSession({ store, scopes, authorizationKey }) {
       </aside>
     </div>
 
-    <Modal open={newOpen} title="Create appointment" subtitle="The clinic server validates the slot and assigns an eligible Dentist unless you choose one." wide onClose={() => setNewOpen(false)}>
+    <Modal open={newOpen} title="New appointment" wide onClose={() => setNewOpen(false)}>
       <AppointmentForm role={role} store={store} prefill={selectedDate ? { date: selectedDate, ...(activeBranch && activeBranch !== 'all' ? { branchId: activeBranch } : {}) } : null} onSaved={() => { setNewOpen(false); handleRefresh() }}/>
     </Modal>
 
@@ -585,6 +614,10 @@ function CalendarSession({ store, scopes, authorizationKey }) {
                 <span className="appt-detail-label">Service</span>
                 <span className="appt-detail-value font-semibold">{selected.serviceName || '—'}</span>
               </div>
+              {selected.intendedServiceName && <div className="appt-detail-row">
+                <span className="appt-detail-label">Intended treatment</span>
+                <span className="appt-detail-value">{selected.intendedServiceName}</span>
+              </div>}
               <div className="appt-detail-row">
                 <span className="appt-detail-label">Attending Dentist</span>
                 <span className="appt-detail-value">{selected.dentistId ? selected.dentistName || '—' : 'Unassigned'}</span>

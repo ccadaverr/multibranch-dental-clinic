@@ -120,6 +120,35 @@ export function me({signal}={}) {
   return request('/api/me',signal?{signal}:{})
 }
 
+// Authenticated Staff photo. The image is fetched as a Blob: never a public storage URL.
+export async function staffPhoto(signal) {
+  try {
+    const response = await rawFetch('/api/me/staff-photo', { signal })
+    if (response?.status === 404) return { ok: true, blob: null }
+    if (!response?.ok) return { ok: false, kind: 'server', message: 'Profile photo could not load.' }
+    const type = response.headers.get('content-type')?.split(';')[0]
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(type)) return { ok: false, kind: 'unverified', message: 'Profile photo response was invalid.' }
+    return { ok: true, blob: await response.blob() }
+  } catch (error) {
+    if (signal?.aborted) return { ok: false, kind: 'cancelled' }
+    return { ok: false, kind: 'network', message: 'Profile photo could not load.' }
+  }
+}
+
+export function uploadStaffPhoto(file, beforeDispatch) {
+  const body = new FormData()
+  body.append('photo', file)
+  return request('/api/me/staff-photo', { method: 'POST', body, beforeDispatch })
+}
+
+export function removeStaffPhoto(beforeDispatch) {
+  return request('/api/me/staff-photo', { method: 'DELETE', beforeDispatch })
+}
+
+export function patientHome(signal) {
+  return request('/api/me/home', { signal })
+}
+
 export function login(email, password) {
   return request('/api/login', { method: 'POST', body: JSON.stringify({ email, password }) })
 }
@@ -210,6 +239,14 @@ export function updateBranch(legacyRef, payload, beforeDispatch) {
   return request(`/api/branches/${encodeURIComponent(legacyRef)}`, { method: 'PATCH', body: JSON.stringify(payload), beforeDispatch })
 }
 
+export function archiveBranch(legacyRef, reason, beforeDispatch) {
+  return request(`/api/branches/${encodeURIComponent(legacyRef)}/archive`, { method: 'POST', body: JSON.stringify({ reason }), beforeDispatch })
+}
+
+export function restoreBranch(legacyRef, beforeDispatch) {
+  return request(`/api/branches/${encodeURIComponent(legacyRef)}/restore`, { method: 'POST', beforeDispatch })
+}
+
 export function setBranchService(payload, beforeDispatch) {
   return request('/api/branch-services', { method: 'POST', body: JSON.stringify(payload), beforeDispatch })
 }
@@ -248,22 +285,24 @@ const query = params => {
   return entries.length ? `?${new URLSearchParams(entries).toString()}` : ''
 }
 const command = (path, payload, key, beforeDispatch) => request(path, { method: 'POST', body: JSON.stringify(payload), headers: key ? { 'Idempotency-Key': key } : {}, beforeDispatch })
-export function listAppointments(params) { return request(`/api/appointments${query(params)}`) }
-export function getAppointment(id) { return request(`/api/appointments/${encodeURIComponent(id)}`) }
+export function listAppointments(params, signal) { return request(`/api/appointments${query(params)}`, { signal }) }
+export function getAppointment(id, signal) { return request(`/api/appointments/${encodeURIComponent(id)}`, { signal }) }
 export function appointmentAvailability(params) { return request(`/api/appointments/availability${query(params)}`) }
 export function appointmentRecommendation(params) { return request(`/api/appointments/recommendation${query(params)}`) }
 export function createAppointment(payload, key, beforeDispatch) { return command('/api/appointments', payload, key, beforeDispatch) }
 export function rescheduleAppointment(id, payload, key) { return command(`/api/appointments/${encodeURIComponent(id)}/reschedule`, payload, key) }
 export function cancelAppointmentRemote(id, payload, key, beforeDispatch) { return command(`/api/appointments/${encodeURIComponent(id)}/cancel`, payload, key, beforeDispatch) }
+// R23A: authorized clinic booking-deposit refund. The server owns amount, provider id and settlement state.
+export function requestBookingRefund(id, payload, key, beforeDispatch) { return command(`/api/appointments/${encodeURIComponent(id)}/booking-refund`, payload, key, beforeDispatch) }
 // Appointment-only lifecycle command: the pre-arrival 'no-show' (Check-In and treatment progression are Visit commands).
 export function transitionAppointment(id, name, payload, key) { return command(`/api/appointments/${encodeURIComponent(id)}/${encodeURIComponent(name)}`, payload, key) }
 // Minimal M4 Patient directory (Staff/Owner selection) and front-desk registration (Person + Patient, no login).
 export function searchPatients(params) { return request(`/api/patients${query(params)}`) }
 export function registerPatient(payload, key) { return command('/api/patients', payload, key) }
 // M4 Patient record: non-clinical profile (read; Staff-only edit with expected_revision) and the read-only linked-record index.
-export function getPatientRecord(id) { return request(`/api/patients/${encodeURIComponent(id)}`) }
+export function getPatientRecord(id, signal) { return request(`/api/patients/${encodeURIComponent(id)}`, { signal }) }
 export function updatePatientRecordRemote(id, payload, key, beforeDispatch) { return request(`/api/patients/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload),headers:key?{'Idempotency-Key':key}:{},beforeDispatch }) }
-export function getPatientRecordIndex(id) { return request(`/api/patients/${encodeURIComponent(id)}/records`) }
+export function getPatientRecordIndex(id, signal) { return request(`/api/patients/${encodeURIComponent(id)}/records`, { signal }) }
 
 // M8 Patient Check-In and the shared Visit / Clinical Encounter. Raw calls only; src/visits-api.js owns mapping.
 export function listVisits(params) { return request(`/api/visits${query(params)}`) }
@@ -342,15 +381,15 @@ export function updateAssistantAnswer(id, payload) { return request(`/api/assist
 export function testAssistantAnswer(question) { return request('/api/assistant-answers/test', { method: 'POST', body: JSON.stringify({ question }) }) }
 
 // Identity-specific notifications from real server events (each person sees only their own).
-export function listNotifications(before, collection = 'active') {
+export function listNotifications(before, collection = 'active', signal) {
   const query = new URLSearchParams()
   if (typeof before === 'string' && before) query.set('before', before)
   if (collection === 'archived') query.set('collection', 'archived')
-  return request('/api/notifications' + (query.size ? `?${query}` : ''))
+  return request('/api/notifications' + (query.size ? `?${query}` : ''), { signal })
 }
-export function readNotification(id, beforeDispatch, collection = 'active') { return request(`/api/notifications/${encodeURIComponent(id)}/read` + (collection === 'archived' ? '?collection=archived' : ''), { method: 'POST', body: '{}', beforeDispatch }) }
-export function archiveNotification(id, beforeDispatch) { return request(`/api/notifications/${encodeURIComponent(id)}/archive`, { method: 'POST', body: '{}', beforeDispatch }) }
-export function readAllNotifications(beforeDispatch) { return request('/api/notifications/read-all', { method: 'POST', body: '{}', beforeDispatch }) }
+export function readNotification(id, beforeDispatch, collection = 'active', signal) { return request(`/api/notifications/${encodeURIComponent(id)}/read` + (collection === 'archived' ? '?collection=archived' : ''), { method: 'POST', body: '{}', beforeDispatch, signal }) }
+export function archiveNotification(id, beforeDispatch, signal) { return request(`/api/notifications/${encodeURIComponent(id)}/archive`, { method: 'POST', body: '{}', beforeDispatch, signal }) }
+export function readAllNotifications(beforeDispatch, signal) { return request('/api/notifications/read-all', { method: 'POST', body: '{}', beforeDispatch, signal }) }
 
 // Patient booking helpers (read-only searches; the booking command is createAppointment).
 export function bookingBranchOptions(params) { return request(`/api/appointments/branch-options${query(params)}`) }
@@ -371,6 +410,7 @@ export function listConversationMessages(id, params) { return request(`/api/conv
 export function sendConversationMessage(id, body, key, beforeDispatch) { return command(`/api/conversations/${encodeURIComponent(id)}/messages`, { body }, key, beforeDispatch) }
 // The browser names the NEWEST message it has actually displayed; the server moves this participant's marker forward only.
 export function markConversationRead(id, upTo, beforeDispatch) { return command(`/api/conversations/${encodeURIComponent(id)}/read`, { up_to: upTo }, undefined, beforeDispatch) }
+export function getConversation(id) { return request(`/api/conversations/${encodeURIComponent(id)}`) }
 export function closeConversation(id, payload, key, beforeDispatch) { return command(`/api/conversations/${encodeURIComponent(id)}/close`, payload, key, beforeDispatch) }
 export function conversationStartOptions() { return request('/api/conversations/start-options') }
 export function startConversation(payload, key, beforeDispatch) { return command('/api/conversations', payload, key, beforeDispatch) }
@@ -382,7 +422,7 @@ export function authorizeChannel(socketId, channelName) { return request('/api/b
 
 // M16 external inquiries (manually captured by Staff; no social-platform integration). Cursor-paged, newest first.
 export function listInquiries(params) { return request(`/api/inquiries${query(params)}`) }
-export function inquirySummary() { return request('/api/inquiries/summary') }
+export function inquirySummary(signal) { return request('/api/inquiries/summary', signal ? { signal } : {}) }
 export function createInquiry(payload, key) { return command('/api/inquiries', payload, key) }
 export function inquiryCommand(id, name, payload, key) { return command(`/api/inquiries/${encodeURIComponent(id)}/${encodeURIComponent(name)}`, payload, key) }
 
@@ -408,9 +448,9 @@ export function hmoCaseCommand(id, name, payload, key, beforeDispatch) { return 
 
 // M11 server-authoritative billing. These calls never write invoices, payments or receipts to browser storage.
 // Cursor-paged (newest first): params may carry per_page (1-100), cursor (the previous page's meta.next_cursor), status.
-export function listBillingInvoices(params) { return request(`/api/invoices${query(params)}`) }
+export function listBillingInvoices(params, signal) { return request(`/api/invoices${query(params)}`, signal ? { signal } : {}) }
 export function getBillingInvoice(id) { return request(`/api/invoices/${encodeURIComponent(id)}`) }
-export function listBillingTreatments() { return request('/api/billing/treatments') }
+export function listBillingTreatments(signal) { return request('/api/billing/treatments', signal ? { signal } : {}) }
 export function createBillingDraft(treatmentId, key, beforeDispatch) { return command(`/api/invoices/from-treatment/${encodeURIComponent(treatmentId)}`, {}, key, beforeDispatch) }
 export function reviewBillingInvoice(id, payload, key, beforeDispatch) { return command(`/api/invoices/${encodeURIComponent(id)}/review`, payload, key, beforeDispatch) }
 export function applyBillingDiscount(id, payload, key, beforeDispatch) { return command(`/api/invoices/${encodeURIComponent(id)}/discount`, payload, key, beforeDispatch) }
@@ -631,7 +671,7 @@ export function closureAffected(id) { return request(`/api/branch-closures/${enc
 export function notifyClosurePatients(id) { return json(`/api/branch-closures/${enc(id)}/notify`, 'POST') }
 export function publicClosures() { return request('/api/public/closures') }
 // F6 calendar load.
-export function calendarLoad(params) { return request(`/api/calendar/load${query(params)}`) }
+export function calendarLoad(params, signal) { return request(`/api/calendar/load${query(params)}`, { signal }) }
 // F7 online booking mode per service (Owner).
 export function setServiceOnlineBooking(serviceId, body) { return json(`/api/services/${enc(serviceId)}/online-booking`, 'PATCH', body) }
 // F8 accepted HMOs (information only) and the patient's own HMO details.
@@ -653,7 +693,8 @@ export function pendingIntake() { return request('/api/intake/submissions') }
 export function confirmIntake(id, body) { return json(`/api/intake/submissions/${enc(id)}/confirm`, 'POST', body) }
 export function cancelIntake(id) { return json(`/api/intake/submissions/${enc(id)}/cancel`, 'POST') }
 // M3 Work Schedules
-export function workSchedules() { return request('/api/work-schedules') }
+export function workSchedulesDuty(signal) { return request('/api/work-schedules/duty', signal ? {signal} : {}) }
+export function workSchedules(signal) { return request('/api/work-schedules', signal ? {signal} : {}) }
 export function saveWeeklyHours(dentistId, body) { return json(`/api/work-schedules/${enc(dentistId)}/weekly`, 'PUT', body) }
 export function copyProfileHours(dentistId, branchRef) { return json(`/api/work-schedules/${enc(dentistId)}/from-profile`, 'POST', { branch_ref: branchRef }) }
 export function addScheduleException(dentistId, body) { return json(`/api/work-schedules/${enc(dentistId)}/exceptions`, 'POST', body) }
@@ -661,11 +702,12 @@ export function removeScheduleException(id) { return json(`/api/work-schedule-ex
 export function scheduleAffected(dentistId) { return request(`/api/work-schedules/${enc(dentistId)}/affected`) }
 export function notifyScheduleAffected(dentistId) { return json(`/api/work-schedules/${enc(dentistId)}/notify`, 'POST') }
 // M15 Leave Management
-export function myLeave() { return request('/api/leave/mine') }
+export function myLeave(signal) { return request('/api/leave/mine', signal ? { signal } : {}) }
 export function requestLeave(body, beforeDispatch) { return request('/api/leave', { method: 'POST', body: JSON.stringify(body), beforeDispatch }) }
 export function leaveRequests(filters = {}) { const q = new URLSearchParams(Object.entries(filters).filter(([, v]) => v)).toString(); return request(`/api/leave${q ? `?${q}` : ''}`) }
-export function leaveCalendar(from, to) { return request(`/api/leave/calendar?from=${enc(from)}&to=${enc(to)}`) }
+export function leaveCalendar(from, to, signal) { return request(`/api/leave/calendar?from=${enc(from)}&to=${enc(to)}`, signal ? { signal } : {}) }
 export function leaveConflicts(id) { return request(`/api/leave/${enc(id)}/conflicts`) }
+export function leaveCoverage(id, signal) { return request(`/api/leave/${enc(id)}/coverage`, signal ? { signal } : {}) }
 export function getLeave(id) { return request(`/api/leave/${enc(id)}`) }
 export function decideLeave(id, decision, command, beforeDispatch) { return request(`/api/leave/${enc(id)}/decide`, {method:'POST',body:JSON.stringify({...command,decision}),beforeDispatch}) }
 export function cancelLeave(id, command, beforeDispatch) { return request(`/api/leave/${enc(id)}/cancel`, {method:'POST',body:JSON.stringify(command),beforeDispatch}) }
@@ -688,3 +730,17 @@ export function inviteToClaim(patientId, email) { return json(`/api/patients/${e
 export function linkGuardian(patientId, body) { return json(`/api/patients/${enc(patientId)}/guardians`, 'POST', body) }
 export function myHmo() { return request('/api/me/hmo') }
 export function saveMyHmo(body) { return json('/api/me/hmo', 'PUT', body) }
+
+export function loadBookingDraft() {
+  return request('/api/me/booking-draft')
+}
+export function saveBookingDraft(revision, selection, beforeDispatch) {
+  return request('/api/me/booking-draft', { method: 'PUT', body: JSON.stringify({ revision, selection }), beforeDispatch })
+}
+
+export function changePatientPassword(body) {
+  return request('/api/me/password', { method: 'POST', body: JSON.stringify(body) })
+}
+export function updateOwnProfile(body, beforeDispatch) {
+  return request('/api/me/profile', { method: 'PATCH', body: JSON.stringify(body), beforeDispatch })
+}

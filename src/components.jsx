@@ -22,6 +22,8 @@ const ICON_PATHS={
   activity:<><path d="M3 12h4l2.3-6 4.4 12 2.2-6H21"/></>,
   message:<><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/><path d="M8 9h8M8 13h5"/></>,
   receipt:<><path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 7h6M9 11h6M9 15h4"/></>,
+  eye:<><path d="M2.3 12s3.5-6.5 9.7-6.5 9.7 6.5 9.7 6.5-3.5 6.5-9.7 6.5S2.3 12 2.3 12Z"/><circle cx="12" cy="12" r="3"/></>,
+  reschedule:<><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18M8 16h8m-3-3 3 3-3 3"/></>,
   pill:<><path d="m10.5 5.5 8 8a4.24 4.24 0 0 1-6 6l-8-8a4.24 4.24 0 0 1 6-6Z"/><path d="m8 14 6-6"/></>,
   followup:<><path d="M20 11a8 8 0 1 1-2.34-5.66L20 7"/><path d="M20 3v4h-4"/><path d="M12 8v4l3 2"/></>,
   gift:<><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 8v13M3 12h18M7.5 8C5 8 5 4.5 7 4.5c2.3 0 5 3.5 5 3.5s2.7-3.5 5-3.5c2 0 2 3.5-.5 3.5"/></>,
@@ -71,21 +73,41 @@ export function Card({ title, subtitle, actions, children, className='' }) {
 
 export function StatCard({ label, value, hint, tone='teal', icon }) {
   return <div className={`stat-card ${tone}`}>
-    <div className="stat-top"><span className="stat-label">{label}</span><span className="stat-icon">{icon||<Icon name="activity" size={18}/>}</span></div>
+    <div className="stat-top"><span className="stat-label">{label}</span>{icon&&<span className="stat-icon">{icon}</span>}</div>
     <div className="stat-value">{value}</div>
     {hint&&<div className="stat-hint">{hint}</div>}
   </div>
 }
 
+// Filter out presentational wrappers whose only child is a routine, non-rendered
+// refresh control. This prevents phantom header spacing in every role.
+function headerActionVisible(node) {
+  if (node == null || typeof node === 'boolean') return false
+  if (Array.isArray(node)) return node.some(headerActionVisible)
+  if (!React.isValidElement(node)) return true
+  if (node.type === RefreshButton && !node.props.recovery) return false
+  return node.props.children === undefined ? true : headerActionVisible(node.props.children)
+}
+
 export function PageHeader({ title, text, aside, kicker }) {
-  return <div className="page-header page-header-compact">
-    <div className="page-title-block">{kicker&&<span className="page-kicker">{kicker}</span>}<h1>{title}</h1>{text&&<p className="page-header-desc sr-only">{text}</p>}</div>
-    {aside&&<div className="page-header-right">{aside}</div>}
+  const { role } = React.useContext(ShellActionsContext)
+  const staff = role === 'staff'
+  const usableAside = headerActionVisible(aside) ? aside : null
+  return <div className={`page-header page-header-compact${staff ? ' staff-r11-page-header' : ''}${staff && usableAside ? ' has-aside' : ''}`}>
+    {staff
+      ? <><h1 className="sr-only">{title}</h1>{text&&<p className="sr-only">{text}</p>}</>
+      : <div className="page-title-block">{kicker&&<span className="page-kicker">{kicker}</span>}<h1>{title}</h1>{text&&<p className="page-header-desc sr-only">{text}</p>}</div>}
+    {usableAside&&<div className="page-header-right">{usableAside}</div>}
   </div>
 }
 
 // width: 'content' (default) sizes to its label; 'full' spans its container — reserved for a single-column
 // mobile form/step action where the button genuinely is the row, not a default for every Button.
+export function IconAction({ icon, label, intent = 'neutral', className = '', type = 'button', ...props }) {
+  if (!label || !icon) return null
+  return <button type={type} className={`ui-icon-action intent-${intent} ${className}`.trim()} aria-label={label} title={label} {...props}><Icon name={icon} size={18}/></button>
+}
+
 export function Button({ children, variant='primary', size='md', width='content', className='', icon, type='button', ...props }) {
   return <button type={type} className={`btn ${variant} ${size} ${width==='full'?'btn-full':''} ${className}`.trim()} {...props}>{icon&&<Icon name={icon} size={size==='sm'?15:17}/>}<span>{children}</span></button>
 }
@@ -114,11 +136,27 @@ export function Table({ columns, rows, keyField='id', empty='No records found.',
 }
 
 export function Empty({ text='No records found.', title='Nothing here yet' }) {
-  return <div className="empty-state"><div className="empty-icon"><Icon name="sparkles" size={21}/></div><b>{title}</b><span>{text}</span></div>
+  return <div className="empty-state" role="status"><b>{title}</b><span>{text}</span></div>
 }
 
 export function Notice({ tone='info', title, children }) {
-  return <div className={`notice ${tone}`} role={tone==='danger'||tone==='error'?'alert':'status'}><div className="notice-icon"><Icon name={tone==='warning'?'activity':tone==='success'?'shield':'sparkles'} size={17}/></div><div>{title&&<b>{title}</b>}<span>{children}</span></div></div>
+  return <div className={`notice ${tone} ui-notice`} role={tone==='danger'||tone==='error'?'alert':'status'}><div className="notice-body">{title&&<b>{title}</b>}<div className="notice-content">{children}</div></div></div>
+}
+
+/** One shared, truthful read state. Never turns a failed server response into an empty collection.
+ *  Retry is offered only for a failed GET; mutation recovery stays with its owning workflow. */
+export function ReadState({ state = 'loading', message, onRetry, compact = false, className = '' }) {
+  if (state === 'ready') return null
+  const failure = state === 'error' || state === 'forbidden' || state === 'incomplete'
+  const stale = state === 'stale'
+  const fallback = failure ? 'This information is unavailable.' : stale
+    ? 'Showing the last confirmed information. The latest update failed.' : 'Loading…'
+  return <div className={`ui-read-state ${failure ? 'is-error' : stale ? 'is-stale' : 'is-loading'}${compact ? ' is-compact' : ''} ${className}`.trim()}
+    role={failure ? 'alert' : 'status'} aria-live={failure ? 'assertive' : 'polite'}>
+    {!failure && !stale && <span className="ui-read-indicator" aria-hidden="true"/>}
+    <span className="ui-read-message">{message || fallback}</span>
+    {(failure || stale) && typeof onRetry === 'function' && <button type="button" className="ui-retry" onClick={onRetry}>Retry</button>}
+  </div>
 }
 
 export function Tabs({ tabs, active, onChange }) {
@@ -205,7 +243,7 @@ export function SearchInput({ value, onChange, placeholder = 'Search…', ariaLa
   </div>
 }
 
-export function RefreshButton({ onClick, loading = false, disabled = false, title = 'Refresh', ariaLabel = 'Refresh', size = 'md', className = '', ...props }) {
+export function RefreshButton({ onClick, loading = false, disabled = false, recovery = false, title = 'Refresh', ariaLabel = 'Refresh', size = 'md', className = '', ...props }) {
   const [spinning, setSpinning] = React.useState(false)
   const isRefreshing = loading || spinning
   const pending = useRef(false)
@@ -221,9 +259,11 @@ export function RefreshButton({ onClick, loading = false, disabled = false, titl
     }
   }
 
+  if (!recovery) return null
+
   return <button
     type="button"
-    className={`icon-btn refresh-btn ${size === 'sm' ? 'refresh-btn-sm' : ''} ${isRefreshing ? 'is-spinning' : ''} ${className}`.trim()}
+    className={`ui-retry ${className}`.trim()}
     title={title}
     aria-label={ariaLabel}
     disabled={disabled || isRefreshing}
@@ -231,7 +271,7 @@ export function RefreshButton({ onClick, loading = false, disabled = false, titl
     onClick={handleClick}
     {...props}
   >
-    <Icon name="refresh" size={size === 'sm' ? 16 : 18}/>
+    {isRefreshing ? 'Checking…' : /^Check server record/i.test(title) ? 'Check saved record' : 'Retry'}
   </button>
 }
 

@@ -1,56 +1,65 @@
-import React, {useEffect,useRef,useState} from 'react'
-import {Button,Icon,RefreshButton} from '../../components.jsx'
-import {listAppointments,myBillingInvoices,myDependents} from '../../api-client.js'
-import {dateLong,money,splitAppointments,time12,todayManila} from '../format.js'
-import {EmptyState,ErrorState,Pill,Skeleton} from '../ui.jsx'
-import {readHomeAppointments,readHomeBalance} from '../home-read.js'
-import {JoinQueueCard} from '../../pages/JoinQueueCard.jsx'
+import React from 'react'
+import { Button, Icon } from '../../components.jsx'
+import { patientHome } from '../../api-client.js'
+import { dateLong, greeting, money, time12 } from '../format.js'
+import { EmptyState, ErrorState, LoadingState, PageHead, Pill, useLoad } from '../ui.jsx'
+import { JoinQueueCard } from '../../pages/JoinQueueCard.jsx'
 
-function useHomeRead(read,owner,owns) {
-  const [result,setResult]=useState({status:'loading',data:null}),serial=useRef(0),live=useRef(false),latest=useRef();latest.current={read,owner,owns}
-  const reload=async()=>{
-    const ticket=++serial.current,scope=latest.current.owner
-    setResult({status:'loading',data:null})
-    const current=()=>live.current&&scope===latest.current.owner&&latest.current.owns()&&ticket===serial.current
-    const r=await latest.current.read(current)
-    if(!live.current||scope!==latest.current.owner||ticket!==serial.current)return
-    setResult(current()&&r?.ok?{status:'ready',data:r.data}:{status:'error',data:null,error:r?.message||'Your session or records could not be verified. Sign in again or reload.'})
-  }
-  useEffect(()=>{live.current=true;reload();return()=>{live.current=false;serial.current++}},[owner])
-  return {...result,reload}
-}
-
-/** Current server records only; no balance or visit is inferred from a partial read. */
-export function HomePage({me,onNavigate,session,getAuthGeneration}) {
-  const today=todayManila(),generation=getAuthGeneration?.(),patientId=session?.patientPublicId
-  const owner=JSON.stringify([session?.serverUserId,patientId,generation,today])
-  const owns=()=>session?.active===true&&session?.role==='patient'&&!!session?.serverUserId&&!!patientId&&me?.patient?.id===patientId&&(!getAuthGeneration||generation!=null&&getAuthGeneration()===generation)
-  const visits=useHomeRead(current=>owns()?readHomeAppointments(listAppointments,myDependents,patientId,current):Promise.resolve({ok:false}),owner,owns)
-  const invoices=useHomeRead(current=>owns()?readHomeBalance(myBillingInvoices,myDependents,patientId,current):Promise.resolve({ok:false}),owner,owns)
-  const {upcoming}=splitAppointments(visits.data),next=upcoming[0]
-  return <div className="pp-page pp-home care-home">
-    <header className="care-heading"><div><p>{me?.patient?.name||me?.name||'Patient'}</p><h1>Your dental care</h1></div><RefreshButton title="Reload home" ariaLabel="Reload home" loading={visits.status==='loading'||invoices.status==='loading'} onClick={()=>Promise.all([visits.reload(),invoices.reload()])}/></header>
-    <JoinQueueCard/>
-    <div className="care-home-grid"><section className="care-next-section" aria-labelledby="pp-next-title">
-      <div className="care-section-heading"><h2 id="pp-next-title">Your next visit</h2><Button variant="ghost" size="sm" onClick={()=>onNavigate('visits')}>All visits</Button></div>
-      {visits.status==='loading'&&<Skeleton lines={4} label="Loading your next visit"/>}
-      {visits.status==='error'&&<ErrorState text={visits.error} onRetry={visits.reload}/>}
-      {visits.status==='ready'&&!next&&<EmptyState icon="calendar" title="No upcoming visits" text="Choose a service, branch and available time. Payment options are checked before you confirm."><Button icon="plusCalendar" onClick={()=>onNavigate('book')}>Book a visit</Button></EmptyState>}
-      {visits.status==='ready'&&next&&<article className="pp-card care-next">
-        <div className="care-next-top"><span className="care-calendar"><b>{Number(next.date.slice(8))}</b><span>{new Date(next.date+'T00:00:00+08:00').toLocaleDateString('en-PH',{month:'short',timeZone:'Asia/Manila'})}</span></span><div><Pill>{next.status}</Pill><h3>{next.service?.name||'Dental visit'}</h3><p>{dateLong(next.date)} · <strong>{time12(next.start_time)}</strong></p></div></div>
-        <dl className="care-facts"><div><dt>Patient</dt><dd>{next.patient.name}{next.patient.code&&<small>{next.patient.code}</small>}</dd></div><div><dt>Branch</dt><dd>{next.branch.name}</dd></div>{next.dentist?.name&&<div><dt>Dentist</dt><dd>{next.dentist.name}</dd></div>}</dl>
-        {next.status==='Pending'&&<p className="care-state-note">Confirmation is pending. Open the visit to check its current status.</p>}
-        <div className="care-next-footer"><span>{next.code?`Appointment ${next.code}`:'Saved appointment'}</span><Button onClick={()=>onNavigate('visits',{appointmentId:next.id})}>View details</Button></div>
+export function HomePage({ me, onNavigate, session, getAuthGeneration }) {
+  const patientId = session?.patientPublicId
+  const generation = getAuthGeneration?.()
+  const owns = () => session?.active && session?.role === 'patient' && patientId && me?.patient?.id === patientId &&
+    (!getAuthGeneration || generation === getAuthGeneration())
+  const summary = useLoad(async signal => {
+    if (!owns()) return { ok: false, kind: 'stale_context', message: 'Sign in again to view your appointment and balance.' }
+    const result = await patientHome(signal)
+    const candidate = result.data?.appointment
+    const invalid = result.ok && (result.data?.patient_id !== patientId ||
+      (candidate !== null && (!candidate?.id || !Number.isFinite(Date.parse(candidate.starts_at)))))
+    if (!owns() || invalid) {
+      return { ok: false, kind: 'stale_context', message: 'Your appointment and balance could not be verified.' }
+    }
+    return result
+  }, [patientId, generation, getAuthGeneration])
+  const { appointment: next, balance } = summary.data || {}
+  const checkedIn = ['Checked In', 'In Treatment'].includes(next?.status)
+  const date = next?.starts_at.slice(0, 10)
+  const firstName = me?.first_name || me?.name?.split(' ')[0]
+  return <div className="pp-page patient-home">
+    <PageHead title={firstName ? `${greeting()}, ${firstName}` : 'Welcome'}
+      actions={<Button icon="plusCalendar" onClick={() => onNavigate('book')}>Book appointment</Button>}/>
+    <section aria-labelledby="patient-next-heading" className="patient-home-section">
+      <h2 id="patient-next-heading">{checkedIn ? 'Current visit' : 'Next appointment'}</h2>
+      {summary.loading && !summary.data && <LoadingState label="Loading your next appointment…"/>}
+      {summary.error && <ErrorState text={summary.error} onRetry={summary.reload}/>}
+      {summary.data && !next && <EmptyState icon="calendar" title="No upcoming appointments" text="Your next booking will appear here."/>}
+      {next && <article className="patient-next-visit">
+        <div className="patient-date-tile" aria-hidden="true">
+          <strong>{Number(date.slice(8))}</strong>
+          <span>{new Intl.DateTimeFormat('en-PH', { month: 'short', timeZone: 'Asia/Manila' }).format(new Date(next.starts_at))}</span>
+        </div>
+        <div className="patient-next-copy">
+          <div className="patient-next-title"><h3>{next.service}</h3><Pill>{next.status}</Pill></div>
+          <p><Icon name="pin" size={16}/>{next.branch}</p>
+          <p><Icon name="clock" size={16}/><time dateTime={next.starts_at}>{dateLong(date)} · {time12(next.starts_at.slice(11, 16))}</time></p>
+          {next.dentist && <p>Dentist · {next.dentist}</p>}
+          {next.booking_payment_status === 'paid' && <p>Booking payment verified</p>}
+          {next.booking_payment_status === 'unpaid' && <p>Booking fee unpaid</p>}
+          {next.patient && next.patient !== me?.name && <p>For {next.patient}</p>}
+          {next.status === 'Pending' && <p>{next.booking_payment_status === 'held' ? 'Payment verification pending.' : 'Awaiting confirmation from the front desk.'}</p>}
+        </div>
+        <Button variant="soft" icon="arrow" onClick={() => onNavigate('visits', { appointmentId: next.id })}>View appointment</Button>
       </article>}
-    </section><section className="care-attention" aria-labelledby="care-attention-title"><h2 id="care-attention-title">Your next steps</h2>
-      {invoices.status==='loading'&&<Skeleton lines={2} label="Checking your invoices"/>}
-      {invoices.status==='error'&&<ErrorState text={invoices.error} onRetry={invoices.reload}/>}
-      {invoices.status==='ready'&&<div className="pp-card care-balance"><Icon name="wallet" size={22}/><h3>{invoices.data.count?money(invoices.data.minor/100):'No issued balance'}</h3><p>{invoices.data.count?`${invoices.data.count} issued ${invoices.data.count===1?'invoice':'invoices'} for you and your family.`:'No unpaid balance on issued invoices.'}</p><Button variant="soft" onClick={()=>onNavigate('billing')}>Review billing</Button></div>}
-      {next&&<Button variant="ghost" icon="plusCalendar" onClick={()=>onNavigate('book')}>Book another visit</Button>}
-    </section></div>
-    <section className="care-library" aria-labelledby="care-library-title"><div className="care-section-heading"><div><h2 id="care-library-title">Your care records</h2><p>Saved records and people in your care.</p></div></div><nav className="care-link-grid" aria-label="Care records">
-      {[['archives','archive','Treatment history','Completed visits and care'],['prescriptions','file','Prescriptions','Issued prescriptions and PDFs'],['documents','file','Documents','Your files and consent records'],['family','users','Family','Children and dependents']].map(([page,icon,label,hint])=><button type="button" className="care-link" key={page} onClick={()=>onNavigate(page)}><Icon name={icon} size={20}/><span><b>{label}</b><small>{hint}</small></span><Icon name="chevron" size={18}/></button>)}
-    </nav></section>
-    <nav className="care-footer-links" aria-label="More shortcuts"><Button variant="ghost" icon="calendar" onClick={()=>onNavigate('visits')}>My visits</Button><Button variant="ghost" icon="message" onClick={()=>onNavigate('messages')}>Ask the front desk</Button></nav>
+      {summary.data?.more_upcoming && <Button variant="ghost" onClick={() => onNavigate('visits')}>More upcoming appointments</Button>}
+    </section>
+    {balance?.count > 0 && <section className="patient-attention" aria-labelledby="patient-attention-title">
+      <h2 id="patient-attention-title">Needs attention</h2>
+      <div className="patient-home-balance">
+        <Icon name="receipt" size={20}/>
+        <div><h3>Payment due</h3><p><strong className="patient-number">{money(balance.minor / 100)}</strong> across {balance.count} {balance.count === 1 ? 'invoice' : 'invoices'}</p></div>
+        <Button variant="soft" onClick={() => onNavigate('billing')}>Review billing</Button>
+      </div>
+    </section>}
+    <JoinQueueCard/>
   </div>
 }

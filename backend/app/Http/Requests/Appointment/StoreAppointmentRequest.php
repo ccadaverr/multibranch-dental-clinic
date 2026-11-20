@@ -40,7 +40,10 @@ class StoreAppointmentRequest extends FormRequest
             // A Patient may prefer a Dentist (optional; "Any available" keeps the automatic assignment). The scheduling rules still
             // check that the Dentist works at the branch, does the service and is free.
             'dentist_ref' => ['nullable', 'string', 'exists:dentist_profiles,legacy_ref'],
+            'draft_revision' => $patient ? ['sometimes', 'integer', 'min:1', 'prohibits:for_patient_id'] : ['prohibited'],
             'pay_at_clinic' => ['nullable', 'boolean'],
+            'intended_service_ref' => $patient ? ['nullable', 'string', 'max:50'] : ['prohibited'],
+            'intended_service_id' => ['prohibited'],
             'consultation_acknowledged' => $patient ? ['prohibited'] : ['nullable', 'boolean'],
             'followup_task_id' => [Rule::requiredIf($this->selectsFollowup()), 'string', 'ulid'],
             'followup_expected_revision' => [Rule::requiredIf($this->selectsFollowup()), 'integer', 'min:1', 'max:2147483647'],

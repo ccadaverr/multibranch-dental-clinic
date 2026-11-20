@@ -1,154 +1,165 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useId, useMemo, useState } from 'react'
 import { Icon } from '../components.jsx'
 import { clinic } from '../clinic-config.js'
 import { hoursSummary, openStatus } from '../patient/format.js'
 import { PublicFooter, PublicHeader } from './PublicChrome.jsx'
+import { PublicBookingGuide } from './PublicBookingGuide.jsx'
 import { LocationMap } from './PublicLocations.jsx'
-import { directionsUrl, telHref, usePublicData } from './public-data.js'
+import { hasClinicCoordinates } from '../clinic-map-options.js'
+import { catalogEstimate, directionsUrl, telHref, usePublicData } from './public-data.js'
+import { publicBookingLink } from '../page-link.js'
 import { publicClosures, publicFaq } from '../api-client.js'
 
 // The public landing page. Every clinic fact comes from the clinic server: the name and logo from the branding settings,
 // branches (contacts and hours) from GET /api/public/branches, services from GET /api/public/services, and the FAQ from the
 // assistant answers the clinic has confirmed (GET /api/public/faq). Product copy describes what the portal really does.
-// No statistics, testimonials, prices, partner logos or photos of people.
-
-/** Reveal-on-scroll: only adds motion when the browser supports it and the visitor has not asked for reduced motion. */
-function useReveal() {
-  useEffect(() => {
-    if (typeof window === 'undefined' || !('IntersectionObserver' in window)) return undefined
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return undefined
-    const root = document.querySelector('.lp-site')
-    root?.classList.add('lp-motion')
-    const observer = new IntersectionObserver(entries => entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('is-visible'); observer.unobserve(e.target) } }), { rootMargin: '0px 0px -8% 0px' })
-    root?.querySelectorAll('.lp-reveal').forEach(el => observer.observe(el))
-    return () => observer.disconnect()
-  })
-}
-
-const STEPS = [
-  ['user', 'Create your account', 'Sign up with your email. We send a 6-digit code to confirm it is yours.'],
-  ['calendar', 'Book a visit', 'Choose a service, a branch near you and a time on the calendar. Only real open times are shown.'],
-  ['wallet', 'Pay appointment fee', 'Choose to pay at the clinic when booking. Online booking payment is currently unavailable here.'],
-  ['receipt', 'Visit & receipt', 'Complete your treatment at the clinic; any remaining balance is billed after your visit with an itemized payment receipt.'],
-]
-
-const FEATURES = [
-  ['calendar', 'Online booking', 'Book, reschedule or cancel from your phone, with only the times that are really open.'],
-  ['mail', 'Email updates', 'Your booking confirmation and any changes arrive in your inbox.'],
-  ['lock', 'Secure messaging', 'Chat with the clinic front desk; only you and the clinic staff in your conversation can read it.'],
-  ['wallet', 'Online payment with receipt', 'Pay securely through PayMongo and receive your receipt as a PDF by email.'],
+const CAPABILITIES = [
+  ['calendar', 'Appointments', 'Book a visit or manage an existing appointment.'],
+  ['message', 'Clinic messages', 'Contact the clinic front desk through the portal.'],
+  ['receipt', 'Billing', 'View your invoices, receipts, and available payment options.'],
 ]
 
 // Shown only until the clinic confirms its own answers (Administration → Assistant answers). Each line describes how the
 // portal really works; no clinic fact (hours, prices, policies) is stated here.
 const PORTAL_FAQ = [
   ['How do I create an account?', 'Choose “Create account”, fill in your details and the email you use. We send a 6-digit code to that email; enter it, then sign in with your email and password.'],
-  ['How do I book a visit?', 'After signing in, choose “Book a visit”, pick the service, a branch and a day on the calendar, then a time. Choose pay at the clinic before submitting. Online booking payment is currently unavailable here. Contact the front desk about cancellation and refund eligibility.'],
-  ['How do I pay?', 'You can choose to pay at the clinic when booking. Online booking payment is currently unavailable here. After your visit, any remaining balance on your invoice can be paid online in Billing through PayMongo or in person at the clinic.'],
+  ['How do I book a visit?', 'After signing in, choose “Book a visit”. Select a service, branch, date and time, then review your booking before submitting. Contact the front desk with questions about cancellations or refunds.'],
+  ['How do I pay?', 'Check the payment options shown when you review your booking. After your visit, open Billing to see your invoice and available payment options.'],
   ['How do I message the clinic?', 'Open Messages in the portal and write to the front desk of your branch. They reply in the same conversation.'],
 ]
 
-export function PublicSite() {
-  useReveal()
-  return <div className="lp-site public-site">
+export function PublicSite({ children, onClick }) {
+  return <div className="lp-site public-site lp-home" onClick={onClick}>
     <PublicHeader/>
     <main id="public-main" tabIndex={-1}>
       <Hero/>
-      <HowItWorks/>
-      <Services/>
-      <Branches/>
-      <Features/>
-      <Faq/>
-      <Emergency/>
+      <div className="lp-lower">
+        <Services/>
+        <Branches/>
+        <PublicBookingGuide/>
+        <PortalCapabilities/>
+        <Faq/>
+        <VisitCallToAction/>
+        <Emergency/>
+      </div>
     </main>
     <PublicFooter/>
+    {children}
   </div>
 }
 
 function Hero() {
   return <section id="home" className="lp-hero" aria-labelledby="lp-hero-title">
-    <div className="lp-container lp-hero-grid">
-      <div className="lp-hero-copy">
-        <h1 id="lp-hero-title">Dr. Dana E. Roxas <span>Dental Clinic</span></h1>
-        <p className="lp-lead">Book a dental visit at your preferred branch.</p>
-        <div className="lp-cta">
-          <a className="lp-btn lp-btn-primary lp-btn-lg" href="#create-account"><Icon name="plusCalendar" size={19}/>Book a visit</a>
-          <a className="lp-link" href="#sign-in">Sign in<Icon name="arrow" size={16}/></a>
-        </div>
-      </div>
-      <nav className="lp-visit-directory" aria-label="Before your visit">
-        <h2>Before your visit</h2>
-        <a href="#branches"><Icon name="pin" size={20}/><span><b>Find a branch</b><small>Hours, contacts and directions</small></span><Icon name="chevron" size={16}/></a>
-        <a href="#services"><Icon name="tooth" size={20}/><span><b>Explore services</b><small>See what you can book</small></span><Icon name="chevron" size={16}/></a>
-      </nav>
+    <div className="lp-hero-media" aria-hidden="true">
+      <img src="/images/drdana.bg.png" alt="" width="739" height="415" fetchPriority="high"/>
     </div>
-  </section>
-}
-
-function HowItWorks() {
-  return <section id="how-it-works" className="lp-section" aria-labelledby="lp-how-title">
     <div className="lp-container">
-      <div className="lp-heading lp-reveal"><p className="lp-eyebrow">How it works</p><h2 id="lp-how-title">How to book a visit</h2></div>
-      <ol className="lp-steps">{STEPS.map(([icon, title, text], i) => <li key={title} className="lp-step lp-reveal">
-        <span className="lp-step-icon" aria-hidden="true"><Icon name={icon} size={22}/></span>
-        <span className="lp-step-number">Step {i + 1}</span><h3>{title}</h3><p>{text}</p>
-      </li>)}</ol>
+      <h1 id="lp-hero-title" tabIndex={-1}>Good care starts<br/>with people.</h1>
+      <p className="lp-lead">Meet the team at Dr. Dana E. Roxas Dental Clinic, explore our services, and plan your next visit.</p>
+      <div className="lp-cta">
+        <a className="lp-btn lp-btn-primary" href="#create-account">Book a visit<Icon name="arrow" size={16}/></a>
+        <a className="lp-link lp-hero-link" href="#branches">View locations</a>
+      </div>
     </div>
   </section>
 }
 
 function Services() {
-  const { status, rows } = usePublicData('services')
+  const { status, rows, reload } = usePublicData('services')
   const [category, setCategory] = useState('')
+  const [retried, setRetried] = useState(false)
   const categories = useMemo(() => [...new Set(rows.map(s => s.category || 'Other'))], [rows])
-  const shown = rows.filter(s => !category || (s.category || 'Other') === category)
-  return <section id="services" className="lp-section lp-tint" aria-labelledby="lp-services-title">
-    <div className="lp-container">
-      <div className="lp-heading lp-reveal"><p className="lp-eyebrow">Services</p><h2 id="lp-services-title">Find the care you need</h2><p>Some services start with a consultation. Your dentist confirms the next steps.</p></div>
-      {status === 'loading' && <div className="lp-grid-3" role="status" aria-label="Loading services">{[0, 1, 2].map(i => <div key={i} className="lp-card lp-skeleton"><span/><span/><span/></div>)}</div>}
-      {status === 'error' && <p className="lp-fallback">The list of services can’t be shown right now. Create an account to see what you can book, or call <a href={telHref(clinic.phoneDisplay)}>{clinic.phoneDisplay}</a>.</p>}
-      {status === 'ready' && !rows.length && <p className="lp-fallback">No services are open for online booking yet. Please contact the clinic.</p>}
-      {categories.length > 1 && <div className="lp-chips" role="group" aria-label="Filter services by category">
-        {['', ...categories].map(c => <button key={c || 'all'} type="button" className={`lp-chip ${category === c ? 'is-active' : ''}`} aria-pressed={category === c} onClick={() => setCategory(c)}>{c || 'All'}</button>)}
-      </div>}
-      {status === 'ready' && <ul className="lp-grid-3">{shown.map(s => <li key={s.id} className="lp-card lp-service">
-        <div className="lp-service-top"><span className="lp-tag">{s.category || 'Other'}</span></div>
-        <h3>{s.name}</h3>
-        {s.description && <p>{s.description}</p>}
-        <p className="lp-muted"><Icon name="clock" size={14}/> About {s.duration_minutes} minutes</p>
-        <a className="lp-link" href="#create-account" aria-label={`${s.starts_with_consultation ? 'Book a consultation for' : 'Book'} ${s.name}`}>{s.starts_with_consultation ? 'Start with a consultation' : 'Book this service'} <Icon name="arrow" size={16}/></a>
-      </li>)}</ul>}
+  const selected = categories.includes(category) ? category : ''
+  const shown = rows.filter(s => !selected || (s.category || 'Other') === selected)
+  const hasServices = status === 'ready' && rows.length > 0
+  return <section id="services" className="lp-section lp-services" aria-labelledby="lp-services-title" tabIndex={-1}>
+    <div className={`lp-container lp-services-inner${hasServices ? ' has-directory' : ''}`}>
+      <div className="lp-heading">
+        <h2 id="lp-services-title">Dental services</h2>
+        <p>Explore services offered for online booking. Some visits begin with a consultation.</p>
+      </div>
+      <div className="lp-directory">
+        {status === 'loading' && !retried && <div className="lp-service-loading" role="status">
+          <span className="sr-only">Loading services…</span>
+          {[0, 1, 2].map(row => <span key={row} aria-hidden="true"/>)}
+        </div>}
+        {(status === 'error' || (status === 'loading' && retried)) && <div className="lp-service-state">
+          <div>
+            <p role="status">{status === 'error' ? 'Services are temporarily unavailable.' : 'Loading services…'}</p>
+            {status === 'error' && <a className="lp-link lp-service-help" href={telHref(clinic.phoneDisplay)}>Call the clinic for help choosing a service</a>}
+          </div>
+          <button type="button" className="lp-retry" aria-disabled={status === 'loading'} onClick={() => {
+            if (status === 'loading') return
+            setRetried(true)
+            reload()
+          }}>{status === 'loading' ? 'Retrying…' : 'Retry'}</button>
+        </div>}
+        {status === 'ready' && !rows.length && <p className="lp-service-state" role="status">No services are listed yet.</p>}
+        {categories.length > 1 && <label className="lp-catalog-filter">Service category
+          <select value={selected} onChange={event => setCategory(event.target.value)}>
+            <option value="">All services</option>
+            {categories.map(name => <option key={name}>{name}</option>)}
+          </select>
+        </label>}
+        {status === 'ready' && shown.length > 0 && <ul className="lp-service-list">{shown.map(s => <li key={s.id} className="lp-service">
+          <div><h3>{s.name}</h3>{s.category && <p className="lp-muted">{s.category}</p>}
+            {catalogEstimate(s.price) && <p><strong>{catalogEstimate(s.price)}</strong> <span className="lp-muted">· Development estimate</span></p>}</div>
+          <div>{s.description && <p>{s.description}</p>}{s.duration_minutes > 0 && <p className="lp-muted">About {s.duration_minutes} minutes</p>}</div>
+          <a className="lp-link" href={publicBookingLink({service: s.id})} aria-label={`${s.starts_with_consultation ? 'Book a consultation for' : 'Book'} ${s.name}`}>{s.starts_with_consultation ? 'Book a consultation' : 'Book appointment'} <Icon name="arrow" size={16}/></a>
+        </li>)}</ul>}
+      </div>
     </div>
   </section>
 }
 
-export function BranchCard({ branch, now }) {
-  const status = openStatus(branch.weeklyHours, now)
-  return <li className="lp-card lp-branch lp-reveal">
-    <div className="lp-branch-head"><span className="lp-branch-number" aria-hidden="true">{branch.number}</span>
+export function BranchCard({ branch, now, onSelect }) {
+  const weekly = branch.weeklyHours && Object.values(branch.weeklyHours).some(Boolean) ? branch.weeklyHours : null
+  const status = openStatus(weekly, now)
+  return <li className="lp-branch">
+    <div className="lp-branch-head">{branch.number && hasClinicCoordinates(branch) &&
+      <span className="lp-branch-number"><span className="sr-only">Map marker </span>{branch.number}</span>}
       <div><h3>{branch.name}</h3>{status.label && <span className={`lp-status ${status.open ? 'is-open' : 'is-closed'}`}>{status.label}</span>}</div></div>
     <address>
       <span><Icon name="pin" size={16}/>{branch.address}</span>
       {branch.phone && <a href={telHref(branch.phone)}><Icon name="phone" size={16}/>{branch.phone}</a>}
       {branch.email && <a href={`mailto:${branch.email}`}><Icon name="mail" size={16}/>{branch.email}</a>}
     </address>
-    {branch.weeklyHours && <p className="lp-hours"><Icon name="clock" size={16}/><span>{hoursSummary(branch.weeklyHours)}</span></p>}
-    <a className="lp-btn lp-btn-soft lp-btn-block" href={directionsUrl(branch)} target="_blank" rel="noreferrer">Get directions<span className="sr-only"> to {branch.name} (opens Google Maps)</span></a>
+    <p className="lp-hours"><Icon name="clock" size={16}/><span>{weekly ? hoursSummary(weekly) : 'Hours to be confirmed by the clinic'}</span></p>
+    {branch.services?.length > 0 && <details><summary>{branch.developmentCatalog ? 'Development service catalog' : 'Services at this branch'} ({branch.services.length})</summary>
+      {branch.developmentCatalog && <p>Clinic service availability is awaiting confirmation.</p>}
+      <ul>{branch.services.map(service => <li key={service.id}><a href={publicBookingLink({service: service.id, branch: branch.id})}>{service.name}</a></li>)}</ul>
+    </details>}
+    <a className="lp-link" href={publicBookingLink({branch: branch.id})}>{weekly ? 'Book at this clinic' : 'Request a visit'}<Icon name="arrow" size={16}/></a>
+    {onSelect && hasClinicCoordinates(branch) && <button type="button" className="lp-retry" onClick={() => onSelect(branch.id)}>Show {branch.name} on the map</button>}
+    <a className="lp-link" href={directionsUrl(branch)} target="_blank" rel="noreferrer">Get directions<span className="sr-only"> to {branch.name} (opens Google Maps)</span><Icon name="arrow" size={16}/></a>
   </li>
 }
 
 function Branches() {
-  const { status, rows } = usePublicData('branches')
+  const { status, rows, reload } = usePublicData('branches')
+  const [selected, setSelected] = useState(null)
+  const currentBranch = rows.find(branch => branch.id === selected) ?? rows[0]
   const [now, setNow] = useState(() => new Date())
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 60000); return () => clearInterval(t) }, [])
-  return <section id="branches" className="lp-section" aria-labelledby="lp-branches-title">
+  return <section id="branches" className="lp-section lp-branches" aria-labelledby="lp-branches-title" tabIndex={-1}>
     <div className="lp-container">
-      <div className="lp-heading lp-reveal"><p className="lp-eyebrow">Branches</p><h2 id="lp-branches-title">Find the branch near you</h2><p>Opening status is shown in Philippine time.</p></div>
-      {status === 'loading' && <div className="lp-grid-3" role="status" aria-label="Loading branches">{[0, 1, 2].map(i => <div key={i} className="lp-card lp-skeleton"><span/><span/><span/></div>)}</div>}
-      {status === 'error' && <p className="lp-fallback">Our branches can’t be shown right now. Call <a href={telHref(clinic.phoneDisplay)}>{clinic.phoneDisplay}</a> or email <a href={`mailto:${clinic.email}`}>{clinic.email}</a> and we’ll help you find the nearest clinic.</p>}
-      {status === 'ready' && <ul className="lp-grid-3">{rows.map(b => <BranchCard key={b.id} branch={b} now={now}/>)}</ul>}
+      <div className="lp-heading lp-location-heading">
+        <div>
+          <p className="lp-section-label">Our locations</p>
+          <h2 id="lp-branches-title">Find your nearest clinic.</h2>
+        </div>
+        <p>Select a clinic to see opening hours, contact details and directions.</p>
+      </div>
+      <div className={`lp-location-layout${rows.length ? ' has-branches' : ''}`}>
+        {currentBranch && <div className="lp-branch-directory">
+          <div className="lp-branch-picker" role="group" aria-label="Choose a clinic">
+            {rows.map(branch => <button type="button" key={branch.id} aria-pressed={currentBranch.id === branch.id} onClick={() => setSelected(branch.id)}>{branch.name}</button>)}
+          </div>
+          <ul className="lp-branch-list"><BranchCard branch={currentBranch} now={now}/></ul>
+        </div>}
+        <LocationMap branches={rows} branchStatus={status} reload={reload} selectedBranch={selected} onSelectBranch={setSelected}/>
+      </div>
       <UpcomingClosures/>
-      {status === 'ready' && rows.some(b => b.latitude != null) && <div className="lp-map lp-reveal"><LocationMap branches={rows}/></div>}
     </div>
   </section>
 }
@@ -159,19 +170,23 @@ function UpcomingClosures() {
   useEffect(() => { publicClosures().then(r => { if (r.ok) setRows(r.data || []) }) }, [])
   if (!rows.length) return null
   const day = d => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
-  return <div className="lp-card lp-closures lp-reveal" role="region" aria-label="Upcoming closures">
+  return <div className="lp-closures" role="region" aria-label="Upcoming closures">
     <h3><Icon name="calendar" size={18}/> Upcoming closures</h3>
     <ul>{rows.map(c => <li key={c.id}><b>{day(c.date)}</b> · {c.branch?.name || 'All branches'}{c.partial_hours ? ` · open ${c.partial_hours.open}–${c.partial_hours.close} only` : ' · closed'}{c.reason ? ` · ${c.reason}` : ''}</li>)}</ul>
   </div>
 }
 
-function Features() {
-  return <section id="features" className="lp-section lp-tint" aria-labelledby="lp-features-title">
-    <div className="lp-container">
-      <div className="lp-heading lp-reveal"><p className="lp-eyebrow">Why patients like it</p><h2 id="lp-features-title">Everything for your visit, in your pocket</h2></div>
-      <ul className="lp-grid-4">{FEATURES.map(([icon, title, text]) => <li key={title} className="lp-card lp-feature lp-reveal">
-        <span className="lp-step-icon" aria-hidden="true"><Icon name={icon} size={22}/></span><h3>{title}</h3><p>{text}</p>
-      </li>)}</ul>
+function PortalCapabilities() {
+  return <section id="features" className="lp-section lp-features" aria-labelledby="lp-features-title">
+    <div className="lp-container lp-capabilities-layout">
+      <div className="lp-heading">
+        <p className="lp-section-label">Patient portal</p>
+        <h2 id="lp-features-title">Your visits, in one place.</h2>
+        <a href="#sign-in" className="lp-link">Sign in to the patient portal<Icon name="arrow" size={16}/></a>
+      </div>
+      <dl className="lp-capabilities">{CAPABILITIES.map(([icon, title, text]) => <div key={title}>
+        <dt><Icon name={icon} size={18}/>{title}</dt><dd>{text}</dd>
+      </div>)}</dl>
     </div>
   </section>
 }
@@ -179,17 +194,50 @@ function Features() {
 function Faq() {
   const { status, rows } = usePublicData('faq')
   const [extra, setExtra] = useState({ policy: null, hmos: [] })
+  const [selection, setSelection] = useState(undefined)
   useEffect(() => { publicFaq().then(r => { if (r.ok) setExtra({ policy: r.meta?.cancellation_policy || null, hmos: r.meta?.accepted_hmos || [] }) }) }, [])
   // F4 and F8: the cancellation policy as the Owner set it, and only the HMOs the clinic verified.
-  const items = [...(status === 'ready' && rows.length ? rows.map(r => [r.question, r.answer]) : PORTAL_FAQ),
-    ...(extra.policy ? [['Can I cancel or reschedule?', extra.policy]] : []),
-    ...(extra.hmos.length ? [['Which HMOs does the clinic accept?', `${extra.hmos.map(h => h.name + (h.branch ? ` (${h.branch})` : '') + (h.note ? `, ${h.note}` : '')).join('; ')}. Coverage is checked at the clinic.`]] : [])]
-  return <section id="faq" className="lp-section" aria-labelledby="lp-faq-title">
-    <div className="lp-container lp-narrow">
-      <div className="lp-heading lp-reveal"><p className="lp-eyebrow">FAQ</p><h2 id="lp-faq-title">Questions patients ask</h2></div>
-      <div className="lp-faq">{items.map(([q, a], i) => <details key={q} className="lp-card lp-reveal" open={i === 0}>
-        <summary><span>{q}</span><Icon name="chevron" size={18}/></summary><p>{a}</p>
-      </details>)}</div>
+  const items = [...(status === 'ready' && rows.length ? rows.map(r => [`clinic-${r.id ?? r.question}`, r.question, r.answer]) : PORTAL_FAQ.map(([q, a], i) => [`portal-${i}`, q, a])),
+    ...(extra.policy ? [['policy', 'Can I cancel or reschedule?', extra.policy]] : []),
+    ...(extra.hmos.length ? [['hmos', 'Which HMOs does the clinic accept?', `${extra.hmos.map(h => h.name + (h.branch ? ` (${h.branch})` : '') + (h.note ? `, ${h.note}` : '')).join('; ')}. Coverage is checked at the clinic.`]] : [])]
+  const first = items[0]?.[0]
+  const active = selection === undefined ? first : selection
+  return <section id="faq" className="lp-section lp-faq-section" aria-labelledby="lp-faq-title" tabIndex={-1}>
+    <div className="lp-container lp-faq-content">
+      <div className="lp-heading"><p className="lp-section-label">Questions &amp; answers</p><h2 id="lp-faq-title">Good to know.</h2></div>
+      <div className="lp-faq">{items.map(([key, question, answer]) =>
+        <FaqItem key={key} question={question} answer={answer} open={active === key}
+          onToggle={() => setSelection(previous => (previous === undefined ? first : previous) === key ? null : key)}/>
+      )}</div>
+    </div>
+  </section>
+}
+
+function FaqItem({ question, answer, open, onToggle }) {
+  const id = useId()
+  const labelId = `${id}-question`
+  const answerId = `${id}-answer`
+  return <div className="lp-faq-item">
+    <h3><button type="button" id={labelId} aria-expanded={open} aria-controls={answerId} onClick={onToggle}>
+      {question}<Icon name="chevron" size={18}/>
+    </button></h3>
+    <div id={answerId} className="lp-faq-answer" aria-labelledby={labelId} aria-hidden={!open} role="region">
+      <div><p>{answer}</p></div>
+    </div>
+  </div>
+}
+
+function VisitCallToAction() {
+  return <section className="lp-visit-cta" aria-labelledby="lp-visit-cta-title">
+    <div className="lp-container lp-visit-cta-inner">
+      <div>
+        <h2 id="lp-visit-cta-title">Planning your next visit?</h2>
+        <p>Explore our services and clinic locations before you book.</p>
+      </div>
+      <div className="lp-visit-actions">
+        <a className="lp-btn lp-btn-primary" href="#create-account">Book a visit<Icon name="arrow" size={16}/></a>
+        <a className="lp-link" href="#branches">View locations</a>
+      </div>
     </div>
   </section>
 }

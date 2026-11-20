@@ -58,8 +58,10 @@ export async function loadPublicBranches(timeoutMs = 6000) {
   if (!ok) return { ok: false, branches: [] }
   const text = value => (typeof value === 'string' && value.trim() ? value.trim() : null)
   return { ok: true, branches: rows.filter(b => b && typeof b.name === 'string' && typeof b.address === 'string').map(b => ({ id: String(b.id), number: String(b.number || ''), name: b.name, address: b.address,
-    latitude: typeof b.latitude === 'number' ? b.latitude : null, longitude: typeof b.longitude === 'number' ? b.longitude : null,
-    phone: text(b.phone), email: text(b.email), weeklyHours: b.weekly_hours && typeof b.weekly_hours === 'object' && !Array.isArray(b.weekly_hours) ? b.weekly_hours : null })) }
+    latitude: Number.isFinite(b.latitude) && Math.abs(b.latitude) <= 90 ? b.latitude : null,
+    longitude: Number.isFinite(b.longitude) && Math.abs(b.longitude) <= 180 ? b.longitude : null,
+    phone: text(b.phone), email: text(b.email), weeklyHours: b.weekly_hours && typeof b.weekly_hours === 'object' && !Array.isArray(b.weekly_hours) ? b.weekly_hours : null,
+    developmentCatalog: b.development_catalog === true, services: Array.isArray(b.services) ? b.services.filter(s => text(s?.id) && text(s?.name)) : [] })) }
 }
 
 /** Fetches the public branding once at startup; never blocks the app for more than `timeoutMs`. */

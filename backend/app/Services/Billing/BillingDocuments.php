@@ -164,7 +164,7 @@ class BillingDocuments
         $pages = [];
         // No remote fetches: the logo and the wave are data URIs and every style is inline.
         $dompdf = Pdf::setOption(['isRemoteEnabled' => false, 'isFontSubsettingEnabled' => true, 'defaultFont' => 'DejaVu Sans'])
-            ->loadView($view, $data + ['brand' => $brand, 'logo' => Brand::logoDataUri(), 'breakTail' => $breakTail,
+            ->loadView($view, $data + ['brand' => $brand, 'logo' => extension_loaded('gd') ? Brand::logoDataUri() : null, 'breakTail' => $breakTail,
                 'wave' => Brand::design() === 'fresh' ? Brand::dataUri(Brand::wavePath('#eaf5f2', '#ffffff')) : null])
             ->setPaper('a4')->getDomPDF();
         $dompdf->setCallbacks([['event' => 'end_frame', 'f' => function ($frame, $canvas) use (&$pages) {

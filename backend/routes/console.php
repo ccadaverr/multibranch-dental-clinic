@@ -84,3 +84,11 @@ if (! \App\Support\SyntheticRuntime::active()) {
 if (! \App\Support\SyntheticRuntime::active()) {
     \Illuminate\Support\Facades\Schedule::command('appointments:release-expired-holds')->everyMinute()->withoutOverlapping();
 }
+
+\Illuminate\Support\Facades\Schedule::call(function () {
+    if (\Illuminate\Support\Facades\Schema::hasTable('patient_booking_drafts')) {
+        \Illuminate\Support\Facades\DB::table('patient_booking_drafts')->where('expires_at', '<=', now())
+            ->update(['selection' => null, 'expires_at' => null, 'updated_at' => now(),
+                'revision' => \Illuminate\Support\Facades\DB::raw('revision + 1')]);
+    }
+})->hourly()->name('expire-patient-booking-drafts');

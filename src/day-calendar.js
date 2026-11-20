@@ -153,6 +153,7 @@ export function mapDayAppointment(row) {
     branchId: row.branch?.id ?? null,
     branchName: row.branch?.name ?? '',
     serviceName: row.service?.name ?? '',
+    intendedServiceName: row.intended_service?.name ?? '',
     dentistId: row.dentist?.id ?? null,
     dentistName: row.dentist?.name ?? '',
   }

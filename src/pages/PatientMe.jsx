@@ -6,7 +6,6 @@ import {patientContext} from '../patient-view.js'
 import {DefinitionList} from '../patient-ui.jsx'
 import {loadPatientRecord} from '../patient-records-api.js'
 import {commandKey} from '../appointments-api.js'
-import {ChangeEmailButton} from './ChangeEmailDialog.jsx'
 import {downloadDocumentFile,mapDocument,mapConsent,CONSENT_TYPES,DOCUMENT_CATEGORIES} from '../documents-api.js'
 import {myDocuments,myConsents,uploadDocument,retractDocument,getDocument} from '../api-client.js'
 import {readPatientDocuments,readPatientConsents,documentUploadIntent,fileSha256,verifiedDocument} from '../patient/document-workflow.js'
@@ -83,8 +82,8 @@ function PatientMeBody({store,setPage,documentsOnly=false}){
  const filtered=docs.filter(d=>(category==='all'||d.category===category)&&[d.title,d.originalFilename,d.patient?.name,d.patient?.code,d.branch?.name].filter(Boolean).join(' ').toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
  const openDocument=id=>{const el=document.getElementById('patient-doc-'+id);if(el){el.open=true;el.querySelector('summary')?.focus();el.scrollIntoView({block:'center'})}}
  return <div className="pt-page patient-documents">
-  {documentsOnly?<PageHead eyebrow="Records & Billing" title="Documents" actions={<RefreshButton title="Reload documents and consents" ariaLabel="Reload documents and consents" loading={documents.loading||agreements.loading} onClick={reload}/>}/>:<PageHeader kicker="Your account" title="Me" text="Your profile, documents and consent records."/>}
-  <div className="doc-owner"><span>Patient record</span><strong>{docs[0]?.patient?`${docs[0].patient.name} · ${docs[0].patient.code}`:patientId}</strong>{docs[0]?.patient&&<small>Patient {patientId}</small>}<p>Documents and consents are for your own record. Family document access is not available here.</p></div>
+  {documentsOnly?<PageHead eyebrow="Records & Billing" title="Documents" actions={<RefreshButton recovery={Boolean(documents.error || agreements.error)} title="Reload documents and consents" ariaLabel="Reload documents and consents" loading={documents.loading||agreements.loading} onClick={reload}/>}/>:<PageHeader kicker="Your account" title="Me" text="Your profile, documents and consent records."/>}
+  <div className="doc-owner"><span>Patient record</span><strong>{docs[0]?.patient?`${docs[0].patient.name} · ${docs[0].patient.code}`:patientId}</strong>{docs[0]?.patient&&<small>Patient {patientId}</small>}<p>Documents and consents are for your own record.</p></div>
   {note&&<p role="status" className="doc-result">{note}</p>}
     {!documentsOnly && <section className="pt-record" aria-labelledby="pt-me-profile-title">
       <header><div><h2 id="pt-me-profile-title" className="pt-record-title">Profile</h2><p className="pt-record-sub">This information is read-only for now.</p></div></header>
@@ -105,8 +104,7 @@ function PatientMeBody({store,setPage,documentsOnly=false}){
           { label: 'Date of birth', value: ctx.patient.dob ? dateLabel(ctx.patient.dob) : null },
           { label: 'Preferred branch', value: branch?.name },
         ]}/>}
-      {serverProfile && profile.status === 'ready' && <div style={{ marginTop: '12px' }}><ChangeEmailButton/></div>}
-      <p className="pt-hint">You can change your sign-in email here. Other profile changes will be available once secure, verified changes are supported; contact the clinic if any of them needs to change now.</p>
+      <p className="pt-hint">Contact the clinic to correct your account information.</p>
     </section>}
 
   <section className="doc-section" aria-labelledby="pt-me-docs-title">

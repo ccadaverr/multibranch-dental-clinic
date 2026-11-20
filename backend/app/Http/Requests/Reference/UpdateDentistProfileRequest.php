@@ -23,6 +23,8 @@ class UpdateDentistProfileRequest extends FormRequest
             'assistant_staff_ref' => ['sometimes', 'nullable', 'string', 'exists:staff_profiles,legacy_ref'],
             'branch_ids' => ['sometimes', 'array', 'min:1'],
             'branch_ids.*' => ['string', 'exists:branches,legacy_ref'],
+            'authorize_service_refs' => ['sometimes', 'array', 'min:1', 'max:100'],
+            'authorize_service_refs.*' => ['required', 'string', 'distinct', 'exists:services,legacy_ref'],
             'shift_start' => ['sometimes', 'date_format:H:i'],
             'shift_end' => ['sometimes', 'date_format:H:i', 'after:shift_start'],
             'available' => ['sometimes', 'boolean'],

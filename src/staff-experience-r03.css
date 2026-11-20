@@ -1,0 +1,129 @@
+/* DentalOps Staff experience R03 — shared operational control language.
+   Role-scoped: no Patient, Dentist or Owner changes.
+   Calendar structural grid intentionally deferred until StaffDayCalendar.jsx and
+   b4-calendar.css are inspected; don't guess DOM class names or erase information. */
+
+.role-staff {
+  --staff-canvas: #f7f6f3;
+  --staff-paper: #ffffff;
+  --staff-subtle: #f3f3f0;
+  --staff-line: #dededb;
+  --staff-ink: #202b35;
+  --staff-muted: #596675;
+  --staff-control: #b9c3cd;
+  --staff-blue: #155d9e;
+  --bg: var(--staff-canvas);
+  --surface-2: #fbfaf8;
+  --surface-3: var(--staff-subtle);
+  --ink: var(--staff-ink);
+  --text: #384757;
+  --muted: var(--staff-muted);
+  --line: var(--staff-line);
+  --line-strong: var(--staff-control);
+  --brand: var(--staff-blue);
+  --brand-2: #206fb7;
+  --brand-3: #104979;
+  --brand-soft: #eaf2fa;
+}
+.role-staff .main-shell { background: var(--staff-canvas); }
+.role-staff .content { min-width: 0; padding: clamp(16px,2.1vw,28px) clamp(16px,2.2vw,32px) 56px; }
+.role-staff .topbar { border-bottom-color: var(--staff-line); box-shadow: none; }
+.role-staff .workspace-heading { min-width: 0; }
+.role-staff .workspace-label { color: var(--staff-muted); }
+.role-staff .branch-lock { min-width: 0; }
+.role-staff .branch-lock b { overflow-wrap: break-word; }
+.role-staff .top-user > span { background: var(--brand-soft); color: var(--brand-3); }
+.role-staff .page-header { gap: 16px; border-bottom: 1px solid var(--staff-line); padding-bottom: 12px; margin-bottom: 16px; }
+.role-staff .page-kicker { font-size: .72rem; letter-spacing: .055em; line-height: 1.35; }
+.role-staff .page-header h1 { color: var(--staff-ink); font-size: clamp(1.35rem,2vw,1.8rem); letter-spacing: -.025em; line-height: 1.2; }
+.role-staff .page-header p { max-width: 650px; font-size: .875rem; line-height: 1.45; }
+.role-staff .card { background: var(--staff-paper); border-color: var(--staff-line); border-radius: 14px; box-shadow: none; }
+.role-staff .card-head { gap: 12px; }
+.role-staff .card-head h3 { font-size: 1rem; letter-spacing: -.01em; }
+.role-staff .card-head p { font-size: .825rem; }
+
+/* One form-control language: consistent heights, aligned labels and quiet surfaces. */
+.role-staff .field { min-width: 0; }
+.role-staff .field label, .role-staff .field > span:first-child { color: var(--staff-ink); }
+.role-staff :is(input:not([type=checkbox]):not([type=radio]),select,textarea) {
+  max-width: 100%; min-width: 0; border: 1px solid var(--staff-control);
+  border-radius: 9px; background: var(--staff-paper); color: var(--staff-ink);
+  font-size: .875rem; box-shadow: none;
+}
+.role-staff :is(input:not([type=checkbox]):not([type=radio]),select) { min-height: 44px; }
+.role-staff textarea { min-height: 80px; line-height: 1.5; }
+.role-staff :is(input,select,textarea):focus-visible { outline: 2px solid var(--staff-blue); outline-offset: 2px; }
+.role-staff .filter-bar { background: var(--staff-paper); border-color: var(--staff-line); gap: 12px; padding: 12px; }
+.role-staff .filter-bar-search { flex: 1 1 240px; min-width: min(100%,220px); }
+.role-staff .filter-bar-controls { flex: 1 1 220px; gap: 10px; }
+.role-staff .filter-bar-controls :is(.field,label) { min-width: 128px; }
+.role-staff .filter-bar :is(input,select) { min-height: 44px; font-size: .875rem; }
+.role-staff .filter-bar .filter-search-input { padding-left: 38px; }
+
+/* Buttons follow the same hierarchy. Never stretch a single action just to fill a card. */
+.role-staff .btn { min-height: 42px; padding: 9px 14px; border-radius: 9px; font-size: .875rem; line-height: 1.35; font-weight: 650; box-shadow: none; max-width: 100%; }
+.role-staff .btn.sm { min-height: 36px; padding: 7px 11px; font-size: .8125rem; }
+.role-staff .btn.primary { background: var(--staff-blue); color: white; }
+.role-staff .btn.primary:hover:not(:disabled) { background: #104979; transform: none; }
+.role-staff .btn.soft { color: var(--brand-3); border-color: #d3e2f0; background: #edf4fa; }
+.role-staff .btn.ghost { color: var(--staff-ink); border-color: var(--staff-line); background: var(--staff-paper); }
+.role-staff .btn:focus-visible { outline: 2px solid var(--staff-blue); outline-offset: 2px; }
+.role-staff :is(.row-actions,.form-actions) { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.role-staff :is(.row-actions,.form-actions) .btn { width:auto; flex: 0 0 auto; }
+
+/* Load, empty and informational states must not look like alerts unless something is wrong. */
+.role-staff .notice.info { background: #f7f8f7; border-color: var(--staff-line); color: var(--staff-muted); }
+.role-staff .notice.info :is(.icon, b) { color: var(--staff-ink); }
+.role-staff .notice:not(.error):not(.danger):not(.warning) { box-shadow:none; }
+.role-staff .empty-state { padding: 24px 20px; background: #fbfaf8; border-radius: 12px; }
+.role-staff .empty-state span { color: var(--staff-muted); }
+.role-staff .staff-inline-loading { padding: 0; background: transparent; color: var(--staff-muted); }
+.role-staff .status { line-height: 1.3; font-size: .75rem; padding: 5px 7px; border-radius: 7px; max-width: 100%; }
+
+/* Tables may scroll when the viewport is too narrow; don't break status words
+   or stack an Actions button into a character-wide vertical column. */
+.role-staff .table-wrap { max-width:100%; overflow-x:auto; overscroll-behavior-x:contain; }
+.role-staff .table-wrap table { border-collapse: separate; border-spacing:0; }
+.role-staff .table-wrap th { font-size:.72rem; font-weight:700; letter-spacing:.025em; line-height:1.3; }
+.role-staff .table-wrap td { font-size:.875rem; line-height:1.4; vertical-align:middle; }
+.role-staff .table-wrap td .status { white-space:nowrap; word-break:normal; overflow-wrap:normal; }
+.role-staff .table-wrap .row-actions { flex-wrap:nowrap; white-space:nowrap; }
+.role-staff .table-wrap .row-actions button { flex: 0 0 auto; min-width:max-content; }
+
+/* Care and arrival workflow: functional content takes precedence over help banners. */
+.role-staff .checkin-shell { max-width: 1240px; }
+.role-staff .checkin-mode { display:flex; width:fit-content; max-width:100%; border-radius: 10px; padding:4px; margin-bottom:14px; background:#eeefed; gap:4px; }
+.role-staff .checkin-mode button { min-height:44px; height:auto; font-size:.875rem; font-weight:650; padding:9px 13px; border-radius:8px; }
+.role-staff .checkin-mode button.active { background:var(--staff-paper); color:var(--brand-3); box-shadow:0 1px 2px #1f293314; }
+.role-staff .checkin-select-row { max-width:560px; width:100%; }
+.role-staff .checkin-note { margin-top:12px; padding:10px 12px; background:#f7f7f5; border:1px solid var(--staff-line); border-radius:9px; color:var(--staff-muted); line-height:1.4; }
+.role-staff .checkin-note b { font-size:.875rem; font-weight:650; }
+.role-staff .checkin-note span { font-size:.8125rem; line-height:1.45; }
+.role-staff .arrival-card { background:var(--staff-paper); border-color:var(--staff-line); border-radius:12px; padding:16px; box-shadow:none; }
+.role-staff .arrival-main > span { font-size:.75rem; letter-spacing:.035em; }
+.role-staff .arrival-main h2 { font-size:1.125rem; }
+.role-staff .arrival-main p,.role-staff .arrival-meta span { font-size:.8125rem; }
+.role-staff .arrival-action { min-width:0; }
+
+/* Avoid colored, edge-to-edge sections on everyday administrative screens. */
+.role-staff :is(.tabs,.checkin-mode) { box-shadow:none; }
+.role-staff .tabs button { font-size:.875rem; font-weight:650; }
+.role-staff .tabs button.active { color:var(--brand-3); }
+
+@media (max-width: 1024px) {
+  .role-staff .content { padding: 16px 16px 40px; }
+  .role-staff .page-header { flex-wrap:wrap; }
+}
+@media (max-width: 640px) {
+  .role-staff .content { padding-inline:12px; }
+  .role-staff .filter-bar { flex-direction:column; align-items:stretch; }
+  .role-staff .filter-bar :is(.filter-bar-search,.filter-bar-controls) { width:100%; }
+  .role-staff .checkin-mode { width:100%; }
+  .role-staff .checkin-mode button { flex:1; justify-content:center; }
+  .role-staff .arrival-card { grid-template-columns:minmax(0,1fr); }
+  .role-staff .arrival-action { grid-column: 1; align-items:stretch; }
+  .role-staff .table-wrap { max-width: calc(100vw - 36px); }
+}
+@media (prefers-reduced-motion:reduce) {
+  .role-staff :is(.btn,.tabs button,.checkin-mode button) { transition:none; animation:none; }
+}

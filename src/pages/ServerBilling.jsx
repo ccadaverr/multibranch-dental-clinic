@@ -18,7 +18,7 @@ function BillingWorkspace({ role, store, identity, auth }) {
   const [payment, setPayment] = useState(null), [method, setMethod] = useState('Cash'), [reference, setReference] = useState(''), [confirm, setConfirm] = useState(null)
   const [discount, setDiscount] = useState(null), [discountType, setDiscountType] = useState(''), [discountId, setDiscountId] = useState('')
   const [commandState, setCommandState] = useState({ pending: false, intent: null }), [problem, setProblem] = useState(null), [notice, setNotice] = useState('')
-  const live = useRef(false), latest = useRef(store), readTicket = useRef(0), readPending = useRef(false), command = useRef(null)
+  const live = useRef(false), latest = useRef(store), readTicket = useRef(0), readPending = useRef(false), readAbort = useRef(null), command = useRef(null)
   latest.current = store
   const allowed = () => live.current && clinicalSessionKey(latest.current.session) === identity && auth === latest.current.getAuthGeneration?.()
   // Create inside the effect so StrictMode's cleanup cannot poison the next lifetime.
@@ -26,24 +26,33 @@ function BillingWorkspace({ role, store, identity, auth }) {
     live.current = true
     command.current = createBillingCommand({ send: i => sends[i.mode](i, allowed), read: api.getBillingInvoice, key: commandKey, allowed, publish: setCommandState })
     load()
-    return () => { live.current = false; readTicket.current++; readPending.current = false; command.current?.dispose() }
+    return () => { live.current = false; readTicket.current++; readPending.current = false; readAbort.current?.abort(); readAbort.current = null; command.current?.dispose() }
   }, [])
   async function load(cursor = null) {
     if (readPending.current || command.current?.state().pending) return
     const ticket = ++readTicket.current
     readPending.current = true; setLoading(true)
+    // Bound only read-only requests. Never timeout or replay payment commands.
+    const controller = new AbortController()
+    readAbort.current = controller
+    let timedOut = false
+    const timeout = setTimeout(() => { timedOut = true; controller.abort() }, 15000)
     if (cursor) setMoreError(''); else { setError(''); setTreatmentError('') }
     try {
-      const [invoices, completed] = await Promise.all([api.listBillingInvoices({ per_page: 50, ...(cursor ? { cursor } : {}) }), cursor ? Promise.resolve(null) : api.listBillingTreatments()])
+      const [invoices, completed] = await Promise.all([api.listBillingInvoices({ per_page: 50, ...(cursor ? { cursor } : {}) }, controller.signal), cursor ? Promise.resolve(null) : api.listBillingTreatments(controller.signal)])
       if (!allowed() || ticket !== readTicket.current) return
-      if (!invoices.ok) (cursor ? setMoreError : setError)(invoices.message || 'Billing records could not be loaded.')
+      if (!invoices.ok) (cursor ? setMoreError : setError)(timedOut ? 'Payments took too long to load. Try again.' : invoices.message || 'Billing records could not be loaded.')
       else {
         setRows(previous => cursor ? [...(previous || []), ...(invoices.data || []).filter(row => !(previous || []).some(p => p.id === row.id))] : invoices.data || [])
         setNextCursor(invoices.meta?.next_cursor || null)
       }
-      if (completed) completed.ok ? setTreatments(completed.data || []) : setTreatmentError(completed.message || 'Completed treatments could not be loaded.')
-    } catch { if (allowed()) (cursor ? setMoreError : setError)('Billing records could not be loaded. Retry when the connection is available.') }
-    finally { if (ticket === readTicket.current) { readPending.current = false; if (allowed()) setLoading(false) } }
+      if (completed) completed.ok ? setTreatments(completed.data || []) : setTreatmentError(timedOut ? 'Treatment records took too long to load. Retry.' : completed.message || 'Completed treatments could not be loaded.')
+    } catch { if (allowed()) (cursor ? setMoreError : setError)(timedOut ? 'Payments took too long to load. Try again.' : 'Billing records could not be loaded. Retry when the connection is available.') }
+    finally {
+      clearTimeout(timeout)
+      if (readAbort.current === controller) readAbort.current = null
+      if (ticket === readTicket.current) { readPending.current = false; if (allowed()) setLoading(false) }
+    }
   }
   async function run(mode, base, payload = {}) {
     if (readPending.current || !allowed() || role !== 'staff') return
@@ -67,7 +76,7 @@ function BillingWorkspace({ role, store, identity, auth }) {
     {!payment && !discount && feedback}
     {commandState.pending && <p role="status">Saving and verifying the clinic record…</p>}
     {error && <Notice tone="warning" title="Billing records unavailable">{error} <Button disabled={loading} onClick={() => load()}>Retry</Button></Notice>}
-    {rows === null && !error && <Notice>Loading authoritative billing records… No current financial action is available until the server billing records load.</Notice>}
+    {rows === null && !error && <p className="ui-read-status" role="status" aria-live="polite">Loading payments…</p>}
     <Card title="Completed treatments awaiting billing">
       {treatmentError && <Notice tone="warning">{treatmentError} <Button disabled={locked} onClick={() => load()}>Retry</Button></Notice>}
       <div className="billing-worklist">{ready.map(t => <div className="billing-worklist-row" key={t.id}>

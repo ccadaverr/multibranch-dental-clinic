@@ -58,6 +58,11 @@ class Conversation extends Model
         return $this->hasMany(ConversationParticipant::class);
     }
 
+    public function latestMessage(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(ConversationMessage::class)->latestOfMany();
+    }
+
     public function messages(): HasMany
     {
         return $this->hasMany(ConversationMessage::class)->orderBy('id');

@@ -43,8 +43,8 @@ export async function loadInquiries(cursor = null) {
 }
 
 /** Authoritative scoped counts for the signed-in Staff member. A failure is returned as a failure — never as zero. */
-export async function loadInquirySummary() {
-  const result = await api.inquirySummary()
+export async function loadInquirySummary(signal) {
+  const result = await api.inquirySummary(signal)
   if (!result.ok) return normalizeFailure(result)
   const d = result.data || {}
   const n = v => (Number.isInteger(v) && v >= 0 ? v : null)

@@ -77,7 +77,7 @@ final class AutomationCatalog
                 true, ['late_hours' => 24, 'limit' => 3, 'window_months' => 6], ['late_hours' => 'R2-13', 'limit' => null, 'window_months' => null, 'enabled' => null]],
             'intake' => ['Registration and ID', 'M1 / M4 / M8', 'Patients register on their phone at the counter and may scan an ID to fill in the form: the scan runs on their device, the photo is never uploaded or kept, and no ID number is stored. Staff check the physical ID once and record only the ID type, who checked it and when. Optionally keep the last 4 characters of the ID. Uploading an ID for remote pre-verification is not available in this release.',
                 true, ['store_id_last4' => false, 'id_upload' => false, 'id_upload_days' => 7, 'claim_link_hours' => 24], ['store_id_last4' => null, 'id_upload' => null, 'id_upload_days' => null, 'claim_link_hours' => null, 'enabled' => 'R2-12']],
-            'staffing' => ['Work schedules, leave and handovers', 'M3 / M15 / M25', 'Who approves leave requests (the Owner only, or also the front desk of the requester\'s branch) and whether the front desk may edit the work schedules of the dentists at their branch (the Owner can always edit every branch), and for how many days after a patient handover is acknowledged the receiving branch keeps access to that patient\'s record (M25). Leave balances are not tracked.',
+            'staffing' => ['Work schedules, leave and handovers', 'M3 / M15 / M25', 'Leave decisions are handled by the Owner; also controls whether the front desk may edit the work schedules of the dentists at their branch (the Owner can always edit every branch), and for how many days after a patient handover is acknowledged the receiving branch keeps access to that patient\'s record (M25). Leave balances are not tracked.',
                 true, ['leave_approver' => 'owner', 'front_desk_edits_schedules' => true, 'handover_access_days' => 60], ['leave_approver' => null, 'front_desk_edits_schedules' => null, 'handover_access_days' => 'R2-08', 'enabled' => null]],
             'followup_reminders' => ['Follow-up reminders', 'M20 / M18', 'Emails the patient once when a follow-up the dentist asked for is due (or the set number of days before) and no appointment is booked yet: "Time to book your follow-up visit", with a booking link. No health advice. Health-related: the wording needs the Owner\'s and a Dentist\'s approval, so it ships off.',
                 false, ['days_before' => 0], ['days_before' => null, 'enabled' => null]],
@@ -179,9 +179,9 @@ final class AutomationCatalog
             'attendance_policy' => ['late_hours' => $int('late_hours', 1, 72), 'limit' => $int('limit', 1, 10), 'window_months' => $int('window_months', 1, 24)],
             'calendar_load' => ['crowded_percent' => $int('crowded_percent', 50, 100)],
             'staffing' => (function () use ($s, $bool, $int, $fail) {
-                if (! in_array($s['leave_approver'], ['owner', 'owner_or_front_desk'], true)) $fail('leave_approver', 'Choose the Owner only, or the Owner or the branch front desk.');
+                if (! in_array($s['leave_approver'], ['owner', 'owner_or_front_desk'], true)) $fail('leave_approver', 'The Owner decides leave requests.');
 
-                return ['leave_approver' => $s['leave_approver'], 'front_desk_edits_schedules' => $bool('front_desk_edits_schedules'), 'handover_access_days' => $int('handover_access_days', 1, 365)];
+                return ['leave_approver' => 'owner', 'front_desk_edits_schedules' => $bool('front_desk_edits_schedules'), 'handover_access_days' => $int('handover_access_days', 1, 365)];
             })(),
             'followup_reminders' => ['days_before' => $int('days_before', 0, 14)],
             'dental_chart' => (function () use ($s, $fail) {

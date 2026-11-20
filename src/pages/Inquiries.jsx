@@ -103,9 +103,10 @@ function InquirySession({ store }) {
   const linkable = linking ? state.appointments.filter(a => isServerId(a.id) && a.branchId === linking.branchId && a.status !== 'Cancelled') : []
 
   return <>
-    <PageHeader title="Social Media & External Inquiry Management" text="Record inquiries your team receives from social media or the website, track who answered them, and link an inquiry to the appointment that followed."/>
-    <Notice tone="info" title="Recorded manually">Staff type each inquiry in. The source is only where Staff say it came from: it does not mean the clinic has an official account there, and this system is not connected to Facebook, Instagram, the website or any other platform, fetches nothing from them and sends no messages. “Responded” only records that you replied outside this system. You see the inquiries assigned to you in your branches.</Notice>
-    <Card title="Record an inquiry"><div className="form-grid">
+    <PageHeader title="Inquiries" text="Record and follow up on contacts from outside DentalOps."/>
+    <p className="staff-inline-guidance">Manual tracking only. Replies are sent outside DentalOps; marking responded records that action, but does not send a message.</p>
+    <details className="staff-inquiry-entry"><summary>Record new inquiry <span>Show form</span></summary>
+    <Card title="Contact details"><div className="form-grid">
 
       <Field label="Source reported by Staff" required><select disabled={busy} value={form.source} onChange={e => edit({ source: e.target.value })}>{SOURCES.map(s => <option key={s}>{s}</option>)}</select></Field>
       <Field label="Contact name" required><input disabled={busy} value={form.name} maxLength={LIMITS.name} onChange={e => edit({ name: e.target.value })}/></Field>
@@ -123,9 +124,9 @@ function InquirySession({ store }) {
         return pot ? <div className="span-2"><Notice tone="info">Potential duplicate: An inquiry from this contact ({pot.source}, status: {pot.status}) was already recorded for this branch on {when(pot.receivedAt)}.</Notice></div> : null
       })()}
       <Button className="span-2" disabled={busy} onClick={add}>Record inquiry</Button>
-    </div></Card>
+    </div></Card></details>
     {error && <Notice tone="warning" title="Inquiries could not be loaded">{error} <Button size="sm" onClick={load}>Retry</Button></Notice>}
-    {!rows && !error && <Notice>Loading inquiries…</Notice>}
+    {!rows && !error && <p className="staff-inline-loading" role="status">Loading inquiries…</p>}
     {rows && (()=>{
       const visibleRows = (rows || []).filter(i => {
         if (filterStatus !== 'All' && i.status !== filterStatus) return false
@@ -140,7 +141,7 @@ function InquirySession({ store }) {
         }
         return true
       })
-      return <Card className="top-gap" title="Inquiry worklist" subtitle="Newest first">
+      return <Card className="top-gap" title="Inquiries" subtitle="Newest recorded first">
         <FilterBar
           search={filterSearch}
           onSearchChange={setFilterSearch}

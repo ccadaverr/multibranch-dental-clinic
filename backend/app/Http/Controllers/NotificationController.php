@@ -18,9 +18,21 @@ class NotificationController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $history = $this->prepareHistory($request, Schema::hasTable('notification_archives'));
-
-        return $this->historyResponse($request, $history);
+        $started = hrtime(true);
+        $archival = Schema::hasTable('notification_archives');
+        $schemaDone = hrtime(true);
+        $history = $this->prepareHistory($request, $archival);
+        $prepareDone = hrtime(true);
+        $response = $this->historyResponse($request, $history);
+        $done = hrtime(true);
+        // Timing categories are purely durations. No user IDs, SQL, or private data.
+        // The page phase contains the recipient-scoped DB read plus serialization.
+        $timing = sprintf('schema;dur=%.1f,prepare;dur=%.1f,page;dur=%.1f,app;dur=%.1f',
+            ($schemaDone - $started) / 1_000_000,
+            ($prepareDone - $schemaDone) / 1_000_000,
+            ($done - $prepareDone) / 1_000_000,
+            ($done - $started) / 1_000_000);
+        return $response->header('Cache-Control', 'private, no-store')->header('Server-Timing', $timing);
     }
 
     /** @return array{query: Builder<UserNotification>, archival: bool, collection: string} */

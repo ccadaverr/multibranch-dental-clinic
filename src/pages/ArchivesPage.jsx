@@ -396,12 +396,12 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
   return (
     <div className={role === 'owner' ? 'archives-page owner-record-workspace' : 'archives-page'} aria-label="Archives and Historical Records">
       {role === 'owner' ? <PageHeader title="Archives & Records" text="Search read-only clinic records by branch."/> : <PageHeader
-        kicker="Compliance & Record Retention"
-        title="Archives & Historical Records Management"
-        text="Role- and branch-scoped history of past or terminal appointments, prescriptions, and settled financial records."
+        kicker="Records"
+        title="Archives"
+        text="Search past appointments, prescriptions, and settled payments."
       />}
 
-      <p className="clinic-inline-help owner-archive-access" id="archive-restore-unavailable" tabIndex={0}>Read-only records. Restoration is unavailable. Permanent deletion is disabled.</p>
+      <p className="staff-inline-guidance" id="archive-restore-unavailable">Archives are read-only. Records cannot be restored or permanently deleted here.</p>
 
       {!enabled || noStaffScope ? <Notice tone="warning" title={noStaffScope && enabled ? 'No authorized archive branches' : 'Archive access unavailable'}>
         {noStaffScope && enabled ? 'This account has no authorized branches for archive viewing or export.' : 'These records are unavailable to the current account.'}
@@ -482,7 +482,7 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
       )}
 
       {tab === 'visits' && (
-        <Card title="Historical Appointments" subtitle="Past or terminal appointments; inclusion here does not confirm completed care.">
+        <Card title="Past appointments" subtitle="Includes past and terminal statuses; this does not by itself confirm completed treatment.">
           {store.appointmentsTruncated && <Notice tone="warning" title="Appointment history is partial">
             Search, counts and CSV export cover the loaded appointments. Older matches may exist.
           </Notice>}
@@ -508,11 +508,10 @@ function ArchiveLifetime({ store, role, session, scopes, enabled, activeBranch }
               { key: 'status', label: 'Outcome Status', render: r => <Status tone={r.status === 'Completed' || r.status === 'Served' ? 'success' : 'neutral'}>{r.status}</Status> },
               { key: 'actions', label: 'Actions', render: r => (
                 <div className="row-actions">
-                  <Button size="sm" variant="soft" icon="file" title="View details" aria-label={`View details for ${r.code || r.id}`} onClick={() => {
+                  <Button size="sm" variant="soft" icon="file" title="View record" aria-label={`View details for ${r.code || r.id}`} onClick={() => {
                     logArchiveView('visit', r)
                     setViewRecord({ kind: 'visit', record: r })
                   }}>View details</Button>
-                  {role !== 'owner' && <Button size="sm" variant="soft" disabled aria-describedby="archive-restore-unavailable">Retrieve / Restore (unavailable)</Button>}
                 </div>
               ) },
             ]}

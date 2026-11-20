@@ -102,8 +102,8 @@ export function ClosedDatesPage({ store, role }) {
         <div className="au-actions"><Button type="submit" disabled={busy === 'add' || !form.date}>{busy === 'add' ? 'Saving…' : 'Close this date'}</Button></div>
       </form>
     </Card>}
-    <Card title={`Upcoming closures (${active.length})`}>
-      <FilterBar
+    <Card className="staff-closures-list" title={`Upcoming closures (${active.length})`}>
+      {active.length > 0 && <FilterBar
         search={filterSearch}
         onSearchChange={setFilterSearch}
         searchPlaceholder="Filter closures by date or reason…"
@@ -113,8 +113,8 @@ export function ClosedDatesPage({ store, role }) {
           <option value="All">All branches</option>
           {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
         </select>}
-      </FilterBar>
-      {!rows ? <p className="au-muted" role="status">Loading…</p> : !active.length ? <p className="au-muted">No upcoming closures.</p>
+      </FilterBar>}
+      {!rows ? error ? <div role="alert" className="staff-load-failure">Unable to load closures. <Button variant="ghost" size="sm" onClick={load}>Retry</Button></div> : <p className="au-muted" role="status">Loading closures…</p> : !active.length ? <p className="staff-empty-state">No upcoming closures.</p>
         : !visibleActive.length ? <p className="au-muted" role="status">No closures matching your filters.</p>
           : <ul className="fd-list">{visibleActive.map(c => <ClosureRow key={c.id} row={c} owner={owner} busy={busy} toast={toast} onRemove={() => change(c, 'remove', 'Closure removed. The date is bookable again.')}/>)}</ul>}
     </Card>
@@ -145,9 +145,9 @@ function ClosureRow({ row, owner, busy, toast, onRemove }) {
   return <li className="cd-row">
     <div><b>{longDate(row.date)}{row.partial_hours ? ` · open ${row.partial_hours.open}–${row.partial_hours.close} only` : ' · closed'}</b>
       <span>{row.branch?.name || 'All branches'}{row.reason ? ` · ${row.reason}` : ''}</span>
-      {affected && (affected.length
-        ? <span><b>{affected.length} appointment(s) still booked</b> (not cancelled): {affected.map(a => `${a.time} ${a.patient}`).join(', ')}{meta.notified_at ? ' · patients told' : ''}</span>
-        : <span>No appointments booked that day.</span>)}
+      {affected?.length > 0 && <details className="staff-closure-affected"><summary>{affected.length} existing booking{affected.length === 1 ? '' : 's'}{meta.notified_at ? ' · notified' : ''}</summary>
+        <ul>{affected.map(a => <li key={a.id || `${a.time}-${a.patient}`}>{a.time} · {a.patient}</li>)}</ul>
+      </details>}
     </div>
     <div className="ns-actions">
       {affected?.length > 0 && <Button size="sm" variant="soft" icon="mail" disabled={sending || meta.wording_approved === false} title={meta.wording_approved === false ? 'The Owner must approve the “Closed date” email wording first' : undefined}

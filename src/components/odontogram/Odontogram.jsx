@@ -17,6 +17,15 @@ import {
 import { ToothTimeline } from './ToothTimeline.jsx'
 import { ChartSummary } from './ChartSummary.jsx'
 
+const DentalModel = React.lazy(() => import('./DentalModel.jsx'))
+
+class ModelBoundary extends React.Component {
+  state = { failed: false }
+  static getDerivedStateFromError() { return { failed: true } }
+  componentDidCatch() { this.props.onFallback() }
+  render() { return this.state.failed ? null : this.props.children }
+}
+
 export function Odontogram({
   data,
   selected = null,
@@ -28,8 +37,12 @@ export function Odontogram({
   defaultView = 'top',
   recordingPending = false,
   onDirtyChange,
+  encounter,
+  allow3d = true,
   onReviewEncounter,
 }) {
+  const [layer, setLayer] = useState('conditions')
+  const [modelError, setModelError] = useState(false)
   const [enlarged,setEnlarged]=useState(false)
   const [view, setView] = useState(defaultView) // 'top' | 'front'
   const [set, setSet] = useState(()=>PRIMARY_UPPER.includes(selected)||PRIMARY_LOWER.includes(selected)?'primary':'adult') // 'adult' | 'primary'
@@ -75,12 +88,14 @@ export function Odontogram({
 
   const currentMap = useMemo(() => {
     const map = {}
-    for (const c of (data?.current || [])) {
+    const entries = layer === 'conditions' ? data?.current : data?.history?.filter(e =>
+      layer === 'history' || (layer === 'planned' ? !!e.planned_service_ref : !!e.completed_procedure_ref))
+    for (const c of (entries || [])) {
       if (!map[c.tooth]) map[c.tooth] = []
       map[c.tooth].push(c)
     }
     return map
-  }, [data])
+  }, [data, layer])
 
   const numbering = data?.settings?.numbering || 'fdi'
   const upperTeeth = set === 'adult' ? ADULT_UPPER : PRIMARY_UPPER
@@ -277,6 +292,8 @@ export function Odontogram({
           >
             Front view
           </button>
+          {allow3d && <button type="button" className={`od-segmented-btn ${view === '3d' ? 'is-active' : ''}`} aria-pressed={view === '3d'}
+            disabled={recordingPending || (canRecord && dirty.current)} onClick={() => { if (canRecord && dirty.current) return; setModelError(false); setView('3d') }}>3D view</button>}
         </div>
 
         <div className="od-segmented" role="group" aria-label="Dentition Set">
@@ -302,6 +319,12 @@ export function Odontogram({
       {/* Main 2-column layout: Canvas on Left, Panel on Right */}
       <div className="od-main-layout">
         <div className="od-canvas-container">
+          <label className="od-tooth-chooser">Show on chart
+            <select value={layer} onChange={e => setLayer(e.target.value)}>
+              <option value="conditions">Current findings</option><option value="planned">Recorded plans</option>
+              <option value="completed">Completed procedures</option><option value="history">History</option>
+            </select>
+          </label>
           <label className="od-tooth-chooser">
             Choose tooth
             <select tabIndex={0} value={selected || ''} onChange={e => requestSelection(e.target.value || null)}>
@@ -309,6 +332,13 @@ export function Odontogram({
               {visibleTeeth.map(t => <option key={t} value={t}>Tooth {toothLabel(t, numbering)} — {getToothFullName(t)}{numbering === 'universal' ? ` (FDI ${t})` : ''}</option>)}
             </select>
           </label>
+          {modelError && <p role="status">3D is unavailable on this device. Use the 2D chart to inspect each tooth.</p>}
+          {view === '3d' ? <ModelBoundary onFallback={() => { setModelError(true); setView('top') }}>
+            <React.Suspense fallback={<p role="status">Loading dental model…</p>}>
+              <DentalModel teeth={visibleTeeth} selected={selected} current={currentMap} onSelect={requestSelection}
+                onFallback={() => { setModelError(true); setView('top') }}/>
+            </React.Suspense>
+          </ModelBoundary> : <>
           <Button className="od-zoom-control" variant="ghost" aria-pressed={enlarged} onClick={()=>setEnlarged(v=>!v)}>{enlarged?'Fit chart':'Enlarge chart'}</Button>
           {enlarged&&<p className="od-key-help">Scroll the enlarged diagram horizontally, or use Choose tooth.</p>}
           <p id={`${chartId}-keys`} className="od-key-help">Diagram: Left/Right moves between teeth; Up/Down changes arch; Home/End moves to first/last. Enter or Space opens details; Tab leaves the diagram.</p>
@@ -345,8 +375,9 @@ export function Odontogram({
           )}
           </div>
 
+          </>}
           <div className="chart-selection-strip"><span>Numbering: <b>{numbering==='universal'?'Universal':'FDI'}</b><small>Patient's right is shown on your left.</small></span><span aria-live="polite">{selected?<><b>Selected: Tooth {toothLabel(selected,numbering)}</b>{numbering==='universal'&&<small>FDI {selected}</small>}</>:'Choose a tooth to review findings'}</span></div>
-          <ul className="chart-legend" aria-label="Chart legend"><li><i/>No nonbaseline finding shown</li><li><i className="finding"/>Saved finding</li><li><i className="selected"/>Selected tooth</li></ul>
+          <ul className="chart-legend" aria-label="Chart legend"><li><i/>No nonbaseline finding shown</li><li><i className="finding"/>Recorded in selected layer</li><li><i className="selected"/>Selected tooth</li></ul>
         </div>
 
         {/* Right Panel: Tooth Timeline (if selected) or Chart Summary (if none selected) */}
@@ -358,9 +389,10 @@ export function Odontogram({
               isCurrent={() => selectionGeneration.current === generation && selection.current === selected}
               onDirtyChange={reportDirty}
               recordingPending={recordingPending}
+              encounter={encounter}
               data={data}
               onBack={() => requestSelection(null)}
-              canRecord={canRecord}
+              canRecord={canRecord && view !== '3d'}
               onRecord={onRecord}
               onReviewEncounter={onReviewEncounter}
               branches={branches}

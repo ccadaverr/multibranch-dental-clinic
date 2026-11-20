@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Button, Field } from '../../components.jsx'
 import {ToothHistory} from './ToothHistory.jsx'
+import { listServices } from '../../api-client.js'
 import '../../history-experience.css'
 import { SurfaceDiagram } from './SurfaceDiagram.jsx'
 import { getToothFullName, toothLabel } from './toothShapes.js'
@@ -12,6 +13,7 @@ export function ToothTimeline({
   tooth,
   data,
   onBack,
+  encounter,
   canRecord = false,
   onRecord,
   branches = [],
@@ -24,6 +26,12 @@ export function ToothTimeline({
   const numbering = data?.settings?.numbering || 'fdi'
   const label = toothLabel(tooth, numbering)
   const fullName = getToothFullName(tooth)
+  const [services, setServices] = useState([])
+  useEffect(() => {
+    let active = true
+    if (canRecord && encounter) listServices().then(r => { if (active && r.ok) setServices(r.data.filter(s => s.status === 'Active')) })
+    return () => { active = false }
+  }, [canRecord, encounter?.treatmentId])
   const statuses = data?.settings?.statuses || []
 
   // Entries for this tooth
@@ -33,7 +41,7 @@ export function ToothTimeline({
 
   // Dentist form state
   const [f, setF] = useState({
-    status: '',
+    kind: 'finding', ref: '', status: '',
     surfaces: [],
     note: '',
     recorded_on: today(),
@@ -69,6 +77,8 @@ export function ToothTimeline({
     saving.current = true
     setBusy(true); setErr('')
     let payload = { tooth, status: submitted.status, surfaces: [...submitted.surfaces], note: submitted.note.trim() || null, recorded_on: submitted.recorded_on,expected_revision:observed.current }
+    if (submitted.kind === 'planned') payload.planned_service_ref = submitted.ref
+    if (submitted.kind === 'completed') payload.completed_procedure_ref = submitted.ref
     if (submitted.branch_id) {
       if (typeof branch === 'number') payload.branch_id = branch
       else payload.branch_ref = String(submitted.branch_id)
@@ -85,9 +95,9 @@ export function ToothTimeline({
         if(edits.current!==revision){setNeedsReview(true);setErr('The finding was saved; your newer draft is retained. Review the saved chart before recording that draft.');return}
         if(Number.isSafeInteger(res.revision))observed.current=res.revision
         submittedSave.current=null
-        form.current = { ...form.current, status: '', surfaces: [], note: '' }
+        form.current = { ...form.current, kind: 'finding', ref: '', status: '', surfaces: [], note: '' }
         cleanForm.current = draftKey(form.current)
-        setF(x => ({ ...x, status: '', surfaces: [], note: '' }))
+        setF(x => ({ ...x, kind: 'finding', ref: '', status: '', surfaces: [], note: '' }))
         onDirtyChange?.(false)
       } else {setUncertain(!!res?.uncertain);setNeedsReview(!!res?.needsReview);setErr(res?.message || 'Failed to record entry.')}
     } catch {
@@ -133,7 +143,13 @@ export function ToothTimeline({
           <h5 className="od-section-title">Record finding</h5>
 
           <fieldset disabled={uncertain||needsReview} style={{border:0,padding:0,margin:0,minWidth:0}}>
-          <Field label="Status" required>
+          {encounter && <Field label="Entry type"><select value={f.kind} onChange={e => changeForm({kind:e.target.value,ref:'',status:''})}>
+            <option value="finding">Finding or existing restoration</option><option value="planned">Planned treatment</option>
+            {encounter.procedures?.length > 0 && <option value="completed">Completed procedure from this visit</option>}
+          </select></Field>}
+          {f.kind !== 'finding' ? <Field label={f.kind === 'planned' ? 'Planned service' : 'Performed procedure'}><select value={f.ref} onChange={e => changeForm({ref:e.target.value,status:e.target.value ? (f.kind === 'planned' ? 'Planned treatment' : 'Completed procedure') : ''})}>
+            <option value="">Choose…</option>{(f.kind === 'planned' ? services : encounter.procedures).map(s => <option key={s.id} value={s.id}>{s.name || s.serviceName || s.service?.name}</option>)}
+          </select></Field> : <Field label="Status" required>
             <select
               value={f.status}
               onChange={e => changeForm({ status: e.target.value })}
@@ -143,6 +159,7 @@ export function ToothTimeline({
             </select>
           </Field>
 
+          }
           {/* If dentist works at multiple branches, allow choosing branch */}
           {branches.length > 1 && (
             <Field label="Clinic Branch" hint="Branch where this finding was observed">
@@ -171,7 +188,7 @@ export function ToothTimeline({
             ))}
           </fieldset>
 
-          <p className="od-muted">{f.surfaces.length?'Applies to surfaces '+f.surfaces.join(' · '):'Whole-tooth entry replaces the current tooth state. Earlier entries stay in history.'}</p>
+          <p className="od-muted">{f.kind !== 'finding' ? 'This treatment entry keeps the existing findings and links to the selected visit.' : f.surfaces.length?'Applies to surfaces '+f.surfaces.join(' · '):'Whole-tooth entry replaces the current tooth state. Earlier entries stay in history.'}</p>
           <Field label="Date">
             <input
               type="date"

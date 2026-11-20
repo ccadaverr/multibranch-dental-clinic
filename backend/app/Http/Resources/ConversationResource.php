@@ -6,7 +6,7 @@ use App\Support\ClinicClock;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
-// Conversation SUMMARY: deliberately carries no message text (lists must not leak bodies). `unread` counts other participants'
+// The Patient inbox may request a bounded preview of its own visible conversations. `unread` counts other participants'
 // messages this account has not yet opened, in this application only. `participants` are the OTHER participants by display name and role.
 class ConversationResource extends JsonResource
 {
@@ -16,9 +16,11 @@ class ConversationResource extends JsonResource
         $me = $request->user()->id;
         $iso = fn ($v) => $v ? ClinicClock::local($v instanceof \DateTimeInterface ? $v : \Carbon\CarbonImmutable::parse($v))->toIso8601String() : null;
         $grants = app(\App\Services\Messaging\ConversationDentistAccess::class);
-        $strict = $grants->enforced();
-        $activeDentist = $strict && $grants->schemaInstalled()
-            ? \App\Models\ConversationDentistGrant::whereKey($c->active_dentist_grant_id)->value('dentist_user_id') : null;
+        $installed = $request->attributes->get('conversation_grants_installed') ?? $grants->schemaInstalled();
+        $strict = config('messaging.conversation_grants_enabled') || $installed;
+        $activeDentist = array_key_exists('granted_dentist_id', $c->getAttributes()) ? $c->granted_dentist_id :
+            ($installed && $c->active_dentist_grant_id ? \App\Models\ConversationDentistGrant::whereKey($c->active_dentist_grant_id)
+                ->where('patient_id', $c->patient_id)->where('branch_id', $c->branch_id)->where('conversation_id', $c->id)->value('dentist_user_id') : null);
 
         return [
             'id' => $c->public_id,
@@ -36,6 +38,8 @@ class ConversationResource extends JsonResource
             // The participant of record: the first Staff member who replied (null until someone does).
             'assigned' => $c->assigned_user_id ? ['name' => $c->assignee?->person?->fullName(), 'mine' => $c->assigned_user_id === $me] : null,
             'unread' => (int) ($c->unread_count ?? 0),
+            ...($request->user()->role === \App\Enums\Role::Patient && $c->relationLoaded('latestMessage')
+                ? ['preview' => mb_substr((string) $c->latestMessage?->body, 0, 100)] : []),
             'last_message_at' => $iso($c->last_message_at ?? null),
             'closed_at' => $iso($c->closed_at),
         ];

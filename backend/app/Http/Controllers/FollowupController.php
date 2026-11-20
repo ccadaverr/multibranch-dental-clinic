@@ -73,7 +73,7 @@ class FollowupController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $data = $request->validate(['branch_ref' => ['nullable', 'string', 'max:50'], 'status' => ['nullable', 'in:active,Open,Contacted,Booked,Closed'], 'due' => ['nullable', 'in:overdue,today,week,all']]);
+        $data = $request->validate(['branch_ref' => ['nullable', 'string', 'max:50'], 'status' => ['nullable', 'in:active,Open,Contacted,Booked,Closed'], 'due' => ['nullable', 'in:overdue,today,week,all'], 'search' => ['nullable', 'string', 'max:100']]);
         $today = ClinicClock::today();
         $q = $this->scopedTasks($user)->with(['patient.person', 'branch', 'service', 'dentist.person', 'assignee.person', 'appointment'])->orderBy('due_on')->orderBy('id')->limit(300)
             ->when(! empty($data['branch_ref']), fn ($q) => $q->whereIn('branch_id', Branch::select('id')->where('legacy_ref', $data['branch_ref'])))
@@ -81,6 +81,17 @@ class FollowupController extends Controller
             ->when(($data['due'] ?? 'all') === 'overdue', fn ($q) => $q->where('due_on', '<', $today))
             ->when(($data['due'] ?? 'all') === 'today', fn ($q) => $q->where('due_on', $today))
             ->when(($data['due'] ?? 'all') === 'week', fn ($q) => $q->where('due_on', '<=', ClinicClock::addDays($today, 7)));
+
+        // Search is applied inside the already-authorized branch scope BEFORE the 300-row cap.
+        // Escape LIKE wildcards so a Patient search cannot accidentally broaden the result set.
+        if ($search = mb_strtolower(trim($data['search'] ?? ''))) {
+            $pattern = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $search).'%';
+            $q->whereHas('patient', function ($patients) use ($pattern) {
+                $patients->whereRaw("LOWER(patient_code) LIKE ? ESCAPE '!'", [$pattern])
+                    ->orWhereHas('person', fn ($people) => $people
+                        ->whereRaw("LOWER(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) LIKE ? ESCAPE '!'", [$pattern]));
+            });
+        }
 
         return response()->json(['data' => $q->get()->map(fn (FollowupTask $t) => $this->view($t, $user))->values(),
             'meta' => ['today' => $today, 'counts' => $this->counts($user)]]);
@@ -218,9 +229,15 @@ class FollowupController extends Controller
 
     private function counts(User $user): array
     {
-        $base = $this->scopedTasks($user)->whereIn('status', FollowupTask::OPEN);
+        // One PostgreSQL aggregate rather than three scoped count round-trips to Supabase.
+        // Preserve the exact staff/dentist/owner scope and Open/Contacted definition.
+        $today = ClinicClock::today();
+        $counts = $this->scopedTasks($user)->whereIn('status', FollowupTask::OPEN)
+            ->selectRaw('count(*) as total, count(*) filter (where due_on < ?) as overdue_count, count(*) filter (where due_on = ?) as today_count', [$today, $today])
+            ->first();
 
-        return ['open' => (clone $base)->count(), 'overdue' => (clone $base)->where('due_on', '<', ClinicClock::today())->count(), 'due_today' => (clone $base)->where('due_on', ClinicClock::today())->count()];
+        return ['open' => (int) ($counts?->total ?? 0), 'overdue' => (int) ($counts?->overdue_count ?? 0),
+            'due_today' => (int) ($counts?->today_count ?? 0)];
     }
 
     /** Task, status and dates only: never the reason or the note. */

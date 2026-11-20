@@ -181,12 +181,7 @@ function AutomationRow({ row, categories, demo, toast, onSaved, onStale, onWordi
         </>}
         {row.key === 'calendar_load' && num('crowded_percent', 'Mark a day as crowded at (% of the dentists’ time booked)', 50, 100)}
         {row.key === 'staffing' && <>
-          <Field label="Who approves leave requests" hint={hint('leave_approver')}>
-            <select value={draft.leave_approver} onChange={e => set('leave_approver', e.target.value)}>
-              <option value="owner">The Owner only</option>
-              <option value="owner_or_front_desk">The Owner or the front desk of the requester’s branch</option>
-            </select>
-          </Field>
+          <p className="au-muted">Leave decisions are handled by the Clinic Owner. Staff may submit and cancel their own requests.</p>
           {check('front_desk_edits_schedules', 'The front desk may edit the work schedules of the dentists at their branch')}
           {num('handover_access_days', 'After a handover is acknowledged, the receiving branch keeps the patient’s record for (days)', 1, 365)}
         </>}
@@ -341,7 +336,7 @@ export function TemplateEditor({ template, toast, onChanged, approveAction = app
       <div className="au-actions">
         {canEdit && <Button size="sm" disabled={!dirty || !!busy} onClick={save}>{busy === 'save' ? 'Saving…' : 'Save wording'}</Button>}
         {!dirty && !approvedByMe && <Button size="sm" variant="primary" icon="check" disabled={!!busy} onClick={approve}>{busy === 'approve' ? 'Approving…' : 'Approve this wording'}</Button>}
-        {canEdit && !dirty ? <RefreshButton title="Refresh preview" ariaLabel="Refresh preview" loading={!!busy} onClick={show}/> : (canEdit || !preview) && <Button size="sm" variant="ghost" disabled={!!busy} onClick={show}>{busy === 'preview' ? 'Loading…' : canEdit ? 'Preview my changes' : 'Preview formatted email'}</Button>}
+        {canEdit && !dirty ? <Button size="sm" variant="soft" disabled={!!busy} onClick={show}>{busy === 'preview' ? 'Loading…' : 'Preview'}</Button> : (canEdit || !preview) && <Button size="sm" variant="ghost" disabled={!!busy} onClick={show}>{busy === 'preview' ? 'Loading…' : canEdit ? 'Preview my changes' : 'Preview formatted email'}</Button>}
         {canEdit && showTest && <Button size="sm" variant="ghost" icon="mail" disabled={!!busy} onClick={test}>Send a test to myself</Button>}
       </div>
       {canEdit && dirty && template.approved && <p className="au-muted">Saving changes clears the approval and switches off the automations that use this email until you approve again.</p>}

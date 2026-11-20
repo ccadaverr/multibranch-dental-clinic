@@ -10,6 +10,7 @@ import './patient/portal.css'
 import './landing.css'
 import './automations.css'
 import './clinic-workflows.css'
+import './unified-workspace-r17.css'
 
 import { loadBranding } from './clinic-config.js'
 

@@ -229,7 +229,7 @@ function AuditLifetime({ store }) {
         text="Append-only record of significant events written by the clinic server. The Owner can review and export it; nothing in this screen can change or delete an entry. Details are kept minimal and credentials are redacted."
         aside={
           <div className="row-actions">
-            <RefreshButton size="sm" title="Refresh audit events" ariaLabel="Refresh audit events"
+            <RefreshButton recovery={viewStatus === 'error'} size="sm" title="Retry audit events" ariaLabel="Refresh audit events"
               loading={viewStatus === 'loading' && !rangeInvalid} disabled={rangeInvalid} onClick={refresh}/>
             <Button size="sm" variant="soft" onClick={handleExport} disabled={exporting||rangeInvalid||viewStatus!=='ready'}>
               Export Audit Trail (CSV)

@@ -81,7 +81,7 @@ export function StaffRosterWorkflow({staff,branches,role,canRequest,getAuthGener
     <div className="staff-roster-duty">
     <h3>Published Staff duty</h3>
     <div className="st-pair"><Field label="Duty branch"><select aria-label="Duty branch" value={branch} disabled={busy||uncertain} onChange={e=>setBranch(e.target.value)}>{branches.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></Field><Field label="Duty date"><input type="date" value={dutyDate} disabled={busy||uncertain} onChange={e=>setDutyDate(e.target.value)}/></Field></div>
-    <RefreshButton title="Refresh Staff duty" ariaLabel="Refresh Staff duty" loading={dutyBusy} onClick={loadDuty}/>
+    <RefreshButton recovery={Boolean(dutyError)} title="Refresh Staff duty" ariaLabel="Refresh Staff duty" loading={dutyBusy} onClick={loadDuty}/>
     {dutyError&&<p role="alert">{dutyError}</p>}
     {dutyBusy?<p role="status">Loading published duty…</p>:duty&&<div role="region" aria-label="Effective Staff duty"><p><b>{duty.available?'Scheduled and available':'Unavailable / unscheduled'}</b> · {duty.date}</p>{duty.windows.map((w,i)=><p key={i}>{w.start_time}–{w.end_time} · Published revision {w.revision}</p>)}{duty.approved_leave.length>0&&<Notice>Approved leave applies to this date. Only the remaining available hours are shown.</Notice>}{!duty.windows.length&&<p>No effective working hours for this branch and date.</p>}</div>}
     </div>
@@ -89,7 +89,7 @@ export function StaffRosterWorkflow({staff,branches,role,canRequest,getAuthGener
       <h3>{role==='owner'?'Staff roster approval and publication':'My schedule change request'}</h3>
       <p className="staff-roster-guidance">{role==='owner'?'Save draft → Approve → Publish':'Submit request → Owner review → Publication'}. Published duty stays effective until a new version is published.</p>
       <Field label="Schedule record date" hint="Choose the saved preparation date to review or revise that schedule."><input aria-label="Schedule record date" type="date" value={date} disabled={busy||uncertain} onChange={e=>setDate(e.target.value)}/></Field>
-      <RefreshButton title="Reload roster for review" ariaLabel="Reload roster for review" loading={loading} disabled={busy||uncertain} onClick={load}/>
+      <RefreshButton recovery={Boolean(error)} title="Reload roster for review" ariaLabel="Reload roster for review" loading={loading} disabled={busy||uncertain} onClick={load}/>
       {error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}
       {row&&<p>Current review: <Status>{row.status}</Status> · Revision {row.revision}{row.publication_id&&` · Effective published revision ${row.published_revision}`}</p>}
       {uncertain&&<Button disabled={busy} onClick={()=>perform()}>Retry original roster command</Button>}

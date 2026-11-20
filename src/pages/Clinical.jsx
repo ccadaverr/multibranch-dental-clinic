@@ -2,7 +2,7 @@ import { useClinicalSession } from '../use-clinical-session.js'
 import { clinicalSessionKey, encounterKey } from '../encounter.js'
 import React, { useState } from 'react'
 import { ROLE_INFO } from '../data.js'
-import { Button, Card, ConfirmDialog, Field, Modal, Notice, PageHeader, SearchInput, SelectWithOther, Status, Table, Tabs } from '../components.jsx'
+import { Button, Card, ConfirmDialog, Field, Modal, Notice, PageHeader, ReadState, SearchInput, SelectWithOther, Status, Table, Tabs } from '../components.jsx'
 import { dateLabel, dentistName, displayTime, patientName } from '../logic.js'
 import { canSchedule } from '../appointment-ui.js'
 import { publicPatientIdFor } from '../appointment-projection.js'
@@ -43,11 +43,20 @@ function PatientRecordsBody({ role, store, context, setPage }) {
   const [bookingPatient,setBookingPatient]=useState(null)
   const [tab,setTab]=useState((context?.historyTreatmentId||context?.historyTab)?'clinical':'summary')
   const [search,setSearch]=useState('')
+  const [sortBy,setSortBy]=useState('name-asc')
   const filteredPatients=availablePatients.filter(p=>{
     if(branchFilter!=='All'&&p.preferredBranch!==branchFilter)return false
     const term=search.trim().toLowerCase()
     if(!term)return true
     return `${p.name} ${p.patientCode||''} ${p.phone||''}`.toLowerCase().includes(term)
+  }).sort((a,b)=>{
+    if(role!=='staff')return 0
+    const nameOrder=String(a.name||'').localeCompare(String(b.name||''),'en',{sensitivity:'base',numeric:true})
+    const codeOrder=String(a.patientCode||a.id||'').localeCompare(String(b.patientCode||b.id||''),'en',{numeric:true})
+    if(sortBy==='name-desc')return -nameOrder||codeOrder
+    if(sortBy==='code-asc')return codeOrder||nameOrder
+    if(sortBy==='code-desc')return -codeOrder||nameOrder
+    return nameOrder||codeOrder
   })
   const [newOpen,setNewOpen]=useState(false)
   const [newPatient,setNewPatient]=useState({firstName:'',lastName:'',dob:'',sex:'Female',sexOther:'',phone:'',email:'',address:'',preferredBranch:'Dr. Dana Roxas Dental Clinic',hmo:'None',hmoMember:'—',allergies:'None',medicalHistory:'',dentalHistory:'',emergencyContact:'',consent:false,createPortalAccount:false})
@@ -108,14 +117,21 @@ function PatientRecordsBody({ role, store, context, setPage }) {
   const tabs=[{key:'summary',label:'Summary'},{key:'visits',label:'Visit history',count:visits.length},{key:'clinical',label:'Clinical',count:serverClinical?undefined:treatments.length},{key:'hmo',label:'HMO',count:hmo.length},{key:'documents',label:'Documents'}]
   return <>
     {role==='dentist'&&context?.returnEncounter&&<Button variant="ghost" onClick={()=>setPage('treatment',context.returnEncounter)}>Return to encounter</Button>}
-    <PageHeader title="Centralized Patient Records" text="Identity and contact details are shared across the patient record. Staff may maintain approved demographics; dentists see those fields read-only and edit only clinical information." aside={role==='dentist'&&encounter&&(['Called','Treatment Ready'].includes(encounter.status)||encounter.status==='Served'&&encounter.visitStatus==='In Treatment')?<Button onClick={()=>setPage('treatment',context)}>{encounter.treatmentId?'Continue Treatment':'Open Treatment'}</Button>:null}/>
+    <PageHeader title={role==='staff'?'Patients':'Centralized Patient Records'} text={role==='staff'?'Staff may edit authorized contact details; clinical records remain protected.':"Identity and contact details are shared across the patient record. Staff may maintain approved demographics; dentists see those fields read-only and edit only clinical information."} aside={role==='dentist'&&encounter&&(['Called','Treatment Ready'].includes(encounter.status)||encounter.status==='Served'&&encounter.visitStatus==='In Treatment')?<Button onClick={()=>setPage('treatment',context)}>{encounter.treatmentId?'Continue Treatment':'Open Treatment'}</Button>:null}/>
     {!patient&&!serverSession?<Notice>The selected patient is unavailable in your current scope. {availablePatients.length>0&&<Button onClick={()=>setSelected(availablePatients[0].id)}>Open an available patient</Button>}{role==='staff'&&<Button onClick={()=>setNewOpen(true)}>New Patient</Button>}</Notice>:<div className="records-layout">
-      <Card className={role==='dentist'?'patient-list dentist-record-list':'patient-list'} title="Patients" subtitle={role==='dentist'?undefined:`${filteredPatients.length} on file`} actions={role==='staff'?<Button size="sm" onClick={()=>setNewOpen(true)}>New Patient</Button>:null}>
+      <Card className={role==='dentist'?'patient-list dentist-record-list':'patient-list'} title="Patients" subtitle={role==='dentist'?undefined:`${filteredPatients.length} on file`} actions={role==='staff'?<Button size="sm" variant="soft" onClick={()=>setNewOpen(true)}>New patient</Button>:null}>
         <SearchInput className="search-input" ariaLabel="Search patients" placeholder={serverSession&&role!=='dentist'?'Search the clinic directory…':'Search patient...'} value={search} onChange={setSearch} onClear={()=>setSearch('')}/>
-        {branches.length>1&&<select className="filter-select" style={{width:'100%',margin:'6px 0 2px'}} aria-label="Filter patients by branch" value={branchFilter} onChange={e=>setBranchFilter(e.target.value)}>
-          <option value="All">All branches</option>
-          {branches.map(b=><option key={b.id} value={b.name}>{b.name}</option>)}
-        </select>}
+        <div className="staff-patient-directory-tools">
+          {branches.length>1&&<label className="sr-only" htmlFor="patient-branch-filter">Patient branch</label>}
+          {branches.length>1&&<select id="patient-branch-filter" aria-label="Filter patients by branch" value={branchFilter} onChange={e=>setBranchFilter(e.target.value)}>
+            <option value="All">All branches</option>
+            {branches.map(b=><option key={b.id} value={b.name}>{b.name}</option>)}
+          </select>}
+          {role==='staff'&&<select aria-label="Sort patients" value={sortBy} onChange={e=>setSortBy(e.target.value)}>
+            <option value="name-asc">Name A–Z</option><option value="name-desc">Name Z–A</option>
+            <option value="code-asc">Patient ID ↑</option><option value="code-desc">Patient ID ↓</option>
+          </select>}
+        </div>
         {searchError&&<Notice tone="warning" title="Patient search unavailable">{searchError} <Button size="sm" variant="ghost" onClick={()=>setSearchAttempt(searchAttempt+1)}>Retry</Button></Notice>}
         {serverSession&&role==='dentist'&&store.appointmentsStatus==='error'&&<Notice tone="warning" title="Patient list unavailable">
           {store.appointmentsError} <Button size="sm" variant="ghost" onClick={()=>store.appointmentFlow?.refresh()}>Retry</Button>
@@ -235,21 +251,47 @@ function StaffPatientSummary({ patient, role, branches, toast, store }) {
   React.useLayoutEffect(()=>{live.current=true;return()=>{live.current=false}},[])
   React.useEffect(()=>{if(['unknown','refused','verified'].includes(profilePhase))feedback.current?.focus()},[profilePhase])
   React.useEffect(()=>{
-    let current=true,timer
+    let current=true,profileTimer,indexTimer,profileLoaded=false
+    const profileController = new AbortController()
+    const indexController = new AbortController()
     setLoad({status:'loading',record:null,message:''});setProblem(null);setIndex(null);setLinkedError('')
-    const unavailable={ok:false,message:'The Patient record could not be verified within the waiting period. Retry to read its current state.'}
-    Promise.race([Promise.all([loadPatientRecord(patient.id),loadPatientRecordIndex(patient.id)]),new Promise(resolve=>{timer=setTimeout(()=>resolve([unavailable,unavailable]),30000)})])
-    .catch(()=>[unavailable,unavailable]).then(([record,linked])=>{
-      clearTimeout(timer)
+    // The record is the primary task. The linked-record index is optional supporting data:
+    // never fail the entire Patient profile because the index was slow or unavailable.
+    const profileTimeout={ok:false,message:'Patient details took too long to load.'}
+    Promise.race([
+      Promise.resolve().then(()=>loadPatientRecord(patient.id, profileController.signal)),
+      new Promise(resolve=>{profileTimer=setTimeout(()=>{profileController.abort();resolve(profileTimeout)},18000)}),
+    ]).then(record=>{
+      clearTimeout(profileTimer)
       if(!current||!owns())return
-      if(!record.ok)return setLoad({status:'error',record:null,message:record.message})
-      setLoad({status:'ready',record:record.record,message:''});setForm(record.record);setIndex(linked.ok?linked:null)
-      if(!linked.ok)setLinkedError(linked.message||'Linked records could not be verified for this Patient.')
+      if(!record?.ok){
+        setLoad({status:'error',record:null,message:record?.message||'Could not load patient details.'})
+        return
+      }
+      profileLoaded=true
+      setLoad({status:'ready',record:record.record,message:''})
+      setForm(record.record)
+      // Load ancillary counts AFTER the usable profile appears. A failed index does not
+      // erase its identity, editable fields, or clinical links.
+      return Promise.race([
+        Promise.resolve().then(()=>loadPatientRecordIndex(patient.id, indexController.signal)),
+        new Promise(resolve=>{indexTimer=setTimeout(()=>{indexController.abort();resolve({ok:false,message:'Related records took too long to load.'})},15000)}),
+      ]).then(linked=>{
+        clearTimeout(indexTimer)
+        if(!current||!owns())return
+        if(linked?.ok){setIndex(linked);setLinkedError('')}
+        else setLinkedError(linked?.message||'Related records could not load.')
+      })
+    }).catch(()=>{
+      if(!current||!owns())return
+      if(profileLoaded)setLinkedError('Related records could not load.')
+      else setLoad({status:'error',record:null,message:'Could not load patient details.'})
     })
-    return ()=>{current=false;clearTimeout(timer)}
+    return ()=>{current=false;profileController.abort();indexController.abort();clearTimeout(profileTimer);clearTimeout(indexTimer)}
   },[patient.id,attempt,owner])
-  if(load.status==='loading')return <Card title="Patient summary"><p role="status">Loading the patient record from the clinic server…</p></Card>
-  if(load.status==='error')return <Card title="Patient summary"><Notice tone="warning" title="Patient record unavailable">{load.message}</Notice><Button className="top-gap" onClick={()=>setAttempt(attempt+1)}>Retry</Button></Card>
+  if(load.status==='loading')return <ReadState state="loading" compact message="Opening patient record…"/>
+  if(load.status==='error')return <ReadState state="error" compact
+    message={load.message || 'Patient details could not be loaded.'} onRetry={()=>setAttempt(attempt+1)}/>
   const record=load.record
   const full=record.access==='full'
   const editable=role==='staff'&&full
@@ -281,7 +323,7 @@ function StaffPatientSummary({ patient, role, branches, toast, store }) {
     command.current=selected;await submit(selected)
   }
   const counts=index?.counts
-  const subtitle=editable?'Staff maintains the non-clinical profile on the clinic server. Clinical history is not edited here.':full?'Read-only.':'Identity only. The full profile is shown to Staff for patients with an appointment or visit at their branches.'
+  const subtitle=editable?'Contact and profile details. Clinical notes are read-only here.':full?'Read-only record.':'Limited record access for this branch.'
   return <Card title="Patient summary" subtitle={subtitle}>
     <div className="form-grid">
       <fieldset className="span-2" disabled={!editable||profilePending} style={{border:0,padding:0,margin:0,minWidth:0}}><div className="form-grid">
@@ -300,7 +342,7 @@ function StaffPatientSummary({ patient, role, branches, toast, store }) {
       </div></fieldset>
       <div className="span-2"><Notice tone="info" title="Clinical history">Allergies, medical history and dental history are not stored on the clinic server yet, so they are not shown or editable here. They change only through an authorized Dentist workflow.</Notice></div>
       {counts&&<div className="span-2"><Notice tone="info" title="Linked records">{[['appointments','appointments'],['visits','visits'],['treatments','treatments'],['invoices','invoices'],['hmo_cases','HMO cases']].map(([key,label])=>`${counts[key]} ${label}`).join(' • ')}{index.limit&&Object.values(counts).some(n=>n>=index.limit)?` (showing up to ${index.limit} per list)`:''}. These records are kept in their own modules and open from the tabs above.</Notice></div>}
-      {linkedError&&<div className="span-2"><Notice tone="warning" title="Linked records unavailable">{linkedError}</Notice></div>}
+      {linkedError&&<div className="span-2 staff-linked-error" role="status">Related records couldn't load. <button type="button" onClick={()=>setAttempt(attempt+1)}>Retry</button></div>}
       <div className="span-2" ref={feedback} tabIndex={-1} role={profilePhase==='unknown'||profilePhase==='refused'?'alert':'status'}>
         {problem&&<Notice tone={problem.tone} title={problem.conflict?'Record changed':'Save not confirmed'}>{problem.message}</Notice>}
         {profilePhase==='unknown'&&<Button variant="soft" disabled={saving} onClick={()=>submit(command.current)}>Retry same profile save</Button>}

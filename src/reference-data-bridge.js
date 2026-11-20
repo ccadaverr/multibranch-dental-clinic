@@ -18,6 +18,7 @@ export function mapBranch(row) {
     id: row.id, branchCode: row.branch_code, name: row.name, city: row.city, address: row.address,
     phone: row.phone, open: row.open_time?.slice(0, 5), close: row.close_time?.slice(0, 5),
     status: row.status, threshold: row.capacity_threshold,
+    archived: row.archived === true, archivedAt: row.archived_at || null, archiveReason: row.archive_reason || null,
     ...(row.email !== undefined ? { email: row.email || '' } : {}),
     ...(row.latitude !== undefined ? { latitude: row.latitude, longitude: row.longitude } : {}),
     ...(row.operating_days !== undefined ? { operatingDays: Array.isArray(row.operating_days) ? row.operating_days : null } : {}),
@@ -151,6 +152,17 @@ export async function syncBranchUpdate(legacyRef, form, beforeDispatch) {
   if(row?.id!==legacyRef || payload.branch_code!==undefined && row.branch_code!==payload.branch_code ||
     Object.hasOwn(payload,'latitude') && (!sameBranchCoordinate(payload.latitude,row.latitude) || !sameBranchCoordinate(payload.longitude,row.longitude)))return unconfirmedBranchChange()
   return { ok: true, record: mapBranch(row) }
+}
+
+
+/** Adopt only a confirmed, identity-matching archive/restore receipt. */
+export async function syncBranchLifecycle(legacyRef, operation, reason, beforeDispatch) {
+  const result = operation === 'archive'
+    ? await api.archiveBranch(legacyRef, reason, beforeDispatch)
+    : operation === 'restore' ? await api.restoreBranch(legacyRef, beforeDispatch) : unconfirmedBranchChange()
+  if (!result.ok) return result
+  if (result.data?.id !== legacyRef || result.data?.archived !== (operation === 'archive')) return unconfirmedBranchChange()
+  return { ok: true, record: mapBranch(result.data) }
 }
 
 export async function syncBranchServiceToggle(branchId, serviceId, active, beforeDispatch) {

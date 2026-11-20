@@ -600,9 +600,9 @@ function PrescriptionDialogBody({ clinicalContext, id, toast, onClose, onChanged
     setP(r.data); setVoiding(false); toast?.('Voided. Write a new prescription if one is still needed.', 'success'); onChanged?.()
   }
   return <Modal open title={p ? `${p.number || 'Draft'}${p.patient ? ` · ${p.patient.name}` : ''}` : 'Prescription'} onClose={onClose}>
-    {error && <Notice tone="warning" title="Unavailable">{error} <RefreshButton title="Reload prescription" ariaLabel="Reload prescription" onClick={reload}/></Notice>}
-    {voidError && <div role="alert"><p className="au-error">{voidError}</p>{!error && operation?.phase !== 'recovery' && <RefreshButton title="Reload prescription" ariaLabel="Reload prescription" onClick={reload}/>}</div>}
-    {operation?.phase === 'recovery' && <Notice tone="warning" title="Void result unconfirmed">{!viewOnly && <Button disabled={busy} onClick={() => doVoid(true)}>Retry same Void request</Button>} The original request may have succeeded. Reload to check for a verified Void state; do not repeat it based on an unchanged Issued record. {!error && <RefreshButton title="Reload prescription" ariaLabel="Reload prescription" onClick={reload}/>}</Notice>}
+    {error && <Notice tone="warning" title="Unavailable">{error} <RefreshButton recovery title="Reload prescription" ariaLabel="Reload prescription" onClick={reload}/></Notice>}
+    {voidError && <div role="alert"><p className="au-error">{voidError}</p>{!error && operation?.phase !== 'recovery' && <RefreshButton recovery title="Reload prescription" ariaLabel="Reload prescription" onClick={reload}/>}</div>}
+    {operation?.phase === 'recovery' && <Notice tone="warning" title="Void result unconfirmed">{!viewOnly && <Button disabled={busy} onClick={() => doVoid(true)}>Retry same Void request</Button>} The original request may have succeeded. Reload to check for a verified Void state; do not repeat it based on an unchanged Issued record. {!error && <RefreshButton recovery title="Reload prescription" ariaLabel="Reload prescription" onClick={reload}/>}</Notice>}
     {(busy || operation?.phase === 'pending') && <p role="status">Voiding the original prescription. Closing this dialog does not cancel the transmitted request.</p>}
     {!isCurrent() && <Notice title="Session unavailable">Close this dialog and sign in again before continuing.</Notice>}
     {!p ? !error && isCurrent() && <p className="au-muted" role="status">Loading…</p> : <div className="st-handover">

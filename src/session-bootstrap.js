@@ -3,7 +3,7 @@ export async function bootstrapSession(readSession, {setTimer=setTimeout,clearTi
   const controller=new AbortController()
   let timer
   const timeout=new Promise(resolve=>{
-    timer=setTimer(()=>{controller.abort();resolve({ok:false,kind:'network'})},15000)
+    timer=setTimer(()=>{controller.abort();resolve({ok:false,kind:'network'})},30000)
   })
   // Also bound adapters that fail to settle after abort, and normalize unexpected rejection.
   try {return await Promise.race([readSession({signal:controller.signal}),timeout])}

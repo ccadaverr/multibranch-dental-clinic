@@ -1,7 +1,7 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Card, ConfirmDialog, Field, FilterBar, Notice, PageHeader, RefreshButton } from '../components.jsx'
 import {
-  addScheduleException, cancelLeave, copyProfileHours, decideLeave, leaveCalendar, leaveConflicts, leaveRequests, myLeave, notifyLeaveAffected,
+  addScheduleException, cancelLeave, copyProfileHours, decideLeave, leaveCalendar, leaveConflicts, leaveCoverage, leaveRequests, myLeave, notifyLeaveAffected,
   notifyScheduleAffected, removeScheduleException, requestLeave, saveWeeklyHours, scheduleAffected, updateStaffProfile, workSchedules,
 } from '../api-client.js'
 import { commandKey, rescheduleAppointment } from '../appointments-api.js'
@@ -133,14 +133,14 @@ function WorkScheduleSession({ store, role }) {
 
   return <div className="st-page">
     <PageHeader kicker={role === 'dentist' ? 'My hours' : role === 'owner' ? 'Administration' : 'Team'} title={role === 'dentist' ? 'My work hours' : 'Work schedules'}
-      aside={<RefreshButton title={error ? 'Retry work schedules' : 'Refresh work schedules'} ariaLabel={error ? 'Retry work schedules' : 'Refresh work schedules'} loading={loading} onClick={load}/>}
+      aside={<RefreshButton recovery={Boolean(error)} title={error ? 'Retry work schedules' : 'Refresh work schedules'} ariaLabel={error ? 'Retry work schedules' : 'Refresh work schedules'} loading={loading} onClick={load}/>}
       text="Each dentist’s weekly hours per branch, and dated exceptions. Online booking, the front desk, walk-ins and the calendar use only these hours, inside the branch’s opening hours and minus approved leave. A change never cancels an appointment."/>
-    {role === 'staff' && <Notice tone="info" title="Staff shift profiles are read-only">Only the Clinic Owner can change Staff shift profiles. A profile's hours do not confirm weekday coverage. Request time off under Leave.</Notice>}
+    {role === 'staff' && <p className="staff-context-note">Schedules are managed by the Clinic Owner.</p>}
     {error && <div role="alert"><Notice tone="warning" title="Unavailable">{error} {data && 'Showing the last loaded schedule.'}</Notice></div>}
     {role !== 'dentist' && (
-      <div className="st-role-toggle" role="tablist" aria-label="Schedule role selector" style={{display:'flex',gap:'8px',marginBottom:'12px'}}>
-        <Button variant={scheduleRole === 'dentist' ? 'primary' : 'soft'} id={`${roleTabsId}-dentist`} data-schedule-role="dentist" aria-controls={`${roleTabsId}-panel`} tabIndex={scheduleRole === 'dentist' ? 0 : -1} onKeyDown={roleKey} onClick={() => setScheduleRole('dentist')} role="tab" aria-selected={scheduleRole === 'dentist'}>Dentist schedules</Button>
-        <Button variant={scheduleRole === 'staff' ? 'primary' : 'soft'} id={`${roleTabsId}-staff`} data-schedule-role="staff" aria-controls={`${roleTabsId}-panel`} tabIndex={scheduleRole === 'staff' ? 0 : -1} onKeyDown={roleKey} onClick={() => setScheduleRole('staff')} role="tab" aria-selected={scheduleRole === 'staff'}>Staff schedules</Button>
+      <div className="st-role-toggle staff-segmented" role="tablist" aria-label="Schedule role selector">
+        <Button variant="ghost" id={`${roleTabsId}-dentist`} data-schedule-role="dentist" aria-controls={`${roleTabsId}-panel`} tabIndex={scheduleRole === 'dentist' ? 0 : -1} onKeyDown={roleKey} onClick={() => setScheduleRole('dentist')} role="tab" aria-selected={scheduleRole === 'dentist'}>Dentist schedules</Button>
+        <Button variant="ghost" id={`${roleTabsId}-staff`} data-schedule-role="staff" aria-controls={`${roleTabsId}-panel`} tabIndex={scheduleRole === 'staff' ? 0 : -1} onKeyDown={roleKey} onClick={() => setScheduleRole('staff')} role="tab" aria-selected={scheduleRole === 'staff'}>Staff schedules</Button>
       </div>
     )}
     <div id={`${roleTabsId}-panel`} role={role !== 'dentist' ? 'tabpanel' : undefined} aria-labelledby={role !== 'dentist' ? `${roleTabsId}-${scheduleRole}` : undefined}>
@@ -247,7 +247,7 @@ export function StaffScheduleProfiles({ role, session, getAuthGeneration, roster
   const summary = current ? staffShiftSummary(current) : null
   if (!authorized) return <Notice title="Clinic server required">Staff shift profiles require an active Staff or Owner server session. Historical workspace profiles are not shown as live schedules.</Notice>
   return <Card title="Staff shift profiles" subtitle="Profile hours and assignment; weekday coverage is not provided."
-    actions={<RefreshButton title={error ? 'Retry staff profiles' : 'Refresh staff profiles'} ariaLabel={error ? 'Retry staff profiles' : 'Refresh staff profiles'} loading={loading} disabled={saving||draftPending} onClick={load}/>} >
+    actions={<RefreshButton recovery={Boolean(error)} title={error ? 'Retry staff profiles' : 'Refresh staff profiles'} ariaLabel={error ? 'Retry staff profiles' : 'Refresh staff profiles'} loading={loading} disabled={saving||draftPending} onClick={load}/>} >
     {error && <div role="alert" tabIndex={0}><p>{error} {snapshot && 'Showing the last loaded profiles.'}</p></div>}
     {snapshot && loading && <p role="status">Refreshing Staff profiles…</p>}
     {!snapshot ? loading && <p role="status">Loading Staff profiles…</p> : !staff.length ? <p>No Staff shift profiles are available in your branch scope.</p> : <>
@@ -480,9 +480,9 @@ function LeaveSession({ store, role }) {
   return <div className="st-page">
     <PageHeader kicker={role === 'owner' ? 'Administration' : 'Team'} title={role === 'owner' ? 'Leave requests' : 'Leave'}
       text="Vacation, sick and other leave. Approved leave of a dentist removes their time from booking at once; approving never cancels an appointment. Leave balances are not tracked."/>
-    <TeamStrip key={tick}/>
     {requester && <MyLeave toast={toast} onChanged={changed} getAuthGeneration={store?.getAuthGeneration}/>}
-    {role !== 'dentist' && <Approvals toast={toast} role={role} onChanged={changed} getAuthGeneration={store?.getAuthGeneration} branches={store?.state?.branches || []}/>}
+    {role === 'owner' && <Approvals toast={toast} role={role} onChanged={changed} getAuthGeneration={store?.getAuthGeneration} branches={store?.state?.branches || []}/>}
+    <TeamStrip key={tick}/>
   </div>
 }
 
@@ -494,18 +494,20 @@ function TeamStrip() {
     if (!live.current || pending.current) return
     const ticket = ++generation.current
     pending.current = ticket; setLoading(true); setRows(null); setError('')
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 15000)
     try {
-      const r = await leaveCalendar(from, to)
+      const r = await leaveCalendar(from, to, controller.signal)
       if (!live.current || ticket !== generation.current) return
       if (!r.ok || !Array.isArray(r.data)) { setRows(null); setError('Leave calendar could not be loaded. Availability is unverified.'); return }
       setRows(r.data)
     } catch { if (live.current && ticket === generation.current) { setRows(null); setError('Leave calendar could not be loaded. Availability is unverified.') } }
-    finally { if (pending.current === ticket) pending.current = false; if (live.current && ticket === generation.current) setLoading(false) }
+    finally { clearTimeout(timeout); if (pending.current === ticket) pending.current = false; if (live.current && ticket === generation.current) setLoading(false) }
   }
   useStaffLayoutEffect(() => { live.current = true; load(); return () => { live.current = false; generation.current++; pending.current = false } }, [from])
   const days = useMemo(() => Array.from({ length: 14 }, (_, i) => addDays(from, i)), [from])
   const away = d => (rows || []).filter(r => r.starts_at.slice(0, 10) <= d && (r.ends_at.slice(11, 16) === '00:00' ? addDays(r.ends_at.slice(0, 10), -1) : r.ends_at.slice(0, 10)) >= d)
-  return <Card title="Who is away" subtitle="The next two weeks. Approved leave is solid, pending is dashed.">
+  return <Card title="Who is away" className="staff-away-card">
     {error && <div role="alert"><p>{error}</p><Button variant="ghost" disabled={loading} onClick={load}>Retry leave calendar</Button></div>}
     {loading && <p className="au-muted" role="status">Loading leave calendar…</p>}
     {rows && <>
@@ -539,14 +541,16 @@ function MyLeave({ toast, onChanged, getAuthGeneration }) {
     if((command.uncertain&&confirmed!==true)||pending.current)return
     const ticket=++readGeneration.current,auth=getAuthGeneration?.()
     setReloading(true)
+    const controller=new AbortController()
+    const timeout=setTimeout(()=>controller.abort(),15000)
     try {
-      const r=await myLeave()
+      const r=await myLeave(controller.signal)
       if(!live.current||ticket!==readGeneration.current||(getAuthGeneration&&(auth==null||auth!==getAuthGeneration())))return
       if(r.ok&&Array.isArray(r.data)){setRows(r.data);setCommandsAvailable(r.meta?.commands_available===true&&r.data.every(l=>validLeaveRevision(l.revision)));setReadError('');command.reviewed();onChanged?.()}
       else if(['unauthenticated','forbidden'].includes(r.kind)){setRows(null);setDenied(true)}
       else setReadError('My leave could not be refreshed. Previously loaded requests may be out of date.')
     }catch{if(live.current&&ticket===readGeneration.current)setReadError('My leave could not be refreshed. Try again.')}
-    finally{if(live.current&&ticket===readGeneration.current)setReloading(false)}
+    finally{clearTimeout(timeout);if(live.current&&ticket===readGeneration.current)setReloading(false)}
   }
   useEffect(()=>{load()},[])
   const complete=saved=>{
@@ -577,20 +581,20 @@ function MyLeave({ toast, onChanged, getAuthGeneration }) {
   }
   const cancel=leave=>{if(leave.can_cancel&&!command.locked)perform('cancel',leave)}
   if(denied)return null
-  return <Card title="My leave" actions={<RefreshButton ariaLabel="Refresh My leave" title="Refresh My leave" onClick={load} loading={reloading} disabled={!!busy || reloading || command.uncertain}/>}>
+  return <Card title="My leave" className="staff-my-leave-card">
     {command.error && <p role="alert">{command.error}</p>}
     {command.uncertain && <Button onClick={recover}>Retry original leave command</Button>}
     {command.receipt && <p role="status">Confirmed {command.receipt.status}, revision {command.receipt.revision}. Current requests are refreshed separately.</p>}
     {!commandsAvailable && rows && <Notice>Revision-safe leave changes are unavailable. Refresh after the server capability is restored.</Notice>}
-    {readError && <p role="alert">{readError}</p>}
-    <form className="au-form" onSubmit={submit}>
-      <fieldset className="au-form" disabled={!!busy || command.locked || !commandsAvailable} style={{border: 0, padding: 0, margin: 0, minWidth: 0}}>
-      <Field label="Type"><select value={f.type} onChange={e => {
+    {readError && <div role="alert" className="staff-duty-error"><span>{readError}</span><button type="button" className="btn ghost sm" onClick={load} disabled={!!busy || reloading || command.uncertain}>Retry</button></div>}
+    <form className="au-form staff-leave-form" onSubmit={submit}>
+      <fieldset className="au-form staff-leave-fields" disabled={!!busy || command.locked || !commandsAvailable} style={{border: 0, padding: 0, margin: 0, minWidth: 0}}>
+      <div className="staff-leave-main-fields"><Field label="Type"><select value={f.type} onChange={e => {
         const type = e.target.value
         setF(previous => ({ ...previous, type, other_reason: type === 'other' ? previous.other_reason : '' }))
       }}><option value="vacation">Vacation</option><option value="sick">Sick</option><option value="other">Other</option></select></Field>
       <div className="st-pair"><Field label="From" required><input aria-label="From" type="date" min={manilaToday()} value={f.start_date} onChange={e => setF(x => ({ ...x, start_date: e.target.value, end_date: x.end_date && x.end_date < e.target.value ? '' : x.end_date }))} required/></Field>
-        <Field label="To (last day)"><input type="date" min={f.start_date || manilaToday()} value={f.partial ? f.start_date : f.end_date} disabled={f.partial} onChange={e => set('end_date', e.target.value)}/></Field></div>
+        <Field label="To (last day)"><input type="date" min={f.start_date || manilaToday()} value={f.partial ? f.start_date : f.end_date} disabled={f.partial} onChange={e => set('end_date', e.target.value)}/></Field></div></div>
       <label className="au-check"><input type="checkbox" checked={f.partial} onChange={e => set('partial', e.target.checked)}/> Only part of the day</label>
       {f.partial && <div className="st-pair"><Field label="From (time on selected date)"><input type="time" value={f.start_time} onChange={e => set('start_time', e.target.value)}/></Field>
         <Field label="Until (time on selected date)"><input type="time" value={f.end_time} onChange={e => set('end_time', e.target.value)}/></Field></div>}
@@ -605,8 +609,8 @@ function MyLeave({ toast, onChanged, getAuthGeneration }) {
       <div className="au-actions"><Button type="submit" disabled={command.locked || !commandsAvailable || busy === 'add' || !f.start_date || f.start_date < manilaToday() || (!f.partial && f.end_date && f.end_date < f.start_date) || (f.partial && (!f.start_time || !f.end_time || f.end_time <= f.start_time)) || (f.type === 'other' && !f.other_reason.trim())}>{busy === 'add' ? 'Sending…' : 'Request leave'}</Button></div>
       </fieldset>
     </form>
-    {!rows ? <p className="au-muted" role="status">Loading…</p> : !rows.length ? <p className="au-muted">No leave requested yet.</p> : <ul className="fd-list">{rows.map(l => <li key={l.id}>
-      <div><b>{l.label}</b><span>{l.type_label} (revision {l.revision ?? "unavailable"}) · <span className={`fd-badge ${STATUS_TONE[l.status]}`}>{l.status}</span>{l.decided_by ? ` · by ${l.decided_by}` : ''}</span>{l.private_note && <span>Note: {l.private_note}</span>}</div>
+    {!rows ? (reloading ? <p className="au-muted" role="status">Loading…</p> : null) : !rows.length ? <p className="au-muted">No leave requested yet.</p> : <ul className="fd-list">{rows.map(l => <li key={l.id}>
+      <div><b>{l.label}</b><span>{l.type_label} · <span className={`fd-badge ${STATUS_TONE[l.status]}`}>{l.status}</span>{l.decided_by ? ` · by ${l.decided_by}` : ''}</span>{l.private_note && <span>Note: {l.private_note}</span>}</div>
       {l.can_cancel && <Button size="sm" variant="ghost" disabled={!!busy || command.locked || !validLeaveRevision(l.revision)} onClick={() => cancel(l)}>Cancel</Button>}
     </li>)}</ul>}
   </Card>
@@ -644,7 +648,7 @@ function Approvals({ toast, role, branches, onChanged, getAuthGeneration }) {
       <Field label="Leave through"><input type="date" value={filters.to} disabled={held} onChange={e=>setFilters(x=>({...x,to:e.target.value}))}/></Field>
     </FilterBar>
     {error && <p role="alert">{error}</p>}
-    <RefreshButton title="Refresh leave requests" ariaLabel="Refresh leave requests" onClick={load} disabled={held} loading={loading}/>
+    <RefreshButton recovery={Boolean(error)} title="Refresh leave requests" ariaLabel="Refresh leave requests" onClick={load} disabled={held} loading={loading}/>
     {meta.has_more&&!loading&&!error&&<Notice>More authorized requests match these filters. Showing the first {meta.limit||300}; narrow the status, branch or dates to review the rest.</Notice>}
     {loading ? <p role="status">Loading leave requests...</p> : !rows ? <p className="au-muted">Leave requests are unavailable.</p> : !rows.length ? <p className="au-muted">No requests here.</p> : <ul className="fd-list">{rows.map(l => <LeaveRow key={l.id} l={l} role={role} open={open === l.id} onToggle={() => setOpen(open === l.id ? null : l.id)} toast={toast} wordingApproved={meta.wording_approved} getAuthGeneration={getAuthGeneration} onPending={setRowPending} commandsAvailable={meta.commands_available===true}
       onChanged={decided => { if (decided && filters.status && decided !== filters.status) { setOpen(l.id); setFilters(x => ({ ...x, status: '' })) } else load() }}/>)}</ul>}
@@ -654,6 +658,8 @@ function Approvals({ toast, role, branches, onChanged, getAuthGeneration }) {
 function LeaveRow({ l: source, role, open, onToggle, toast, onChanged, wordingApproved, getAuthGeneration, onPending, commandsAvailable }) {
   const [l,setLeave]=useState(source),[conflicts,setConflicts]=useState(null),[busy,setBusy]=useState(''),[confirmDecision,setConfirmDecision]=useState(null)
   const [reviewBusy,setReviewBusy]=useState(false),[readError,setReadError]=useState('')
+  const [coverage,setCoverage]=useState(null),[coverageLoading,setCoverageLoading]=useState(false)
+  const coverageAbort=useRef(null)
   const command=useLeaveCommand(getAuthGeneration),live=useRef(false),readGeneration=useRef(0),current=useRef('')
   current.current=JSON.stringify([l.id,l.revision])
   useStaffLayoutEffect(()=>{live.current=true;return()=>{live.current=false;readGeneration.current++}},[])
@@ -667,7 +673,27 @@ function LeaveRow({ l: source, role, open, onToggle, toast, onChanged, wordingAp
     try{const r=await leaveConflicts(l.id);if(!owns())return;if(r.ok&&Array.isArray(r.data?.appointments))setConflicts(r.data.appointments);else setReadError('Affected appointments could not be loaded. Try again.')}
     catch{if(owns())setReadError('Affected appointments could not be loaded. Try again.')}
   }
-  useEffect(()=>{if(open)loadConflicts();return()=>{readGeneration.current++}},[open,l.revision])
+  const loadCoverage=async()=>{
+    if(l.requester.role!=='Staff')return
+    const ticket=++readGeneration.current,key=current.current,auth=getAuthGeneration?.()
+    const owns=()=>live.current&&ticket===readGeneration.current&&key===current.current&&(!getAuthGeneration||(auth!=null&&auth===getAuthGeneration()))
+    setReadError('');setCoverage(null);setCoverageLoading(true)
+    coverageAbort.current?.abort()
+    const controller=new AbortController()
+    coverageAbort.current=controller
+    const timeout=setTimeout(()=>controller.abort(),12000)
+    try{
+      const r=await leaveCoverage(l.id,controller.signal)
+      if(!owns())return
+      if(r.ok&&r.data?.leave_id===l.id&&r.data?.revision===l.revision&&Array.isArray(r.data?.windows))setCoverage(r.data)
+      else setReadError('Current Staff coverage could not be verified. Owner review is still required.')
+    }catch{if(owns())setReadError('Staff coverage could not be verified. Retry the review.')}
+    finally{clearTimeout(timeout);if(coverageAbort.current===controller)coverageAbort.current=null;if(owns())setCoverageLoading(false)}
+  }
+  useEffect(()=>{
+    if(open){if(l.requester.role==='Staff')loadCoverage();else loadConflicts()}
+    return()=>{readGeneration.current++;coverageAbort.current?.abort()}
+  },[open,l.revision])
   const reviewCurrent=async()=>{
     if(command.busy||command.uncertain||reviewBusy)return
     const auth=getAuthGeneration?.(),ticket=++readGeneration.current;setReviewBusy(true);setReadError('')
@@ -705,6 +731,7 @@ function LeaveRow({ l: source, role, open, onToggle, toast, onChanged, wordingAp
       {l.can_decide && <><Button size="sm" disabled={command.locked||reviewBusy||!commandsAvailable||!validLeaveRevision(l.revision)} onClick={() => setConfirmDecision('approve')}>{busy === 'approve' ? 'Accepting…' : 'Accept leave request'}</Button>
         <Button size="sm" variant="ghost" disabled={command.locked||reviewBusy||!commandsAvailable||!validLeaveRevision(l.revision)} onClick={() => setConfirmDecision('decline')}>{busy === 'decline' ? 'Declining…' : 'Decline leave'}</Button></>}
       {l.requester.role === 'Dentist' && l.status !== 'Declined' && l.status !== 'Cancelled' && <Button size="sm" variant="soft" onClick={onToggle} aria-expanded={open}>{open ? 'Hide bookings' : 'Booked appointments'}</Button>}
+      {l.requester.role === 'Staff' && l.status !== 'Declined' && l.status !== 'Cancelled' && <Button size="sm" variant="soft" onClick={onToggle} aria-expanded={open}>{open ? 'Hide coverage' : 'Review coverage'}</Button>}
       {l.can_cancel && l.status === 'Approved' && <Button size="sm" variant="ghost" disabled={command.locked||reviewBusy||!commandsAvailable||!validLeaveRevision(l.revision)} onClick={() => setConfirmDecision('cancel')}>Cancel leave</Button>}
     </div>
     {confirmDecision && <ConfirmDialog
@@ -722,7 +749,11 @@ function LeaveRow({ l: source, role, open, onToggle, toast, onChanged, wordingAp
     >
       <p>
         {l.requester.role !== 'Dentist'
-          ? 'This records the Staff leave decision. Effective Staff roster publication remains separate.'
+          ? (confirmDecision === 'approve'
+              ? `Owner decision only. ${coverage?.revision===l.revision&&coverage?.assessment==='review_ready'
+                  ? `${coverage.unmatched_windows} shift window(s) have no scheduled alternative and ${coverage.partially_matched_windows} have only partial alternatives.`
+                  : 'Published Staff coverage has not been completely verified for this request.'} No coworker has accepted a replacement assignment, and no minimum staffing level is configured. Review the coverage details before approving.`
+              : 'This records the Staff leave decision. Effective Staff roster publication remains separate.')
           : confirmDecision === 'approve'
           ? `Accepting this leave request for ${l.requester.name} (${l.label}) blocks new bookings during their away window. Existing appointments remain on the affected list so they can be reassigned or rescheduled.`
           : confirmDecision === 'decline'
@@ -730,7 +761,25 @@ function LeaveRow({ l: source, role, open, onToggle, toast, onChanged, wordingAp
             : `Cancelling this approved leave for ${l.requester.name} (${l.label}) reopens their blocked schedule time for booking.`}
       </p>
     </ConfirmDialog>}
-    {open && <div className="st-conflicts">
+    {open && l.requester.role === 'Staff' && <div className="st-conflicts" role="region" aria-label={`Published Staff coverage for ${l.requester.name}`}>
+      {coverageLoading && <p role="status">Checking published shifts and pending or approved coworker leave…</p>}
+      {coverage && <>
+        <Notice tone={coverage.assessment==='review_ready'&&coverage.unmatched_windows===0&&coverage.partially_matched_windows===0?'info':'warning'}
+          title="Owner coverage review">
+          {coverage.reason || `${coverage.fully_matched_windows} interval(s) have a scheduled alternative throughout, ${coverage.partially_matched_windows} have partial alternatives, and ${coverage.unmatched_windows} have none.`}
+          {' '}Scheduled alternatives exclude coworkers with overlapping pending or approved leave, but are not confirmed replacement assignments or a staffing minimum.
+          {coverage.truncated && ' Only the first 14 dates were reviewed; the remaining dates require separate review.'}
+        </Notice>
+        {coverage.windows.length > 0 && <ul className="fd-list">{coverage.windows.map((w,i)=><li key={`${w.date}:${w.branch_ref}:${w.from}:${i}`}>
+          <div><b>{longDate(w.date)} · {w.branch_name}</b>
+            <span>{t12(w.from)}–{t12(w.until)} · {w.alternative==='full_alternative'?'Alternative shift spans this period':w.alternative==='partial_alternative'?'Alternative shifts cover only part':'No authorized, available coworker shift identified'}</span>
+            {w.unmatched_minutes>0&&<span>{w.unmatched_minutes} minute(s) without a matching published coworker shift</span>}
+          </div>
+        </li>)}</ul>}
+      </>}
+      <Button size="sm" variant="ghost" disabled={coverageLoading||command.locked} onClick={loadCoverage}>Recheck published coverage</Button>
+    </div>}
+    {open && l.requester.role === 'Dentist' && <div className="st-conflicts">
       {l.status === 'Pending' && conflicts?.length > 0 && <p className="au-muted">Approving keeps these appointments; resolve them before or after approving.</p>}
       <AffectedAppointments rows={conflicts} wordingApproved={wordingApproved} toast={toast} canAct={l.status === 'Approved' || l.status === 'Pending'} onChanged={loadConflicts}
         onNotify={() => l.status === 'Approved' ? notifyLeaveAffected(l.id) : Promise.resolve({ ok: false, message: 'Approve the leave first, then email the patients.' })}/>

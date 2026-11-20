@@ -6,6 +6,21 @@
 const KEY = 'dentalops-v4-page-link'
 const ID = /^[0-9a-z]{26}$/i
 const PAGES = ['book', 'reports']
+const bookingRef = value => typeof value === 'string' && /^[a-z0-9-]{1,50}$/i.test(value) ? value : null
+
+export function publicBookingLink({ service, branch } = {}) {
+  const params = new URLSearchParams({ open: 'book' })
+  if (bookingRef(service)) params.set('service', service)
+  if (bookingRef(branch)) params.set('branch', branch)
+  return `/?${params}#sign-in`
+}
+
+const bookLink = (service, branch) => {
+  const link = { page: 'book' }
+  if (bookingRef(service)) link.service = service
+  if (bookingRef(branch)) link.branch = branch
+  return link
+}
 
 export function readPageLink(search) {
   let params
@@ -13,6 +28,7 @@ export function readPageLink(search) {
   const appointmentId = (params.get('appointment') || '').trim()
   if (ID.test(appointmentId)) return { appointmentId: appointmentId.toLowerCase() }
   const page = (params.get('open') || '').trim()
+  if (page === 'book') return bookLink(params.get('service'), params.get('branch'))
   return PAGES.includes(page) ? { page } : null
 }
 
@@ -28,6 +44,7 @@ export function takePageLink(storage = globalThis.sessionStorage) {
   if (!raw) return null
   try {
     const parsed = JSON.parse(raw)
+    if (parsed?.page === 'book' && !parsed.appointmentId) return bookLink(parsed.service, parsed.branch)
     return readPageLink(parsed?.appointmentId ? `?appointment=${encodeURIComponent(parsed.appointmentId)}` : `?open=${encodeURIComponent(parsed?.page || '')}`)
   } catch { return null }
 }
@@ -36,7 +53,7 @@ export function takePageLink(storage = globalThis.sessionStorage) {
 export function pageForLink(link, role) {
   if (!link) return null
   if (role === 'patient' && link.appointmentId) return ['visits', { appointmentId: link.appointmentId }]
-  if (role === 'patient' && link.page === 'book') return ['book', null]
+  if (role === 'patient' && link.page === 'book') return ['book', link.service || link.branch ? { service: link.service, branch: link.branch } : null]
   if (role === 'owner' && link.page === 'reports') return ['analytics', null]
   return null
 }
@@ -47,6 +64,8 @@ export function clearPageLinkFromUrl(win = globalThis.window) {
     if (!url.searchParams.has('appointment') && !url.searchParams.has('open')) return
     url.searchParams.delete('appointment')
     url.searchParams.delete('open')
+    url.searchParams.delete('service')
+    url.searchParams.delete('branch')
     url.hash = ''
     win.history.replaceState(win.history.state, '', `${url.pathname}${url.search}`)
   } catch { /* nothing to clean */ }

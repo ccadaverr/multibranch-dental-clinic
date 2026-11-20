@@ -74,6 +74,22 @@ class AppointmentReadPrivacyTest extends TestCase
         Http::assertNothingSent();
     }
 
+    public function test_patient_dentist_message_action_fails_closed_without_reviewed_grant_schema(): void
+    {
+        $this->actingAsUser('patientA');
+        $response = $this->getJson('/api/appointments/'.$this->own->public_id)->assertOk()
+            ->assertJsonPath('data.dentist_conversation_state', 'grant_unavailable');
+        $this->assertArrayNotHasKey('dentist_conversation_id', $response->json('data'));
+        $this->assertSame('Confirmed', $this->own->fresh()->status);
+
+        // This capability is deliberately patient-specific; it does not expose
+        // messaging state to Staff, Dentist, or Owner appointment readers.
+        $this->actingAsUser('staffB1');
+        $staff = $this->getJson('/api/appointments/'.$this->own->public_id)->assertOk();
+        $this->assertArrayNotHasKey('dentist_conversation_state', $staff->json('data'));
+        $this->assertArrayNotHasKey('dentist_conversation_id', $staff->json('data'));
+    }
+
     public function test_revoked_branch_and_role_are_rechecked_for_an_exact_formerly_authorized_id(): void
     {
         $this->actingAsUser('staffB1');

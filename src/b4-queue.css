@@ -50,3 +50,65 @@
   .queue-table .queue-status { padding: 0; }
   .queue-table .queue-patient-link { min-height: var(--control-height); }
 }
+
+/* R10: make the operational queue scan as one patient per row. Avoid tall
+   cells that waste space on repeated position labels and icon-only controls. */
+.role-staff .queue-live-card .card-head { margin-bottom: 12px; }
+.role-staff .queue-live-card .card-head p { max-width: 65ch; font-size: 12px; }
+.role-staff .queue-table th { font-size: 11px; letter-spacing: .035em; }
+.role-staff .queue-table .queue-open-row > td { padding-block: 13px; vertical-align: middle; line-height: 1.45; }
+.role-staff .queue-table .queue-number { font-size: 22px; line-height: 1.15; }
+.role-staff .queue-table .queue-rank { font-size: 11px; line-height: 1.4; white-space: normal; }
+.role-staff .queue-table .queue-patient-meta { margin-top: 3px; gap: 2px 10px; }
+.role-staff .queue-table .queue-care-team { gap: 3px; }
+.role-staff .queue-table .queue-secondary { font-size: 12px; line-height: 1.35; }
+.role-staff .queue-table .queue-actions { flex-wrap: wrap; align-items: center; gap: 5px; }
+.role-staff .queue-table .queue-actions > :is(button,.btn) { min-height: 36px; border-radius: 8px; }
+.role-staff .queue-table .queue-call-btn,
+.role-staff .queue-table .queue-message-btn { gap: 6px; padding: 7px 10px; }
+.role-staff .queue-table .queue-call-btn:hover:not(:disabled),
+.role-staff .queue-table .queue-message-btn:hover:not(:disabled) { background: var(--brand-soft, #edf3f6); }
+/* Staff sidebar reduces actual content width before the physical viewport is narrow. */
+@media (max-width: 1320px) {
+  .role-staff .queue-table { overflow: visible; }
+  .role-staff .queue-table table,
+  .role-staff .queue-table tbody { display: block; width: 100%; }
+  .role-staff .queue-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .role-staff .queue-table .queue-open-row {
+    display: grid;
+    grid-template-columns: minmax(70px, .45fr) minmax(0, 1.55fr) minmax(155px, 1fr);
+    gap: 9px 14px;
+    margin: 0;
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-radius: 0;
+    background: var(--surface);
+  }
+  .role-staff .queue-table .queue-open-row + .queue-open-row { border-top: 0; }
+  .role-staff .queue-table .queue-open-row:first-child { border-radius: 10px 10px 0 0; }
+  .role-staff .queue-table .queue-open-row:last-child { border-radius: 0 0 10px 10px; }
+  .role-staff .queue-table .queue-open-row:only-child { border-radius: 10px; }
+  .role-staff .queue-table .queue-open-row > td {
+    display: block; padding: 0; border: 0; min-width: 0; width: auto;
+    background: transparent; grid-row: auto;
+  }
+  .role-staff .queue-table .queue-open-row > td[data-column='queueNumber'] { grid-column: 1; grid-row: 1; }
+  .role-staff .queue-table .queue-open-row > td[data-column='patient'] { grid-column: 2; grid-row: 1; }
+  .role-staff .queue-table .queue-open-row > td[data-column='status'] { grid-column: 3; grid-row: 1; }
+  .role-staff .queue-table .queue-open-row > td[data-column='checkedIn'] { grid-column: 1; grid-row: 2; }
+  .role-staff .queue-table .queue-open-row > td[data-column='careTeam'] { grid-column: 2; grid-row: 2; }
+  .role-staff .queue-table .queue-open-row > td[data-column='actions'] { grid-column: 3; grid-row: 2; }
+  .role-staff .queue-table .mobile-cell-label { display: none; }
+  .role-staff .queue-table .queue-actions { justify-content: flex-start; }
+}
+@media (max-width: 680px) {
+  .role-staff .queue-table .queue-open-row { grid-template-columns: 62px minmax(0, 1fr); gap: 10px 12px; padding: 12px; }
+  .role-staff .queue-table .queue-open-row > td[data-column='queueNumber'] { grid-column: 1; grid-row: 1; }
+  .role-staff .queue-table .queue-open-row > td[data-column='patient'] { grid-column: 2; grid-row: 1; }
+  .role-staff .queue-table .queue-open-row > td[data-column='status'] { grid-column: 1 / -1; grid-row: 2; }
+  .role-staff .queue-table .queue-open-row > td[data-column='careTeam'] { grid-column: 1 / -1; grid-row: 3; }
+  .role-staff .queue-table .queue-open-row > td[data-column='checkedIn'] { grid-column: 1 / -1; grid-row: 4; }
+  .role-staff .queue-table .queue-open-row > td[data-column='actions'] { grid-column: 1 / -1; grid-row: 5; border-top: 1px solid var(--line); padding-top: 9px; }
+  .role-staff .queue-table .queue-open-row > td[data-column='checkedIn'] .mobile-cell-label,
+  .role-staff .queue-table .queue-open-row > td[data-column='careTeam'] .mobile-cell-label { display: block; margin-bottom: 3px; }
+}

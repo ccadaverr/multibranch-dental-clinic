@@ -30,5 +30,9 @@ class ToothChartEntry extends Model
 
     public function branch(): BelongsTo { return $this->belongsTo(Branch::class); }
 
+    public function plannedService(): BelongsTo { return $this->belongsTo(Service::class, 'planned_service_id'); }
+
+    public function completedProcedure(): BelongsTo { return $this->belongsTo(TreatmentProcedure::class, 'completed_procedure_id'); }
+
     public function treatment(): BelongsTo { return $this->belongsTo(Treatment::class); }
 }

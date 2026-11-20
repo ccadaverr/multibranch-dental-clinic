@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 
 /**
- * M1 self-service change of the sign-in email (any signed-in role). Two steps:
+ * M1 self-service change of the sign-in email for staff, dentists, and owners. Two steps:
  *  request — the current password re-confirms the person; a one-time code goes to the NEW address (proving control of it).
  *            If the new address already belongs to someone, no code is sent but the answer is the same (no enumeration).
  *  confirm — a correct code moves users.email and persons.email to the new address (marked verified), signs every session

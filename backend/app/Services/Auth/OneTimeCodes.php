@@ -41,9 +41,6 @@ class OneTimeCodes
             'user_id' => $user->id, 'purpose' => $purpose, 'new_email' => $newEmail, 'digest' => Hash::make($code), 'attempts' => 0,
             'expires_at' => $now->copy()->addMinutes((int) config('clinic.otp_ttl_minutes', 10)), 'sent_at' => $now,
         ]);
-        if (app()->environment('local')) {
-            \Illuminate\Support\Facades\Log::info("DEV_OTP: {$code} for {$to} ({$purpose})");
-        }
         $this->mail->queueOnce($to, new OneTimeCodeMail($code, $purpose, $user->person?->first_name), self::MAIL_PURPOSES[$purpose], $user, $otp->id);
 
         return $otp;

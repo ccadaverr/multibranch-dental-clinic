@@ -388,3 +388,12 @@ dialog.patient-logout-dialog { margin: auto 0 0; width: 100%; max-width: none; b
   .role-patient .rp-body { padding: 18px 16px; }
   .role-patient .rp-hero b { font-size: 1.8rem; }
 }
+
+/* Booking review: succinct payment guidance without an unconditional refund promise. */
+.role-patient .pt-booking-payment-guidance {
+  display: grid; gap: 6px; margin: 12px 0 16px; padding: 12px 14px;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: var(--surface-2, #faf9f7);
+}
+.role-patient .pt-booking-payment-guidance > strong { font-size: 13px; }
+.role-patient .pt-booking-payment-guidance p { margin: 0; max-width: 72ch; font-size: 12px; line-height: 1.55; color: var(--muted); }

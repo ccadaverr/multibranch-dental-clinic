@@ -51,6 +51,8 @@ export function mapAppointment(row, patientIdFor = id => id) {
     branchId: row.branch?.id ?? null,
     serviceId: row.service?.id ?? null,
     service: row.service?.name ?? '',
+    intendedServiceId: row.intended_service?.id ?? null,
+    intendedServiceName: row.intended_service?.name ?? '',
     dentistId: row.dentist?.id ?? null,
     dentistName: row.dentist?.name ?? '',
     date: row.date,
@@ -69,6 +71,7 @@ export function mapAppointment(row, patientIdFor = id => id) {
     cancellationDetail: row.cancellation_detail ?? null,
     bookingFeePhp: row.booking_fee_php ?? null,
     bookingPaymentStatus: row.booking_payment_status ?? null,
+    cancellationRefund: row.cancellation_refund ?? null,
     bookingPaymentMethod: row.booking_payment_method ?? null,
     bookingPaidAt: row.booking_paid_at ?? null,
     bookingHoldExpiresAt: row.booking_hold_expires_at ?? null,
@@ -162,8 +165,10 @@ export async function fetchRecommendation({ serviceId, branchId = null, coords =
 
 const commandResult = result => (result.ok ? { ok: true, row: result.data } : normalizeFailure(result))
 
-function appointmentPayload({ branchId, serviceId, date, start, notes = null, patientPublicId = null, dentistId = null, forPatientId = null, consultationAcknowledged = null, payAtClinic = false, paymentChoice = null }) {
+function appointmentPayload({ draftRevision = null, branchId, serviceId, intendedServiceId, date, start, notes = null, patientPublicId = null, dentistId = null, forPatientId = null, consultationAcknowledged = null, payAtClinic = false, paymentChoice = null }) {
   const payload = { branch_ref: branchId, service_ref: serviceId, date, start_time: start }
+  if (draftRevision != null) payload.draft_revision = draftRevision
+  if (intendedServiceId) payload.intended_service_ref = intendedServiceId
   if (notes) payload.notes = notes
   if (patientPublicId) payload.patient_id = patientPublicId
   if (forPatientId) payload.for_patient_id = forPatientId // a guardian booking for a dependent

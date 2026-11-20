@@ -3,7 +3,7 @@ import { clinicalSessionKey, resolveEncounter } from '../encounter.js'
 import { ClinicalNavigation } from '../clinical-navigation.jsx'
 import React, { lazy, Suspense, useEffect, useState } from 'react'
 import { Button, Card, ConfirmDialog, Field, Notice, PageHeader, RefreshButton, SearchInput, FilterBar } from '../components.jsx'
-import { patientChart, listVisits } from '../api-client.js'
+import { patientChart, listVisits, listTreatments } from '../api-client.js'
 import { Odontogram, toothLabel } from '../components/odontogram/index.js'
 import {clinicalChartValid,readClinicalChart,readChartVisitPatients} from '../chart-read.js'
 import '../chart-experience.css'
@@ -113,7 +113,7 @@ function ChartRecord({ patientId, canRecord, toast, store, recordContext = null,
 
   return (
     <div ref={chartRoot} className="tc-unified-chart clinical-odontogram">
-      <div className="chart-read-heading"><div><h3>Current dental chart{!canRecord?' · Read-only':''}</h3><p>{data?.patient?.name||'Patient '+patientId}</p></div><RefreshButton title="Review saved chart" ariaLabel="Review saved chart" loading={!data&&!error} disabled={recordingPending} onClick={()=>{if(dirty.current||command.current?.outcome==='unknown')setReviewOpen(true);else{command.current=null;setAttempt(a=>a+1)}}}/></div>
+      <div className="chart-read-heading"><div><h3>Current dental chart{!canRecord?' · Read-only':''}</h3><p>{data?.patient?.name||'Patient '+patientId}</p></div><RefreshButton recovery={Boolean(dirty.current || command.current?.outcome==='unknown')} title="Review saved chart" ariaLabel="Review saved chart" loading={!data&&!error} disabled={recordingPending} onClick={()=>{if(dirty.current||command.current?.outcome==='unknown')setReviewOpen(true);else{command.current=null;setAttempt(a=>a+1)}}}/></div>
       {error&&<Notice tone="warning" title="Chart unavailable"><p>{error}</p><Button variant="ghost" onClick={()=>setAttempt(a=>a+1)}>Retry chart</Button></Notice>}
       {!data&&!error&&<p className="au-muted" role="status">Loading the chart…</p>}
       {data&&<>
@@ -122,6 +122,8 @@ function ChartRecord({ patientId, canRecord, toast, store, recordContext = null,
         data={data}
         selected={picked}
         onSelect={setPicked}
+        allow3d={store?.session?.role === 'dentist'}
+        encounter={recordContext}
         canRecord={writable}
         onRecord={handleRecord}
         onReviewEncounter={store?.session?.role==='dentist'?(target,trigger)=>{historyButton.current=trigger||document.activeElement;setHistoryTarget(target)}:undefined}
@@ -178,9 +180,31 @@ function DentistChart({ store, context, setPage }) {
   if(linked&&!linked.ok)return <Notice title="Chart unavailable">{linked.message}<Button onClick={()=>setPage('queue')}>My Queue</Button></Notice>
   return <DentistChartBody store={store} context={context} setPage={setPage} linked={linked}/>
 }
+function CompletedEncounterPicker({ patientId, dentistId, value, onChange, disabled }) {
+  const [page, setPage] = useState(1), [attempt, setAttempt] = useState(0)
+  const [result, setResult] = useState(null)
+  useEffect(() => {
+    let active = true
+    setResult(null)
+    listTreatments({ patient_id: patientId, status: 'Completed', page }).then(response => {
+      if (active) setResult(response)
+    })
+    return () => { active = false }
+  }, [patientId, dentistId, page, attempt])
+  if (!result) return <p role="status">Loading completed visits…</p>
+  if (!result.ok) return <Notice>Completed visits could not be read. <Button onClick={() => setAttempt(n => n + 1)}>Retry</Button></Notice>
+  const rows = result.data.filter(r => r.author && r.dentist?.id === dentistId && r.patient?.id === patientId && r.status === 'Completed' && r.visit?.status === 'Completed')
+  return <div><Field label="Visit for this chart entry"><select disabled={disabled} value={value?.treatmentId || ''} onChange={e => {
+    const row = rows.find(r => r.id === e.target.value)
+    onChange(row ? { treatmentId: row.id, revision: row.revision, branchId: row.branch.id, procedures: row.procedures } : null)
+  }}><option value="">Finding without a linked visit</option>{rows.map(r => <option key={r.id} value={r.id}>{r.clinic_date} · {r.branch.name} · {r.requested_service?.name || 'Completed visit'} · {r.visit.id.slice(-6)}</option>)}</select></Field>
+  {result.meta?.last_page > 1 && <div><Button disabled={disabled || page < 2} onClick={() => { onChange(null); setPage(page - 1) }}>Previous visits</Button><Button disabled={disabled || page >= result.meta.last_page} onClick={() => { onChange(null); setPage(page + 1) }}>More visits</Button></div>}</div>
+}
+
 function DentistChartBody({ store, context, setPage, linked }) {
   const toast = store?.toast || (() => {})
   const [selectedPatient, setSelectedPatient] = useState(linked?.patient||null)
+  const [chosenEncounter, setChosenEncounter] = useState(null), [editorDirty, setEditorDirty] = useState(false)
   const dirty = React.useRef(false)
   const patientGeneration=React.useRef(0), patientId=React.useRef(selectedPatient?.id||null)
   const pendingTarget=React.useRef(null), patientSearch=React.useRef(null), restoreSearch=React.useRef(false)
@@ -194,6 +218,7 @@ function DentistChartBody({ store, context, setPage, linked }) {
     // Invalidate old chart reads, completions and dirty reports before React
     // remounts it, including a rapid A -> B -> A return.
     patientGeneration.current++;patientId.current=patient?.id||null;dirty.current=false
+    setChosenEncounter(null); setEditorDirty(false)
     cancelPatient();restoreSearch.current=true;setSelectedPatient(patient)
   }
   const confirmPatient=()=>{
@@ -215,10 +240,11 @@ function DentistChartBody({ store, context, setPage, linked }) {
       <p>Unsaved findings for {selectedPatient?.name} will be discarded. A submitted request keeps its original patient. Unsaved changes are kept only on this screen and cannot be recovered after leaving or reloading.</p>
     </ConfirmDialog>
     <PageHeader kicker="Clinical" title="Dental chart" text="Record findings by tooth and surface. Current findings and earlier entries stay separate. The system makes no diagnosis or suggestion."/>
-    {selectedPatient&&<header className="chart-context" aria-label="Current chart Patient and Visit"><h2>{selectedPatient.name}</h2><p>{selectedPatient.patientCode||selectedPatient.code||''}{linked?' · '+(store.state.branches.find(b=>b.id===linked.record.branchId)?.name||linked.record.branchId):''}</p>{linked&&<p>{linked.treatment?.dentistName||store.state.dentists.find(d=>d.id===store.session.dentistId)?.name} · {linked.treatment?.status||linked.visit?.status}</p>}<p className="chart-context-ids">Patient {linked?.record?.patientPublicId||selectedPatient.publicId||selectedPatient.id}{linked&&<> · Visit {linked.visit.id}{linked.treatment&&<> · Encounter {linked.treatment.id} · Revision {linked.treatment.revision}</>}</>}</p>{!linked&&<p>No encounter is selected. Each finding keeps its recorded branch.</p>}</header>}
+    {selectedPatient&&<header className="chart-context" aria-label="Current chart Patient and Visit"><h2>{selectedPatient.name}</h2><p>{selectedPatient.patientCode||selectedPatient.code||''}{linked?' · '+(store.state.branches.find(b=>b.id===linked.record.branchId)?.name||linked.record.branchId):''}</p>{linked&&<p>{linked.treatment?.dentistName||store.state.dentists.find(d=>d.id===store.session.dentistId)?.name} · {linked.treatment?.status||linked.visit?.status}</p>}<p className="chart-context-ids">Patient {linked?.record?.patientPublicId||selectedPatient.publicId||selectedPatient.id}{linked&&<> · Visit {linked.visit.id}{linked.treatment&&<> · Encounter {linked.treatment.id} · Revision {linked.treatment.revision}</>}</>}</p>{!linked&&!chosenEncounter&&<p>No encounter is selected. Each finding keeps its recorded branch.</p>}</header>}
     <Card>
       {linked?<><Button variant="ghost" onClick={()=>setPage('treatment',context.returnEncounter)}>Return to encounter</Button><p>Current findings across visits. New chart entries do not change saved treatment documentation.</p></>:<SearchablePatientPicker selectedPatient={selectedPatient} onSelect={selectPatient} store={store} inputRef={patientSearch}/>}
-      {selectedPatient && <ChartView patientId={linked?.record?.patientPublicId||selectedPatient.publicId||selectedPatient.id} canRecord toast={toast} store={store} recordContext={linked?.treatment?{treatmentId:linked.treatment.id,revision:linked.treatment.revision,branchId:linked.record.branchId}:null} isCurrent={ownsPatient} onDirtyChange={value => { if(ownsPatient())dirty.current=value }}/>}
+      {selectedPatient && !linked && <CompletedEncounterPicker key={selectedPatient.id} patientId={selectedPatient.publicId || selectedPatient.id} dentistId={store.session.dentistId} value={chosenEncounter} disabled={editorDirty} onChange={row => { if (!dirty.current) setChosenEncounter(row) }}/>}
+      {selectedPatient && <ChartView patientId={linked?.record?.patientPublicId||selectedPatient.publicId||selectedPatient.id} canRecord toast={toast} store={store} recordContext={linked?.treatment?{treatmentId:linked.treatment.id,revision:linked.treatment.revision,branchId:linked.record.branchId,procedures:linked.treatment.status === 'Completed' ? linked.treatment.procedures : []}:chosenEncounter} isCurrent={ownsPatient} onDirtyChange={value => { if(ownsPatient()){dirty.current=value;setEditorDirty(value)} }}/>}
     </Card>
   </div>
 }

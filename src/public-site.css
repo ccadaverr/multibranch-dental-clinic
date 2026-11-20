@@ -1,6 +1,5 @@
 /* Public website and account entry. Scoped so operational screens keep their own design. */
 :root { --site-ink:#163e49; --site-muted:#586f77; --site-blue:#1764a6; --site-teal:#216f70; --site-paper:#f4f8f8; --site-line:#dce7e9; }
-html:has(.public-site), html:has(.public-auth) { scroll-behavior:smooth; scroll-padding-top:110px; }
 .public-site,.public-auth { color:var(--site-ink); background:#fff; font-size:16px; line-height:1.65; }
 .public-site *, .public-auth * { box-sizing:border-box; }
 .public-site h1,.public-site h2,.public-site h3,.public-site h4 { color:var(--site-ink); }
@@ -302,41 +301,13 @@ html:has(.public-site), html:has(.public-auth) { scroll-behavior:smooth; scroll-
   .site-footer a { min-height:44px; }
 }
 
-/* Authentication is a focused task within the clinic website. */
-.public-auth { --auth-control-height:52px; --auth-radius:16px; }
-.public-auth .auth-shell { min-height:calc(100dvh - 92px); padding:64px 24px 48px; display:grid; align-items:center; background:#f7f8f6; }
-.public-auth .auth-form-side { width:min(100%,500px); min-width:0; margin-inline:auto; }
-.public-auth .auth-shell-wide { padding-top:48px; }
-.public-auth .auth-shell-wide .auth-form-side { width:min(100%,760px); }
-.public-auth .auth-card { background:white; border:1px solid var(--site-line); border-radius:var(--auth-radius); box-shadow:0 8px 32px #173f4c07; padding:40px; }
-.public-auth .auth-form { min-width:0; }
-.public-auth .login-copy-wrap { margin:0 0 32px; }
-.public-auth .auth-form .eyebrow { font-size:12px; letter-spacing:.13em; color:var(--site-teal); font-weight:750; }
-.public-auth .auth-form h1 { margin:10px 0 12px; font-size:34px; line-height:1.16; letter-spacing:-.04em; color:var(--site-ink); }
-.public-auth .auth-register h1 { font-size:36px; }
-.public-auth .login-copy { margin:0; font-size:15px; line-height:1.7; color:var(--site-muted); }
-.public-auth .field { gap:8px; margin-bottom:22px; }
-.public-auth .field>span,.public-auth .field>label { margin:0; font-size:14px; font-weight:650; color:var(--site-ink); }
-.public-auth .field small { font-size:12px; line-height:1.6; }
-.public-auth .field input:not([type=checkbox]):not([type=radio]) { min-height:var(--auth-control-height); border:1px solid #c4d3d8; border-radius:8px; padding:12px 14px; font-size:16px; background:#fff; color:var(--site-ink); }
-.public-auth .field input:focus-visible { outline:2px solid var(--site-blue); outline-offset:2px; }
-.public-auth .field.has-error input { border-color:var(--red); }
-.public-auth .auth-password-toggle { min-height:44px; right:4px; color:var(--site-teal); }
+/* Recovery and verification details within the shared account layout. */
 .public-auth .auth-group { min-width:0; padding:24px 0 0; margin:0 0 32px; border:0; border-top:1px solid var(--site-line); }
 .public-auth .auth-group legend { padding:0 12px 0 0; font-size:12px; font-weight:750; letter-spacing:.09em; text-transform:uppercase; color:var(--site-teal); }
 .public-auth .auth-group .form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:22px 20px; }
 .public-auth .auth-group .field { margin:0; }
-.public-auth .auth-phone-field>small { margin:0; }
-.public-auth .auth-phone-field .phone-field { border-color:#c4d3d8; border-radius:8px; }
-.public-auth .auth-country-trigger { min-height:50px; border-radius:8px 0 0 8px; font-size:14px; }
-.public-auth .auth-country-wrap { flex-basis:42%; }
-.public-auth .auth-phone-field .phone-field-number { border:0 !important; border-radius:0 8px 8px 0 !important; min-height:50px !important; box-shadow:none; }
-.public-auth .auth-country-menu { width:min(350px,calc(100vw - 88px)); }
-.public-auth .auth-country-options button { min-height:44px; font-size:14px; }
 .public-auth .auth-submit>.btn,.public-auth .login-button { width:100%; min-height:52px; justify-content:center; border-radius:8px; font-size:15px; }
 .public-auth .auth-submit { margin-top:8px; }
-.public-auth .login-register-link { margin:24px 0 0; padding-top:20px; border-top:1px solid var(--site-line); text-align:center; font-size:14px; color:var(--site-muted); }
-.public-auth .text-link { display:inline-flex; min-height:44px; align-items:center; color:var(--site-blue); font-size:14px; }
 .public-auth .auth-context { text-align:center; margin-top:20px; font-size:13px; color:var(--site-muted); }
 .public-auth .auth-home-link { display:inline-flex; align-items:center; min-height:44px; color:var(--site-muted); text-decoration:none; }
 .public-auth .auth-home-link:hover { color:var(--site-blue); }
@@ -350,65 +321,6 @@ html:has(.public-site), html:has(.public-auth) { scroll-behavior:smooth; scroll-
 .public-auth .auth-change-email { margin:12px 0 0; text-align:center; }
 .public-auth .verification-resend { margin-top:18px; padding-top:18px; flex-wrap:wrap; gap:8px; }
 .public-auth .verification-resend .btn { min-height:44px; }
-.public-auth .auth-form [aria-busy=true]>.btn:disabled { opacity:.75; }
-.public-auth .auth-form :is(input,button,a) { scroll-margin-block:120px 40px; }
-@media (max-width:600px) {
-  .public-auth .auth-shell,.public-auth .auth-shell-wide { min-height:0; padding:32px 16px; align-items:start; }
-  .public-auth .auth-card { padding:28px 22px; border-radius:14px; }
-  .public-auth .auth-form h1,.public-auth .auth-register h1 { font-size:30px; }
-  .public-auth .login-copy-wrap { margin-bottom:28px; }
-  .public-auth .auth-group .form-grid { grid-template-columns:minmax(0,1fr); gap:22px; }
-  .public-auth .auth-group .span-2 { grid-column:auto; }
-  .public-auth .auth-group { margin-bottom:28px; padding-top:20px; }
-  .public-auth .auth-country-wrap { flex-basis:47%; }
-  .public-auth .auth-country-trigger { padding-inline:8px; font-size:13px; }
-  .public-auth .auth-phone-field .phone-field-number { padding-inline:10px; }
-  .public-auth .auth-context { margin-top:16px; }
-}
-
-/* Public branch presentation is independent of operational branch permissions. */
-.site-locations { background:#f7f9f8; border-bottom:1px solid var(--site-line); }
-.site-location-map { position:relative; height:420px; margin:0; border:1px solid #d5e1df; border-radius:14px; overflow:hidden; background:#edf2ee; isolation:isolate; }
-.site-map-canvas { position:absolute; inset:0; z-index:0; pointer-events:none; }
-.site-map-canvas.leaflet-container { background:#edf2ee; font-family:inherit; }
-.site-map-state { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:#edf2ee; color:var(--site-muted); }
-.site-map-state>span { font-size:18px; font-weight:650; color:var(--site-ink); }
-.site-map-state p { margin:8px 16px 0; text-align:center; font-size:14px; }
-.map-error .site-map-canvas { visibility:hidden; }
-.site-map-caption { position:absolute; z-index:1; bottom:0; left:0; right:0; padding:10px 16px; display:flex; justify-content:space-between; gap:8px 20px; flex-wrap:wrap; background:#fffffff2; border-top:1px solid var(--site-line); color:var(--site-muted); font-size:12px; }
-.site-map-caption a { color:var(--site-ink); text-decoration:underline; text-underline-offset:2px; }
-.site-map-canvas .clinic-map-marker { border:0; background:none; }
-.clinic-pin { position:absolute; width:0; height:0; color:var(--site-blue); }
-.clinic-pin>i { position:absolute; width:10px; height:10px; left:-5px; top:-5px; border-radius:50%; background:currentColor; border:2px solid white; box-shadow:0 0 0 1px currentColor; }
-.clinic-pin>b { position:absolute; left:-20px; bottom:22px; width:40px; height:40px; display:grid; place-items:center; border:2px solid white; border-radius:12px; color:white; background:var(--site-blue); font-size:15px; box-shadow:0 2px 6px #163e4930; }
-.clinic-pin::before { content:''; position:absolute; width:2px; height:24px; bottom:0; left:-1px; background:currentColor; }
-.clinic-pin.pin-02 { color:var(--site-teal); }
-.clinic-pin.pin-02>b { top:22px; bottom:auto; background:var(--site-teal); }
-.clinic-pin.pin-02::before { top:0; bottom:auto; }
-.site-branch-list { list-style:none; padding:0; margin:24px 0 0; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:24px; }
-.site-branch-card { display:flex; gap:16px; min-width:0; padding:26px 0 0; border-top:1px solid #cddbd9; }
-.site-branch-number { flex:none; color:var(--site-teal); font-size:13px; font-weight:750; letter-spacing:.05em; padding-top:3px; }
-.site-branch-card h3 { margin:0 0 10px; font-size:18px; letter-spacing:-.02em; line-height:1.4; }
-.site-branch-card address { font-style:normal; font-size:14px; color:var(--site-muted); line-height:1.75; }
-@media (max-width:1150px) and (min-width:1001px) {
-  .site-navigation,.site-nav-links,.site-account-links { gap:12px; }
-  .site-header-inner { gap:14px; }
-}
-@media (max-width:768px) {
-  .site-location-map { height:360px; }
-  .site-branch-list { grid-template-columns:1fr; gap:22px; }
-  .site-branch-card { padding-top:22px; }
-  .site-branch-card h3 { font-size:17px; }
-}
-@media (max-width:430px) {
-  .site-location-map { height:340px; }
-  .site-map-caption { padding:8px 12px; font-size:11px; }
-}
-
-.public-auth #public-main:focus { outline:none; }
-.site-map-canvas .leaflet-tile-pane { filter:saturate(.65); }
-.public-auth .auth-form .field input[aria-invalid=true],
-.public-auth .auth-phone-field.has-error .phone-field { border-color:var(--red); }
 
 /* F1–F3 one-time email links (#respond/<token>) */
 .public-auth .respond-facts { display:grid; gap:0; margin:4px 0 18px; border:1px solid #e1eaf1; border-radius:14px; overflow:hidden; }

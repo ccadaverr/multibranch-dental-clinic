@@ -112,6 +112,12 @@ final class BillingService {
         if ($appointment->booking_payment_status !== 'paid') {
             return null;
         }
+        if ($appointment->booking_refund_ref || \App\Models\AuditLog::where('auditable_type', 'Appointment')
+            ->where('auditable_public_id', $appointment->public_id)
+            ->where('action', 'billing.booking_refund_attempt_started')->exists()) {
+            throw new BillingException(422, 'booking_refund_reconciliation_required',
+                'A booking deposit refund was requested or its outcome is uncertain. Reconcile the original capture before issuing this invoice.');
+        }
         if ($appointment->patient_id !== $invoice->patient_id || $appointment->branch_id !== $invoice->branch_id
             || ! $appointment->booking_payment_ref || ! $appointment->booking_paid_at || $this->cents((string) ($appointment->booking_fee_php ?? 0)) === 0) {
             throw new BillingException(422, 'booking_credit_unverified', 'The original booking payment must be reconciled before issuing this invoice.');

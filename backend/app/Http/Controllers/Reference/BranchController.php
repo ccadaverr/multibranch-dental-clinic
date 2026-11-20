@@ -6,10 +6,15 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Reference\UpdateBranchRequest;
 use App\Http\Resources\Reference\BranchResource;
 use App\Http\Resources\Reference\BranchServiceResource;
+use App\Models\Appointment;
 use App\Models\Branch;
+use App\Models\Invoice;
+use App\Models\StaffProfile;
+use App\Models\Visit;
 use App\Models\User;
 use App\Services\Audit\AuditService;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -32,6 +37,9 @@ class BranchController extends Controller
                 abort_unless($actor && $actor->role->value === 'owner' && $actor->account_status === 'Active'
                     && $actor->auth_version === $request->user()->auth_version, 403);
                 $current = Branch::whereKey($branch->id)->lockForUpdate()->firstOrFail();
+                if ($current->archived_at !== null) {
+                    return response()->json(['code' => 'branch_archived', 'message' => 'Restore this archived branch before editing it.'], 409);
+                }
                 $data = $request->validated();
                 // Route binding may predate this lock. An old legacy code cannot
                 // become a new choice after another command has replaced it.
@@ -97,6 +105,92 @@ class BranchController extends Controller
                 'branch_code' => 'This branch code is already in use. Choose another code.',
             ]);
         }
+    }
+
+    /**
+     * Archive, never delete. Reject ongoing appointments, active Visits and assigned
+     * on-duty Staff so that a routine Owner action cannot strand clinic work.
+     * Closed branches retain their original IDs, scoped history and financial rows.
+     */
+    public function archive(Request $request, Branch $branch)
+    {
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'min:8', 'max:300'],
+        ]);
+
+        return DB::transaction(function () use ($request, $branch, $data) {
+            $actor = $this->currentOwner($request);
+            $current = Branch::whereKey($branch->id)->lockForUpdate()->firstOrFail();
+            if ($current->archived_at !== null) {
+                return response()->json(['data' => new BranchResource($current), 'meta' => ['already_archived' => true]]);
+            }
+            // Deliberately inspect all active work, including past-dated items
+            // which have not been closed. Never infer an appointment is finished
+            // just because its scheduled date has passed.
+            $hasAppointments = Appointment::where('branch_id', $current->id)
+                ->whereIn('status', Appointment::ACTIVE_STATUSES)->exists();
+            $hasVisits = Visit::where('branch_id', $current->id)
+                ->whereIn('status', Visit::ACTIVE_STATUSES)->exists();
+            $hasStaff = StaffProfile::where('branch_id', $current->id)
+                ->where('available', true)->exists();
+            $hasUnsettledInvoices = Invoice::where('branch_id', $current->id)
+                ->where('status', '!=', 'Paid')->exists();
+            if ($hasAppointments || $hasVisits || $hasStaff || $hasUnsettledInvoices) {
+                return response()->json([
+                    'code' => 'branch_has_active_work',
+                    'message' => 'This branch has active appointments, open Visits, assigned available Staff or unsettled invoices. Resolve those records before archiving.',
+                ], 409);
+            }
+            $priorStatus = $current->status;
+            $current->forceFill([
+                'status' => 'Inactive',
+                'archived_at' => now(),
+                'archived_by_user_id' => $actor->id,
+                'archive_reason' => trim($data['reason']),
+            ])->save();
+            app(AuditService::class)->record([
+                'action' => 'branch.archived', 'category' => 'administrative',
+                'severity' => 'warning', 'actor' => $actor, 'target' => $current,
+                'branch_id' => $current->id,
+                'payload' => ['previous_status' => $priorStatus, 'reason' => $current->archive_reason],
+            ]);
+            return response()->json(['data' => new BranchResource($current)]);
+        });
+    }
+
+    /** Restore to Inactive so a restore cannot silently reopen online bookings. */
+    public function restore(Request $request, Branch $branch)
+    {
+        return DB::transaction(function () use ($request, $branch) {
+            $actor = $this->currentOwner($request);
+            $current = Branch::whereKey($branch->id)->lockForUpdate()->firstOrFail();
+            if ($current->archived_at === null) {
+                return response()->json(['data' => new BranchResource($current), 'meta' => ['already_active' => true]]);
+            }
+            $archivedAt = $current->archived_at->toIso8601String();
+            $current->forceFill([
+                'status' => 'Inactive',
+                'archived_at' => null,
+                'archived_by_user_id' => null,
+                'archive_reason' => null,
+            ])->save();
+            app(AuditService::class)->record([
+                'action' => 'branch.restored', 'category' => 'administrative',
+                'actor' => $actor, 'target' => $current,
+                'branch_id' => $current->id,
+                'payload' => ['prior_archived_at' => $archivedAt, 'restored_status' => 'Inactive'],
+            ]);
+            return response()->json(['data' => new BranchResource($current)]);
+        });
+    }
+
+    private function currentOwner(Request $request): User
+    {
+        $actor = User::whereKey($request->user()->id)->lockForUpdate()->first();
+        abort_unless($actor && $actor->role->value === 'owner' && $actor->account_status === 'Active'
+            && $actor->auth_version === $request->user()->auth_version, 403);
+
+        return $actor;
     }
 
     public function servicesForBranch(Branch $branch)

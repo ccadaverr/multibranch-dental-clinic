@@ -37,6 +37,34 @@ final class WorkSchedules
         $this->weekly = $this->exceptions = $this->leave = [];
     }
 
+    /** Prime the calendar's read-only date range. Booking commands still acquire fresh scheduling data. */
+    public function preloadCalendar(Collection $pool, string $first, string $last): void
+    {
+        if ($pool->isEmpty() || $first > $last) return;
+        $ids = $pool->pluck('id')->unique()->values();
+        // These weekly rows are reused for every date/branch below. Without a
+        // prefill, usesProfileHours() issues a remote query for each dentist.
+        $weekly = DentistSchedule::whereIn('dentist_profile_id', $ids)
+            ->where('status', 'active')->get()->groupBy('dentist_profile_id');
+        foreach ($ids as $id) {
+            $this->weekly[$id] = $weekly->get($id, collect());
+        }
+        $exceptions = DentistScheduleException::whereIn('dentist_profile_id', $ids)->where('status', 'active')
+            ->whereBetween('on_date', [$first, $last])->get()->groupBy(fn ($row) => $row->dentist_profile_id.':'.substr($row->getRawOriginal('on_date'), 0, 10));
+        $leaves = LeaveRequest::whereIn('dentist_profile_id', $ids)->where('status', 'Approved')
+            ->where('starts_at', '<', SchedulingService::ts(ClinicClock::at($last, '00:00')->addDay()))
+            ->where('ends_at', '>', SchedulingService::ts(ClinicClock::at($first, '00:00')))->get()->groupBy('dentist_profile_id');
+        for ($date = $first; $date <= $last; $date = ClinicClock::addDays($date, 1)) {
+            $start = ClinicClock::at($date, '00:00');
+            $end = $start->addDay();
+            foreach ($ids as $id) {
+                $key = $id.':'.$date;
+                $this->exceptions[$key] = $exceptions->get($key, collect());
+                $this->leave[$key] = $leaves->get($id, collect())->filter(fn ($row) => $row->starts_at < $end && $row->ends_at > $start);
+            }
+        }
+    }
+
     /** True when this dentist has no weekly schedule yet and booking uses the hours on their profile. */
     public function usesProfileHours(DentistProfile $d): bool
     {

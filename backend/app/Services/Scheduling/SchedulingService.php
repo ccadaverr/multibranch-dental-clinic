@@ -49,7 +49,7 @@ final class SchedulingService
     /** @return array{0:string,1:string} first and last Patient-bookable dates, inclusive */
     public function patientWindow(?CarbonImmutable $now = null): array
     {
-        $today = ($now ?? ClinicClock::now())->toDateString();
+        $today = ($now ?? ClinicClock::now())->setTimezone(ClinicClock::TIMEZONE)->toDateString();
         $first = CarbonImmutable::createFromFormat('!Y-m-d', $today, ClinicClock::TIMEZONE)->addDay()->toDateString();
 
         return [$first, ClinicClock::addCalendarMonths($first, 1)];
@@ -77,7 +77,7 @@ final class SchedulingService
             return collect();
         }
 
-        return Branch::where('status', 'Open')
+        return Branch::where('status', 'Open')->whereNull('archived_at')
             ->whereHas('branchServices', fn (Builder $q) => $q->where('service_id', $service->id)->where('active', true))
             ->orderBy('id')->get();
     }
@@ -133,7 +133,7 @@ final class SchedulingService
         if ($r->patient || $r->requirePatient) {
             $check('patient', 'Patient exists', $r->patient);
         }
-        $check('branch-status', 'Branch is open', $branch?->status === 'Open');
+        $check('branch-status', 'Branch is open', $branch?->status === 'Open' && $branch->archived_at === null);
         $check('branch-day', 'Branch is open on this day', $branch && ClinicClock::validDate($r->date) && self::openOn($branch, $r->date));
         $check('service-exists', 'Service is active', $service?->status === 'Active');
         if ($r->patientRules && $r->ignoreAppointmentId === null) {

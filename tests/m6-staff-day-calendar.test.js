@@ -34,7 +34,9 @@ test('status labels equal the backend lifecycle; completion comes only from the 
   const allowed = migration.match(/appointments_status_check CHECK \(status IN \(([^)]*)\)\)/)[1].split(',').map(s => s.trim().replace(/'/g, ''))
   assert.deepEqual(Object.keys(APPOINTMENT_STATUSES), allowed)
   const model = read('backend/app/Models/Appointment.php')
-  assert.match(model, /ACTIVE_STATUSES = \['Pending', 'Confirmed', 'Checked In', 'In Treatment'\]/)
+  assert.match(model, /SCHEDULED_STATUSES = \['Pending', 'Confirmed'\]/)
+  assert.match(model, /IN_PROGRESS_STATUSES = \['Checked In', 'In Treatment'\]/)
+  assert.match(model, /ACTIVE_STATUSES = \[\.\.\.self::SCHEDULED_STATUSES, \.\.\.self::IN_PROGRESS_STATUSES\]/)
   assert.match(model, /TERMINAL_STATUSES = \['Completed', 'Cancelled', 'No-show'\]/)
   // Completed is written by the server when the Dentist completes the Treatment (TreatmentService), never derived from time.
   assert.match(read('backend/app/Services/Treatments/TreatmentService.php'), /'Completed'/)
@@ -76,7 +78,7 @@ test('booking source codes from the server read as plain words', () => {
 // ---- read model --------------------------------------------------------------------------------------------------------
 test('rows keep only contract fields needed by the calendar: no notes, history or Patient public id', () => {
   const m = mapDayAppointment(row(1))
-  assert.deepEqual(Object.keys(m).sort(), ['branchId', 'branchName', 'code', 'date', 'dentistId', 'dentistName', 'duration', 'end', 'id', 'patientCode', 'patientName', 'serviceName', 'source', 'start', 'status'])
+  assert.deepEqual(Object.keys(m).sort(), ['branchId', 'branchName', 'code', 'date', 'dentistId', 'dentistName', 'duration', 'end', 'id', 'intendedServiceName', 'patientCode', 'patientName', 'serviceName', 'source', 'start', 'status'])
   assert.equal(JSON.stringify(m).includes('private booking note'), false)
   assert.equal(mapDayAppointment(row(2, { dentist: null })).dentistId, null)
 })
@@ -238,7 +240,7 @@ test('offline demo shows an honest notice and no calendar; a server session pain
   const demo = renderToString(React.createElement(ui.StaffDayCalendar, { store: store({ role: 'staff' }) }))
   assert.match(demo, /isn’t available in the offline demo/); assert.doesNotMatch(demo, /No appointments/)
   const live = renderToString(React.createElement(ui.StaffDayCalendar, { store: store({ role: 'staff', serverUserId: 'u1', branchScopes: ['b1', 'b2'] }) })).replace(/<!-- -->/g, '')
-  assert.match(live, /Loading appointments/)
+  assert.match(live, /Loading this month(?:&#x27;|')s appointments/)
   assert.match(live, /Previous month/); assert.match(live, /Next month/); assert.match(live, /Today/)
   assert.match(live, /September 2026/)
   assert.match(live, /All my branches/) // several branches: a filter exists
@@ -351,7 +353,7 @@ test('per-day totals exist only for a complete response; an incomplete one yield
   const page = read('src/pages/StaffDayCalendar.jsx')
   assert.match(page, /const totals = dayTotals\(rows, complete, \{ branchId: activeBranch \}\)/)
   assert.match(page, /const verified = totals !== null/)
-  assert.match(page, /\{totals && list\.length > 0 &&/); assert.match(page, /\{totals && list\.length > shown\.length &&/)
+  assert.match(page, /\{totals && list\.length > 0 &&/); assert.match(page, /\{complete && list\.length > shown\.length &&/)
   assert.match(page, /!c\.fetched\)\s*return/)
 })
 

@@ -185,7 +185,7 @@ function Dependents({ deps, setDeps, errors, minDob, maxDob }) {
  * Optional "Scan your ID to fill this in". A consent step first; then the photo is read ON THIS DEVICE (the scan module is a
  * separate chunk loaded only now) and dropped. Only the name parts and birth date are filled in, highlighted for checking.
  */
-export function ScanIdButton({ onResult }) {
+export function ScanIdButton({ onResult, compact = false }) {
   const [phase, setPhase] = useState('idle'), [progress, setProgress] = useState(0), [note, setNote] = useState('')
   const input = useRef(null)
   const read = async file => {
@@ -203,7 +203,7 @@ export function ScanIdButton({ onResult }) {
     } finally { if (input.current) input.current.value = '' }
   }
   return <div className="scan-id">
-    {phase === 'idle' && <Button variant="soft" icon="sparkles" width="full" onClick={() => setPhase('consent')}>Scan your ID to fill this in (optional)</Button>}
+    {phase === 'idle' && <Button variant={compact ? 'ghost' : 'soft'} icon={compact ? undefined : 'sparkles'} width={compact ? undefined : 'full'} onClick={() => setPhase('consent')}>{compact ? 'Scan ID (optional)' : 'Scan your ID to fill this in (optional)'}</Button>}
     {phase === 'consent' && <div className="scan-consent" role="region" aria-label="About the ID scan">
       <p><b>Before you scan</b></p>
       <ul><li>We read only your <b>name and date of birth</b> from the ID, to fill in this form.</li>

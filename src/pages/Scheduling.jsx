@@ -1,14 +1,16 @@
 import {SelectionDetailsNotice} from '../selection-details.jsx'
 import React, { useEffect, useId, useRef, useState } from 'react'
-import { Button, Card, ConfirmDialog, Field, FilterBar, Icon, Modal, Notice, PageHeader, RefreshButton, SelectWithOther, Status, Table } from '../components.jsx'
+import { Button, Card, ConfirmDialog, Field, FilterBar, Icon, IconAction, Modal, Notice, PageHeader, RefreshButton, SelectWithOther, Status, Table } from '../components.jsx'
 import { addMinutes, dateLabel, dentistName, displayTime, patientName } from '../logic.js'
 import { canAccessPage } from '../safeguards.js'
 import { checkInNavigationFor } from '../checkin-navigation.js'
 import { clinicDate } from '../clock.js'
 import { commandKey, selectedFollowupProblem, STAFF_CANCELLATION_REASONS } from '../appointments-api.js'
+import { requestBookingRefund } from '../api-client.js'
 import { publicPatientIdFor } from '../appointment-projection.js'
 import { useDayAvailability } from '../booking-availability.js'
 import { dentistsFor, servicesAt } from '../scheduling.js'
+import { groupBookableServiceOptions } from '../service-options.js'
 import { PatientAppointmentsPage } from './PatientVisits.jsx'
 import { PatientBookingPage } from './PatientBook.jsx'
 import { inScope, isTodayQueue, patientInScope, sessionForRole } from '../contracts.js'
@@ -50,6 +52,7 @@ function AppointmentEditor({ role, store, appointment: currentAppointment, follo
   const selectedAttempt=useRef(null), feedback=useRef(null), formElement=useRef(null), feedbackId=useId()
   const [selectedPhase,setSelectedPhase]=useState('idle')
   const branches=bookableBranches(state,session)
+  const defaultBranch=branches.find(b=>b.id===session?.branchId)?.id || branches[0]?.id || ''
   const followupPatient=followup?publicPatientIdFor(followup.patientId,{session,users:state.users,patients:state.patients}):null
   const lockedPatient=!!(appointment||followup||prefill?.patientPublicId||prefill?.patientName)||selectedMode
   const lockedBranch=!!(appointment||followup||(prefill?.patientPublicId&&prefill?.branchId))||selectedMode
@@ -57,8 +60,8 @@ function AppointmentEditor({ role, store, appointment: currentAppointment, follo
     if(selectedMode)return {patientPublicId:selection.patientPublicId||'',branchId:selection.branchId||'',serviceId:prefill?.serviceId||'',dentistId:selection.dentistId||prefill?.dentistId||'',date:prefill?.date&&prefill.date>=clinicDate()?prefill.date:clinicDate(),start:'',notes:prefill?.notes||''}
     if(appointment)return {patientPublicId:appointment.patientPublicId,branchId:appointment.branchId,serviceId:appointment.serviceId,dentistId:appointment.dentistId,date:appointment.date>=clinicDate()?appointment.date:clinicDate(),start:'',notes:''}
     if(followup)return {patientPublicId:followupPatient,branchId:followup.branchId,serviceId:'',dentistId:followup.dentistId,date:followup.recommendedDate&&followup.recommendedDate>=clinicDate()?followup.recommendedDate:clinicDate(),start:'',notes:followup.reason||''}
-    if(prefill)return {patientPublicId:prefill.patientPublicId,branchId:prefill.branchId||branches[0]?.id||'',serviceId:prefill.serviceId||'',dentistId:prefill.dentistId||'',date:prefill.date&&prefill.date>=clinicDate()?prefill.date:clinicDate(),start:'',notes:prefill.notes||''}
-    return {patientPublicId:'',branchId:branches[0]?.id||'',serviceId:'',dentistId:'',date:clinicDate(),start:'',notes:''}
+    if(prefill)return {patientPublicId:prefill.patientPublicId,branchId:prefill.branchId||defaultBranch,serviceId:prefill.serviceId||'',dentistId:prefill.dentistId||'',date:prefill.date&&prefill.date>=clinicDate()?prefill.date:clinicDate(),start:'',notes:prefill.notes||''}
+    return {patientPublicId:'',branchId:defaultBranch,serviceId:'',dentistId:'',date:clinicDate(),start:'',notes:''}
   })
   const [search,setSearch]=useState('')
   const [failure,setFailure]=useState(null)
@@ -83,6 +86,7 @@ function AppointmentEditor({ role, store, appointment: currentAppointment, follo
   useEffect(()=>{if(selectedMode&&['unknown','refused','verified'].includes(selectedPhase))feedback.current?.focus()},[selectedMode,selectedPhase])
 
   const services=servicesAt(state,form.branchId)
+  const serviceGroups=groupBookableServiceOptions(appointment?state.services.filter(s=>s.id===appointment.serviceId):services)
   const dentists=form.serviceId?dentistsFor(state,form.branchId,form.serviceId):[]
   const lockedDentist=!!followup||(selectedMode&&!!selection.dentistId)
   const selectedService=services.find(s=>s.id===form.serviceId)
@@ -166,7 +170,7 @@ function AppointmentEditor({ role, store, appointment: currentAppointment, follo
       {lockedPatient
         ?<Field label="Patient"><input value={selectedMode?prefill?.patientName||selectedPatient?.name||'Selected follow-up patient':appointment?`${appointment.patientName||patientName(appointment.patientId,state.patients)} • ${appointment.patientCode||''}`:prefill?prefill.patientName||prefill.patientPublicId:patientName(followup.patientId,state.patients)} disabled/></Field>
         :<>
-          <Field label="Find patient" hint="Search the clinic Patient directory by name, code or phone."><input value={search} placeholder="Type at least 2 characters" onChange={e=>setSearch(e.target.value)}/></Field>
+          <Field label="Find patient"><input value={search} placeholder="Type at least 2 characters" onChange={e=>setSearch(e.target.value)}/></Field>
           <Field label="Patient" required><select value={form.patientPublicId} onChange={e=>update('patientPublicId',e.target.value)}>
             <option value="">Select a patient</option>
             {directory.map(p=><option key={p.id} value={p.id}>{p.name} • {p.patientCode}{p.phone?` • ${p.phone}`:''}</option>)}
@@ -176,9 +180,9 @@ function AppointmentEditor({ role, store, appointment: currentAppointment, follo
         {!branches.length&&<option value="">No authorized branch</option>}
         {(lockedBranch?state.branches.filter(b=>b.id===form.branchId):branches).map(b=><option key={b.id} value={b.id}>{b.name}</option>)}
       </select></Field>
-      <Field label="Service" required><select disabled={!!appointment} value={form.serviceId} onChange={e=>update('serviceId',e.target.value)}>
+      <Field label="Service" required hint={selectedService ? `${selectedService.duration} min` : undefined}><select disabled={!!appointment} value={form.serviceId} onChange={e=>update('serviceId',e.target.value)}>
         <option value="">Select a service</option>
-        {(appointment?state.services.filter(s=>s.id===appointment.serviceId):services).map(s=><option key={s.id} value={s.id}>{s.name} • {s.duration} min</option>)}
+        {serviceGroups.map(group=><optgroup key={group.category} label={group.category}>{group.items.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</optgroup>)}
       </select></Field>
       {isRestricted&&<div className="span-2">
         <Notice tone="warning" title="Restricted / Preliminary Consultation Required">
@@ -192,7 +196,7 @@ function AppointmentEditor({ role, store, appointment: currentAppointment, follo
           </label>
         </Notice>
       </div>}
-      <Field label="Dentist" hint={lockedDentist?'The requesting Dentist.':'Leave on automatic to let the clinic assign an eligible Dentist.'}>
+      <Field label="Dentist" hint={lockedDentist?'Requesting Dentist':undefined}>
         <select disabled={lockedDentist} value={form.dentistId} onChange={e=>update('dentistId',e.target.value)}>
           {!lockedDentist&&<option value="">Assign automatically</option>}
           {(lockedDentist?state.dentists.filter(d=>d.id===form.dentistId):dentists).map(d=><option key={d.id} value={d.id}>{d.name} • {d.specialty}</option>)}
@@ -200,7 +204,7 @@ function AppointmentEditor({ role, store, appointment: currentAppointment, follo
       <Field label="Date" required><input type="date" value={form.date} min={clinicDate()} onChange={e=>update('date',e.target.value)}/></Field>
       <Field label="Notes"><input value={form.notes} disabled={!!appointment} placeholder="Optional booking note" onChange={e=>update('notes',e.target.value)}/></Field>
       <div className="span-2">
-        {!form.serviceId?<Notice tone="info">Choose a service to see available start times.</Notice>
+        {!form.serviceId?<p className="staff-booking-prompt" role="status">Select a service to see available times.</p>
           :day.status==='loading'?<p className="block-muted" role="status">Loading available times…</p>
           :day.status==='error'?<Notice tone="warning" title="Availability couldn’t be loaded">{day.error} <Button size="sm" variant="ghost" onClick={day.reload}>Try again</Button></Notice>
           :day.slots.length?<div className="alternatives"><small>Available start times on {dateLabel(form.date)}</small><div className="chip-row" role="group" aria-label="Available start times">
@@ -218,14 +222,12 @@ function AppointmentEditor({ role, store, appointment: currentAppointment, follo
         {selectedPhase==='verified'&&<p>Appointment and selected follow-up link verified.</p>}
       </div>}
     </form>
-    <div className="validation-card">
-      <div className="validation-title"><b>Scheduling checks</b><span>Confirmed by the clinic server</span></div>
-      {(!failure||selectedMode)&&<Notice tone="info">Only start times the server can accept are offered. On confirm, the server re-checks branch hours, branch service, Dentist eligibility and shift, and Dentist/Patient conflicts{selectedPatient?` for ${selectedPatient.name}`:''}.</Notice>}
+    {(failure&&!selectedMode)&&<div className="validation-card staff-booking-error" role="alert">
       {failure&&!selectedMode&&<>
         <Notice tone={failure.kind==='conflict'?'warning':'danger'} title={failure.kind==='conflict'?'Availability changed':'This slot can’t be booked'}>{failure.message}</Notice>
         {!!failure.alternatives?.length&&<div className="alternatives"><small>Other start times on this date</small><div className="chip-row">{failure.alternatives.map(t=><button type="button" className="chip" key={t} onClick={()=>setForm(previous=>({...previous,start:t}))}>{displayTime(t)}</button>)}</div></div>}
       </>}
-    </div>
+    </div>}
   </div>
 }
 
@@ -253,6 +255,7 @@ function AppointmentManagement({ role, store, setPage, context }) {
   const [cancelling,setCancelling]=useState(null)
   const cancellationKeys = useRef(new Map())
   const [missed,setMissed]=useState(null)
+  const [refunding,setRefunding]=useState(null)
   const [newOpen,setNewOpen]=useState(false)
   const [search,setSearch]=useState('')
   const [statusFilter,setStatusFilter]=useState('All')
@@ -300,12 +303,52 @@ function AppointmentManagement({ role, store, setPage, context }) {
   // Pre-arrival No-show (M6): a manual same-day Staff decision that the scheduled Patient did not arrive. No Visit is
   // created; once the Patient has checked in, No-show is no longer possible.
   const markNoShow=()=>runAction('noShow',missed,setMissed,a=>store.appointmentFlow.noShow(a,commandKey()))
+  // Staff needs a readable worklist at normal desktop widths. Keep all actions,
+  // payment semantics and exact appointment/Patient identities, but group related fields.
+  const staffAppointmentColumns = [
+    { key:'appointmentNo', label:'Appointment', render:a=><div className="staff-r11-cell">
+      <b className="staff-r11-code">{a.appointmentNo}</b>
+      <small>{a.source}</small>
+      <small>{branchNames.get(a.branchId)||'Branch unavailable'}</small>
+    </div> },
+    { key:'patient', label:'Patient / service', render:a=><div className="staff-r11-cell">
+      <b>{a.patientName||patientName(a.patientId,state.patients)}</b>
+      <small>{a.service}</small>
+    </div> },
+    { key:'date', label:'When / dentist', render:a=><div className="staff-r11-cell">
+      <b>{dateLabel(a.date)}</b>
+      <span>{displayTime(a.start)}–{displayTime(addMinutes(a.start,a.duration))}</span>
+      <small>{a.dentistName||dentistName(a.dentistId,state.dentists)}</small>
+    </div> },
+    { key:'status', label:'Status / payment', render:a=><div className="staff-r11-state-stack">
+      <Status>{a.status}</Status>
+      <BookingPaymentBadge status={a.bookingPaymentStatus} method={a.bookingPaymentMethod}/>
+      {a.cancellationCategory&&<small className="staff-r11-cancel-note">{a.cancellationCategory}{a.cancellationDetail&&` — ${a.cancellationDetail}`}</small>}
+      {a.cancellationRefund && <small className="staff-r11-cancel-note">{a.cancellationRefund.message}</small>}
+    </div> },
+    { key:'actions', label:'Actions', render:a=>{
+      const checkIn=checkInNavigationFor(store,a)
+      const patient=appointmentRecordPatient(a,state,session)
+      const canChange=canSchedule(store,a.branchId)&&['Confirmed','Pending'].includes(a.status)
+      return <div className="staff-r11-appt-actions">
+        {canChange&&<IconAction icon="reschedule" intent="neutral" label={`Reschedule ${a.appointmentNo}`} onClick={()=>openAction(setReschedule,a)}/>}
+        {canChange&&<Button size="sm" variant="danger" disabled={owner.busy} onClick={()=>openAction(setCancelling,a)}>Cancel</Button>}
+        {patient&&<IconAction icon="eye" label={`View record for ${a.patientName||patientName(a.patientId,state.patients)}`} onClick={()=>setPage('patients',{patientId:patient.id})}/>}
+        {checkIn&&<Button size="sm" variant="primary" onClick={()=>setPage('checkin',{mode:'scheduled',checkIn})}>Check in</Button>}
+        {canChange&&a.date===clinicDate()&&<button type="button" className="ui-text-action" disabled={owner.busy} onClick={()=>openAction(setMissed,a)}>No-show</button>}
+        {canSchedule(store,a.branchId)&&['paid','forfeited'].includes(a.bookingPaymentStatus)&&['Pending','Confirmed','Cancelled','No-show'].includes(a.status)&&
+          <Button size="sm" variant="ghost" disabled={owner.busy} onClick={()=>openAction(setRefunding,a)}>Review refund</Button>}
+      </div>
+    } },
+  ]
   return <>
-    <PageHeader kicker="Scheduling" title="Appointment management" text={role === 'staff' ? 'Find bookings, confirm arrivals and manage appointment changes.' : undefined} aside={<div className="row-actions"><RefreshButton onClick={()=>store.appointmentFlow.refresh()}/><Button onClick={()=>openAction(setNewOpen,true)} icon="plusCalendar">New appointment</Button></div>}/>
+    <PageHeader kicker="Scheduling" title="Appointment management" text={role === 'staff' ? 'Find bookings, confirm arrivals and manage appointment changes.' : undefined} aside={<div className="row-actions">{role!=='staff'&&<RefreshButton onClick={()=>store.appointmentFlow.refresh()}/>}<Button onClick={()=>openAction(setNewOpen,true)} icon="plusCalendar">New appointment</Button></div>}/>
     <AppointmentsStatusNotice store={store}/>
     {owner.busy&&<p role="status">Saving appointment change…</p>}
     {actionError&&<p role="alert">{actionError}</p>}
-    <FilterBar
+    <div className={role==='staff'?'staff-r15-appointment-filters':undefined}><FilterBar
+      className={role==='staff'?'staff-r15-appt-filter-bar':''}
+      ariaLabel="Search clinic appointments"
       search={search}
       onSearchChange={setSearch}
       searchPlaceholder="Search patient, appointment #, dentist, service…"
@@ -326,9 +369,9 @@ function AppointmentManagement({ role, store, setPage, context }) {
         <option value="All">All branches</option>
         {branches.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}
       </select>}
-    </FilterBar>
-    <Card title="Clinic appointments" subtitle="Appointments in your authorized branches, about three months back and ahead.">
-      <Table rows={visible} empty="No appointments matching your filters in your authorized branches." columns={[
+    </FilterBar></div>
+    <Card className={role==='staff'?'staff-r11-appointments-card':''} title={role==='staff'?undefined:'Clinic appointments'}>
+      <Table caption="Appointments" rows={visible} empty="No appointments match the selected filters." columns={role==='staff'?staffAppointmentColumns:[
         {key:'appointmentNo',label:'Appointment',render:a=><div>
           <b>{a.appointmentNo}</b>
           <small className="block-muted">{a.source}</small>
@@ -342,16 +385,73 @@ function AppointmentManagement({ role, store, setPage, context }) {
           {a.cancellationCategory && <small className="block-muted" style={{overflowWrap:'anywhere'}}>{a.cancellationCategory}{a.cancellationDetail && ` — ${a.cancellationDetail}`}</small>}
         </div>},
         {key:'bookingPaymentStatus',label:'Booking payment',render:a=><BookingPaymentBadge status={a.bookingPaymentStatus} method={a.bookingPaymentMethod}/>},
-        {key:'actions',label:'Actions',render:a=><div className="row-actions">{checkInNavigationFor(store,a)&&<Button variant="primary" onClick={()=>{const checkIn=checkInNavigationFor(store,a);if(checkIn)setPage('checkin',{mode:'scheduled',checkIn})}}>Check in</Button>}{role==='staff'&&appointmentRecordPatient(a,state,session)&&<Button size="sm" variant="soft" onClick={()=>{const patient=appointmentRecordPatient(a,state,session);if(patient)setPage('patients',{patientId:patient.id})}}>Open Patient Record</Button>}{canSchedule(store,a.branchId)&&['Confirmed','Pending'].includes(a.status)&&<><Button size="sm" variant="soft" onClick={()=>openAction(setReschedule,a)}>Reschedule</Button><Button size="sm" variant="ghost" disabled={owner.busy} onClick={()=>openAction(setCancelling,a)}>Cancel</Button>{a.date===clinicDate()&&<Button size="sm" variant="ghost" disabled={owner.busy} onClick={()=>openAction(setMissed,a)}>No-show</Button>}</>}</div>}
+        {key:'actions',label:'Actions',render:a=><div className="row-actions">{checkInNavigationFor(store,a)&&<Button variant="primary" onClick={()=>{const checkIn=checkInNavigationFor(store,a);if(checkIn)setPage('checkin',{mode:'scheduled',checkIn})}}>Check in</Button>}{role==='staff'&&appointmentRecordPatient(a,state,session)&&<Button size="sm" variant="soft" onClick={()=>{const patient=appointmentRecordPatient(a,state,session);if(patient)setPage('patients',{patientId:patient.id})}}>Open Patient Record</Button>}{canSchedule(store,a.branchId)&&['Confirmed','Pending'].includes(a.status)&&<><Button size="sm" variant="soft" onClick={()=>openAction(setReschedule,a)}>Reschedule</Button><Button size="sm" variant="ghost" disabled={owner.busy} onClick={()=>openAction(setCancelling,a)}>Cancel</Button>{a.date===clinicDate()&&<Button size="sm" variant="ghost" disabled={owner.busy} onClick={()=>openAction(setMissed,a)}>No-show</Button>}</>}{canSchedule(store,a.branchId)&&['paid','forfeited'].includes(a.bookingPaymentStatus)&&['Pending','Confirmed','Cancelled','No-show'].includes(a.status)&&<Button size="sm" variant="ghost" disabled={owner.busy} onClick={()=>openAction(setRefunding,a)}>Review refund</Button>}</div>}
       ]}/>
     </Card>
-    <Modal open={newOpen} title="Create appointment" subtitle="The clinic server validates the slot and assigns an eligible Dentist unless you choose one." wide onClose={()=>setNewOpen(false)}><AppointmentForm role={role} store={store} onSaved={()=>setNewOpen(false)}/></Modal>
+    <Modal open={newOpen} title="New appointment" wide onClose={()=>setNewOpen(false)}><AppointmentForm role={role} store={store} onSaved={()=>setNewOpen(false)}/></Modal>
     <Modal open={!!reschedule} title="Reschedule appointment" subtitle="The new time must pass the same conflict-prevention rules as a new booking." wide onClose={()=>setReschedule(null)}>{reschedule&&<AppointmentForm role={role} store={store} appointment={reschedule} submitLabel="Save new time" onSaved={()=>setReschedule(null)}/>}</Modal>
     {cancelling && <StaffCancellationDialog selectionDetailsAvailable={store.session?.selectionDetailsAvailable===true} key={cancelling.id} appointment={cancelling} operationKeys={cancellationKeys.current} onCancel={()=>{setCancelling(null);store.appointmentFlow?.refresh()}} onConfirm={cancel}/>}
+    {refunding && <BookingRefundDialog key={refunding.id} appointment={refunding} onClose={()=>{setRefunding(null);store.appointmentFlow?.refresh()}}/>}
     <ConfirmDialog open={!!missed} title="Mark as No-show?" confirmLabel="Mark No-show" cancelLabel="Keep appointment" tone="danger" onConfirm={markNoShow} onCancel={()=>setMissed(null)}>
       {missed&&<p>{missed.appointmentNo} • today at {displayTime(missed.start)} • {missed.patientName}. Use this only when the patient did not arrive; no visit is created. A patient who has already checked in can’t be marked No-show.</p>}
     </ConfirmDialog>
   </>
+}
+
+/** R23A: explicit manual review. Never say a requested refund is settled until PayMongo confirms it. */
+function BookingRefundDialog({ appointment, onClose }) {
+  const [reason,setReason]=useState('requested_by_customer')
+  const [note,setNote]=useState('')
+  const [busy,setBusy]=useState(false)
+  const [error,setError]=useState('')
+  const [result,setResult]=useState(null)
+  const key=useRef(commandKey())
+  const submitted=useRef(false)
+  const submit=async event=>{
+    event.preventDefault()
+    if(submitted.current || busy || (reason==='others'&&!note.trim()))return
+    submitted.current=true
+    setBusy(true);setError('')
+    try {
+      const response=await requestBookingRefund(appointment.id,{
+        expected_revision:appointment.revision,reason,note:note.trim()||null,
+      },key.current)
+      if(response.ok){
+        setResult(response.data)
+      }else{
+        setError(response.kind==='network'||response.kind==='server'
+          ? 'The provider outcome may be unknown. Close this window and refresh the appointment before any further action. Do not send another refund request.'
+          : response.message||'Refund could not be authorized. Review the current appointment and financial records.')
+      }
+    }catch{
+      setError('The refund outcome could not be confirmed. Refresh the appointment before any further action.')
+    }finally{setBusy(false)}
+  }
+  return <Modal open title="Review booking payment refund" onClose={()=>!busy&&onClose()}>
+    <p><b>{appointment.appointmentNo}</b> · {appointment.patientName} · {appointment.bookingPaymentStatus==='forfeited'?'Booking fee withheld':'Captured booking fee'}.</p>
+    <Notice tone="warning">PayMongo booking payment only. If the Patient has checked in, received treatment or an invoice has used the booking credit, stop and review the financial record. This cannot refund counter Cash or reverse an issued receipt.</Notice>
+    {result ? <div role="status" aria-live="polite">
+      <p>{result.outcome}</p>
+      <p><b>Provider outcome:</b> {result.refund_status==='refunded'?'Confirmed refunded':result.refund_status==='unconfirmed'?'Unconfirmed — manual reconciliation needed':result.refund_status}</p>
+      <Button onClick={onClose}>Close and refresh</Button>
+    </div> : <>
+      {error&&<Notice tone="warning" title="Refund not confirmed">{error}</Notice>}
+      <form className="au-form" onSubmit={submit}>
+        <Field label="Reason"><select aria-label="Refund reason" value={reason} disabled={busy||submitted.current} onChange={e=>setReason(e.target.value)}>
+          <option value="requested_by_customer">Patient requested refund</option>
+          <option value="duplicate">Duplicate payment</option>
+          <option value="fraudulent">Reported fraudulent payment</option>
+          <option value="others">Other, specify below</option>
+        </select></Field>
+        <Field label="Review note" required={reason==='others'}><textarea aria-label="Refund review note" rows={3} maxLength={500} value={note} disabled={busy||submitted.current} onChange={e=>setNote(e.target.value)} required={reason==='others'}/></Field>
+        <div className="row-actions">
+          <Button type="button" variant="ghost" disabled={busy} onClick={onClose}>Close</Button>
+          <Button type="submit" disabled={busy||submitted.current||(reason==='others'&&!note.trim())}>{busy?'Checking provider…':'Request PayMongo refund'}</Button>
+        </div>
+      </form>
+      {submitted.current&&error&&<Button onClick={onClose}>Close and refresh</Button>}
+    </>}
+  </Modal>
 }
 
 const BOOKING_PAYMENT_LABELS = {

@@ -6,6 +6,7 @@ use App\Models\Appointment;
 use App\Models\Branch;
 use App\Models\UserBranchScope;
 use App\Services\Automations\AutomationCatalog;
+use App\Services\Closures\ClosureCalendar;
 use App\Services\Scheduling\WorkSchedules;
 use App\Support\ClinicClock;
 use Carbon\CarbonImmutable;
@@ -26,21 +27,33 @@ class CalendarLoadController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
+        $started = hrtime(true);
         $data = $request->validate(['branch_ref' => ['nullable', 'string', 'max:50'], 'from' => ['required', 'date_format:Y-m-d'], 'to' => ['required', 'date_format:Y-m-d', 'after_or_equal:from']]);
         $from = CarbonImmutable::createFromFormat('!Y-m-d', $data['from'], ClinicClock::TIMEZONE);
         $to = CarbonImmutable::createFromFormat('!Y-m-d', $data['to'], ClinicClock::TIMEZONE);
         if ($from->diffInDays($to) > 42) throw ValidationException::withMessages(['to' => ['Choose at most six weeks.']]);
         $user = $request->user();
-        $branches = Branch::query()->where('status', 'Open')->orderBy('id')
+        $branches = Branch::query()->where('status', 'Open')->whereNull('archived_at')->orderBy('id')
             ->when(! empty($data['branch_ref']), fn ($q) => $q->where('legacy_ref', $data['branch_ref']))
             ->when($user->role->value === 'staff', fn ($q) => $q->whereIn('id', UserBranchScope::select('branch_id')->where('user_id', $user->id)))
             ->with(['dentistBranches.dentistProfile'])->get();
         abort_if($branches->isEmpty(), 403, 'Forbidden.');
+        // A range is at most six weeks. Avoid downloading a year of clinic closures
+        // when rendering this month; Branch::hoursOnDate() remains the authority.
+        app(ClosureCalendar::class)->primeRange($branches->pluck('id')->all(), $from->toDateString(), $to->toDateString());
         $threshold = (int) (AutomationCatalog::setting('calendar_load')?->settings['crowded_percent'] ?? 80);
         $booked = Appointment::whereIn('branch_id', $branches->pluck('id'))->whereNotIn('status', ['Cancelled', 'No-show'])
             ->where('starts_at', '>=', $from->toIso8601String())->where('starts_at', '<', $to->addDay()->toIso8601String())
             ->get(['branch_id', 'starts_at', 'duration_minutes'])
             ->groupBy(fn ($a) => $a->branch_id.':'.ClinicClock::local($a->starts_at)->toDateString());
+
+        // A month contains up to 42 dates. Without preloading, each dentist/day
+        // individually queries schedule exceptions and leave over the remote DB.
+        // Prime the exact authorized dentist/date pool once for this read-only report.
+        $dentistPool = $branches->flatMap(fn (Branch $b) => $b->dentistBranches->pluck('dentistProfile'))
+            ->filter()->unique('id')->values();
+        $this->work = new WorkSchedules();
+        $this->work->preloadCalendar($dentistPool, $from->toDateString(), $to->toDateString());
 
         $days = [];
         for ($day = $from; $day->lessThanOrEqualTo($to); $day = $day->addDay()) {
@@ -72,7 +85,9 @@ class CalendarLoadController extends Controller
         $estimated = $this->profileHours !== [];
 
         return response()->json(['data' => ['days' => $days, 'crowded_percent' => $threshold, 'capacity_estimated' => $estimated,
-            'capacity_note' => $estimated ? 'Capacity is estimated for '.count($this->profileHours).' dentist(s) without a weekly work schedule yet (their profile hours are used).' : null, 'branches' => $branches->map(fn ($b) => ['id' => $b->legacy_ref, 'name' => $b->name])->values()]]);
+            'capacity_note' => $estimated ? 'Capacity is estimated for '.count($this->profileHours).' dentist(s) without a weekly work schedule yet (their profile hours are used).' : null, 'branches' => $branches->map(fn ($b) => ['id' => $b->legacy_ref, 'name' => $b->name])->values()]])
+            ->header('Cache-Control', 'private, no-store')
+            ->header('Server-Timing', 'app;dur='.round((hrtime(true) - $started) / 1_000_000, 1));
     }
 
     /** @var array<int,true> dentists counted with their profile hours (no weekly schedule yet) */

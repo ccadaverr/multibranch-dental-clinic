@@ -13,3 +13,108 @@
   .checkin-shell .arrival-action { flex-direction: column; align-items: stretch; }
   .checkin-shell .arrival-action .btn { min-height: 44px; }
 }
+
+
+/* R04 — Staff check-in: selectable appointment list, no full-width blue notices. */
+.role-staff .checkin-shell { max-width: 1040px; min-width: 0; }
+.role-staff .checkin-shell .checkin-mode { display: inline-flex; max-width: 100%; gap: 3px; padding: 3px; background: #f0f0ed; border-radius: 11px; margin: 0 0 12px; }
+.role-staff .checkin-shell .checkin-mode button { min-height: 42px; height: auto; padding: 9px 12px; font-size: 13px; border-radius: 8px; }
+.role-staff .checkin-shell .checkin-mode button.active { background: white; color: #104979; box-shadow: 0 1px 3px #202b3511; }
+.role-staff .checkin-shell .checkin-focus-card { padding: 16px 18px; border-radius: 13px; }
+.role-staff .checkin-shell .checkin-select-row { max-width: none; margin: 0 0 12px; }
+.role-staff .checkin-list-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; }
+.role-staff .checkin-list-heading strong { font-size: 13px; }
+.role-staff .checkin-list-heading span { font-size: 12px; color: var(--staff-muted,#596675); }
+.role-staff .checkin-arrival-options { display: grid; max-height: 260px; overflow-y: auto; border: 1px solid var(--staff-line,#dededb); border-radius: 10px; }
+.role-staff .checkin-arrival-option { width: 100%; min-width: 0; min-height: 58px; display: grid; grid-template-columns: 90px minmax(0,1fr) auto; align-items: center; gap: 14px; padding: 10px 14px; background: white; border: 0; border-bottom: 1px solid var(--staff-line,#dededb); color: var(--staff-ink,#202b35); text-align: left; cursor: pointer; }
+.role-staff .checkin-arrival-option:last-child { border-bottom: 0; }
+.role-staff .checkin-arrival-option:hover:not(:disabled) { background: #f7f9fa; }
+.role-staff .checkin-arrival-option.is-selected { background: #edf4fa; box-shadow: inset 3px 0 #155d9e; }
+.role-staff .checkin-arrival-option:focus-visible { outline: 2px solid #155d9e; outline-offset: -3px; }
+.role-staff .checkin-arrival-option:disabled { cursor: not-allowed; opacity: .7; }
+.role-staff .checkin-option-time { font-variant-numeric: tabular-nums; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.role-staff .checkin-option-person { min-width: 0; display: grid; gap: 2px; }
+.role-staff .checkin-option-person strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.role-staff .checkin-option-person small { color: var(--staff-muted,#596675); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.role-staff .checkin-option-status { font-size: 11px; font-weight: 650; color: #446274; white-space: nowrap; }
+.role-staff .checkin-inline-state { margin: 8px 0 12px; padding: 9px 0; color: var(--staff-muted,#596675); font-size: 13px; line-height: 1.5; }
+.role-staff .checkin-inline-state.is-error { color: #86502f; }
+.role-staff .checkin-inline-state .btn { margin-left: 8px; }
+.role-staff .checkin-shell .arrival-card { display: grid; grid-template-columns: 48px minmax(0,1fr); align-items: start; gap: 12px; margin-top: 12px; padding: 14px 16px; background: #fafaf8; border: 1px solid var(--staff-line,#dededb); border-radius: 11px; }
+.role-staff .checkin-shell .arrival-card .avatar { grid-column: 1; }
+.role-staff .checkin-shell .arrival-main { grid-column: 2; min-width: 0; }
+.role-staff .checkin-shell .arrival-main h2 { font-size: 16px; line-height: 1.3; margin: 2px 0 3px; }
+.role-staff .checkin-shell .arrival-main p { font-size: 13px; line-height: 1.45; }
+.role-staff .checkin-shell .arrival-meta { gap: 5px 14px; }
+.role-staff .checkin-shell .arrival-action { grid-column: 2; display: flex; flex-direction: row; align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: 10px 16px; }
+.role-staff .checkin-shell .arrival-action > label { display: flex; min-height: 40px; align-items: center; }
+.role-staff .checkin-shell .arrival-action .btn { width: auto; }
+.role-staff .checkin-shell .checkin-note { display: flex; align-items: start; gap: 8px; padding: 9px 0 0; margin-top: 12px; border-top: 1px solid var(--staff-line,#dededb); border-radius: 0; background: transparent; color: var(--staff-muted,#596675); font-size: 12px; }
+.role-staff .checkin-shell .checkin-note .icon { flex: 0 0 auto; color: #637281; }
+.role-staff .checkin-shell .checkin-note span { line-height: 1.45; }
+@media (max-width: 620px) {
+  .role-staff .checkin-arrival-option { grid-template-columns: 70px minmax(0,1fr); gap: 8px; padding: 10px; }
+  .role-staff .checkin-option-status { grid-column: 2; }
+  .role-staff .checkin-shell .arrival-card { grid-template-columns: 1fr; }
+  .role-staff .checkin-shell .arrival-card .avatar,.role-staff .checkin-shell .arrival-main,.role-staff .checkin-shell .arrival-action { grid-column: 1; }
+}
+@media (prefers-reduced-motion: reduce) { .role-staff .checkin-arrival-option { transition: none; } }
+
+/* R10: recorded arrivals are evidence for recovery, not a second approval queue. */
+.role-staff .checkin-recorded .checkin-arrival-history {
+  border: 1px solid var(--staff-line, #e3ded6);
+  background: var(--staff-paper, #fff);
+  border-radius: 12px;
+  overflow: clip;
+}
+.role-staff .checkin-arrival-history > summary {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 16px;
+  min-height: 50px;
+  cursor: pointer;
+  color: var(--staff-ink, #24313d);
+}
+.role-staff .checkin-arrival-history > summary::-webkit-details-marker { display: none; }
+.role-staff .checkin-arrival-history > summary::after {
+  content: '⌄';
+  font-size: 16px;
+  margin-left: auto;
+  color: var(--staff-muted, #5c6871);
+  transition: transform 160ms ease;
+}
+.role-staff .checkin-arrival-history[open] > summary::after { transform: rotate(180deg); }
+.role-staff .checkin-arrival-history > summary:focus-visible { outline: 2px solid var(--staff-blue, #18598e); outline-offset: -3px; }
+.role-staff .checkin-history-label { font-size: 13px; font-weight: 700; }
+.role-staff .checkin-history-count { font-size: 12px; font-weight: 700; padding: 1px 7px; border-radius: 6px; background: var(--staff-subtle, #f0eee8); }
+.role-staff .checkin-history-hint { font-size: 12px; font-weight: 400; color: var(--staff-muted, #5c6871); }
+.role-staff .checkin-history-body { padding: 0 16px 12px; border-top: 1px solid var(--staff-line, #e3ded6); }
+.role-staff .checkin-history-explainer { margin: 10px 0; max-width: 64ch; color: var(--staff-muted, #5c6871); font-size: 12px; line-height: 1.5; }
+.role-staff .checkin-history-list { margin: 0; padding: 0; list-style: none; }
+.role-staff .checkin-history-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 9px 14px;
+  padding: 12px 0;
+  border-top: 1px solid var(--staff-line, #e3ded6);
+}
+.role-staff .checkin-history-person { display: grid; gap: 3px; min-width: 0; }
+.role-staff .checkin-history-person b { font-size: 13px; overflow-wrap: anywhere; }
+.role-staff .checkin-history-person > span { font-size: 12px; color: var(--staff-muted, #5c6871); overflow-wrap: anywhere; }
+.role-staff .checkin-history-state { justify-self: start; }
+.role-staff .checkin-history-row > .btn { min-height: 36px; padding: 7px 10px; white-space: nowrap; }
+.role-staff .checkin-history-feedback { grid-column: 1 / -1; margin: 0; padding: 8px 0; font-size: 12px; line-height: 1.5; }
+.role-staff .checkin-history-feedback p { margin: 0; }
+.role-staff .checkin-history-feedback[role='alert'] { color: #8d492a; }
+@media (max-width: 700px) {
+  .role-staff .checkin-history-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .role-staff .checkin-history-row > .btn { grid-column: 1 / -1; justify-self: start; }
+  .role-staff .checkin-history-hint { flex-basis: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .role-staff .checkin-arrival-history > summary::after { transition: none; }
+}

@@ -1,14 +1,15 @@
 // Shared rules for manual selection and external service prefills. Never guess
 // an alternative consultation when the configured service is unavailable.
 export function bookingPaymentChoices(quote, choice) {
-  const matches = quote && quote.branch_ref === choice.branch?.id && quote.service_ref === choice.service?.id && quote.date === choice.date
+  const matches = quote && quote.branch_ref === choice.branch?.id && quote.service_ref === choice.service?.id && quote.date === choice.date &&
+    (quote.intended_service_ref ?? null) === (choice.wanted?.id ?? null)
   const fee = matches && quote.currency === 'PHP' && quote.booking_fee_php !== null && quote.booking_fee_php !== '' && Number.isFinite(Number(quote.booking_fee_php)) && Number(quote.booking_fee_php) >= 0 ? Number(quote.booking_fee_php) : null
   return { cash: !!matches && quote.pay_at_clinic_available === true, online: !!matches && fee !== null && quote.online_payment_available === true && Array.isArray(quote.payment_methods) && quote.payment_methods.length > 0, fee }
 }
 
 export function resolveBookingService(services, id) {
   const wanted = (services || []).find(s => s.id === id)
-  if (!wanted || wanted.status !== 'Active' || wanted.online_booking === 'hidden') {
+  if (!wanted || wanted.status !== 'Active' || wanted.online_booking === 'hidden' || wanted.booking_internal) {
     return { ok: false, message: 'This service is not available for online booking. Please choose another service or message the front desk.' }
   }
   if (wanted.online_booking === 'consultation_first') {
@@ -42,6 +43,7 @@ export function bookingReceiptMatches(row, payload, selfPatientId, current = fal
   return ulid(row?.id) && ulid(row.patient?.id) && row.patient.id === (payload.forPatientId || selfPatientId) &&
     typeof row.code === 'string' && !!row.code.trim() && Number.isSafeInteger(row.revision) && row.revision > 0 &&
     (current?['Pending','Confirmed','Checked In','In Treatment','Completed','Cancelled','No-show']:['Pending','Confirmed']).includes(row.status) && row.branch?.id === payload.branchId && row.service?.id === payload.serviceId &&
+    (row.intended_service?.id ?? null) === (payload.intendedServiceId ?? null) &&
     typeof row.dentist?.id === 'string' && !!row.dentist.id && (!payload.dentistId || row.dentist.id === payload.dentistId) &&
     row.date === payload.date && row.start_time === payload.start && typeof row.starts_at === 'string' &&
     row.starts_at.startsWith(`${payload.date}T${payload.start}:`) && row.starts_at.endsWith('+08:00') &&

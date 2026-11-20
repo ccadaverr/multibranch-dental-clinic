@@ -1,106 +1,138 @@
-import {SelectionDetailsNotice} from '../../selection-details.jsx'
+import { SelectionDetailsNotice } from '../../selection-details.jsx'
 import React, { useEffect, useRef, useState } from 'react'
 import { Button, Icon, Modal } from '../../components.jsx'
-import { acceptSlotOffer, listAppointments, myDependents, mySlotOffers, myTreatments, sayOnMyWay } from '../../api-client.js'
+import { acceptSlotOffer, getAppointment, listAppointments, mySlotOffers, sayOnMyWay } from '../../api-client.js'
 import { cancelAppointment, commandKey, rescheduleAppointment } from '../../appointments-api.js'
 import { clinic } from '../../clinic-config.js'
 import { BookingCalendar, TimeSlots } from '../BookingCalendar.jsx'
 import { dateLong, downloadIcs, splitAppointments, time12, todayManila } from '../format.js'
-import { EmptyState, ErrorState, PageHead, Pill, Skeleton, useLoad } from '../ui.jsx'
+import { EmptyState, ErrorState, LoadingState, PageHead, Pill, useLoad } from '../ui.jsx'
+import { loadPatientAppointments } from '../visit-history.js'
 
-import { treatmentSummaries, visitFilter, loadPatientAppointments, loadTreatmentHistory, loadActiveAppointments } from '../visit-history.js'
+const TABS = [['upcoming', 'Upcoming'], ['completed', 'Completed'], ['cancelled', 'Cancelled']]
 
-const addDays = (date, n) => { const d = new Date(`${date}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10) }
-
-/** Visits: upcoming and past appointments from the server, with reschedule, cancel, and absorbed historical archives. */
-export function VisitsPage({ selectionDetailsAvailable = false, context, onNavigate, toast }) {
-  const today = todayManila()
-  const [tab, setTab] = useState(visitFilter(context?.tab))
-  const active = useLoad(() => loadActiveAppointments(listAppointments), [today])
-  const history = useLoad(() => tab === 'upcoming' ? Promise.resolve({ ok: true, data: null }) : loadPatientAppointments(listAppointments), [tab === 'upcoming', today])
-  const list = tab === 'upcoming' ? active : history
-  const treatments = useLoad(() => tab === 'history' ? loadTreatmentHistory(myTreatments) : Promise.resolve({ ok: true, data: null }), [tab === 'history'])
-  useEffect(() => {
-    if (context?.tab) setTab(visitFilter(context.tab))
-  }, [context?.tab])
-  const family = useLoad(() => myDependents(), [])
-  const forName = a => (family.data || []).find(d => d.id === a.patient?.id)?.first_name
-  const [action, setAction] = useState(null) // {kind: 'cancel'|'reschedule', appointment}
+export function VisitsPage({ selectionDetailsAvailable = false, context, onNavigate, toast, patientId }) {
+  const [tab, setTab] = useState(TABS.some(([key]) => key === context?.tab) ? context.tab : 'upcoming')
+  const linkedId = context?.appointmentId || context?.id || null
+  const [detailId, setDetailId] = useState(linkedId)
+  const focused = useRef(false)
+  const list = useLoad(async signal => {
+    const result = await loadPatientAppointments(params => listAppointments(params, signal))
+    if (result.ok && result.data.some(row => !row?.id || typeof row.status !== 'string' || !row.date || !row.patient?.id)) {
+      return { ok: false, kind: 'stale_context', message: 'The appointment list could not be verified. Try again.' }
+    }
+    return result
+  }, [])
   const { upcoming, past } = splitAppointments(list.data)
+  const groups = {
+    upcoming,
+    completed: past.filter(row => row.status === 'Completed'),
+    cancelled: past.filter(row => row.status === 'Cancelled'),
+  }
+  const shown = groups[tab]
 
-  const completed = (list.data || []).filter(a => a.status === 'Completed')
-  const cancelled = (list.data || []).filter(a => a.status === 'Cancelled')
-  const summaries = treatmentSummaries(treatments.data)
-
-  const focusId = context?.appointmentId || context?.id || null
-  const notifiedPayment = useRef(false)
   useEffect(() => {
-    if (notifiedPayment.current) return
-    if (context?.appointmentId && context?.payment === 'success') {
-      notifiedPayment.current = true
+    if (context?.payment === 'success') {
       toast?.('You have returned from checkout. Payment is confirmed only after the clinic receives verification from PayMongo. Check your visit status below.', 'info')
     } else if (context?.payment === 'cancelled') {
-      notifiedPayment.current = true
       toast?.('Payment was cancelled. Your slot hold will expire.', 'warning')
     }
-  }, [context?.appointmentId, context?.payment, toast])
+  }, [context?.payment])
+
   useEffect(() => {
-    if (!focusId || list.status !== 'ready') return
-    if (tab === 'upcoming' && !(list.data || []).some(a => a.id === focusId)) setTab('history')
-    requestAnimationFrame(() => document.getElementById(`visit-${focusId}`)?.scrollIntoView({ block: 'center' }))
-  }, [focusId, list.status, list.data, tab])
+    if (!linkedId || !list.data || focused.current) return
+    focused.current = true
+    const target = TABS.find(([key]) => groups[key].some(row => row.id === linkedId))
+    if (target) setTab(target[0])
+  }, [linkedId, list.data])
 
-  const shown = tab === 'upcoming' ? upcoming : tab === 'completed' ? completed : tab === 'cancelled' ? cancelled : past
-  const tabs = [
-    ['upcoming', `Upcoming (${splitAppointments(active.data).upcoming.length})`], ['completed', 'Completed'],
-    ['cancelled', 'Cancelled'], ['history', 'History'],
-  ]
-
-  return <div className="pp-page">
-    <PageHead eyebrow="Your visits" title="My visits" actions={<Button icon="plusCalendar" onClick={() => onNavigate('book')}>Book a visit</Button>}/>
-    <div className="pp-tabs" role="group" aria-label="Visits">
-      {tabs.map(([key, label]) =>
-        <button key={key} type="button" aria-pressed={tab === key} className={tab === key ? 'is-active' : ''} onClick={() => setTab(key)}>{label}</button>)}
+  return <div className="pp-page patient-appointments">
+    <PageHead title="Appointments" actions={<Button icon="plusCalendar" onClick={() => onNavigate('book')}>Book appointment</Button>}/>
+    <div className="pp-tabs" role="group" aria-label="Appointment status">
+      {TABS.map(([key, label]) =>
+        <button key={key} type="button" aria-pressed={tab === key} className={tab === key ? 'is-active' : ''} onClick={() => setTab(key)}>
+          {label}{list.data && <span className="patient-tab-count">{groups[key].length}</span>}
+        </button>)}
     </div>
-    <EarlierTimeOffers toast={toast} onMoved={() => list.reload({ quiet: true })}/>
-    {list.status === 'loading' && <Skeleton lines={4} label="Loading your visits"/>}
-    {list.status === 'error' && <ErrorState text={list.error} onRetry={list.reload}/>}
-    {list.status === 'ready' && !shown.length && (tab === 'upcoming'
-      ? <EmptyState icon="calendar" title="No upcoming visits" text="When you book, your appointment appears here."><Button onClick={() => onNavigate('book')}>Book a visit</Button></EmptyState>
-      : <EmptyState icon="clock" title="No past visits yet" text="Visits from past encounters appear here."/>)}
-    {list.status === 'ready' && <ul className="pp-list" aria-label={`${tab} visits`}>
-      {shown.map(a => <li key={`appointment-${a.id}`} id={`visit-${a.id}`} className={`pp-card pp-visit pp-fade ${focusId === a.id ? 'is-focus' : ''}`}>
-        <div className="pp-visit-date" aria-hidden="true"><b>{Number(a.date.slice(8))}</b><span>{new Date(`${a.date}T00:00:00Z`).toLocaleDateString('en-PH', { month: 'short', timeZone: 'UTC' })}</span></div>
-        <div className="pp-visit-body">
-          <h3>{a.service?.name}</h3>
-          {forName(a) && <p className="pp-for-who">For {forName(a)}</p>}
-          <p>{dateLong(a.date)}{a.start_time ? ` · ${time12(a.start_time)}${a.end_time ? ` – ${time12(a.end_time)}` : ''}` : ''}</p>
-          <p className="pp-muted"><Icon name="pin" size={14}/> {a.branch?.name}{a.dentist?.name ? ` · ${a.dentist.name}` : ''}</p>
-          <p className="pp-muted">Ref. {a.code} <Pill>{a.status}</Pill></p>
-          {a.cancellation_category && <p style={{overflowWrap:'anywhere'}}>{a.cancellation_category}{a.cancellation_detail && `: ${a.cancellation_detail}`}</p>}
-          {a.cancellation_refund && <p>{a.cancellation_refund.message}</p>}
-          {['Checked In','In Treatment','Completed'].includes(a.status)&&<Button size="sm" variant="soft" icon="receipt" onClick={()=>onNavigate('billing',{appointmentId:a.id,patientId:a.patient?.id,receiptOnly:true})}>Invoice and receipt</Button>}
-          {tab === 'upcoming' && a.date === today && ['Pending', 'Confirmed'].includes(a.status) && <OnMyWay appointment={a} toast={toast}/>}
-          {a.status === 'Pending' && <p className="pp-hint">{a.booking_payment_status === 'held' ? 'Awaiting verified online payment. Your slot hold expires if payment is not completed.' : 'Waiting for the front desk to confirm this booking.'}</p>}
-          {tab === 'upcoming' && ['Pending', 'Confirmed'].includes(a.status) && <div className="pp-actions">
-            <Button size="sm" variant="soft" icon="download" onClick={() => downloadIcs({ id: a.id, service: a.service?.name, branchName: a.branch?.name, dentist: a.dentist?.name, startsAt: a.starts_at, endsAt: a.ends_at, clinicName: clinic.name }, `${a.code || 'appointment'}.ics`)}>Add to calendar</Button>
-            <Button size="sm" variant="ghost" onClick={() => setAction({ kind: 'reschedule', appointment: a })}>Reschedule</Button>
-            <Button size="sm" variant="ghost" className="pp-danger" onClick={() => setAction({ kind: 'cancel', appointment: a })}>Cancel</Button>
-          </div>}
+    {tab === 'upcoming' && <EarlierTimeOffers toast={toast} onMoved={list.reload}/>}
+    {list.loading && !list.data && <LoadingState label="Loading appointments…"/>}
+    {list.error && <ErrorState text={list.error} onRetry={list.reload}/>}
+    {list.data && !shown.length && <EmptyState icon="calendar" title={`No ${tab} appointments`}
+      text={tab === 'upcoming' ? 'Your next booking will appear here.' : undefined}/>}
+    {shown.length > 0 && <ul className="patient-record-list" aria-label={`${tab} appointments`}>
+      {shown.map(row => <li key={row.id} className="patient-record-row">
+        <div className="patient-record-copy">
+          <h2>{row.service?.name}</h2>
+          <p>{row.branch?.name}{row.patient?.id && row.patient.id !== patientId ? ` · For ${row.patient.name}` : ''}</p>
+          <time dateTime={row.starts_at}>{dateLong(row.date)}{row.start_time ? ` · ${time12(row.start_time)}` : ''}</time>
+        </div>
+        <div className="patient-record-actions">
+          <Pill>{row.status}</Pill>
+          <Button variant="soft" size="sm" onClick={() => setDetailId(row.id)} aria-label={`View appointment for ${row.service?.name}, ${dateLong(row.date)}`}>View details</Button>
         </div>
       </li>)}
     </ul>}
-    {tab === 'history' && <section aria-labelledby="treatment-history-title">
-      <h2 id="treatment-history-title">Treatment summaries</h2>
-      <p className="pp-hint">Treatment summaries are listed separately from appointment bookings.</p>
-      {treatments.status === 'loading' && <Skeleton lines={3} label="Loading treatment history"/>}
-      {treatments.status === 'error' && <ErrorState text={treatments.error} onRetry={treatments.reload}/>}
-      {treatments.status === 'ready' && !summaries.length && <p>No treatment summaries available.</p>}
-      <ul className="pp-list">{summaries.map(t => <li key={t.id} className="pp-card"><h3>{t.service.name}</h3><p>{dateLong(t.date) || 'Date unavailable'}</p>{t.dentist?.name && <p>{t.dentist.name}</p>}</li>)}</ul>
-    </section>}
-    {action?.kind === 'cancel' && <CancelDialog selectionDetailsAvailable={selectionDetailsAvailable} appointment={action.appointment} onClose={() => setAction(null)} onDone={refund => { setAction(null); toast?.(refund ? 'Your appointment is cancelled. ' + refund.message : 'Your appointment is cancelled.', refund && refund.status !== 'refunded' ? 'warning' : 'success'); list.reload({ quiet: true }) }}/>}
-    {action?.kind === 'reschedule' && <RescheduleDialog appointment={action.appointment} onClose={() => setAction(null)} onDone={() => { setAction(null); toast?.('Your appointment is moved.', 'success'); list.reload({ quiet: true }) }}/>}
+    {detailId && <AppointmentDetails key={detailId} id={detailId} toast={toast} onNavigate={onNavigate} onClose={() => setDetailId(null)}
+      onChanged={list.reload} selectionDetailsAvailable={selectionDetailsAvailable}/>}
   </div>
+}
+
+export function AppointmentDetails({ id, onClose, onChanged, onNavigate, toast, selectionDetailsAvailable }) {
+  const detail = useLoad(async signal => {
+    const result = await getAppointment(id, signal)
+    return result.ok && result.data?.id !== id ? { ok: false, kind: 'stale_context', message: 'The requested appointment could not be verified.' } : result
+  }, [id])
+  const [action, setAction] = useState(null)
+  const a = detail.data
+  const editable = a && ['Pending', 'Confirmed'].includes(a.status) && splitAppointments([a]).upcoming.length > 0
+  const refresh = () => { detail.reload(); onChanged?.() }
+  return <>
+    <Modal open title={a?.service?.name || 'Appointment details'} className="patient-appointment-dialog" onClose={onClose}>
+      {detail.loading && !a && <LoadingState label="Loading appointment details…"/>}
+      {detail.error && <ErrorState text={detail.error} onRetry={detail.reload}/>}
+      {a && <>
+        <Pill>{a.status}</Pill>
+        <dl className="patient-profile-fields">
+          <div><dt>Date and time</dt><dd>{dateLong(a.date)} · {time12(a.start_time)}{a.end_time && ` – ${time12(a.end_time)}`}</dd></div>
+          <div><dt>Branch</dt><dd>{a.branch?.name}</dd></div>
+          <div><dt>Patient</dt><dd>{a.patient?.name}</dd></div>
+          {a.dentist?.name && <div><dt>Dentist</dt><dd>{a.dentist.name}</dd></div>}
+          {a.intended_service && <div><dt>Intended treatment</dt><dd>{a.intended_service.name}</dd></div>}
+          <div><dt>Appointment reference</dt><dd>{a.code || a.id}</dd></div>
+        </dl>
+        {a.dentist_conversation_id ? <Button variant="soft" icon="message" onClick={() => onNavigate('messages', {conversationId:a.dentist_conversation_id,appointmentId:a.id,patientPublicId:a.patient.id,branchId:a.branch.id})}>Message your dentist</Button>
+          : <p className="pp-hint">{({
+              not_assigned: 'A Dentist has not been assigned to this appointment yet.',
+              appointment_inactive: 'This appointment is no longer active.',
+              grant_required: 'The clinic has not enabled a Dentist conversation for this appointment.',
+              grant_unavailable: 'Direct Dentist messaging is currently unavailable.',
+            })[a.dentist_conversation_state] || 'For questions about this appointment,'}{' '}
+            <button type="button" className="link-button" onClick={() => onNavigate('messages', {compose:true, branchPublicId:a.branch?.public_id, text:`I have a question about appointment ${a.code}.`})}>Contact the front desk</button>.</p>}
+        {a.cancellation_category && <p>{[a.cancellation_category, a.cancellation_detail].filter(Boolean).join(' · ')}</p>}
+        {a.cancellation_refund && <p>{a.cancellation_refund.message}</p>}
+        {a.status === 'Pending' && <p className="pp-hint">{a.booking_payment_status === 'held' ? 'Awaiting verified online payment. Your slot hold expires if payment is not completed.' : 'Waiting for the front desk to confirm this booking.'}</p>}
+        {!detail.error && editable && a.date === todayManila() && <OnMyWay appointment={a} toast={toast}/>}
+        {!detail.error && editable && <div className="pp-actions">
+          <Button size="sm" variant="soft" icon="download" onClick={() => downloadIcs({ id: a.id, service: a.service?.name, branchName: a.branch?.name, dentist: a.dentist?.name, startsAt: a.starts_at, endsAt: a.ends_at, clinicName: clinic.name }, `${a.code || 'appointment'}.ics`)}>Add to calendar</Button>
+          <Button size="sm" variant="ghost" onClick={() => setAction('reschedule')}>Reschedule</Button>
+          <Button size="sm" variant="ghost" className="pp-danger" onClick={() => setAction('cancel')}>Cancel appointment</Button>
+        </div>}
+        {['Checked In', 'In Treatment', 'Completed'].includes(a.status) && <Button size="sm" variant="soft" icon="receipt" onClick={() => onNavigate('billing', { appointmentId: a.id, patientId: a.patient?.id, receiptOnly: true })}>Invoice and receipt</Button>}
+      </>}
+    </Modal>
+    {action === 'cancel' && <CancelDialog selectionDetailsAvailable={selectionDetailsAvailable} appointment={a}
+      onClose={() => setAction(null)} onDone={refund => {
+        setAction(null)
+        toast?.(refund ? 'Your appointment is cancelled. ' + refund.message : 'Your appointment is cancelled.', refund && refund.status !== 'refunded' ? 'warning' : 'success')
+        refresh()
+      }}/>}
+    {action === 'reschedule' && <RescheduleDialog appointment={a}
+      onClose={() => setAction(null)} onDone={() => {
+        setAction(null)
+        toast?.('Your appointment is moved.', 'success')
+        refresh()
+      }}/>}
+  </>
 }
 
 function CancelDialog({ selectionDetailsAvailable = false, appointment, onClose, onDone }) {
@@ -214,7 +246,7 @@ function EarlierTimeOffers({ toast, onMoved }) {
   }
   if (!offers.length) return null
   return <section className="pp-card pp-offers" aria-label="Earlier times available">
-    <h2><Icon name="sparkles" size={18}/> An earlier time is available</h2>
+    <h2><Icon name="clock" size={18}/> An earlier time is available</h2>
     <ul>{offers.map(o => <li key={o.id}>
       <p><b>{when(o.new_starts_at)}</b> instead of {when(o.current_starts_at)} · {o.branch}</p>
       {confirming === o.id

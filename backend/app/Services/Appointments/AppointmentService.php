@@ -7,6 +7,7 @@ use App\Http\Resources\AppointmentResource;
 use App\Models\Appointment;
 use App\Models\AppointmentCommandKey;
 use App\Models\AppointmentHistory;
+use App\Models\AuditLog;
 use App\Models\Branch;
 use App\Models\DentistProfile;
 use App\Models\Patient;
@@ -23,6 +24,7 @@ use Closure;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 
 // M6 named commands: create, reschedule, cancel and the pre-arrival No-show. Each runs in one transaction,
 // revalidates through SchedulingService, appends history, and is optionally idempotent. The PostgreSQL exclusion
@@ -39,6 +41,22 @@ final class AppointmentService
     private const ATTEMPTS = 3;
 
     public function __construct(private readonly SchedulingService $scheduling) {}
+
+    public function intendedConsultationService(Branch $branch, Service $consultation, string $ref): Service
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasColumn('appointments', 'intended_service_id')) {
+            throw AppointmentCommandException::rule('consultation_intent_unavailable', 'Contact the clinic to request this treatment consultation.', 'intended_service_ref');
+        }
+        $intended = Service::where('legacy_ref', $ref)->first();
+        if (! $intended || $intended->status !== 'Active' || $intended->online_booking !== 'consultation_first'
+            || (int) $intended->consultation_service_id !== (int) $consultation->id
+            || $consultation->status !== 'Active' || $consultation->online_booking !== 'bookable'
+            || ! $this->scheduling->branchesOffering($intended)->contains('id', $branch->id)) {
+            throw AppointmentCommandException::rule('consultation_intent_invalid', 'The chosen branch and consultation do not match this treatment.', 'intended_service_ref');
+        }
+
+        return $intended;
+    }
 
     public function create(User $actor, Patient $patient, Branch $branch, Service $service, ?DentistProfile $dentist, array $input, ?string $key): JsonResponse
     {
@@ -66,6 +84,11 @@ final class AppointmentService
                 $dentist = Followups::selectedDentist($snapshot, $dentist);
             }
             $isPatient = $actor->role === Role::Patient;
+            $intended = isset($input['intended_service_ref'])
+                ? $this->intendedConsultationService($branch, $service, $input['intended_service_ref']) : null;
+            if ($isPatient && ! $intended && $service->legacy_ref === \App\Support\DevelopmentClinicCatalog::INTERNAL_CONSULTATION) {
+                throw AppointmentCommandException::rule('intended_service_required', 'Choose the treatment that requires this consultation.', 'intended_service_ref');
+            }
             // F7 (R2-17): a consultation-first or hidden service is not booked online; the front desk still can.
             if ($isPatient && ($service->online_booking ?? 'bookable') !== 'bookable') {
                 throw AppointmentCommandException::rule('service_not_bookable_online', $service->online_booking === 'consultation_first'
@@ -98,10 +121,7 @@ final class AppointmentService
             if ($service->online_booking === 'consultation_first' && $service->consultation_service_id) {
                 $targetService = Service::find($service->consultation_service_id) ?? $service;
             }
-            $resolved = app(\App\Services\Pricing\PriceResolver::class)->resolve($targetService, $branch, $result->startsAt->toDateString());
-            $fee = ($resolved instanceof \App\Services\Pricing\ResolvedPrice)
-                ? $resolved->amount()
-                : null;
+            $fee = \App\Services\Pricing\BookingFee::resolve($targetService, $branch, $result->startsAt->toDateString());
 
             $payMongo = app(\App\Services\Payment\PayMongoService::class);
             // An explicit online choice must never silently become an unpaid booking. Omitted legacy choices retain compatibility.
@@ -114,7 +134,19 @@ final class AppointmentService
                 throw AppointmentCommandException::rule('booking_price_unavailable', 'Online payment is unavailable because no confirmed booking price applies. Please contact the clinic or choose pay at clinic.', 'service_ref');
             }
 
+            $draft = null;
+            if (isset($input['draft_revision'])) {
+                $draft = DB::table('patient_booking_drafts')->where('patient_id', $patient->id)->lockForUpdate()->first();
+                $selection = json_decode($draft->selection ?? 'null', true);
+                if (! $selection || (int) $draft->revision !== (int) $input['draft_revision'] || ClinicClock::now()->gte($draft->expires_at)
+                    || $selection['service_ref'] !== $service->legacy_ref || ($selection['intended_service_ref'] ?? null) !== $intended?->legacy_ref
+                    || ($selection['branch_ref'] ?? null) !== $branch->legacy_ref || ($selection['date'] ?? null) !== $input['date']
+                    || ($selection['start_time'] ?? null) !== $input['start_time'] || $selection['payment'] !== ($payOnline ? 'online' : 'cash')) {
+                    throw AppointmentCommandException::rule('draft_changed', 'Reload your saved draft before booking.', 'draft_revision');
+                }
+            }
             $appointment = Appointment::create([
+                ...($intended ? ['intended_service_id' => $intended->id] : []),
                 'patient_id' => $patient->id,
                 'branch_id' => $branch->id,
                 'service_id' => $service->id,
@@ -136,6 +168,13 @@ final class AppointmentService
                 'created_by_user_id' => $actor->id,
                 'updated_by_user_id' => $actor->id,
             ]);
+            if ($draft) {
+                DB::table('patient_booking_drafts')->where('patient_id', $patient->id)->update([
+                    'revision' => $draft->revision + 1,
+                    'selection' => $payOnline ? json_encode([...$selection, 'held_appointment' => $appointment->public_id], JSON_THROW_ON_ERROR) : null,
+                    'expires_at' => $payOnline ? $draft->expires_at : null, 'updated_at' => now(),
+                ]);
+            }
             $this->record($appointment, $actor, 'appointment.created', null);
             if (! $isPatient && ($service->online_booking ?? 'bookable') === 'consultation_first') {
                 app(\App\Services\Audit\AuditService::class)->recordClinical('appointment.consultation_authorized', $actor, $appointment, [
@@ -179,6 +218,11 @@ final class AppointmentService
             }
             if (! in_array($current->status, ['Pending', 'Confirmed'], true)) {
                 throw AppointmentCommandException::rule('appointment_not_reschedulable', 'An admitted or closed appointment cannot be rescheduled.', 'status');
+            }
+            if ($current->booking_payment_status === 'paid' &&
+                ($current->booking_refund_ref || $this->refundAttemptExists($current))) {
+                throw AppointmentCommandException::rule('booking_refund_reconciliation_required',
+                    'Resolve the pending booking refund before rescheduling this appointment.', 'booking_payment_status');
             }
             // A Patient changes only the date and time (the Dentist, branch and service stay fixed).
             $isPatient = $actor->role === Role::Patient;
@@ -270,9 +314,21 @@ final class AppointmentService
             if ($current->booking_payment_status === 'paid' && $current->booking_payment_ref) {
                 $diffHours = $now->diffInHours($current->starts_at, false);
                 if ($diffHours >= 24) {
-                    // Commit the cancellation and the one-time attempt marker before contacting the provider.
-                    $this->recordCancellationRefund($current, $actor, 'billing.booking_refund_attempt_started');
-                    DB::afterCommit(fn () => $this->checkCancellationRefund($current->id, $actor, readback: (bool) $current->booking_refund_ref));
+                    // A prior manual or automatic refund may be in flight. Never start a
+                    // second provider POST just because cancellation happened meanwhile.
+                    if ($this->refundAttemptExists($current)) {
+                        if ($current->booking_refund_ref) {
+                            DB::afterCommit(fn () => $this->checkCancellationRefund($current->id, $actor, readback: true));
+                        } else {
+                            $this->recordCancellationRefund($current, $actor, 'billing.booking_refund_unconfirmed', 'prior_request_unconfirmed');
+                        }
+                    } elseif ($current->booking_refund_ref) {
+                        DB::afterCommit(fn () => $this->checkCancellationRefund($current->id, $actor, readback: true));
+                    } else {
+                        // Commit the cancellation AND its durable attempt marker first.
+                        $this->recordCancellationRefund($current, $actor, 'billing.booking_refund_attempt_started');
+                        DB::afterCommit(fn () => $this->checkCancellationRefund($current->id, $actor, readback: false));
+                    }
                 } else {
                     $current->update(['booking_payment_status' => 'forfeited']);
                     app(\App\Services\Audit\AuditService::class)->record([
@@ -386,6 +442,11 @@ final class AppointmentService
                 throw AppointmentCommandException::rule('booking_payment_pending', 'This booking is awaiting verified payment confirmation.', 'booking_payment_status');
             }
             if ($command === 'no-show') {
+                if ($current->booking_payment_status === 'paid' &&
+                    ($current->booking_refund_ref || $this->refundAttemptExists($current))) {
+                    throw AppointmentCommandException::rule('booking_refund_reconciliation_required',
+                        'Resolve the booking refund before marking No-show.', 'booking_payment_status');
+                }
                 $this->assertNoShowAllowed($current);
             }
 
@@ -481,10 +542,10 @@ final class AppointmentService
     /**
      * Section 22.3: releases pending appointments held for payment whose 15-minute checkout window expired.
      */
-    public function releaseExpiredHolds(): int
+    public function releaseExpiredHolds(?Appointment $only = null): int
     {
         $now = ClinicClock::now();
-        $expired = Appointment::where('status', 'Pending')
+        $expired = Appointment::when($only, fn ($query) => $query->whereKey($only->id))->where('status', 'Pending')
             ->where('booking_payment_status', 'held')
             ->whereNotNull('booking_hold_expires_at')
             ->where('booking_hold_expires_at', '<=', $now)
@@ -492,13 +553,13 @@ final class AppointmentService
 
         $count = 0;
         foreach ($expired as $appointment) {
-            \Illuminate\Support\Facades\DB::transaction(function () use ($appointment, $now) {
+            $released = DB::transaction(function () use ($appointment, $now) {
                 $locked = Appointment::whereKey($appointment->id)->lockForUpdate()->first();
                 if (! $locked || $locked->status !== 'Pending' || $locked->booking_payment_status !== 'held') {
-                    return;
+                    return false;
                 }
                 if ($locked->booking_hold_expires_at && $locked->booking_hold_expires_at->greaterThan($now)) {
-                    return;
+                    return false;
                 }
                 $from = $locked->status;
                 $locked->update([
@@ -513,36 +574,96 @@ final class AppointmentService
                 if ($patientUser) {
                     $this->notifyPatient($locked, $patientUser, 'appointment_cancelled');
                 }
+                return true;
             });
-            $count++;
+            if ($released) $count++;
         }
 
         return $count;
     }
 
     /**
-     * Section 22.3: Front desk or Owner decides to refund a forfeited or paid booking payment.
+     * Pre-credit booking deposit refund only. The attempt is committed BEFORE the provider request:
+     * a timeout or process crash must never cause a second refund creation. With a known provider
+     * refund id, only provider GET is permitted. Invoice/cash refunds are a separate, gated lifecycle.
+     *
+     * The optional expected revision protects the public Staff/Owner command; legacy internal
+     * callers retain their current signature and must still pass the authorization/credit gates.
      */
-    public function refundBookingPayment(User $actor, Appointment $appointment, string $reason): array
+    public function refundBookingPayment(User $actor, Appointment $appointment, string $reason,
+        ?int $expectedRevision = null, ?string $operationKey = null, ?string $note = null): array
     {
-        return \Illuminate\Support\Facades\DB::transaction(function () use ($actor, $appointment, $reason) {
+        $decision = DB::transaction(function () use ($actor, $appointment, $reason, $expectedRevision, $operationKey, $note) {
             $locked = Appointment::whereKey($appointment->id)->lockForUpdate()->firstOrFail();
-            if (! in_array($locked->booking_payment_status, ['paid', 'forfeited'], true)) {
-                throw AppointmentCommandException::rule('not_refundable', 'Only paid or forfeited booking payments can be refunded.', 'booking_payment_status');
+            // Re-evaluate authorization AFTER waiting for the appointment lock. A Staff member's
+            // branch authorization might have been revoked between route and command execution.
+            Gate::forUser($actor)->authorize('refundBookingPayment', $locked);
+            if ($expectedRevision !== null && $locked->revision !== $expectedRevision) {
+                throw AppointmentCommandException::staleRevision();
             }
-
-            if ($locked->status === 'Cancelled' && ! $locked->booking_refund_ref
-                && \App\Models\AuditLog::where('auditable_type', 'Appointment')
-                    ->where('auditable_public_id', $locked->public_id)
-                    ->where('action', 'billing.booking_refund_attempt_started')->exists()) {
-                throw AppointmentCommandException::rule('refund_reconciliation_required',
-                    'Verify the original request with the payment provider before taking another refund action.', 'booking_payment_status');
+            if ($locked->booking_payment_status === 'refunded' && $locked->booking_refund_ref && $locked->booking_refunded_at) {
+                return 'completed';
             }
-            $result = app(\App\Services\Payment\PayMongoService::class)->refundAppointment($locked, $reason);
-            $this->record($locked, $actor, $result['status'] === 'refunded' ? 'appointment.booking_refunded' : 'appointment.booking_refund_requested', $locked->status);
+            if (! in_array($locked->booking_payment_status, ['paid', 'forfeited'], true)
+                || ! $locked->booking_payment_ref) {
+                throw AppointmentCommandException::rule('not_refundable', 'No settled booking payment is available to refund.', 'booking_payment_status');
+            }
+            // No post-Visit reversal is authorized. In particular an invoice may already have
+            // allocated the deposit as patient credit, or a clinical record may be finalized.
+            if ($locked->visit()->exists()) {
+                throw AppointmentCommandException::rule('refund_requires_financial_review',
+                    'A Visit is linked to this appointment. Review its invoice and original collection before any refund.', 'booking_payment_status');
+            }
+            if (! $locked->booking_refund_ref) {
+                if ($this->refundAttemptExists($locked)) {
+                    throw AppointmentCommandException::rule('refund_reconciliation_required',
+                        'An earlier provider refund request has an unknown outcome. Reconcile it before attempting another refund.', 'booking_payment_status');
+                }
+                // This row must commit outside any surrounding IdempotentCommand transaction.
+                // The marker is durable even if the provider answers and the PHP process dies.
+                app(\App\Services\Audit\AuditService::class)->record([
+                    'action' => 'billing.booking_refund_attempt_started',
+                    'category' => 'financial', 'severity' => 'info',
+                    'actor' => $actor, 'target' => $locked, 'branch_id' => $locked->branch_id,
+                    'payload' => [
+                        'appointment_code' => $locked->appointment_code,
+                        'source' => 'authorized_manual_pre_credit',
+                        'reason' => $reason, 'note' => $note,
+                        'operation_key_sha256' => $operationKey ? hash('sha256', $operationKey) : null,
+                    ],
+                ]);
+            }
+            return 'provider_read_or_request';
+        }, self::ATTEMPTS);
 
-            return $result;
+        if ($decision === 'completed') {
+            return ['status' => 'refunded', 'refund_id' => $appointment->fresh()->booking_refund_ref];
+        }
+        try {
+            // Never hold an appointment row lock while calling an external API. A pending
+            // marker blocks another POST and invoice booking-credit allocation in the meantime.
+            $result = app(PayMongoService::class)->refundAppointment($appointment->fresh(), $reason);
+        } catch (BillingException $exception) {
+            $this->recordCancellationRefund($appointment, $actor, 'billing.booking_refund_unconfirmed', $exception->responseBody()['code'] ?? 'provider_unavailable');
+            return ['status' => 'unconfirmed', 'refund_id' => $appointment->fresh()->booking_refund_ref];
+        }
+        DB::transaction(function () use ($appointment, $actor, $result) {
+            $locked = Appointment::whereKey($appointment->id)->lockForUpdate()->firstOrFail();
+            $event = $result['status'] === 'refunded' ? 'appointment.booking_refunded' : 'appointment.booking_refund_requested';
+            // Repeated provider GETs may be needed to reconcile pending/failed requests.
+            // Never append the same history result repeatedly on an unchanged revision.
+            if (! AppointmentHistory::where('appointment_id', $locked->id)->where('event', $event)->exists()) {
+                $this->record($locked, $actor, $event, $locked->status);
+            }
         });
+        return $result;
+    }
+
+    private function refundAttemptExists(Appointment $appointment): bool
+    {
+        return AuditLog::where('auditable_type', 'Appointment')
+            ->where('auditable_public_id', $appointment->public_id)
+            ->where('action', 'billing.booking_refund_attempt_started')->exists();
     }
 
     /**

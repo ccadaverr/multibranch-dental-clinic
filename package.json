@@ -15,6 +15,7 @@
     "test:e2e-odontogram": "node tests/playwright-odontogram-motion.js"
   },
   "dependencies": {
+    "@react-three/fiber": "^9.8.2",
     "@tesseract.js-data/eng": "^1.0.0",
     "jsqr": "^1.4.0",
     "laravel-echo": "2.5.0",
@@ -23,7 +24,8 @@
     "pusher-js": "8.6.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "tesseract.js": "^7.0.0"
+    "tesseract.js": "^7.0.0",
+    "three": "^0.187.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.7.0",

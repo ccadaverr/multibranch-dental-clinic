@@ -8,6 +8,7 @@ use App\Http\Requests\Appointment\AvailabilityRequest;
 use App\Http\Requests\Appointment\CancelAppointmentRequest;
 use App\Http\Requests\Appointment\RecommendationRequest;
 use App\Http\Requests\Appointment\RescheduleAppointmentRequest;
+use App\Http\Requests\Appointment\RefundBookingPaymentRequest;
 use App\Http\Requests\Appointment\StoreAppointmentRequest;
 use App\Http\Requests\Appointment\TransitionAppointmentRequest;
 use App\Http\Resources\AppointmentResource;
@@ -34,7 +35,7 @@ class AppointmentController extends Controller
 {
     use ReadsIdempotencyKey;
 
-    private const RELATIONS = ['patient.person', 'branch', 'service', 'dentist.person'];
+    private const RELATIONS = ['patient.person', 'branch', 'service', 'intendedService', 'dentist.person'];
 
     public function __construct(
         private readonly AppointmentService $appointments,
@@ -75,6 +76,10 @@ class AppointmentController extends Controller
                 ->where('starts_at', '<', SchedulingService::ts(ClinicClock::at($to, '00:00')->addDay())))
             ->orderBy('starts_at')->orderBy('id');
 
+        if ($user->role === Role::Patient) {
+            $request->attributes->set('appointment_day_start', ClinicClock::now()->startOfDay());
+        }
+
         return AppointmentResource::collection($query->paginate($validated['per_page'] ?? 50)->withQueryString());
     }
 
@@ -95,6 +100,40 @@ class AppointmentController extends Controller
             } catch (\Throwable) {}
         }
 
+        // A returning patient can release this expired hold even if the scheduler is offline.
+        if ($request->user()->role === Role::Patient && $request->user()->patient?->id === $appointment->patient_id
+            && $appointment->booking_payment_status === 'held' && $appointment->booking_hold_expires_at?->isPast()) {
+            $this->appointments->releaseExpiredHolds($appointment);
+            $appointment->refresh();
+        }
+
+        if ($request->user()->role === Role::Patient && $request->user()->patient?->id === $appointment->patient_id) {
+            // This is an optional, fail-closed capability on the EXACT patient/branch/assigned Dentist.
+            // Never interpret a branch membership or a legacy participant row as a Dentist grant.
+            $threadId = null;
+            $state = 'not_assigned';
+            $dentist = $appointment->dentist?->person?->user;
+            if (in_array($appointment->status, ['Cancelled', 'No-show'], true)) {
+                $state = 'appointment_inactive';
+            } elseif (! $dentist || $dentist->role !== Role::Dentist || $dentist->account_status !== 'Active' || $dentist->deleted_at) {
+                $state = 'not_assigned';
+            } else {
+                $grants = app(\App\Services\Messaging\ConversationDentistAccess::class);
+                if (! $grants->schemaInstalled()) {
+                    $state = 'grant_unavailable';
+                } else {
+                    // Both scopes must match. The Dentist scope additionally requires an active
+                    // matching patient/branch/conversation grant and current Dentist branch membership.
+                    $threadId = \App\Models\Conversation::visibleTo($request->user())
+                        ->whereIn('conversations.id', \App\Models\Conversation::visibleTo($dentist)->select('conversations.id'))
+                        ->where('patient_id', $appointment->patient_id)->where('branch_id', $appointment->branch_id)
+                        ->where('status', 'Open')->orderByDesc('id')->value('public_id');
+                    $state = $threadId ? 'ready' : ($grants->available() ? 'grant_required' : 'grant_unavailable');
+                }
+            }
+            $appointment->setAttribute('dentist_conversation_state', $state);
+            $appointment->setAttribute('dentist_conversation_id', $threadId);
+        }
         return new AppointmentResource($appointment->load([...self::RELATIONS, 'history']));
     }
 
@@ -136,7 +175,7 @@ class AppointmentController extends Controller
             $branch,
             Service::where('legacy_ref', $request->validated('service_ref'))->firstOrFail(),
             $dentistRef ? DentistProfile::where('legacy_ref', $dentistRef)->firstOrFail() : null,
-            $request->safe()->only(['date', 'start_time', 'notes', 'pay_at_clinic', 'consultation_acknowledged', 'followup_task_id', 'followup_expected_revision']),
+            $request->safe()->only(['date', 'start_time', 'notes', 'pay_at_clinic', 'draft_revision', 'intended_service_ref', 'consultation_acknowledged', 'followup_task_id', 'followup_expected_revision']),
             $this->idempotencyKey($request, $request->selectsFollowup()),
         );
     }
@@ -177,6 +216,31 @@ class AppointmentController extends Controller
         $body['data']['cancellation_refund'] = $current->cancellationRefund();
 
         return $response->setData($body);
+    }
+
+    /** Staff/Owner pre-credit PayMongo booking refund. Cash/invoice refunds remain policy-gated. */
+    public function refundBookingPayment(RefundBookingPaymentRequest $request, Appointment $appointment): JsonResponse
+    {
+        // Mask out-of-scope financial resources instead of disclosing their existence.
+        abort_unless(Gate::allows('refundBookingPayment', $appointment), 404, 'Appointment not found.');
+        $values = $request->validated();
+        // A visible key is required to identify the operator's original intent, but money
+        // movement replay is guarded by the durable appointment attempt marker, not by a
+        // transaction spanning the network call.
+        $key = $this->idempotencyKey($request, true);
+        $result = $this->appointments->refundBookingPayment(
+            $request->user(), $appointment, $values['reason'],
+            (int) $values['expected_revision'], $key, $values['note'] ?? null,
+        );
+        $fresh = $appointment->fresh();
+        return response()->json(['data' => [
+            'appointment_id' => $fresh->public_id,
+            'booking_payment_status' => $fresh->booking_payment_status,
+            'refund_status' => $result['status'],
+            'outcome' => $result['status'] === 'refunded'
+                ? 'The provider confirmed the booking refund.'
+                : 'The refund is not confirmed. Reconcile the original provider request; do not submit a new refund.',
+        ]], $result['status'] === 'unconfirmed' ? 202 : 200)->header('Cache-Control', 'no-store');
     }
 
     /** Appointment-only lifecycle command: the pre-arrival No-show (see AppointmentService::TRANSITIONS). */
@@ -293,6 +357,7 @@ class AppointmentController extends Controller
             'branches' => $ranked->map(fn ($o) => [
                 'id' => $o['branch']->legacy_ref, 'name' => $o['branch']->name, 'address' => $o['branch']->address, 'city' => $o['branch']->city,
                 'open_time' => substr((string) $o['branch']->open_time, 0, 5), 'close_time' => substr((string) $o['branch']->close_time, 0, 5),
+                'public_id' => $o['branch']->public_id,
                 'operating_days' => $o['branch']->operating_days, 'weekly_hours' => $o['branch']->weekHours(), 'distance_km' => $o['distance_km'],
                 'earliest' => $o['earliest'] ? ['date' => $o['earliest']['date'], 'start_time' => $o['earliest']['start_time'], 'label' => $when($o['earliest'])] : null,
                 'recommended' => $recommended !== null && $o['branch']->is($recommended['branch']),
@@ -345,6 +410,8 @@ class AppointmentController extends Controller
         $base = new SlotRequest($patient, $branch, $service, null, null, null, $isPatient, $ignore?->id, requirePatient: false);
         $busy = $pool->isEmpty() ? collect() : $this->scheduling->busyBetween($start, $start->addMonth(), $pool->pluck('id')->all(), $patient?->id, $ignore?->id);
         $today = ClinicClock::today();
+        $this->scheduling->work()->preloadCalendar($pool, max($start->toDateString(), $isPatient ? $first : $today),
+            min($start->endOfMonth()->toDateString(), $isPatient ? $last : $start->endOfMonth()->toDateString()));
         $days = [];
         for ($day = $start; $day->format('Y-m') === $month; $day = $day->addDay()) {
             $date = $day->toDateString();
@@ -389,16 +456,22 @@ class AppointmentController extends Controller
         $service = Service::where('legacy_ref', $request->validated('service_ref'))->firstOrFail();
         $bookable = $service->status === 'Active' && ($service->online_booking ?? 'bookable') === 'bookable'
             && $this->scheduling->branchesOffering($service)->contains('id', $branch->id);
-        $price = app(\App\Services\Pricing\PriceResolver::class)->resolve($service, $branch, $request->validated('date'));
+        $intent = $request->validate(['intended_service_ref' => ['nullable', 'string', 'max:50']])['intended_service_ref'] ?? null;
+        if ($intent) $this->appointments->intendedConsultationService($branch, $service, $intent);
+        if (! $intent && $service->legacy_ref === \App\Support\DevelopmentClinicCatalog::INTERNAL_CONSULTATION) {
+            $bookable = false;
+        }
         $gateway = app(PayMongoService::class);
-        $amount = $price->available() ? $price->amount() : null;
-        $reason = ! $bookable ? 'service_not_bookable_online' : (! $gateway->isConfigured() ? 'payment_not_configured'
+        $amount = \App\Services\Pricing\BookingFee::resolve($service, $branch, $request->validated('date'));
+        $methods = $bookable ? $gateway->bookingMethodNames($service) : [];
+        $reason = ! $bookable ? 'service_not_bookable_online' : (! $methods ? 'payment_not_configured'
             : ($amount === null ? 'booking_price_unavailable' : (app(\App\Services\Billing\BillingService::class)->centavos($amount) < PayMongoService::MIN_CENTAVOS ? 'amount_too_small' : null)));
 
         return response()->json(['data' => [
             'branch_ref' => $branch->legacy_ref, 'service_ref' => $service->legacy_ref, 'date' => $request->validated('date'),
             'currency' => 'PHP', 'booking_fee_php' => $amount, 'online_payment_available' => $reason === null,
-            'online_payment_unavailable_reason' => $reason, 'payment_methods' => $reason === null ? $gateway->acceptedMethodNames() : [],
+            'intended_service_ref' => $intent,
+            'online_payment_unavailable_reason' => $reason, 'payment_methods' => $reason === null ? $methods : [],
             'pay_at_clinic_available' => $bookable, 'hold_minutes' => 15, 'reserves_slot' => false,
         ]]);
     }

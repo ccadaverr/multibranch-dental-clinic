@@ -22,7 +22,10 @@ class ServiceResource extends JsonResource
             'status' => $this->status,
             // F7 (R2-17): bookable online, consultation first (books the linked consultation instead) or hidden online.
             'online_booking' => $this->online_booking ?? 'bookable',
-            'consultation_service_id' => $this->consultation_service_id ? \App\Models\Service::whereKey($this->consultation_service_id)->value('legacy_ref') : null,
+            'consultation_service_id' => $this->consultationService?->legacy_ref,
+            ...($this->stage_fee !== null ? ['booking_stage_fee_php' => $this->stage_fee] : []),
+            'booking_internal' => $this->legacy_ref === \App\Support\DevelopmentClinicCatalog::INTERNAL_CONSULTATION,
+            ...(($estimate = \App\Support\DevelopmentClinicCatalog::presentation($this->resource)) ? ['price' => $estimate] : []),
         ];
     }
 }

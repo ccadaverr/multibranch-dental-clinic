@@ -4,6 +4,12 @@ import { visibleNotifications, notificationDestination } from './phase3-contract
 import { clinicDate } from './clock.js'
 import './notification-panel.css'
 import './a12-shell-polish.css'
+import './staff-design-system.css'
+import './staff-r11.css'
+import './staff-r13.css'
+import './clinic-overlays.css'
+import './staff-r15.css'
+import './workspace-ui.css'
 import { groupNotificationsByDate, sortNotificationsNewestFirst } from './notification-date-groups.js'
 import { sessionForRole } from './contracts.js'
 import { canAccessPage } from './safeguards.js'
@@ -13,7 +19,7 @@ import { AuthShell } from './pages/AuthShell.jsx'
 import { PasswordField } from './pages/PasswordField.jsx'
 import { ClinicAssistant } from './assistant-panel.jsx'
 import { loadConversationSummary, sendPresence } from './messaging-api.js'
-import { listNotifications, readNotification, readAllNotifications, archiveNotification } from './api-client.js'
+import { listNotifications, readNotification, readAllNotifications, archiveNotification, staffPhoto, uploadStaffPhoto, removeStaffPhoto } from './api-client.js'
 export { Brand } from './Brand.jsx'
 import { Brand } from './Brand.jsx'
 
@@ -22,7 +28,7 @@ const useLayoutEffectSafe=typeof window==='undefined'?React.useEffect:React.useL
 const NAV_ICONS={
   dashboard:'home',book:'plusCalendar',appointments:'calendar',calendar:'calendar',schedule:'calendar',checkin:'checkin',queue:'queue',capacity:'activity',
   patients:'users',chart:'dentalChart',handovers:'handover',schedules:'clock',leave:'leave',audit:'file',treatment:'tooth',billing:'receipt',hmo:'shield',inquiries:'message',messages:'message',prescriptions:'pill',followups:'followup',
-  branches:'building',team:'users',analytics:'chart',users:'shield',pricing:'receipt',automations:'clock',archives:'archive',branding:'sparkles',assistant:'robot',closures:'calendar',hmos:'shield',wording:'mail',engagement:'sparkles',loyalty:'gift',me:'user'
+  branches:'building',team:'users',analytics:'chart',users:'shield',pricing:'receipt',automations:'clock',archives:'archive',branding:'settings',assistant:'robot',closures:'calendar',hmos:'shield',wording:'mail',engagement:'chart',loyalty:'gift',me:'user'
 }
 
 const GROUPS={
@@ -31,7 +37,7 @@ const GROUPS={
   // Loyalty remain fully reachable pages (see `pages` in safeguards.js and Me's secondary links) — they are just
   // not primary navigation destinations.
   patient:[['Overview',['dashboard']],['Booking',['book','appointments']],['Communication',['messages']],['Account',['billing','archives','me']]],
-  staff:[['Clinic Operations',['dashboard','appointments','calendar','patients','handovers','schedules','leave','closures']],['Patient Care',['checkin','queue','capacity','prescriptions','followups']],['Billing & Finance',['billing','hmo']],['Marketing & Analytics',['inquiries','messages','engagement']],['Archives',['archives']]],
+  staff:[['Daily work',['dashboard','appointments','calendar','checkin','queue']],['Patient care',['patients','handovers','prescriptions','followups']],['Team & schedule',['schedules','leave','closures']],['Payments & coverage',['billing','hmo']],['Communication',['messages','inquiries','engagement']],['Records',['archives']]],
   dentist:[['Patient Care',['dashboard','schedule','queue','chart','treatment','prescriptions','followups']],['Clinic Operations',['patients','handovers','schedules','leave']],['Marketing & Analytics',['messages','wording']],['Archives',['archives']]],
   owner:[['Executive Dashboard',['dashboard']],['Clinic Operations',['branches','team','calendar','schedules','leave','handovers']],['Patient Care',['capacity','prescriptions']],['Billing & Finance',['pricing','hmo','hmos']],['Marketing & Analytics',['analytics','engagement']],['Administration',['users','automations','closures','audit','branding','assistant']],['Archives',['archives']]],
 }
@@ -39,7 +45,25 @@ const GROUPS={
 // In a clinic-server session the capacity page is the factual live-queue view (src/pages/QueueCounts.jsx); the
 // "Capacity"/"Workload" labels belong to the offline demo's estimators and are not shown for server sessions.
 function navGroups(role,serverSession=false){
-  const lookup=Object.fromEntries(NAV[role].map(([key,label])=>[key,serverSession&&key==='capacity'?'Live Queue by Branch':label]))
+  const staffLabels = {
+    dashboard: 'Today',
+    calendar: 'Calendar',
+    patients: 'Patients',
+    schedules: 'Schedules',
+    closures: 'Closures',
+    capacity: 'Branch queue',
+    billing: 'Payments',
+    hmo: 'HMO',
+    inquiries: 'Inquiries',
+    followups: 'Follow-ups',
+    archives: 'Archives',
+  }
+  const lookup=Object.fromEntries(NAV[role].map(([key,label])=>[
+    key,
+    role==='staff' && staffLabels[key]
+      ? staffLabels[key]
+      : serverSession&&key==='capacity'?'Live Queue by Branch':label
+  ]))
   return GROUPS[role].map(([title,keys])=>[title,keys.filter(k=>lookup[k]&&(!['calendar','closures','hmos','wording'].includes(k)||serverSession)).map(k=>[k,lookup[k]])]).filter(([,items])=>items.length)
 }
 
@@ -53,7 +77,7 @@ function navGroups(role,serverSession=false){
 // `{ok:true}` or `{ok:false, message}` (see App.jsx / api-client.js). The third callback argument's
 // isCurrent reader lets App reject obsolete completions before identity/route changes. This component
 // owns only its submitting/error UI state, never authenticated identity.
-export function Login({ onLogin, onShowRegister, onForgotPassword, initialEmail = '', notice = '' }) {
+export function Login({ onLogin, onShowRegister, onForgotPassword, initialEmail = '', notice = '', connectionNotice }) {
   const [email,setEmail]=React.useState(initialEmail||'')
   const passwordWrap=React.useRef(null)
   // After email verification the address is filled in and the empty password field takes focus.
@@ -61,6 +85,7 @@ export function Login({ onLogin, onShowRegister, onForgotPassword, initialEmail 
   const [password,setPassword]=React.useState('')
   const [submitting,setSubmitting]=React.useState(false)
   const [error,setError]=React.useState('')
+  const [credentialError,setCredentialError]=React.useState('')
   const submission=React.useRef(null)
   useLayoutEffectSafe(()=>{
     const lifetime={pending:null}
@@ -70,18 +95,21 @@ export function Login({ onLogin, onShowRegister, onForgotPassword, initialEmail 
   const submit=async event=>{
     event.preventDefault()
     const lifetime=submission.current
-    if(!lifetime||lifetime.pending)return
+    if(connectionNotice||!lifetime||lifetime.pending)return
     const ticket={hash:typeof window==='undefined'?'':window.location.hash}
     lifetime.pending=ticket
     // The ref owns this attempt before React commits the pending UI. The App
     // also checks this lifetime before adopting identity or changing auth routes.
     const isCurrent=()=>submission.current===lifetime&&lifetime.pending===ticket
       &&(typeof window==='undefined'||window.location.hash===ticket.hash)
-    setError('')
+    setError('');setCredentialError('')
     setSubmitting(true)
     try{
       const result=await onLogin(email,password,{isCurrent})
-      if(isCurrent()&&!result?.ok&&!result?.obsolete)setError(result?.message||'Something went wrong. Try again.')
+      if(isCurrent()&&!result?.ok&&!result?.obsolete){
+        if(result?.kind==='invalid_credentials')setCredentialError('Email or password is incorrect. Check both and try again.')
+        else setError(result?.message||'We couldn’t sign you in. Please try again.')
+      }
     }catch{
       if(isCurrent())setError('Could not sign in. Please try again.')
     }finally{
@@ -91,17 +119,20 @@ export function Login({ onLogin, onShowRegister, onForgotPassword, initialEmail 
     }
   }
   return <AuthShell><div className="auth-form" aria-labelledby="login-title">
-      <div className="login-copy-wrap"><div className="eyebrow">Patient Portal</div><h1 id="login-title">Welcome back</h1><p className="login-copy">Sign in to continue to your clinic portal.</p></div>
+      <div className="lp-card-head"><h1 id="login-title">Welcome back</h1><p>Sign in to your clinic account.</p></div>
+      {connectionNotice}
       {notice&&<Notice tone="success" title={notice}/>}
-      <form onSubmit={submit} noValidate aria-busy={submitting}>
-        <Field label="Email" required><input type="email" autoComplete="email" value={email} onChange={e=>{setEmail(e.target.value);setError('')}}/></Field>
-        <div ref={passwordWrap}><PasswordField label="Password" autoComplete="current-password" value={password} onChange={e=>{setPassword(e.target.value);setError('')}}/></div>
-        {onForgotPassword&&<p className="login-forgot"><button type="button" className="text-link" onClick={onForgotPassword}>Forgot password?</button></p>}
-        <p className="login-forgot"><a className="text-link" href="#claim-account">Registered at the clinic? Claim your online account</a></p>
-        {error&&<Notice tone="warning" title="Couldn’t sign in">{error}</Notice>}
-        <Button type="submit" className="login-button" icon="arrow" disabled={submitting}>{submitting?'Signing in…':'Sign in'}</Button>
+      <form className="lp-form" onSubmit={submit} noValidate aria-busy={submitting}>
+        <Field label="Email" required><input type="email" autoComplete="email" value={email} onChange={e=>{setEmail(e.target.value);setError('');setCredentialError('')}}/></Field>
+        <div ref={passwordWrap}><PasswordField label="Password" error={credentialError} autoComplete="current-password" value={password} onChange={e=>{setPassword(e.target.value);setError('');setCredentialError('')}}/></div>
+        {onForgotPassword&&<p className="lp-forgot"><button type="button" className="text-link" onClick={onForgotPassword}>Forgot password?</button></p>}
+        {error&&<Notice tone="error" title="Couldn’t sign in">{error}</Notice>}
+        <Button type="submit" className="login-button" disabled={submitting||Boolean(connectionNotice)}>{submitting?'Signing in…':'Sign in'}</Button>
       </form>
-      {onShowRegister&&<p className="login-register-link">New patient? <button type="button" className="text-link" onClick={onShowRegister}>Create an account</button></p>}
+      <div className="lp-account-links">
+        {onShowRegister&&<p>New patient? <button type="button" className="text-link" onClick={onShowRegister}>Create an account</button></p>}
+        <p><a className="text-link" href="#claim-account">Claim an existing clinic account</a></p>
+      </div>
     </div></AuthShell>
 }
 
@@ -141,6 +172,21 @@ export function serverNotificationSnapshot(result) {
     ...(result.meta.has_more !== undefined ? { nextBefore: result.meta.next_before } : {}) }
 }
 
+// Bound read-only notification requests; never impose a client timeout on a write.
+// A timed-out GET can safely be retried, whereas an aborted read/archive command
+// might have been committed by Laravel and must not be shown as "not performed".
+async function readNotificationPage(before, collection) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 15000)
+  try {
+    const response = await listNotifications(before, collection, controller.signal)
+    if (controller.signal.aborted) throw new Error('Notifications took too long to load. Check your connection and retry.')
+    return response
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 // Render-keyed snapshots hide old-account data before effects run. Epoch objects also
 // reject A -> B -> A responses, and cleanup invalidates in-flight work on unmount.
 function useServerNotificationFeed(session, enabled = true, getAuthGeneration) {
@@ -157,7 +203,7 @@ function useServerNotificationFeed(session, enabled = true, getAuthGeneration) {
   const [snapshot, setSnapshot] = React.useState(null)
   const snapshotRef = React.useRef(null)
   snapshotRef.current = snapshot
-  const run = React.useCallback(async (operation = () => listNotifications(undefined, collection), mutation = false, expectedRead = null, append = false, expectedArchive = null) => {
+  const run = React.useCallback(async (operation = () => readNotificationPage(undefined, collection), mutation = false, expectedRead = null, append = false, expectedArchive = null) => {
     if (getAuthGeneration && (auth == null || auth !== getAuthGeneration())) return false
     if (!enabled || !session?.serverUserId || !session.active || pending.current === token || epoch.current !== token || !mounted.current) return false
     const requestId = ++generation.current
@@ -209,7 +255,7 @@ function useServerNotificationFeed(session, enabled = true, getAuthGeneration) {
   }, [run, token])
   const current = !enabled || !session?.active ? { items: [], unread: null, loading: false, busy: false, error: 'Notifications are unavailable for this session.' } : snapshot?.token === token ? snapshot : { items: [], unread: null, loading: true, busy: false, error: '' }
   return { ...current, key, collection, changeCollection: value => { if (['active','archived'].includes(value)) setCollection(value) }, refresh: () => run(),
-    more: () => run(() => listNotifications(current.nextBefore, collection), false, null, true),
+    more: () => run(() => readNotificationPage(current.nextBefore, collection), false, null, true),
     archive: id => run(guard => archiveNotification(id, guard), true, null, false, id),
     mark: id => run(guard => readNotification(id, guard, collection), true, id), markAll: () => run(readAllNotifications, true, '*') }
 }
@@ -223,6 +269,7 @@ function NotificationPanelContent({role,store,onClose,setPage,serverFeed}){
   const {state,actions,toast}=store
   const session=store.session||sessionForRole(role,state)
   const server=!!session?.serverUserId
+  const staffView=role==='staff'
   const ownFeed=useServerNotificationFeed(session,server&&!serverFeed&&canAccessPage(state,session,'dashboard'),store.getAuthGeneration)
   const feed=serverFeed||ownFeed
   const auth=store.getAuthGeneration?.()
@@ -275,24 +322,24 @@ function NotificationPanelContent({role,store,onClose,setPage,serverFeed}){
     if(current){setPage(current.page,current.context);onClose()}
   }
   const updating=busy||(server&&feed.busy)
-  return <Modal open title="Notifications" onClose={onClose} className="notification-dialog a12-notifications clinic-notifications"><div className="notification-popover">
+  return <Modal open title="Notifications" onClose={onClose} className={`notification-dialog a12-notifications clinic-notifications${staffView?' staff-r09-inbox':''}`}><div className="notification-popover">
     <div className="notification-controls">
-      {server&&feedCurrent&&feed.archiveAvailable&&<div className="notification-toolbar notification-collections" aria-label="Notification collection"><button type="button" disabled={updating||loading} aria-pressed={feed.collection==='active'} onClick={()=>{setFailure('');feed.changeCollection('active')}}>Inbox</button><button type="button" disabled={updating||loading} aria-pressed={feed.collection==='archived'} onClick={()=>{setFailure('');setAll(true);feed.changeCollection('archived')}}>Archived notifications</button></div>}
+      {server&&feedCurrent&&feed.archiveAvailable&&<div className="notification-toolbar notification-collections" aria-label="Notification collection"><button type="button" disabled={updating||loading} aria-pressed={feed.collection==='active'} onClick={()=>{setFailure('');feed.changeCollection('active')}}>Inbox</button><button type="button" disabled={updating||loading} aria-pressed={feed.collection==='archived'} onClick={()=>{setFailure('');setAll(true);feed.changeCollection('archived')}}>{staffView?'Archived':'Archived notifications'}</button></div>}
       <div className="notification-bulk">
         <div className="notification-summary">
-          <span>{unread===null?'Unread count unavailable':unread?`${unread} unread`:'No unread updates'}</span>
-          <span role="status">{loading?'Loading notifications…':updating?(feed.pendingLabel||'Updating read status…'):feedError?'Notifications unavailable':items.length>8?`Showing ${visible.length} of ${items.length} loaded`:''}</span>
+          <span>{unread===null?'':unread?`${unread} unread`:'No unread updates'}</span>
+          <span role="status">{loading?'':updating?(feed.pendingLabel||'Updating read status…'):feedError?'':items.length>8?`Showing ${visible.length} of ${items.length} loaded`:''}</span>
         </div>
         <div className="notification-toolbar">
-          <button type="button" onClick={()=>perform(()=>server?feed.markAll():actions.markAllNotificationsRead())} disabled={updating||loading||!!feedError||!unread||feed.collection==='archived'}>Mark my notifications read</button>
+          <button type="button" onClick={()=>perform(()=>server?feed.markAll():actions.markAllNotificationsRead())} disabled={updating||loading||!!feedError||!unread||feed.collection==='archived'}>Mark all read</button>
           {items.length>8&&<button type="button" disabled={loading||!!feedError} aria-pressed={all} onClick={()=>setAll(v=>!v)}>{all?'Recent only':server?`Show loaded history (${items.length})`:`View all (${items.length})`}</button>}
         </div>
       </div>
     </div>
-    {feedError&&<p className="notification-failure" role="alert" tabIndex={0}>{feedError} <button type="button" onClick={()=>{setFailure('');feed.refresh()}}>Retry notifications</button></p>}
+    {feedError&&<div className="notification-failure staff-r15-notification-error" role="alert" tabIndex={0}><strong>Notifications unavailable</strong><span>{feedError}</span><button type="button" onClick={()=>{setFailure('');feed.refresh()}}>Retry</button></div>}
     {feedError&&feed.failedArchive&&<div className="notification-toolbar"><button type="button" disabled={updating||loading} onClick={()=>perform(()=>feed.archive(feed.failedArchive),true)}>Retry archive</button></div>}
     {!feedError&&failure&&<p className="notification-failure" role="alert" tabIndex={0}><b>Notification change wasn’t confirmed.</b> {failure}</p>}
-    <div ref={scrollRegion} className="notification-scroll" role="region" aria-label={server?'Recent notification history':'Notification history'} tabIndex={0} aria-busy={loading||updating}>{loading?<p role="status">Loading notifications…</p>:feedError?null:visible.length?dateGroups.map(group=><section key={group.key}>
+    {!feedError&&<div ref={scrollRegion} className="notification-scroll" role="region" aria-label={server?'Recent notification history':'Notification history'} tabIndex={0} aria-busy={loading||updating}>{loading?(staffView?<div className="staff-notification-loading" role="status"><span className="sr-only">Loading notifications…</span>{[0,1,2].map(index=><div className="staff-notification-placeholder" key={index} aria-hidden="true"><span/><span/><span/></div>)}</div>:<p role="status">Loading notifications…</p>):feedError?null:visible.length?dateGroups.map(group=><section key={group.key}>
       <h3 className="notification-date-heading">{group.label}</h3>
       <ul className="notification-list">{group.items.map(n=><li className={`notification-row ${n.read?'':'unread'}`} key={n.id}>
         <div className="notification-content">
@@ -306,7 +353,7 @@ function NotificationPanelContent({role,store,onClose,setPage,serverFeed}){
           {destination(n)&&<button type="button" className="notification-view" disabled={updating} onClick={()=>open(n)}>View update</button>}
         </div>
       </li>)}</ul>
-    </section>):<div className="notification-empty"><Icon name="bell" size={28}/><b>{server?'No recent notifications.':"You're all caught up."}</b><p>{server?'No records were returned for your account.':'No updates to show in this workspace.'}</p></div>}</div>
+    </section>):<div className="notification-empty"><Icon name="bell" size={28}/><b>{server?'No recent notifications.':"You're all caught up."}</b><p>{server?'No records were returned for your account.':'No updates to show in this workspace.'}</p></div>}</div>}
     {server&&feedCurrent&&!feedError&&feed.nextBefore&&<div className="notification-toolbar"><button type="button" disabled={updating||loading} onClick={async()=>{setAll(true);await perform(()=>feed.more())}}>Load older notifications</button></div>}
     {server&&feedCurrent&&feed.historyError&&<p role="alert" className="notification-failure">{feed.historyError} <button type="button" onClick={()=>perform(()=>feed.refresh())}>Refresh notifications</button></p>}
   </div></Modal>
@@ -347,6 +394,89 @@ export function PatientMenuSheet({ open, onClose, setPage, name, unreadMessages=
   </Modal>
 }
 
+// This menu is Staff-only; the photo is held in private Laravel storage, not a browser data URI.
+function StaffPhotoControl({ userId, initials, toast }) {
+  const [photo, setPhoto] = React.useState(null)
+  const [menuOpen, setMenuOpen] = React.useState(false)
+  const [busy, setBusy] = React.useState(false)
+  const [message, setMessage] = React.useState('')
+  const input = React.useRef(null)
+  const wrapper = React.useRef(null)
+  const url = React.useRef(null)
+  const generation = React.useRef(0)
+  const show = blob => {
+    if (url.current) URL.revokeObjectURL(url.current)
+    url.current = blob ? URL.createObjectURL(blob) : null
+    setPhoto(url.current)
+  }
+  const load = async signal => {
+    const token = ++generation.current
+    const result = await staffPhoto(signal)
+    if (signal?.aborted || token !== generation.current) return
+    if (result.ok) show(result.blob)
+    else if (result.kind !== 'cancelled') setMessage('Photo unavailable. Try again.')
+  }
+  React.useEffect(() => {
+    const abort = new AbortController()
+    setPhoto(null); setMessage(''); setMenuOpen(false)
+    if (userId) load(abort.signal)
+    return () => {
+      abort.abort(); generation.current++
+      if (url.current) URL.revokeObjectURL(url.current)
+      url.current = null
+    }
+  }, [userId])
+  React.useEffect(() => {
+    if (!menuOpen) return
+    const close = event => {
+      if (event.type === 'keydown' && event.key === 'Escape') {
+        setMenuOpen(false); wrapper.current?.querySelector('.staff-photo-trigger')?.focus()
+      } else if (event.type === 'pointerdown' && !wrapper.current?.contains(event.target)) setMenuOpen(false)
+    }
+    document.addEventListener('keydown', close)
+    document.addEventListener('pointerdown', close)
+    return () => { document.removeEventListener('keydown', close); document.removeEventListener('pointerdown', close) }
+  }, [menuOpen])
+  const upload = async event => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 2 * 1024 * 1024) {
+      setMessage('Choose a JPEG, PNG or WebP photo under 2 MB.'); return
+    }
+    setBusy(true); setMessage('')
+    const token = generation.current
+    const response = await uploadStaffPhoto(file, () => generation.current === token)
+    if (generation.current !== token) return
+    if (response.ok) {
+      await load()
+      toast?.('Profile photo updated.', 'success')
+    } else setMessage(response.message || 'Photo could not be saved.')
+    setBusy(false); setMenuOpen(false)
+  }
+  const remove = async () => {
+    setBusy(true); setMessage('')
+    const token = generation.current
+    const response = await removeStaffPhoto(() => generation.current === token)
+    if (generation.current !== token) return
+    if (response.ok) { generation.current++; show(null); toast?.('Profile photo removed.', 'success') }
+    else setMessage(response.message || 'Could not remove photo.')
+    setBusy(false); setMenuOpen(false)
+  }
+  return <div className="staff-photo-control" ref={wrapper}>
+    <button type="button" className="staff-photo-trigger" aria-label="Staff profile photo" aria-haspopup="true" aria-expanded={menuOpen} onClick={() => setMenuOpen(open => !open)}>
+      {photo ? <img src={photo} alt=""/> : <span aria-hidden="true">{initials}</span>}
+    </button>
+    <input ref={input} type="file" accept="image/jpeg,image/png,image/webp" aria-label="Choose Staff profile photo" hidden onChange={upload}/>
+    {menuOpen && <div className="staff-photo-menu" role="group" aria-label="Staff photo actions">
+      <button type="button" disabled={busy} onClick={() => input.current?.click()}>{photo ? 'Replace photo' : 'Upload photo'}</button>
+      {photo && <button type="button" disabled={busy} onClick={remove}>Remove photo</button>}
+      <small>JPG, PNG or WebP · up to 2 MB</small>
+    </div>}
+    {message && <span className="staff-photo-error" role="status">{message}</span>}
+  </div>
+}
+
 export function Shell({ role, page, setPage, onLogout, activeBranch, setActiveBranch, store, children }) {
   const info=ROLE_INFO[role]
   const [mobileOpen,setMobileOpen]=React.useState(false)
@@ -358,6 +488,11 @@ export function Shell({ role, page, setPage, onLogout, activeBranch, setActiveBr
   const account=store.state.users.find(u=>u.id===session?.userId)
   const name=account?.name||session?.name||info.label
   const initials=name.split(' ').map(x=>x[0]).filter(Boolean).slice(0,2).join('')
+  // The assigned branch ID (not browser-selected text or a network-wide brand)
+  // establishes the Staff header. Never infer scope from a brand or alias.
+  const assignedStaffBranch=role==='staff'
+    ? store.state.branches.find(b=>b.id===session?.branchId) || null
+    : null
   const notificationFeed=useServerNotificationFeed(session,!!session?.serverUserId&&canAccessPage(store.state,session,'dashboard'),store.getAuthGeneration)
   const unread=session?.serverUserId?notificationFeed.unread:visibleNotifications(store.state,session).filter(n=>!n.read).length
   React.useEffect(()=>{if(notificationsOpen&&session?.serverUserId)notificationFeed.refresh()},[notificationsOpen,session?.serverUserId])
@@ -388,9 +523,10 @@ export function Shell({ role, page, setPage, onLogout, activeBranch, setActiveBr
   // separate `onLogout` prop below, never through this path, so it can never trigger the listener.
   const patientNavListenerRef=React.useRef(null)
   const shellActions=React.useMemo(()=>({
+    role,
     openNotifications:()=>setNotificationsOpen(true),
     registerPatientNavListener:fn=>{patientNavListenerRef.current=fn},
-  }),[])
+  }),[role])
   const notifyingSetPage=(key,record)=>{patientNavListenerRef.current?.(key,record);setPage(key,record)}
   const firstPage=React.useRef(true)
   // Patient page changes start at the top with focus on the main landmark. Deep-linked records focus themselves afterwards.
@@ -416,12 +552,12 @@ export function Shell({ role, page, setPage, onLogout, activeBranch, setActiveBr
     <div className="sidebar-footer"><button type="button" onClick={()=>setLogoutConfirmOpen(true)}><Icon name="logout" size={16}/>Sign out</button></div></>
   return <ShellActionsContext.Provider value={shellActions}><div className={`app-shell a12-shell role-${role}`}>
     <a className="skip-link" href="#main-content">Skip to content</a>
-    <aside className="sidebar"><div className="sidebar-brand"><Brand/></div>{navigation}</aside>
-    <Modal open={mobileOpen} title="Your workspace" onClose={()=>setMobileOpen(false)} className="navigation-dialog"><div className="sidebar-brand"><Brand/></div>{navigation}</Modal>
+    <aside className="sidebar"><div className="sidebar-brand"><Brand branchName={assignedStaffBranch?.name}/></div>{navigation}</aside>
+    <Modal open={mobileOpen} title="Your workspace" onClose={()=>setMobileOpen(false)} className="navigation-dialog"><div className="sidebar-brand"><Brand branchName={assignedStaffBranch?.name}/></div>{navigation}</Modal>
     <div className="main-shell">
       <header className="topbar">
-        <div className="topbar-left">{role!=='patient'&&<button className="mobile-menu icon-btn" type="button" aria-label="Open navigation" aria-haspopup="dialog" aria-expanded={mobileOpen} onClick={()=>setMobileOpen(true)}><Icon name="menu" size={21}/></button>}<div className="topbar-context"><div className="workspace-heading"><span className="workspace-label">{info.label} workspace</span>{currentPage&&<b className="workspace-page">{currentPage}</b>}</div>{role==='owner'&&<label className="branch-scope"><span>Branch</span><select value={activeBranch} onChange={e=>setActiveBranch(e.target.value)}><option>All Branches</option>{store.state.branches.map(b=><option key={b.id}>{b.name}</option>)}</select></label>}{(role==='staff'||role==='dentist')&&<div className="branch-lock"><small>Assigned branch</small><b>{activeBranch}</b></div>}</div></div>
-        <div className="top-actions"><button className="top-icon-btn" aria-haspopup="dialog" aria-expanded={notificationsOpen} onClick={()=>setNotificationsOpen(true)} aria-label={`Notifications${unread?`, ${unread} unread`:''}`}><Icon name="bell" size={20}/>{unread>0&&<span aria-hidden="true" className="notification-count">{unread>99?'99+':unread}</span>}</button><div className="top-user"><span aria-hidden="true">{initials}</span><div><b>{name}</b><small>{info.label}</small></div></div></div>
+        <div className="topbar-left">{role!=='patient'&&<button className="mobile-menu icon-btn" type="button" aria-label="Open navigation" aria-haspopup="dialog" aria-expanded={mobileOpen} onClick={()=>setMobileOpen(true)}><Icon name="menu" size={21}/></button>}<div className="topbar-context">{role!=='staff'&&<div className="workspace-heading"><span className="workspace-label">{info.label} workspace</span>{currentPage&&<b className="workspace-page">{currentPage}</b>}</div>}{role==='owner'&&<label className="branch-scope"><span>Branch</span><select value={activeBranch} onChange={e=>setActiveBranch(e.target.value)}><option>All Branches</option>{store.state.branches.map(b=><option key={b.id}>{b.name}</option>)}</select></label>}{(role==='staff'||role==='dentist')&&<div className="branch-lock"><small>Assigned branch</small><b>{activeBranch}</b></div>}</div></div>
+        <div className="top-actions"><button className="top-icon-btn" aria-haspopup="dialog" aria-expanded={notificationsOpen} onClick={()=>setNotificationsOpen(true)} aria-label={`Notifications${unread?`, ${unread} unread`:''}`}><Icon name="bell" size={20}/>{unread>0&&<span aria-hidden="true" className="notification-count">{unread>99?'99+':unread}</span>}</button><div className="top-user">{role==='staff'&&session?.serverUserId?<StaffPhotoControl userId={session.serverUserId} initials={initials} toast={store.toast}/>:<span aria-hidden="true">{initials}</span>}<div><b>{name}</b><small>{info.label}</small></div></div></div>
       </header>
       <main id="main-content" tabIndex={-1} className="content">{children}</main>
     </div>
@@ -431,8 +567,8 @@ export function Shell({ role, page, setPage, onLogout, activeBranch, setActiveBr
       <button type="button" aria-haspopup="dialog" aria-expanded={patientMenuOpen} onClick={()=>setPatientMenuOpen(true)}><Icon name="menu" size={20}/><span>Menu</span>{unreadMessages>0&&<span className="pt-nav-badge"><span aria-hidden="true">{unreadMessages}</span><span className="sr-only">, {unreadMessages} unread</span></span>}</button>
     </nav>}
     {role==='patient'&&<PatientMenuSheet open={patientMenuOpen} onClose={()=>setPatientMenuOpen(false)} setPage={notifyingSetPage} name={name} unreadMessages={unreadMessages} onRequestLogout={()=>setLogoutConfirmOpen(true)}/>}
-    <ConfirmDialog open={logoutConfirmOpen} title="Sign out?" tone="default" confirmLabel="Sign out" cancelLabel="Cancel" className="patient-logout-dialog" onConfirm={()=>{setLogoutConfirmOpen(false);onLogout()}} onCancel={()=>setLogoutConfirmOpen(false)}>
-      Are you sure you want to sign out of your account?
+    <ConfirmDialog open={logoutConfirmOpen} title="Sign out?" tone="default" confirmLabel="Sign out" cancelLabel="Cancel" className="patient-logout-dialog clinic-signout-dialog" onConfirm={()=>{setLogoutConfirmOpen(false);onLogout()}} onCancel={()=>setLogoutConfirmOpen(false)}>
+      End your session on this device?
     </ConfirmDialog>
     {role==='patient'&&<ClinicAssistant open={assistantOpen} onOpenChange={setAssistantOpen} server={!!store?.session?.serverUserId} onContact={()=>notifyingSetPage('messages')}/>}
   </div></ShellActionsContext.Provider>

@@ -72,14 +72,19 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
     Route::post('/gemini/stream', [\App\Http\Controllers\GeminiChatController::class, 'stream'])->middleware(['role:patient', 'throttle:m7-assistant']);
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy']);
     Route::get('/me', [CurrentUserController::class, 'show']);
+    // Private photo for the authenticated Staff account only; never exposes employee files publicly.
+    Route::get('/me/staff-photo', [\App\Http\Controllers\StaffPhotoController::class, 'show'])->middleware('role:staff');
+    Route::post('/me/staff-photo', [\App\Http\Controllers\StaffPhotoController::class, 'store'])->middleware(['role:staff', 'throttle:10,1']);
+    Route::delete('/me/staff-photo', [\App\Http\Controllers\StaffPhotoController::class, 'destroy'])->middleware(['role:staff', 'throttle:10,1']);
+    Route::get('/me/home', \App\Http\Controllers\PatientHomeController::class)->middleware('role:patient');
     // Identity-specific notifications written by real server events (each user sees only their own).
     Route::get('/notifications', [\App\Http\Controllers\NotificationController::class, 'index']);
     Route::post('/notifications/read-all', [\App\Http\Controllers\NotificationController::class, 'readAll']);
     Route::post('/notifications/{notification}/read', [\App\Http\Controllers\NotificationController::class, 'read']);
     Route::post('/notifications/{notification}/archive', [\App\Http\Controllers\NotificationController::class, 'archive']);
-    // M1 self-service sign-in email change: current password, then a one-time code sent to the new address.
-    Route::post('/account/email', [\App\Http\Controllers\Auth\EmailChangeController::class, 'request'])->middleware('throttle:m1-otp');
-    Route::post('/account/email/confirm', [\App\Http\Controllers\Auth\EmailChangeController::class, 'confirm'])->middleware('throttle:m1-otp');
+    // Patient sign-in addresses may be corrected only through authorized administration.
+    Route::post('/account/email', [\App\Http\Controllers\Auth\EmailChangeController::class, 'request'])->middleware('role:staff,dentist,owner')->middleware('throttle:m1-otp');
+    Route::post('/account/email/confirm', [\App\Http\Controllers\Auth\EmailChangeController::class, 'confirm'])->middleware('role:staff,dentist,owner')->middleware('throttle:m1-otp');
 
     // M11 server-authoritative billing. Legacy browser invoices remain read-only presentation data.
     Route::prefix('invoices')->group(function () {
@@ -181,6 +186,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
     // F5 closed and holiday dates (Owner manages; Staff see the affected appointments and notify the patients).
     // M3 Work Schedules: Owner (all branches), front desk (their branches, when allowed), dentist (own, read-only).
     Route::prefix('work-schedules')->group(function () {
+        Route::get('/duty', [\App\Http\Controllers\WorkScheduleController::class, 'duty'])->middleware('role:staff');
         Route::get('/', [\App\Http\Controllers\WorkScheduleController::class, 'index'])->middleware('role:staff,owner,dentist');
         Route::put('/{dentistProfile}/weekly', [\App\Http\Controllers\WorkScheduleController::class, 'weekly'])->middleware(['role:staff,owner', 'throttle:60,1']);
         Route::post('/{dentistProfile}/from-profile', [\App\Http\Controllers\WorkScheduleController::class, 'fromProfile'])->middleware(['role:staff,owner', 'throttle:20,1']);
@@ -192,11 +198,12 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
     Route::prefix('leave')->group(function () {
         Route::get('/mine', [\App\Http\Controllers\LeaveController::class, 'mine'])->middleware('role:staff,dentist');
         Route::post('/', [\App\Http\Controllers\LeaveController::class, 'store'])->middleware(['role:staff,dentist', 'throttle:20,1']);
-        Route::get('/', [\App\Http\Controllers\LeaveController::class, 'index'])->middleware('role:staff,owner');
+        Route::get('/', [\App\Http\Controllers\LeaveController::class, 'index'])->middleware('role:owner');
         Route::get('/calendar', [\App\Http\Controllers\LeaveController::class, 'calendar'])->middleware('role:staff,owner,dentist');
         Route::get('/{leaveRequest}', [\App\Http\Controllers\LeaveController::class, 'show'])->middleware('role:staff,owner,dentist');
         Route::get('/{leaveRequest}/conflicts', [\App\Http\Controllers\LeaveController::class, 'conflicts'])->middleware('role:staff,owner,dentist');
-        Route::post('/{leaveRequest}/decide', [\App\Http\Controllers\LeaveController::class, 'decide'])->middleware(['role:staff,owner', 'throttle:30,1']);
+        Route::get('/{leaveRequest}/coverage', [\App\Http\Controllers\LeaveController::class, 'coverage'])->middleware('role:owner');
+        Route::post('/{leaveRequest}/decide', [\App\Http\Controllers\LeaveController::class, 'decide'])->middleware(['role:owner', 'throttle:30,1']);
         Route::post('/{leaveRequest}/cancel', [\App\Http\Controllers\LeaveController::class, 'cancel'])->middleware(['role:staff,owner,dentist', 'throttle:30,1']);
         Route::post('/{leaveRequest}/notify', [\App\Http\Controllers\LeaveController::class, 'notify'])->middleware(['role:staff,owner', 'throttle:10,1']);
     });
@@ -220,6 +227,9 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
     // M10 Dental Charts: Dentists record; front desk read-only; patient simplified; Owner none.
     Route::get('/patients/{patient}/chart', [\App\Http\Controllers\DentalChartController::class, 'show'])->middleware('role:dentist,staff,owner');
     Route::post('/patients/{patient}/chart', [\App\Http\Controllers\DentalChartController::class, 'store'])->middleware(['role:dentist', 'throttle:120,1']);
+    Route::match(['get', 'put'], '/me/booking-draft', [\App\Http\Controllers\PatientBookingDraftController::class, 'handle'])->middleware(['role:patient', 'throttle:120,1']);
+    Route::patch('/me/profile', [\App\Http\Controllers\PatientRecordController::class, 'updateMine'])->middleware(['role:patient', 'throttle:20,1']);
+    Route::post('/me/password', [\App\Http\Controllers\Auth\PasswordResetController::class, 'change'])->middleware(['role:patient', 'throttle:m1-otp']);
     Route::get('/me/chart', [\App\Http\Controllers\DentalChartController::class, 'mine'])->middleware('role:patient');
     // M19 Prescriptions: Dentists at the branch write, issue and void; front desk views and prints; Owner metadata; patient own.
     Route::get('/me/prescriptions', [\App\Http\Controllers\PrescriptionController::class, 'mine'])->middleware('role:patient');
@@ -311,6 +321,8 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
     // internal bigint id.
     Route::get('/branches', [BranchController::class, 'index']);
     Route::patch('/branches/{branch}', [BranchController::class, 'update'])->middleware('role:owner');
+    Route::post('/branches/{branch}/archive', [BranchController::class, 'archive'])->middleware('role:owner');
+    Route::post('/branches/{branch}/restore', [BranchController::class, 'restore'])->middleware('role:owner');
     Route::get('/branches/{branch}/services', [BranchController::class, 'servicesForBranch']);
 
     Route::get('/services', [ServiceController::class, 'index']);
@@ -373,6 +385,8 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
         Route::get('/{appointment}/receipt-pdf', [AppointmentController::class, 'receiptPdf'])->middleware(['role:patient,staff,owner', 'throttle:30,1']);
         Route::post('/{appointment}/reschedule', [AppointmentController::class, 'reschedule'])->middleware('role:patient,staff,owner');
         Route::post('/{appointment}/cancel', [AppointmentController::class, 'cancel'])->middleware('role:patient,staff,owner');
+        Route::post('/{appointment}/booking-refund', [AppointmentController::class, 'refundBookingPayment'])
+            ->middleware(['role:staff,owner', 'throttle:10,1']);
         // The pre-arrival No-show (the Patient did not arrive; no Visit). Check-In and treatment start/completion are
         // Visit commands below — there is no second appointment path for them.
         Route::post('/{appointment}/{command}', [AppointmentController::class, 'transition'])

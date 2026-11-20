@@ -1,5 +1,5 @@
 import React, { useEffect, useId, useRef, useState } from 'react'
-import { Button, Field, Icon, Notice } from '../components.jsx'
+import { Button, Field, Icon } from '../components.jsx'
 import { COUNTRY_CODES, DEFAULT_COUNTRY, normalizePhoneNumber } from '../phone.js'
 import { AuthShell } from './AuthShell.jsx'
 import { PasswordField } from './PasswordField.jsx'
@@ -31,7 +31,7 @@ function PhoneField({ countryCode, localNumber, onCountryChange, onLocalNumberCh
   return <div className={`field auth-phone-field ${error?'has-error':''}`}>
     <label htmlFor={numberId}>Phone number<b className="required" aria-hidden="true">*</b></label>
     <div className="phone-field">
-      <div className="auth-country-wrap" ref={wrapRef} onKeyDown={event=>{if(event.key==='Escape'){setOpen(false);triggerRef.current?.focus()}}}>
+      <div className="auth-country-wrap" ref={wrapRef} onKeyDown={event=>{if(event.key==='Escape'&&open){event.preventDefault();setOpen(false);triggerRef.current?.focus()}}}>
         <button type="button" ref={triggerRef} className="auth-country-trigger" aria-label={`Country and calling code: ${country.label} ${country.dial}`}
           aria-expanded={open} aria-haspopup="listbox" onClick={()=>{setOpen(!open);setSearch('')}}>
           <span className="auth-country-name">{country.label}</span><b>{country.dial}</b><span aria-hidden="true">⌄</span>
@@ -116,7 +116,7 @@ function PasswordHelp({ value }) {
   </div>
 }
 
-export function PatientRegister({ onRegister, onCancel }) {
+export function PatientRegister({ onRegister, onCancel, connectionNotice }) {
   const [form,setForm]=useState(emptyForm)
   const [phoneLocal,setPhoneLocal]=useState('')
   const [countryCode,setCountryCode]=useState(DEFAULT_COUNTRY.code)
@@ -129,6 +129,8 @@ export function PatientRegister({ onRegister, onCancel }) {
   const maxDob=today
   const minDob=addCalendarMonths(today, -12 * 120)
   const formRef=useRef(null)
+  const registrationAttempt=useRef(null)
+  useEffect(()=>()=>{registrationAttempt.current=null},[])
   const check=(nextForm=form,nextConsent=consent,nextPhone=phoneLocal)=>{
     const phone=normalizePhoneNumber(countryCode,nextPhone)
     return validateRegistration(nextForm,{phoneOk:phone.ok,phoneReason:phone.reason,consent:nextConsent,today,minDob,maxDob})
@@ -139,6 +141,14 @@ export function PatientRegister({ onRegister, onCancel }) {
     const next={...form,[key]:value}
     setForm(next)
     if(touched[key]||errors[key])setErrors(e=>({...e,[key]:check(next)[key]}))
+    setFormError('')
+  }
+  const prefillId=({ fields })=>{
+    const keys=['first_name','last_name','date_of_birth'].filter(key=>fields[key])
+    const details=Object.fromEntries(keys.map(key=>[key,fields[key]]))
+    const found=check({...form,...details})
+    setForm(current=>({...current,...details}))
+    setErrors(current=>({...current,...Object.fromEntries(keys.filter(key=>touched[key]||current[key]).map(key=>[key,found[key]]))}))
     setFormError('')
   }
   const updatePhone=rawValue=>{
@@ -160,7 +170,7 @@ export function PatientRegister({ onRegister, onCancel }) {
 
   const submit=async event=>{
     event.preventDefault()
-    if(submitting)return
+    if(connectionNotice||submitting||registrationAttempt.current)return
     const found=check()
     if(Object.keys(found).length){
       setErrors(found);setTouched({first_name:true,last_name:true,date_of_birth:true,email:true,phone:true,password:true,password_confirmation:true,consent:true})
@@ -174,7 +184,12 @@ export function PatientRegister({ onRegister, onCancel }) {
     setErrors({})
     setFormError('')
     // The server decides; its answer does not reveal whether an email already has an account (unchanged behaviour).
-    const result=await onRegister({...form,phone:phone.e164})
+    const attempt={hash:window.location.hash}
+    registrationAttempt.current=attempt
+    const isCurrent=()=>registrationAttempt.current===attempt&&window.location.hash===attempt.hash
+    const result=await onRegister({...form,phone:phone.e164},isCurrent)
+    if(registrationAttempt.current!==attempt)return
+    registrationAttempt.current=null
     setSubmitting(false)
     if(result?.ok)return
     if(result?.kind==='validation'){
@@ -189,29 +204,42 @@ export function PatientRegister({ onRegister, onCancel }) {
   return <AuthShell><div className="auth-form auth-register" aria-labelledby="register-title">
       <div className="lp-card-head">
         <h1 id="register-title">Create your account</h1>
-        <p>Book visits, pay online and message the clinic in one place.</p>
+        <p>Book and manage your dental visits.</p>
       </div>
-      <form ref={formRef} onSubmit={submit} noValidate aria-busy={submitting} className="lp-form">
-        {/* Optional: fill the name and birth date from an ID, read on this device only (the photo is not uploaded or kept). */}
-        <ScanIdButton onResult={r=>{for(const k of ['first_name','last_name','date_of_birth'])if(r.fields[k])update(k,r.fields[k])}}/>
-        <div className="lp-form-row">
-          <Field label="First name" required error={errors.first_name}><input value={form.first_name} onChange={e=>update('first_name',e.target.value)} onBlur={blur('first_name')} autoComplete="given-name" aria-invalid={errors.first_name?true:undefined}/></Field>
-          <Field label="Last name" required error={errors.last_name}><input value={form.last_name} onChange={e=>update('last_name',e.target.value)} onBlur={blur('last_name')} autoComplete="family-name" aria-invalid={errors.last_name?true:undefined}/></Field>
+      <form ref={formRef} onSubmit={submit} noValidate aria-busy={submitting} className="lp-register-form">
+        <div className="lp-register-fields">
+          {connectionNotice}
+          <fieldset className="lp-form-group">
+            <legend>Personal details</legend>
+            <div className="lp-form-row">
+              <Field label="First name" required error={errors.first_name}><input value={form.first_name} onChange={e=>update('first_name',e.target.value)} onBlur={blur('first_name')} autoComplete="given-name" aria-invalid={errors.first_name?true:undefined}/></Field>
+              <Field label="Last name" required error={errors.last_name}><input value={form.last_name} onChange={e=>update('last_name',e.target.value)} onBlur={blur('last_name')} autoComplete="family-name" aria-invalid={errors.last_name?true:undefined}/></Field>
+            </div>
+            <Field label="Date of birth" required hint="Must be within the last 120 years." error={errors.date_of_birth}><input type="date" required max={maxDob} min={minDob} value={form.date_of_birth} onChange={e=>update('date_of_birth',e.target.value)} onBlur={blur('date_of_birth')} autoComplete="bday" aria-invalid={errors.date_of_birth?true:undefined}/></Field>
+            <PhoneField countryCode={countryCode} localNumber={phoneLocal} onCountryChange={updateCountry} onLocalNumberChange={updatePhone} onBlur={blur('phone')} error={errors.phone}/>
+            <details className="auth-id-disclosure">
+              <summary>Use an ID to fill in details</summary>
+              <ScanIdButton compact onResult={prefillId}/>
+            </details>
+          </fieldset>
+          <fieldset className="lp-form-group">
+            <legend>Sign-in details</legend>
+            <Field label="Email" required hint="We’ll send your six-digit verification code to this address." error={errors.email}><input type="email" inputMode="email" value={form.email} onChange={e=>update('email',e.target.value)} onBlur={blur('email')} autoComplete="email" aria-invalid={errors.email?true:undefined}/></Field>
+            <PasswordField label="Password" value={form.password} onChange={e=>update('password',e.target.value)} onBlur={blur('password')} autoComplete="new-password" error={errors.password} hint={<PasswordHelp value={form.password}/>}/>
+            <PasswordField label="Confirm password" value={form.password_confirmation} onChange={e=>update('password_confirmation',e.target.value)} onBlur={blur('password_confirmation')} autoComplete="new-password" error={errors.password_confirmation}/>
+          </fieldset>
+          <div className={`lp-consent ${errors.consent?'has-error':''}`}>
+            <label><input type="checkbox" checked={consent} aria-invalid={errors.consent?true:undefined} aria-describedby={errors.consent?'consent-error':undefined}
+              onChange={e=>{setConsent(e.target.checked);if(errors.consent)setErrors(x=>({...x,consent:e.target.checked?undefined:x.consent}))}}/>
+              <span>I agree to the <a href="#privacy" target="_blank" rel="noreferrer">Privacy Policy</a> and <a href="#terms" target="_blank" rel="noreferrer">Terms of Use</a>.</span></label>
+            {errors.consent&&<small id="consent-error" className="field-error" role="alert">{errors.consent}</small>}
+          </div>
+          {formError&&<p className="field-error auth-form-error" role="alert">{formError}</p>}
         </div>
-        <Field label="Date of birth" required hint="Must be within the last 120 years." error={errors.date_of_birth}><input type="date" required max={maxDob} min={minDob} value={form.date_of_birth} onChange={e=>update('date_of_birth',e.target.value)} onBlur={blur('date_of_birth')} autoComplete="bday" aria-invalid={errors.date_of_birth?true:undefined}/></Field>
-        <Field label="Email" required hint="This is the email you will sign in with. We send your 6-digit code here." error={errors.email}><input type="email" inputMode="email" value={form.email} onChange={e=>update('email',e.target.value)} onBlur={blur('email')} autoComplete="email" aria-invalid={errors.email?true:undefined}/></Field>
-        <PhoneField countryCode={countryCode} localNumber={phoneLocal} onCountryChange={updateCountry} onLocalNumberChange={updatePhone} onBlur={blur('phone')} error={errors.phone}/>
-        <PasswordField label="Password" value={form.password} onChange={e=>update('password',e.target.value)} onBlur={blur('password')} autoComplete="new-password" error={errors.password} hint={<PasswordHelp value={form.password}/>}/>
-        <PasswordField label="Confirm password" value={form.password_confirmation} onChange={e=>update('password_confirmation',e.target.value)} onBlur={blur('password_confirmation')} autoComplete="new-password" error={errors.password_confirmation}/>
-        <div className={`lp-consent ${errors.consent?'has-error':''}`}>
-          <label><input type="checkbox" checked={consent} aria-invalid={errors.consent?true:undefined} aria-describedby={errors.consent?'consent-error':undefined}
-            onChange={e=>{setConsent(e.target.checked);if(errors.consent)setErrors(x=>({...x,consent:e.target.checked?undefined:x.consent}))}}/>
-            <span>I agree to the <a href="#privacy" target="_blank" rel="noreferrer">Privacy Policy</a> and <a href="#terms" target="_blank" rel="noreferrer">Terms of Use</a>.</span></label>
-          {errors.consent&&<small id="consent-error" className="field-error" role="alert">{errors.consent}</small>}
+        <div className="lp-register-actions">
+          <Button type="submit" width="full" className="lp-submit" disabled={submitting||Boolean(connectionNotice)}>{submitting?'Creating your account…':'Create an account'}</Button>
+          <p>Already have an account? <button type="button" className="text-link" onClick={onCancel}>Sign in</button></p>
         </div>
-        {formError&&<Notice tone="warning" title="We couldn’t create your account">{formError}</Notice>}
-        <Button type="submit" width="full" className="lp-submit" disabled={submitting}>{submitting?'Creating your account…':'Create account'}</Button>
       </form>
-      <p className="lp-switch">Already have an account? <button type="button" className="text-link" onClick={onCancel}>Sign in</button></p>
   </div></AuthShell>
 }

@@ -4,6 +4,11 @@ import { appointmentAvailability, bookingCalendar } from '../api-client.js'
 import { dateLong, time12 } from './format.js'
 import { ErrorState, Skeleton } from './ui.jsx'
 
+function pendingRead(pending, key, read) {
+  if (!pending.has(key)) pending.set(key, read().finally(() => pending.delete(key)))
+  return pending.get(key)
+}
+
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const LABEL = { available: 'available', full: 'fully booked', closed: 'closed', off: 'no dentist working', past: 'not bookable', outside: 'outside the booking window' }
 
@@ -18,7 +23,7 @@ export function BookingCalendar({ branchId, serviceId, dentistId = null, appoint
   const [state, setState] = useState({ status: 'loading', data: null, error: '' })
   const [attempt, setAttempt] = useState(0)
   const [closedNote, setClosedNote] = useState(null) // F5: the reason of a closed day the patient tapped
-  const loaded = useRef(null)
+  const loaded = useRef(null), pending = useRef(new Map())
   useEffect(() => {
     const contextKey = selectedMonth => JSON.stringify([branchId, serviceId, dentistId, appointmentId, forPatientId, selectedMonth, attempt])
     if (loaded.current === contextKey(month)) return undefined
@@ -28,7 +33,7 @@ export function BookingCalendar({ branchId, serviceId, dentistId = null, appoint
     let live = true
     setState({ status: 'loading', data: null, error: '' })
     setClosedNote(null)
-    bookingCalendar({ branch_ref: branchId, service_ref: serviceId, dentist_ref: dentistId, appointment_id: appointmentId, for_patient_id: forPatientId, month }).then(r => {
+    pendingRead(pending.current, contextKey(month), () => bookingCalendar({ branch_ref: branchId, service_ref: serviceId, dentist_ref: dentistId, appointment_id: appointmentId, for_patient_id: forPatientId, month })).then(r => {
       if (!live) return
       loaded.current = r.ok ? contextKey(r.data.month) : null
       setState(r.ok ? { status: 'ready', data: r.data, error: '' } : { status: 'error', data: null, error: r.message || 'The calendar could not be loaded.' })
@@ -61,7 +66,7 @@ export function BookingCalendar({ branchId, serviceId, dentistId = null, appoint
         {cells.map((day, i) => day === null ? <span key={`b${i}`} className="pp-cal-blank" aria-hidden="true"/> : <button
           key={day.date} type="button" role="gridcell"
           className={`pp-cal-day is-${day.status} ${day.date === data.today ? 'is-today' : ''} ${value === day.date ? 'is-selected' : ''}`}
-          disabled={day.status !== 'available' && !(onFullDay && day.status === 'full') && !((day.status === 'closed' || day.status === 'off') && day.reason)}
+          disabled={day.date <= data.today || day.status !== 'available' && !(onFullDay && day.status === 'full') && !((day.status === 'closed' || day.status === 'off') && day.reason)}
           aria-disabled={day.status === 'closed' || day.status === 'off' ? true : undefined} aria-pressed={value === day.date} title={(day.status === 'closed' || day.status === 'off') && day.reason ? `${day.status === 'off' ? 'Not available' : 'Closed'}: ${day.reason}` : undefined}
           aria-label={`${dateLong(day.date)}, ${LABEL[day.status]}${(day.status === 'closed' || day.status === 'off') && day.reason ? `: ${day.reason}` : ''}${onFullDay && day.status === 'full' ? ', choose to join the waitlist' : ''}${day.date === data.today ? ', today' : ''}`}
           onClick={() => (day.status === 'closed' || day.status === 'off' ? setClosedNote(day) : day.status === 'full' ? onFullDay(day.date) : onChange(day.date))}>
@@ -76,20 +81,17 @@ export function BookingCalendar({ branchId, serviceId, dentistId = null, appoint
   </div>
 }
 
-const STANDARD_SLOTS = [
-  '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
-  '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30'
-]
-
 /** Time chips for one day, grouped Morning / Afternoon, from GET /api/appointments/availability. */
 export function TimeSlots({ branchId, serviceId, dentistId = null, appointmentId = null, forPatientId = null, date, value, onChange }) {
   const [state, setState] = useState({ status: 'loading', slots: [], error: '' })
   const [attempt, setAttempt] = useState(0)
+  const pending = useRef(new Map())
   useEffect(() => {
     if (!date) return undefined
     let live = true
     setState({ status: 'loading', slots: [], error: '' })
-    appointmentAvailability({ branch_ref: branchId, service_ref: serviceId, date, dentist_ref: dentistId, appointment_id: appointmentId, for_patient_id: forPatientId }).then(r => {
+    const key = JSON.stringify([branchId, serviceId, dentistId, appointmentId, forPatientId, date, attempt])
+    pendingRead(pending.current, key, () => appointmentAvailability({ branch_ref: branchId, service_ref: serviceId, date, dentist_ref: dentistId, appointment_id: appointmentId, for_patient_id: forPatientId })).then(r => {
       if (live) setState(r.ok ? { status: 'ready', slots: r.data?.slots || [], error: '' } : { status: 'error', slots: [], error: r.message || 'Times could not be loaded.' })
     })
     return () => { live = false }
@@ -99,29 +101,17 @@ export function TimeSlots({ branchId, serviceId, dentistId = null, appointmentId
   if (state.status === 'loading') return <Skeleton lines={2} card={false} label="Loading times"/>
   if (state.status === 'error') return <ErrorState text={state.error} onRetry={() => setAttempt(a => a + 1)}/>
 
-  const availableMap = new Map((state.slots || []).map(s => [s.start_time, s]))
-  const allTimes = Array.from(new Set([...STANDARD_SLOTS, ...(state.slots || []).map(s => s.start_time)])).sort()
-
-  const items = allTimes.map(t => ({
-    time: t,
-    available: availableMap.has(t),
-    slot: availableMap.get(t) || { start_time: t }
-  }))
-
   const groups = [
-    ['Morning', items.filter(i => i.time < '12:00')],
-    ['Afternoon', items.filter(i => i.time >= '12:00')]
+    ['Morning', state.slots.filter(slot => slot.start_time < '12:00')],
+    ['Afternoon', state.slots.filter(slot => slot.start_time >= '12:00')]
   ].filter(([, list]) => list.length)
 
   return <div className="pp-times pp-fade">
-    {!state.slots.length && <p className="pp-hint">All appointment slots for this day are currently booked. Unavailable times are shown below.</p>}
+    {!state.slots.length && <p className="pp-hint">No available times for this day. Choose another date.</p>}
     {groups.map(([label, list]) => <fieldset key={label} className="pp-time-group">
       <legend>{label}</legend>
       <div className="pp-chips">
-        {list.map(item => {
-          if (item.available) {
-            const slot = item.slot
-            return <button
+        {list.map(slot => <button
               key={slot.start_time}
               type="button"
               className={`pp-chip ${value?.start_time === slot.start_time ? 'is-selected' : ''}`}
@@ -131,20 +121,7 @@ export function TimeSlots({ branchId, serviceId, dentistId = null, appointmentId
               <b>{time12(slot.start_time)}</b>
               {!dentistId && slot.dentist?.name && <small>{slot.dentist.name}</small>}
             </button>
-          }
-          return <button
-            key={item.time}
-            type="button"
-            className="pp-chip is-unavailable"
-            disabled
-            aria-disabled="true"
-            title="Unavailable / Booked"
-            aria-label={`${time12(item.time)}, unavailable`}
-          >
-            <b>{time12(item.time)}</b>
-            <small>Unavailable</small>
-          </button>
-        })}
+        )}
       </div>
     </fieldset>)}
   </div>

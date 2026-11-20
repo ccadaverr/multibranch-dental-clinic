@@ -40,6 +40,9 @@ return Application::configure(basePath: dirname(__DIR__))
             if ($exception instanceof \App\Exceptions\MailTransportUnavailable) {
                 return response()->json(['message' => 'We could not send the email. Please try again later.', 'code' => 'email_delivery_failed'], 503);
             }
+            if ($exception instanceof \Illuminate\Database\QueryException && $request->is('api/public/services', 'api/public/branches')) {
+                return response()->json(['message' => 'The clinic system is temporarily unavailable. Try again.'], 503);
+            }
             if (! $request->is('api/login', 'api/logout', 'api/me', 'api/register', 'api/register/*', 'api/password/*', 'api/account/*', 'api/users', 'api/users/*')) return null;
             if ($exception instanceof \Illuminate\Database\UniqueConstraintViolationException) {
                 return response()->json(['message' => 'This account information is already in use.', 'errors' => ['email' => ['This account information is already in use.']]], 422);

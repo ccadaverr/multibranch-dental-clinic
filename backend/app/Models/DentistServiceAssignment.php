@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 // DENTIST_SERVICE_ASSIGNMENTS — see the create_dentist_service_assignments_table migration comment and the
-// Phase 2A plan, section C/D. No mutation route this phase (no current UI edits eligibility).
+// Phase 2A plan, section C/D. Qualifications are maintained through the Owner Dentist profile command.
 class DentistServiceAssignment extends Model
 {
     use HasFactory;

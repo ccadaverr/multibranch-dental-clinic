@@ -97,9 +97,9 @@ The same fields appear in the register/login response envelopes (`data.*`).
 
 1. Install PHP 8.3+, Composer, and a local PostgreSQL server.
 2. `composer install`
-3. `cp .env.example .env` then fill in `DB_USERNAME`/`DB_PASSWORD` for your local Postgres role (do not commit
-   real credentials — `.env` is gitignored).
-4. `php artisan key:generate`
+3. Run `test -e .env || cp .env.example .env`, then fill in the local database credentials in the ignored `.env`.
+4. Run `php artisan key:generate` only for a new environment with no existing key or encrypted data. If an existing
+   environment loses its key, restore its private backup before starting Laravel.
 5. Create the database: `createdb dental_clinic` (name must match `DB_DATABASE` in `.env`)
 6. `php artisan migrate`
 7. Seed demo accounts: `php artisan db:seed` (see below)

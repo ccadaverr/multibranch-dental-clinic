@@ -37,6 +37,11 @@ class Service extends Model
         return $this->hasMany(BranchService::class);
     }
 
+    public function consultationService(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(self::class, 'consultation_service_id');
+    }
+
     public function dentistServiceAssignments(): HasMany
     {
         return $this->hasMany(DentistServiceAssignment::class);

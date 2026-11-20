@@ -116,7 +116,13 @@ class MailDispatcher
             'subject_type' => $recipient ? 'user' : null, 'subject_public_id' => $recipient?->public_id,
             'recipient_user_id' => $recipient?->id, 'retryable' => false, 'max_attempts' => 1, 'status' => 'pending',
         ]);
-        \App\Jobs\SendOnceMail::dispatch($dispatch->id, $to, $mail, $otpId);
+        if ($otpId && app()->environment('local') && $this->transportKind() === 'real') {
+            // The local demonstration runs without a persistent mail worker. Release account locks before SMTP.
+            \Illuminate\Support\Facades\DB::afterCommit(fn () =>
+                \App\Jobs\SendOnceMail::dispatchSync($dispatch->id, $to, $mail, $otpId));
+        } else {
+            \App\Jobs\SendOnceMail::dispatch($dispatch->id, $to, $mail, $otpId);
+        }
 
         return $dispatch;
     }

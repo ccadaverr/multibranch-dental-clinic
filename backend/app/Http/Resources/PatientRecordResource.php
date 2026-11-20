@@ -16,7 +16,8 @@ class PatientRecordResource extends JsonResource
     {
         $person = $this->person;
         $iso = fn ($value) => $value ? \App\Support\ClinicClock::local($value)->toIso8601String() : null;
-        $full = $request->user()?->can('viewProfile', $this->resource) ?? false;
+        $decision = $request->attributes->get('patient_record_full_'.$this->id);
+        $full = is_bool($decision) ? $decision : ($request->user()?->can('viewProfile', $this->resource) ?? false);
 
         $identity = [
             'id' => $this->public_id,
@@ -53,7 +54,7 @@ class PatientRecordResource extends JsonResource
                 'by' => \App\Models\User::find($this->id_verified_by_user_id)?->person?->fullName()] : null,
             'has_online_account' => (bool) $this->user?->email_verified_at,
             'minor' => \App\Services\Intake\Guardianship::isMinor($person?->date_of_birth?->toDateString()),
-            'guardians' => $this->guardianLinks()->with('guardian.person')->get()->map(fn ($l) => ['id' => $l->guardian?->public_id, 'name' => $l->guardian?->person?->fullName(), 'relationship' => $l->relationship, 'relationship_other' => $l->relationship_other])->values(),
+            'guardians' => $this->guardianLinks->map(fn ($l) => ['id' => $l->guardian?->public_id, 'name' => $l->guardian?->person?->fullName(), 'relationship' => $l->relationship, 'relationship_other' => $l->relationship_other])->values(),
             'revision' => $this->revision,
             'created_at' => $iso($this->created_at),
             'updated_at' => $iso($this->updated_at),

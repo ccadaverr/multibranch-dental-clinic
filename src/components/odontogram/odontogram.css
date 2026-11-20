@@ -494,3 +494,8 @@
 .chart-selection-strip b { font-weight:600; }.chart-selection-strip small { display:block; font-size:13px; color:var(--chart-muted,var(--muted,#536b78)); }
 .chart-legend { display:flex; flex-wrap:wrap; gap:12px; font-size:13px; color:var(--chart-muted,var(--muted,#536b78)); margin:12px 0 0; padding:0; list-style:none; }
 .chart-legend li { display:flex; align-items:center; gap:6px; }.chart-legend i { width:12px; height:12px; border:1px solid #94a3b8; border-radius:3px; background:white; }.chart-legend .finding { background:#e0e7ff; border-color:#6366f1; }.chart-legend .selected { background:#ede9fe; border:2px solid #4338ca; }
+
+.od-model-stage {height:clamp(300px,44vw,510px);width:100%;background:#e9e5df;border-radius:12px;overflow:hidden;touch-action:none}
+.od-model-controls {display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+.od-model-controls :is(button,select) {min-height:44px;background:white;color:#24323a;border:1px solid #ccc6bd;border-radius:7px;padding:0 12px}
+.od-model small {display:block;margin-top:8px;color:#515c63;line-height:1.5}

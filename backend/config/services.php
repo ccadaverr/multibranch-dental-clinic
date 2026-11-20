@@ -47,6 +47,7 @@ return [
         // 'test' or 'live', required. It selects the webhook signature component (te / li), must agree with the secret key's own
         // prefix (sk_test_ / sk_live_), and every event and session read back must be in the same mode.
         'mode' => env('PAYMONGO_MODE'),
+        'provisional_booking_prices' => env('PAYMONGO_PROVISIONAL_BOOKING_PRICES', false),
         // Comma-separated payment_method_types enabled on the merchant's PayMongo account. There is NO default: availability
         // depends on the account, so an unset value makes checkout fail closed.
         'payment_method_types' => env('PAYMONGO_PAYMENT_METHOD_TYPES'),

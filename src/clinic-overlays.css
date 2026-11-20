@@ -1,0 +1,65 @@
+/* R13 shared account overlays: use the same restrained controls for all roles.
+   Workflows, focus trapping, API state, and logout semantics are unchanged. */
+dialog.modal.clinic-signout-dialog {
+  width: min(410px, calc(100vw - 28px));
+  max-width: calc(100vw - 28px); border: 1px solid #dce4eb;
+  border-radius: 14px; background: rgba(255,255,255,.98);
+  color: #283d4f; box-shadow: 0 22px 64px rgba(19,42,67,.23);
+}
+dialog.modal.clinic-signout-dialog .modal-head { padding: 18px 20px 14px; border-bottom: 1px solid #e8edf1; }
+dialog.modal.clinic-signout-dialog .modal-head h2 { font-size: 17px; letter-spacing: -.025em; }
+dialog.modal.clinic-signout-dialog .modal-head .icon-btn { border: 0; background: transparent; color: #627588; }
+dialog.modal.clinic-signout-dialog .modal-body { padding: 16px 20px 20px; }
+dialog.modal.clinic-signout-dialog .confirm-body { font-size: 13px; color: #596b79; line-height: 1.55; }
+dialog.modal.clinic-signout-dialog .confirm-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 18px; flex-wrap: wrap; }
+dialog.modal.clinic-signout-dialog .confirm-actions .btn { min-height: 40px; border-radius: 8px; font-weight: 650; }
+dialog.modal.clinic-signout-dialog .confirm-actions .btn.primary { background: #254e71; border-color: #254e71; color: #fff; }
+dialog.modal.clinic-signout-dialog .confirm-actions .btn.ghost { background: #fff; border-color: #d5dfe7; color: #42596b; }
+dialog.modal.clinic-signout-dialog .confirm-actions .btn:focus-visible { outline: 2px solid #286c9a; outline-offset: 2px; }
+/* Notification controls should read as an inbox, not stacked form actions. */
+dialog.modal.clinic-notifications {
+  width: min(510px,calc(100vw - 24px)); max-height: min(780px,calc(100dvh - 24px));
+  background: rgba(255,255,255,.98); border: 1px solid #dde6ed;
+  box-shadow: 0 18px 56px rgba(24,44,65,.18); border-radius: 14px;
+}
+dialog.modal.clinic-notifications .modal-head { padding: 16px 18px; border-bottom: 1px solid #e2e9ee; }
+dialog.modal.clinic-notifications .modal-head h2 { font-size: 17px; font-weight: 700; letter-spacing: -.025em; }
+dialog.modal.clinic-notifications .notification-toolbar { padding: 7px 16px; }
+dialog.modal.clinic-notifications .notification-collections { border-bottom: 1px solid #e5eaee; }
+dialog.modal.clinic-notifications .notification-collections button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: #647687; min-height: 38px; }
+dialog.modal.clinic-notifications .notification-collections button[aria-pressed="true"] { color: #245679; border-color: #3273a0; }
+dialog.modal.clinic-notifications .notification-bulk { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0 10px; padding: 8px 16px; border-bottom: 1px solid #e5eaee; }
+dialog.modal.clinic-notifications .notification-summary { padding: 0; font-size: 12px; }
+dialog.modal.clinic-notifications .notification-bulk > .notification-toolbar { padding: 0; }
+dialog.modal.clinic-notifications .notification-bulk > .notification-toolbar button { min-height: 34px; padding: 5px 8px; border: 0; background: none; color: #245679; font-weight: 650; }
+dialog.modal.clinic-notifications .notification-row { padding: 13px 17px; background: #fff; border-bottom-color: #e7edf1; }
+dialog.modal.clinic-notifications .notification-row.unread { background: #f4f8fb; }
+dialog.modal.clinic-notifications .notification-row button { min-height: 34px; padding: 5px 8px; font-size: 12px; border-radius: 7px; }
+dialog.modal.clinic-notifications .notification-row .row-actions { margin-top: 6px; }
+dialog.modal.clinic-notifications .notification-date-heading { padding: 7px 17px; background: #f5f7f9; }
+dialog.modal.clinic-notifications .notification-empty { padding: 28px 18px; }
+dialog.modal.clinic-notifications .notification-empty > .icon { display: none; }
+/* The Patient portal renders a custom dialog; match its profile to the other roles. */
+.pp-pop.pp-notes { border: 1px solid #dce5ec; border-radius: 14px; box-shadow: 0 18px 56px rgba(24,44,65,.18); background: #fff; }
+.pp-pop .patient-page-heading { padding: 15px 18px; border-bottom: 1px solid #e5ebf0; }
+.pp-pop .patient-inbox-toolbar { border-bottom: 1px solid #e5ebf0; }
+.pp-pop .pp-notes-history li { border-bottom-color: #e8edf1; }
+.pp-pop .patient-notice-row.is-unread { background: #f4f8fb; }
+@media (max-width: 500px) {
+  dialog.modal.clinic-signout-dialog .confirm-actions .btn { flex: 1 1 auto; }
+  dialog.modal.clinic-notifications { width: calc(100vw - 16px); max-height: calc(100dvh - 16px); margin: 8px auto; }
+  dialog.modal.clinic-notifications .notification-bulk { padding: 8px 13px; }
+  dialog.modal.clinic-notifications .notification-row { padding: 12px 13px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  dialog.modal.clinic-signout-dialog[open], dialog.modal.clinic-notifications[open] { animation: r13-dialog-enter 160ms ease-out; }
+}
+@keyframes r13-dialog-enter { from { opacity: .75; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) {
+  dialog.modal.clinic-signout-dialog[open],dialog.modal.clinic-notifications[open] { animation: none; }
+}
+dialog.modal.clinic-signout-dialog::backdrop,
+dialog.modal.clinic-notifications::backdrop {
+  background: rgba(20,39,57,.42);
+  -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+}

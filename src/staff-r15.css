@@ -1,0 +1,228 @@
+/* Staff R15 — daily-work usability refinement. Semantic states remain accessible by text. */
+.app-shell.role-staff .staff-r15-icon-control,
+.app-shell.role-staff .queue-actions .queue-call-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; min-width: 36px; height: 36px; min-height: 36px;
+  padding: 0; border-radius: 9px; background: transparent; color: #245779;
+  border: 1px solid transparent; cursor: pointer;
+}
+.app-shell.role-staff .staff-r15-icon-control:hover:not(:disabled),
+.app-shell.role-staff .queue-actions .queue-call-btn:hover:not(:disabled) { background: #e8f0f7; border-color: #d9e6ef; }
+.app-shell.role-staff .staff-r15-icon-control:focus-visible,
+.app-shell.role-staff .queue-actions .queue-call-btn:focus-visible { outline: 2px solid #2765a0; outline-offset: 2px; }
+.app-shell.role-staff .staff-r11-appt-actions { gap: 4px 7px; align-items: center; }
+.app-shell.role-staff .staff-r11-more-actions .staff-r11-more-items { z-index: 8; }
+.app-shell.role-staff .staff-r15-appointment-filters { margin: 0 0 13px; }
+.app-shell.role-staff .staff-r15-appointment-filters .filter-bar { margin: 0; padding: 10px 12px; border-radius: 12px; }
+.app-shell.role-staff .staff-r15-appointment-filters .filter-bar-controls { gap: 8px; }
+.app-shell.role-staff .staff-r15-appointment-filters .filter-bar :is(input,select) { min-width: 0; }
+.app-shell.role-staff .staff-r15-patient-mode { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding-bottom: 4px; }
+.app-shell.role-staff .staff-r15-patient-mode > span { font-size: 13px; font-weight: 700; color: #253d51; }
+.app-shell.role-staff .staff-r15-inline-action { border: 0; background: transparent; color: #245a7d; font-weight: 680; font-size: 12px; cursor: pointer; padding: 7px 9px; border-radius: 7px; }
+.app-shell.role-staff .staff-r15-inline-action:hover:not(:disabled) { background: #e8f1f7; }
+.app-shell.role-staff .staff-r15-queue-search { flex: 2 1 240px; min-width: 180px; }
+.app-shell.role-staff .staff-r15-queue-search input { width: 100%; min-width: 0; }
+.app-shell.role-staff .staff-r15-duty-loading { display: flex; gap: 12px; align-items: center; min-height: 52px; margin: 0; font-size: 12px; color: #647688; }
+.app-shell.role-staff .staff-r15-skeleton { display: block; width: 36px; height: 36px; border-radius: 9px; background: #ebf1f5; flex: none; }
+.app-shell.role-staff .staff-duty-error { border: 1px solid #e7d8ba; background: #fffaf1; border-radius: 9px; padding: 10px 12px; color: #6d5233; font-size: 12px; }
+.app-shell.role-staff .staff-duty-error .btn { min-height: 32px; }
+.app-shell.role-staff .stf07-duty-list li { padding: 11px 14px; border-radius: 9px; }
+.app-shell.role-staff .daycal-month-grid .daycal-cell:not(.is-outside) { border-radius: 12px; transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease; }
+/* Only paint from a returned server capacity band; no capacity estimates invented from appointment counts. */
+.app-shell.role-staff .daycal-month-grid .daycal-cell.load-free { background: #f4faf4; border-color: #d9e9d8; }
+.app-shell.role-staff .daycal-month-grid .daycal-cell.load-light { background: #eaf6ed; border-color: #b9dcc4; }
+.app-shell.role-staff .daycal-month-grid .daycal-cell.load-busy { background: #fff3d9; border-color: #f0d59b; }
+.app-shell.role-staff .daycal-month-grid .daycal-cell.load-crowded { background: #fbe7e6; border-color: #e8b6b4; }
+.app-shell.role-staff .daycal-month-grid .daycal-cell.load-closed { background: #e8edf1; border-color: #c9d4dc; }
+.app-shell.role-staff .daycal-month-grid .daycal-cell.load-none { background: #f0f2f5; border-color: #d6dde4; }
+.app-shell.role-staff .daycal-month-grid .daycal-cell.is-selected { box-shadow: inset 0 0 0 2px #2765a0; }
+.app-shell.role-staff .daycal-month-grid .daycal-cell.is-today:not(.is-selected) { box-shadow: inset 0 0 0 1px #4a7b9c; }
+.app-shell.role-staff .queue-table .queue-actions { align-items: center; gap: 5px; }
+.app-shell.role-staff .queue-table .queue-actions .queue-call-btn { background: transparent; color: #245779; border: 1px solid transparent; }
+.app-shell.role-staff .queue-table .queue-actions .queue-call-btn:hover:not(:disabled) { background: #e8f0f7; }
+.app-shell.role-staff .staff-r15-notification-error { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; margin: 10px; padding: 15px; background: #fff8f6; border: 1px solid #ebc9c5; border-radius: 10px; color: #7e3331; }
+.app-shell.role-staff .staff-r15-notification-error strong { font-size: 13px; }
+.app-shell.role-staff .staff-r15-notification-error span { font-size: 12px; grid-column: 1; }
+.app-shell.role-staff .staff-r15-notification-error button { grid-column: 2; grid-row: 1 / span 2; border-radius: 8px; min-height: 34px; padding: 6px 10px; font-weight: 650; color: #7e3331; border: 1px solid #e4bcb9; background: #fff; cursor: pointer; }
+.app-shell.role-staff .notification-dialog:has(.staff-r15-notification-error) .notification-scroll { min-height: 0; height: 0; padding: 0; overflow: hidden; }
+@media (max-width: 750px) {
+ .app-shell.role-staff .staff-r15-patient-mode { flex-wrap: wrap; }
+ .app-shell.role-staff .staff-r15-notification-error { grid-template-columns: 1fr; }
+ .app-shell.role-staff .staff-r15-notification-error button { grid-column: 1; grid-row: auto; justify-self: start; }
+}
+@media (prefers-reduced-motion: reduce) { .app-shell.role-staff .daycal-month-grid .daycal-cell { transition: none; } }
+
+/* R15 Consolidated — operational hierarchy and purposeful, low-motion feedback.
+   Role scope protects Owner/Patient clinical UI; shared notifications are intentional. */
+.app-shell.role-staff {
+  --r15-accent: #234d70;
+  --r15-accent-hover: #173c5d;
+  --r15-border: #d6e0e7;
+  --r15-focus: #2d668f;
+  --r15-muted: #546778;
+  --r15-radius: 12px;
+  color-scheme: light;
+}
+.app-shell.role-staff .content {
+  background: radial-gradient(ellipse 1100px 480px at 96% -5%, #e3edf5 0%, transparent 75%), #eef2f5;
+  padding-top: 15px;
+}
+.app-shell.role-staff .topbar {
+  background: rgba(249,251,253,.94);
+  -webkit-backdrop-filter: saturate(135%) blur(12px);
+  backdrop-filter: saturate(135%) blur(12px);
+  border-bottom: 1px solid #d6e0e8;
+}
+.app-shell.role-staff > .sidebar {
+  background: linear-gradient(180deg,#edf3f7 0%,#e8eff4 100%);
+  border-right-color: #d0dce4;
+}
+.app-shell.role-staff .main-nav button {
+  min-height: 39px;
+  transition: color .14s ease, background-color .14s ease, box-shadow .14s ease;
+}
+.app-shell.role-staff .main-nav button[aria-current='page'],
+.app-shell.role-staff .main-nav button.active { box-shadow: inset 3px 0 #245c7a; background: #ffffffd9; }
+.app-shell.role-staff .card { border: 1px solid var(--r15-border); background: rgba(255,255,255,.98); border-radius: var(--r15-radius); box-shadow: 0 2px 10px #223d5108; }
+.app-shell.role-staff .card-head { align-items: center; gap: 12px; }
+.app-shell.role-staff .card-head h2 { font-size: 14px; letter-spacing: -.012em; font-weight: 720; }
+.app-shell.role-staff .card-head p { max-width: 62ch; }
+.app-shell.role-staff .btn { border-radius: 9px; transition: background .14s ease, border-color .14s ease, color .14s ease, transform .14s ease; }
+.app-shell.role-staff .btn:active:not(:disabled) { transform: translateY(1px); }
+.app-shell.role-staff :is(.btn,.icon-btn,input,textarea,select,button,summary):focus-visible { outline: 2px solid var(--r15-focus); outline-offset: 2px; }
+.app-shell.role-staff :is(input:not([type='checkbox']):not([type='radio']),select,textarea) { border-radius: 9px; border-color: #bbcbd6; background-color: #fff; }
+.app-shell.role-staff :is(input:not([type='checkbox']):not([type='radio']),select,textarea):hover:not(:disabled) { border-color: #8ba8ba; }
+.app-shell.role-staff :is(.btn:disabled,button:disabled,select:disabled) { opacity: .58; cursor: not-allowed; }
+
+/* Today: the data strip is visually grouped, the duty view a small operational row. */
+.app-shell.role-staff .staff-ops-stats { border-radius: var(--r15-radius); border-color: var(--r15-border); }
+.app-shell.role-staff .staff-ops-stats .stat-card { background: #fdfefe; border-color: #dce4ea; min-height: 82px; }
+.app-shell.role-staff .staff-ops-stats .stat-card .stat-value { letter-spacing: -.055em; font-variant-numeric: tabular-nums; }
+.app-shell.role-staff .stf07-duty { padding: 14px 16px; }
+.app-shell.role-staff .stf07-duty .card-head { margin-bottom: 7px; }
+.app-shell.role-staff .stf07-duty-list { margin: 0; padding: 0; list-style: none; }
+.app-shell.role-staff .stf07-duty-list li { display: flex; justify-content: space-between; gap: 14px; align-items: center; background: #f7fafc; border: 1px solid #e0e8ee; min-height: 56px; padding: 10px 13px; }
+.app-shell.role-staff .stf07-duty-list li b { font-size: 13px; }
+.app-shell.role-staff .stf07-duty-list li small { font-size: 11px; }
+.app-shell.role-staff .stf07-duty-asof { margin-top: 7px; display: block; font-size: 11px; }
+.app-shell.role-staff .stf07-duty .staff-duty-error { display: flex; align-items: center; gap: 12px; border-radius: 9px; padding: 12px; }
+.app-shell.role-staff .stf07-duty .staff-r15-duty-loading { padding-block: 5px; }
+.app-shell.role-staff .staff-r15-skeleton { background: linear-gradient(90deg,#e7eff5 0%,#f1f5f8 50%,#e7eff5 100%); background-size: 180% auto; animation: r15-sheen 1.25s ease-in-out infinite; }
+@keyframes r15-sheen { 0% { background-position: 100% 50% } 100% { background-position: 0% 50% } }
+
+/* Appointments: search is primary; date/status/branch sit as a quiet secondary group. */
+.app-shell.role-staff .staff-r15-appointment-filters { margin-bottom: 12px; }
+.app-shell.role-staff .staff-r15-appt-filter-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 10px 12px; margin: 0; background: rgba(255,255,255,.94); border: 1px solid var(--r15-border); border-radius: 12px; }
+.app-shell.role-staff .staff-r15-appt-filter-bar .filter-bar-search { flex: 2 1 305px; min-width: min(100%,250px); }
+.app-shell.role-staff .staff-r15-appt-filter-bar .filter-bar-controls { flex: 3 1 375px; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.app-shell.role-staff .staff-r15-appt-filter-bar .filter-bar-controls > :is(input,select) { flex: 1 1 125px; min-width: 0; max-width: 235px; }
+.app-shell.role-staff .staff-r15-appt-filter-bar .filter-bar-controls > input[type=date] { flex: 0 1 155px; }
+.app-shell.role-staff .staff-r15-appt-filter-bar .filter-bar-clear { margin: 0; flex: none; }
+.app-shell.role-staff .staff-r11-appointments-card th:nth-child(1) { width: 15%; }
+.app-shell.role-staff .staff-r11-appointments-card th:nth-child(2) { width: 19%; }
+.app-shell.role-staff .staff-r11-appointments-card th:nth-child(3) { width: 20%; }
+.app-shell.role-staff .staff-r11-appointments-card th:nth-child(4) { width: 18%; }
+.app-shell.role-staff .staff-r11-appointments-card th:nth-child(5) { width: 28%; }
+.app-shell.role-staff .staff-r11-appointments-card :is(th,td) { vertical-align: middle; }
+.app-shell.role-staff .staff-r11-appointments-card tbody tr:hover { background: #f9fbfd; }
+.app-shell.role-staff .staff-r11-appt-actions { align-items: center; gap: 7px; }
+.app-shell.role-staff .staff-r11-appt-actions .btn { min-height: 36px; font-size: 12px; }
+.app-shell.role-staff .staff-r11-more-items { position: relative; z-index: 5; }
+.app-shell.role-staff .staff-r15-icon-control { min-width: 36px; min-height: 36px; border-radius: 8px; }
+
+/* Calendar capacity is a semantic full-tile treatment, never a fabricated estimate. */
+.app-shell.role-staff .daycal-controls { background: rgba(255,255,255,.96); border-radius: 12px; padding: 10px 12px; }
+.app-shell.role-staff .daycal-month-grid .daycal-cell { border-radius: 13px; overflow: hidden; background-clip: padding-box; }
+.app-shell.role-staff .daycal-month-grid .daycal-cell.load-free { background: #f6fbf8; border-color: #d9e9dc; }
+.app-shell.role-staff .daycal-month-grid .daycal-cell.load-light { background: #def2e8; border-color: #a6d7c0; }
+.app-shell.role-staff .daycal-month-grid .daycal-cell.load-busy { background: #fff0c9; border-color: #eccb83; }
+.app-shell.role-staff .daycal-month-grid .daycal-cell.load-crowded { background: #fae4e1; border-color: #e8b4ac; }
+.app-shell.role-staff .daycal-month-grid .daycal-cell.load-closed,
+.app-shell.role-staff .daycal-month-grid .daycal-cell.load-none { background: #e9eef3; border-color: #cdd7df; }
+.app-shell.role-staff .daycal-month-grid .daycal-cell.is-selected { box-shadow: inset 0 0 0 2px #1b5d88; }
+.app-shell.role-staff .daycal-month-grid .daycal-cell:focus-visible { outline: 2px solid var(--r15-focus); outline-offset: 1px; }
+.app-shell.role-staff .staff-r15-capacity-status { color: #785a33; font-size: 12px; padding: 7px 10px; margin: 7px 0 0; }
+.app-shell.role-staff .staff-r13-capacity-key { margin: 4px 0 8px; }
+
+/* Check-in is a primary task; the receipt history is secondary. */
+.app-shell.role-staff .checkin-mode { width: max-content; max-width: 100%; border-radius: 10px; }
+.app-shell.role-staff .checkin-workspace.is-walkin { gap: 11px; }
+.app-shell.role-staff .walkin-admission-panel { max-width: none; width: 100%; }
+.app-shell.role-staff .walkin-admission-panel .form-grid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px 15px; }
+.app-shell.role-staff .walkin-admission-panel .form-grid .span-2 { grid-column: 1/-1; }
+.app-shell.role-staff .staff-r15-patient-mode { margin: 0; padding: 0; }
+.app-shell.role-staff .staff-r15-inline-action { font-size: 12px; }
+.app-shell.role-staff .checkin-help { color: #61778a; }
+.app-shell.role-staff .checkin-arrival-history { border-radius: 11px; background: #f7fafc; }
+
+/* Live Queue: one search/filter rail and 40px targets for high-frequency actions. */
+.app-shell.role-staff .queue-live-card { border-radius: 12px; }
+.app-shell.role-staff .queue-live-card .table-wrap { overflow-x: auto; }
+.app-shell.role-staff .queue-table .queue-actions { display: flex; align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: 6px; }
+.app-shell.role-staff .queue-table .queue-actions .queue-call-btn,
+.app-shell.role-staff .queue-table .queue-actions .queue-message-btn { height: 40px; min-width: 40px; width: 40px; border-radius: 9px; padding: 0; }
+.app-shell.role-staff .queue-table .queue-actions .queue-call-btn { background: #eaf2f7; border-color: #d3e3ed; }
+.app-shell.role-staff .queue-table .queue-actions .queue-message-btn { border: 1px solid transparent; }
+.app-shell.role-staff .queue-table .queue-actions :is(.queue-call-btn,.queue-message-btn):hover:not(:disabled) { background: #dcebf4; }
+.app-shell.role-staff .staff-r15-queue-search { flex: 3 1 265px; }
+.app-shell.role-staff .staff-r15-no-results { font-size: 13px; color: var(--r15-muted); padding: 9px 6px; }
+.app-shell.role-staff .staff-r11-queue-guidance { margin: 1px 0 7px auto; }
+
+/* Patient directory: restrained actions, with stronger selected-row contrast. */
+.app-shell.role-staff .staff-patient-workspace .btn { border-radius: 8px; }
+.app-shell.role-staff .staff-patient-workspace .tabs button { transition: background-color .14s ease, color .14s ease; }
+.app-shell.role-staff .staff-record-state { max-width: 100%; border-radius: 10px; min-height: 56px; }
+
+/* Shared cross-role notification overlay is intentional; no unsafe silent empty state. */
+dialog.modal.a12-notifications { border-radius: 15px; overflow: hidden; border: 1px solid #d9e2e9; box-shadow: 0 22px 65px rgba(23,45,63,.2); background: rgba(255,255,255,.985); }
+.a12-notifications .modal-head { background: #fafcfe; padding: 16px 20px; }
+.a12-notifications .notification-toolbar { padding: 7px 18px; }
+.a12-notifications .notification-summary { padding: 7px 18px 0; }
+.a12-notifications .notification-row { padding: 13px 18px; }
+.a12-notifications .notification-failure.staff-r15-notification-error { max-height: none; overflow: visible; display: flex; align-items: flex-start; flex-direction: column; gap: 7px; margin: 12px 16px; padding: 13px 14px; background: #fdf2f1; color: #853834; border: 1px solid #e7bab5; border-radius: 10px; }
+.a12-notifications .staff-r15-notification-error > button { background: #fff; color: #853834; border: 1px solid #e0b8b5; border-radius: 8px; min-height: 34px; padding: 6px 11px; font-weight: 690; }
+.a12-notifications .staff-r15-notification-error > span { font-size: 12px; }
+.a12-notifications .notification-scroll:empty { padding: 0; min-height: 0; }
+.a12-notifications:has(.staff-r15-notification-error) .notification-scroll { display: none; }
+.a12-notifications .notification-row .notification-view { font-weight: 690; }
+
+@media (max-width: 1100px) {
+ .app-shell.role-staff .staff-r15-appt-filter-bar .filter-bar-search { flex-basis: 100%; }
+ .app-shell.role-staff .staff-r15-appt-filter-bar .filter-bar-controls { flex-basis: 100%; }
+}
+@media (max-width: 750px) {
+ .app-shell.role-staff .staff-r15-appt-filter-bar .filter-bar-controls { flex-wrap: wrap; }
+ .app-shell.role-staff .staff-r15-appt-filter-bar .filter-bar-controls > :is(select,input) { flex: 1 1 150px; max-width: none; }
+ .app-shell.role-staff .walkin-admission-panel .form-grid { grid-template-columns: 1fr; }
+ .app-shell.role-staff .walkin-admission-panel .form-grid > * { grid-column: 1 / -1; }
+ .app-shell.role-staff .stf07-duty-list li { flex-wrap: wrap; }
+ .app-shell.role-staff .staff-r15-queue-search { flex-basis: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+ .app-shell.role-staff :is(.btn,.main-nav button,.daycal-cell,.tabs button),
+ .app-shell.role-staff .staff-r15-skeleton { transition: none!important; animation: none!important; }
+}
+
+/* Only failures produce explicit recovery controls; do not coerce a timed-out inquiry read to zero. */
+.app-shell.role-staff .staff-r15-inquiry-failure { background: #f2f6fa; border: 1px solid #d7e2eb; border-radius: 9px; }
+.app-shell.role-staff .staff-r15-inquiry-failure button { min-height: 36px; color: #234d70; font-weight: 650; }
+
+/* Shared authenticated notification panel: identical failure hierarchy for all four roles. */
+.notification-failure.staff-r15-notification-error {
+  display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 4px 12px;
+  align-items: center; margin: 10px; padding: 14px;
+  background: #fff8f6; border: 1px solid #e9c7c2;
+  border-radius: 10px; color: #853d37;
+}
+.notification-failure.staff-r15-notification-error strong { font-size: 13px; }
+.notification-failure.staff-r15-notification-error span { font-size: 12px; grid-column: 1; }
+.notification-failure.staff-r15-notification-error button {
+  grid-column: 2; grid-row: 1 / span 2; min-height: 36px;
+  padding: 6px 12px; background: #fff; color: #7f3632;
+  border: 1px solid #e4beb9; border-radius: 8px; font-weight: 650;
+}
+.notification-dialog:has(.staff-r15-notification-error) .notification-scroll { min-height: 0; height: 0; padding: 0; }
+@media (max-width: 580px) {
+ .notification-failure.staff-r15-notification-error { grid-template-columns: 1fr; }
+ .notification-failure.staff-r15-notification-error button { grid-column: 1; grid-row: auto; justify-self: start; }
+}

@@ -1,5 +1,5 @@
 import React,{useState} from 'react'
-import {Button,Card,Notice,Status} from '../components.jsx'
+import {Button,Status} from '../components.jsx'
 import {arrivalReceipt as readReceipt} from '../api-client.js'
 import {arrivalReceipt} from '../arrival-command.js'
 import {checkInActorKey} from '../checkin-navigation.js'
@@ -11,10 +11,14 @@ export function RecordedArrivals({store}){
  const session=store.session
  if(session?.role!=='staff')return null
  const rows=(store.state.visits||[]).filter(v=>v.server&&v.clinicDate===clinicDate()&&inScope(v,session,store.state))
- return <Card title="Today’s recorded arrivals" subtitle="Review a recorded visit after a reload or an unconfirmed admission. A missing original receipt does not prove an earlier request failed.">
-  {store.appointmentsStatus!=='ready'?<p role="status">Refresh clinic records to review today’s arrivals.</p>:!rows.length?<p>No recorded arrivals are shown. This does not prove an unconfirmed request failed.</p>:
-   <ul className="fd-list">{rows.map(v=><ArrivalReview key={JSON.stringify([v.id,checkInActorKey(session),store.getAuthGeneration?.()])} visit={v} store={store}/>)}</ul>}
- </Card>
+ return <details className="checkin-arrival-history">
+  <summary><span className="checkin-history-label">Recorded arrivals</span><span className="checkin-history-count">{rows.length}</span><span className="checkin-history-hint">Review only when needed</span></summary>
+  <div className="checkin-history-body">
+    <p className="checkin-history-explainer">Already admitted? Use the original receipt to verify an uncertain outcome before attempting another Check-In. A missing receipt does not prove that an earlier request failed.</p>
+    {store.appointmentsStatus!=='ready'?<p role="status">Clinic records are not ready. Refresh to review recorded arrivals.</p>:!rows.length?<p>No recorded arrivals are currently shown for today.</p>:
+     <ul className="checkin-history-list">{rows.map(v=><ArrivalReview key={JSON.stringify([v.id,checkInActorKey(session),store.getAuthGeneration?.()])} visit={v} store={store}/>)}</ul>}
+  </div>
+ </details>
 }
 function ArrivalReview({visit,store}){
  const [result,setResult]=useState(null),[busy,setBusy]=useState(false)
@@ -40,10 +44,16 @@ function ArrivalReview({visit,store}){
    appointmentId:visit.appointmentId,expectedRevision:(row.appointment?.revision??0)-1}):null
   setResult(proof?{proof}:{unavailable:true})
  }
- return <li><div><b>{visit.patientName} · {visit.patientCode}</b><p>{visit.walkIn?'Walk-in':visit.appointmentCode} · <Status>{visit.status}</Status></p>
-  {busy&&<p role="status">Loading the original arrival receipt…</p>}
-  {result&&<div ref={feedback} tabIndex={-1} role={result.unavailable?'alert':'status'}>{result.proof
-   ?<p>Original arrival verified: visit {result.proof.visitId}{result.proof.queued?` · Queue ${result.proof.queueNumber}`:' · No Dentist queue assigned'}. The current visit status above may have changed since arrival.</p>
-   :<p>No original arrival receipt could be verified for your account. The current visit is shown above; do not assume an earlier admission failed or create a replacement.</p>}</div>}
- </div><Button size="sm" variant="soft" disabled={busy} onClick={review}>Review arrival receipt</Button></li>
+ return <li className="checkin-history-row">
+  <div className="checkin-history-person">
+    <b>{visit.patientName}</b>
+    <span>{[visit.patientCode,visit.walkIn?'Walk-in':visit.appointmentCode].filter(Boolean).join(' · ')}</span>
+  </div>
+  <div className="checkin-history-state"><Status>{visit.status}</Status></div>
+  <Button size="sm" variant="soft" disabled={busy} aria-label={`Verify original arrival receipt for ${visit.patientName}`} onClick={review}>{busy?'Verifying…':'Verify receipt'}</Button>
+  {busy&&<span className="sr-only" role="status">Checking the original arrival receipt…</span>}
+  {result&&<div className="checkin-history-feedback" ref={feedback} tabIndex={-1} role={result.unavailable?'alert':'status'}>{result.proof
+   ?<p>Arrival verified: Visit {result.proof.visitId}{result.proof.queued?` · Queue ${result.proof.queueNumber}`:' · No assigned Dentist queue'}. Current status may have changed since arrival.</p>
+   :<p>Original receipt unavailable. Do not assume the prior admission failed or create a replacement without checking clinic records.</p>}</div>}
+ </li>
 }

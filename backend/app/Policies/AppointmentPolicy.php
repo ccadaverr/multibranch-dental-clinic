@@ -46,6 +46,12 @@ class AppointmentPolicy
         return $user->role !== Role::Dentist && $this->view($user, $appointment);
     }
 
+    /** Financial provider action: never available to Patients or Dentists. */
+    public function refundBookingPayment(User $user, Appointment $appointment): bool
+    {
+        return in_array($user->role, [Role::Staff, Role::Owner], true) && $this->view($user, $appointment);
+    }
+
     /**
      * Appointment-only transitions: the pre-arrival No-show is a front-desk action — in-scope Staff, or Owner under the
      * documented Phase 1 administrative exception. Check-In and treatment start/completion are Visit commands

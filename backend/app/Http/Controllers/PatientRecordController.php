@@ -46,9 +46,18 @@ class PatientRecordController extends Controller
 
     public function show(Request $request, string $patient): JsonResponse
     {
+        $started = hrtime(true);
         $patient = $this->readablePatient($request, $patient);
 
-        return response()->json(['data' => new PatientRecordResource($patient->load(['person.user', 'preferredBranch']))])->header('Cache-Control', 'private, no-store');
+        $relations = ['person.user', 'preferredBranch'];
+        // Reuse the authorization decision only within this read request; never cache
+        // private access between users, requests, or record revisions.
+        $fullAccess = $request->user()->can('viewProfile', $patient);
+        $request->attributes->set('patient_record_full_'.$patient->id, $fullAccess);
+        if ($fullAccess) $relations[] = 'guardianLinks.guardian.person';
+        return response()->json(['data' => new PatientRecordResource($patient->load($relations))])
+            ->header('Cache-Control', 'private, no-store')
+            ->header('Server-Timing', 'app;dur='.round((hrtime(true) - $started) / 1_000_000, 1));
     }
 
     public function update(UpdatePatientRecordRequest $request, Patient $patient): JsonResponse
@@ -66,6 +75,19 @@ class PatientRecordController extends Controller
         return response()->json($body, $status)->header('Cache-Control', 'private, no-store');
     }
 
+    public function updateMine(Request $request): JsonResponse
+    {
+        $actor = $request->user();
+        $patient = $actor->patient;
+        abort_unless($actor->role->value === 'patient' && $patient, 403);
+        $allowed = ['expected_revision', 'address', 'emergency_contact', 'phone'];
+        abort_if(array_diff(array_keys($request->all()), $allowed), 422, 'Only contact details may be updated.');
+        $rules = (new UpdatePatientRecordRequest)->rules();
+        $data = $request->validate(array_intersect_key($rules, array_flip($allowed)));
+        [$body, $status] = $this->applyProfileUpdate($request, $patient, $actor, $data, true);
+        return response()->json($body, $status)->header('Cache-Control', 'private, no-store');
+    }
+
     private function authorizeProfileUpdate(User $actor, Patient $patient): void
     {
         $current = $actor->fresh();
@@ -73,17 +95,23 @@ class PatientRecordController extends Controller
         Gate::forUser($current)->authorize('update', $patient);
     }
 
-    private function applyProfileUpdate(Request $request, Patient $patient, User $actor, array $data): array
+    private function applyProfileUpdate(Request $request, Patient $patient, User $actor, array $data, bool $self = false): array
     {
         try {
-            $record = DB::transaction(function () use ($data, $patient, $actor) {
+            $record = DB::transaction(function () use ($data, $patient, $actor, $self) {
                 // Changing an email shares the registration paths' patients-table lock so a concurrent registration cannot
                 // claim the same address (taken before the row locks to keep one lock order).
                 if (array_key_exists('email', $data)) {
                     DB::statement('LOCK TABLE patients IN SHARE ROW EXCLUSIVE MODE');
                 }
                 $locked = Patient::whereKey($patient->id)->lockForUpdate()->firstOrFail();
-                $this->authorizeProfileUpdate($actor, $locked);
+                if ($self) {
+                    $current = $actor->fresh();
+                    abort_unless($current && $current->role->value === 'patient' && $current->account_status === 'Active'
+                        && $current->auth_version === $actor->auth_version && $current->person_id === $locked->person_id, 403);
+                } else {
+                    $this->authorizeProfileUpdate($actor, $locked);
+                }
                 if ($locked->revision !== (int) $data['expected_revision']) {
                     throw new VisitCommandException(409, 'stale_revision', 'This patient record changed after it was opened. Reload it before trying again.', ['current_revision' => $locked->revision]);
                 }
@@ -125,6 +153,7 @@ class PatientRecordController extends Controller
 
     public function records(Request $request, string $patient): JsonResponse
     {
+        $started = hrtime(true);
         $patient = $this->readablePatient($request, $patient);
         $user = $request->user();
         $local = fn ($instant) => $instant ? ClinicClock::local($instant)->toIso8601String() : null;
@@ -154,7 +183,8 @@ class PatientRecordController extends Controller
             // Record families with no server-authoritative source yet. They are listed so the client never presents an
             // empty list as "no records".
             'unavailable' => ['clinical_history', 'prescriptions', 'follow_ups'],
-        ]])->header('Cache-Control', 'private, no-store');
+        ]])->header('Cache-Control', 'private, no-store')
+            ->header('Server-Timing', 'app;dur='.round((hrtime(true) - $started) / 1_000_000, 1));
     }
 
     private function resolveBranch(string $reference): Branch

@@ -6,11 +6,11 @@ import React, { useMemo, useRef, useState } from 'react'
 import { ROLE_INFO } from '../data.js'
 import { eventModuleLabel, ruleTargetLabel } from '../module-map.js'
 import { LOYALTY_PROGRAM, canManageLoyalty, ledgerIssue } from '../loyalty.js'
-import { Button, Card, ConfirmDialog, Field, FilterBar, Modal, Notice, PageHeader, Progress, RefreshButton, StatCard, Status, Table, Tabs } from '../components.jsx'
+import { ReadState, Button, Card, ConfirmDialog, Field, FilterBar, Modal, Notice, PageHeader, Progress, RefreshButton, StatCard, Status, Table, Tabs } from '../components.jsx'
 import { clinicDate, validDate } from '../clock.js'
 import { exactPeso } from '../owner-revenue-data.js'
 import { branchCapacity, dateLabel, dentistName, makeCsv, patientName, peso, uid } from '../logic.js'
-import { syncBranchUpdate, syncBranchServiceToggle, syncPersonnelUpdate } from '../reference-data-bridge.js'
+import { syncBranchUpdate, syncBranchServiceToggle, syncBranchLifecycle, syncPersonnelUpdate } from '../reference-data-bridge.js'
 import { createUserAccountRemote, deleteUserAccountRemote, fetchUserAccounts, updateUserAccountRemote } from '../user-management-bridge.js'
 import { DEFAULT_COUNTRY, normalizePhoneNumber, sanitizePhoneInput } from '../phone.js'
 import { fetchAutomationSnapshot, dispatchAutomationRule, downloadAutomationCsv } from '../automation-api.js'
@@ -113,6 +113,8 @@ function BranchConfiguration({ store }) {
   React.useEffect(()=>setServicePage(1),[selected])
   const owner=useRequestOwner(JSON.stringify([schedulingActorKey(store),selected]),store.getAuthGeneration)
   const [saveError,setSaveError]=useState('')
+  const [lifecycleAction,setLifecycleAction]=useState(null)
+  const [archiveReason,setArchiveReason]=useState('')
   const allowed=!!store.session&&Array.isArray(state.users)&&Array.isArray(state.persons)&&canAccessPage(state,store.session,'branches')
   const selectBranch=id=>{if(!owner.isPending()){selectedRef.current=id;setSaveError('');setSelected(id)}}
   const coordinateInputRef = useRef(null)
@@ -134,6 +136,7 @@ function BranchConfiguration({ store }) {
   // plan, section J/point 8.
   const save=async()=>{
     if(!allowed)return
+    if (branch?.archived) { setSaveError('Restore the branch before editing it.'); return }
     if(selectedRef.current!==selected||form.id!==selected){setSaveError('The selected branch changed. Review its details before publishing.');return}
     if (!isAllowedBranchCode(form.branchCode, branch?.branchCode)) {
       setSaveError('Choose an allowed branch code.'); toast('Choose an allowed branch code.', 'warning'); return
@@ -157,9 +160,39 @@ function BranchConfiguration({ store }) {
     }catch{if(owner.current(ticket))setSaveError('Could not confirm the save. Your edits are retained. Check the branch before retrying.')}
     finally{owner.finish(ticket)}
   }
+  const changeLifecycle = async () => {
+    if (!allowed || !lifecycleAction || owner.busy) return
+    const operation = lifecycleAction.operation
+    const id = lifecycleAction.id
+    if (selectedRef.current !== id || !state.branches.some(b => b.id === id)) {
+      setSaveError('The selected branch changed. Review it before retrying.'); return
+    }
+    if (operation === 'archive' && archiveReason.trim().length < 8) {
+      setSaveError('Provide a reason of at least eight characters.'); return
+    }
+    const ticket = owner.begin()
+    if (!ticket) return
+    setSaveError('')
+    try {
+      const result = await syncBranchLifecycle(id, operation, archiveReason.trim(),
+        () => owner.current(ticket) && selectedRef.current === id && canAccessPage(state, store.session, 'branches'))
+      if (!owner.current(ticket)) return
+      if (!result.ok) {
+        setSaveError(result.message || 'Branch state could not be confirmed. Refresh before retrying.')
+        return
+      }
+      const adopted = actions.adoptBranchFromServer(id, result.record)
+      if (!adopted.ok) { setSaveError(adopted.message); return }
+      toast(operation === 'archive' ? 'Branch archived. Existing records are retained.' : 'Branch restored as Inactive. Reopen it explicitly after reviewing schedules.', 'success')
+      setLifecycleAction(null)
+      setArchiveReason('')
+    } catch {
+      if (owner.current(ticket)) setSaveError('The branch change could not be confirmed. Refresh before retrying.')
+    } finally { owner.finish(ticket) }
+  }
   const serviceActive=serviceId=>state.branchServices.some(bs=>bs.branchId===selected&&bs.serviceId===serviceId&&bs.active!==false)
   const toggleService=async serviceId=>{
-    if(!allowed||selectedRef.current!==selected||form.id!==selected)return
+    if(!allowed||branch?.archived||selectedRef.current!==selected||form.id!==selected)return
     const ticket=owner.begin()
     if(!ticket)return
     const id=selected
@@ -208,14 +241,17 @@ function BranchConfiguration({ store }) {
                     <span style={{ fontSize: '12px', color: 'var(--muted)' }}>• {b.city}</span>
                   </div>
                 </div>
-                <Status tone={b.status === 'Open' ? 'success' : b.status === 'Temporarily Closed' ? 'warning' : 'neutral'}>{b.status}</Status>
+                <Status tone={b.archived ? 'neutral' : b.status === 'Open' ? 'success' : b.status === 'Temporarily Closed' ? 'warning' : 'neutral'}>{b.archived ? 'Archived' : b.status}</Status>
               </div>
               <div style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginTop: '8px', paddingTop: '8px', borderTop: '1px solid var(--line)' }}>
                 <span>Services: <b>{activeSvcCount}</b></span>
                 <span>Phone: <b>{b.phone || '—'}</b></span>
               </div>
               <div style={{ marginTop: '10px', textAlign: 'right' }}>
-                <Button size="sm" variant={isSel ? 'primary' : 'soft'} disabled={owner.busy} aria-pressed={isSel} onClick={(e) => { e.stopPropagation(); selectBranch(b.id); }}>{isSel ? 'Configuring' : 'Configure'}</Button>
+                <Button size="sm" variant={isSel ? 'primary' : 'soft'} disabled={owner.busy} aria-pressed={isSel} onClick={(e) => { e.stopPropagation(); selectBranch(b.id); }}>{isSel ? 'Selected' : 'Configure'}</Button>
+                {isSel && <Button size="sm" variant="ghost" disabled={owner.busy} onClick={e => {
+                  e.stopPropagation(); setArchiveReason(''); setSaveError(''); setLifecycleAction({ id: b.id, operation: b.archived ? 'restore' : 'archive', name: b.name })
+                }}>{b.archived ? 'Restore' : 'Archive'}</Button>}
               </div>
             </div>
           );
@@ -223,10 +259,11 @@ function BranchConfiguration({ store }) {
       </div>
     </div>
     <div className="admin-config">
-      {branch&&<Card title={`Configure ${branch.name}`} subtitle={`${branch.branchCode} • ${branch.city}`}>
+      {branch&&<Card title={`${branch.archived ? 'Archived: ' : 'Configure '}${branch.name}`} subtitle={`${branch.branchCode} • ${branch.city}`}>
+        {branch.archived && <Notice tone="warning">This branch is archived. Its appointments and history are retained. Restore it to edit, then review schedules before reopening.</Notice>}
         {owner.busy&&<p role="status">Publishing changes for {branch.name}…</p>}
         {saveError&&<p role="alert">{saveError}</p>}
-        <fieldset disabled={owner.busy} aria-busy={owner.busy} style={{border:0,padding:0,margin:0,minWidth:0}}>
+        <fieldset disabled={owner.busy || branch.archived} aria-busy={owner.busy} style={{border:0,padding:0,margin:0,minWidth:0}}>
         <Tabs tabs={configTabs} active={configTab} onChange={setConfigTab}/>
         {configTab==='details'&&<div className="form-grid" style={{marginTop:'12px'}}>
           <Field label="Branch name"><input value={form.name||''} onChange={e=>setForm({...form,name:e.target.value})}/></Field>
@@ -337,6 +374,17 @@ function BranchConfiguration({ store }) {
         </fieldset>
       </Card>}
     </div>
+    <Modal open={!!lifecycleAction} title={`${lifecycleAction?.operation === 'archive' ? 'Archive' : 'Restore'} ${lifecycleAction?.name || 'branch'}`} onClose={() => { if (!owner.busy) { setLifecycleAction(null); setSaveError('') } }}>
+      {lifecycleAction?.operation === 'archive' ? <>
+        <p>Archiving removes this clinic from new booking availability. Existing clinical, payment and audit history will stay linked to this branch. Active appointments, open Visits, assigned available Staff or unsettled invoices will block this action.</p>
+        <Field label="Reason for archiving"><textarea rows={2} maxLength={300} value={archiveReason} disabled={owner.busy} onChange={e => setArchiveReason(e.target.value)} placeholder="Reason for retiring this clinic"/></Field>
+      </> : <p>Restoration does not reopen online booking. The branch returns as <b>Inactive</b> until you review its details and explicitly change the status.</p>}
+      {saveError && <Notice tone="warning">{saveError}</Notice>}
+      <div className="row-actions top-gap">
+        <Button variant="ghost" disabled={owner.busy} onClick={() => { setLifecycleAction(null); setSaveError('') }}>Cancel</Button>
+        <Button variant={lifecycleAction?.operation === 'archive' ? 'danger' : 'primary'} disabled={owner.busy || (lifecycleAction?.operation === 'archive' && archiveReason.trim().length < 8)} onClick={changeLifecycle}>{owner.busy ? 'Saving…' : lifecycleAction?.operation === 'archive' ? 'Archive branch' : 'Restore as Inactive'}</Button>
+      </div>
+    </Modal>
   </div>
 }
 
@@ -929,7 +977,7 @@ export function UsersPage({ store }) {
         totalCount={records.length}
         onReset={search || roleFilter !== 'all' ? ()=>{setSearch('');setRoleFilter('all')} : null}
       />
-      {loading?<p className="muted-copy" role="status">Loading user accounts…</p>:error?<Notice tone="warning" title="Couldn’t load user accounts">{error}<Button size="sm" variant="ghost" onClick={load}>Try again</Button></Notice>:<Table rows={filteredRecords} caption="User accounts" columns={[
+      {loading?<ReadState compact state="loading" message="Loading user accounts…"/>:error?<ReadState compact state="error" message={error || "User accounts could not be loaded."} onRetry={load}/>:<Table rows={filteredRecords} caption="User accounts" columns={[
         {key:'name',label:'Name'}, {key:'email',label:'Email'}, {key:'phone',label:'Phone',render:u=>u.phone||'—'},
         {key:'role',label:'Role',render:u=>u.role==='owner'?'Owner':u.role==='dentist'?'Dentist':u.role==='staff'?'Staff':'Patient'},
         {key:'action',label:'Actions',render:u=><div className="row-actions">{u.role==='staff'&&<Button size="sm" variant="soft" onClick={()=>setScopeTarget(u)}>Branch access</Button>}<Button size="sm" variant="ghost" onClick={()=>{setEdit({...u});setEditPhoneLocal(localPhone(u.phone))}}>Edit</Button><Button size="sm" variant="danger" onClick={()=>setDeleteTarget(u)}>Delete</Button></div>}

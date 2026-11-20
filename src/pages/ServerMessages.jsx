@@ -2,13 +2,14 @@ import React, { useEffect, useLayoutEffect, useReducer, useRef, useState } from 
 import '../messages.css'
 import { Button, ConfirmDialog, Empty, Field, Icon, Notice, PageHeader, SearchInput, Status } from '../components.jsx'
 import { canAccessPage } from '../safeguards.js'
-import { PageHead } from '../patient/ui.jsx'
+import { LoadingState, PageHead } from '../patient/ui.jsx'
+import { getAppointment, getConversation } from '../api-client.js'
 import { commandKey } from '../appointments-api.js'
 import { useVisibleRefresh } from '../use-visible-refresh.js'
 import { useDebouncedValue } from '../use-debounced-value.js'
 import { createDrafts } from '../message-drafts.js'
 import { onRealtimeState, startRealtime, subscribe } from '../realtime.js'
-import { addDentist, closeConversation, loadConversations, loadDentistOptions, loadMessages, loadNewerMessages, loadStartOptions, markRead, MAX_MESSAGE, sendMessage, startConversation } from '../messaging-api.js'
+import { mapConversation, addDentist, closeConversation, loadConversations, loadDentistOptions, loadMessages, loadNewerMessages, loadStartOptions, markRead, MAX_MESSAGE, sendMessage, startConversation } from '../messaging-api.js'
 
 // M17 conversations for a clinic-server session (Patient, Staff, Dentist). Everything shown is server data; message text is rendered as
 // plain text. In-app messages only: the screen never claims SMS/e-mail/social delivery, "seen" or "typing".
@@ -18,8 +19,25 @@ import { addDentist, closeConversation, loadConversations, loadDentistOptions, l
 //    end up in another conversation, and an async result is always written to the conversation it was requested for.
 const POLL_MS = 10000
 const SAFETY_POLL_MS = 60000
+const LIST_TIMEOUT_MS = 18000
+
+// An unresponsive inbox request must reach a Retry state instead of an endless banner.
+// This only bounds the UI wait; server authorization and actual network transport remain unchanged.
+async function loadConversationListWithTimeout(cursor, query, includePreview) {
+  let timer
+  try {
+    return await Promise.race([
+      loadConversations(cursor, query, includePreview),
+      new Promise(resolve => { timer = setTimeout(() => resolve({ok:false,kind:'timeout',message:'Conversations are taking too long. Check your connection and try again.'}), LIST_TIMEOUT_MS) }),
+    ])
+  } catch {
+    return {ok:false,kind:'network',message:'Conversations could not be loaded. Try again.'}
+  } finally { clearTimeout(timer) }
+}
 const time = iso => (iso ? iso.slice(11, 16) : '')
 const day = iso => (iso ? iso.slice(0, 10) : '')
+const patientActivity = new Intl.DateTimeFormat('en-PH', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Manila' })
+
 function highlightText(text, query) {
   const raw = String(text ?? '')
   const q = String(query ?? '').trim()
@@ -83,6 +101,7 @@ function MessageWorkspace({ store, role, initial = null }) {
   const thread = selectedId ? threads[selectedId] : null
   const [confirmClose, setConfirmClose] = useState(false)
   const [search, setSearch] = useState(initial?.patientCode || '')
+  const [appointmentContext, setAppointmentContext] = useState(null)
   const [initialNotice, setInitialNotice] = useState('')
   const searchQuery = useDebouncedValue(search.trim())
   const queryRef = useRef('')
@@ -115,7 +134,7 @@ function MessageWorkspace({ store, role, initial = null }) {
     const query = queryRef.current
     const ticket={query,request};listFlight.current=ticket
     setSearching(true)
-    const result = await loadConversations(null, query)
+    const result = await loadConversationListWithTimeout(null, query, role === 'patient')
     if (listFlight.current===ticket)listFlight.current=null
     if (!owns() || request !== listRequest.current || query !== queryRef.current) return null
     setSearching(false)
@@ -128,11 +147,25 @@ function MessageWorkspace({ store, role, initial = null }) {
     setError(''); setList(latest.current.list); setNextCursor(result.nextCursor)
     setChannels(previous => (previous.join() === result.channels.join() ? previous : result.channels)); return result.rows.filter(visibleConversation)
   }
-  useEffect(() => { refreshList().then(rows => {
+  useEffect(() => { refreshList().then(async rows => {
     if (initialOpened.current || !rows) return
     initialOpened.current = true
     if (initial?.conversationId) {
-      const candidate = rows.find(c => c.id === initial.conversationId) || initial.conversation
+      let verifiedThread
+      if (patient && initial.appointmentId) {
+        const [appointment, thread] = await Promise.all([getAppointment(initial.appointmentId), getConversation(initial.conversationId)])
+        if (!owns() || selectedRef.current) return
+        const row = appointment.data
+        if (!appointment.ok || !thread.ok || row?.id !== initial.appointmentId || row.patient?.id !== session.patientPublicId ||
+          row.branch?.id !== initial.branchId || row.dentist_conversation_id !== initial.conversationId ||
+          thread.data?.id !== initial.conversationId || thread.data?.status !== 'Open') {
+          setInitialNotice('The appointment no longer links to this dentist conversation. Contact the front desk.')
+          return
+        }
+        verifiedThread = mapConversation(thread.data)
+        setAppointmentContext({ conversationId: initial.conversationId, code: row.code, service: row.service?.name })
+      }
+      const candidate = verifiedThread || rows.find(c => c.id === initial.conversationId) || initial.conversation
       const found = candidate?.id === initial.conversationId && candidate.patientId === initial.patientPublicId && candidate.branchId === initial.branchId ? candidate : null
       if (found&&visibleConversation(found)) { setSelectedRecord(found); openThread(found.id) }
       else setInitialNotice('That Patient conversation is no longer available in your inbox.')
@@ -149,7 +182,7 @@ function MessageWorkspace({ store, role, initial = null }) {
     paging.current=true
     const request = listRequest.current
     const query = queryRef.current
-    const result = await loadConversations(nextCursor, query)
+    const result = await loadConversations(nextCursor, query, role === 'patient')
     paging.current=false
     if (!owns()) return
     if (request !== listRequest.current || query !== queryRef.current) return
@@ -159,14 +192,34 @@ function MessageWorkspace({ store, role, initial = null }) {
 
   const patchThread = (id, patch) => setThreads(previous => ({ ...previous, [id]: { ...(previous[id] || {}), ...patch(previous[id] || {}) } }))
   const deniedRead = (id,result) => {
-    if (!owns() || !['forbidden','unauthenticated'].includes(result?.kind)) return false
+    // The scoped messages endpoint deliberately returns 404 for a revoked Dentist,
+    // just as it does for a genuinely missing conversation. Both mean the open
+    // thread is no longer safe to display. Do not treat outages as revocation.
+    if (!owns() || !['forbidden','unauthenticated','not_found'].includes(result?.kind)) return false
     deniedThreads.current.add(id)
     accessVersions.current.set(id,accessVersion(id)+1)
     reads.current.delete(id)
+    // A list request started before revocation must not restore a stale row.
+    listRequest.current++
+    listFlight.current=null
+    setSearching(false)
     hitRequest.current++
+    latest.current.list=latest.current.list?.filter(c=>c.id!==id)
     setThreads(previous=>{const next={...previous};delete next[id];return next})
+    setPending(previous=>{const next={...previous};delete next[id];return next})
+    for (const [key,item] of attempts.current) if (item.snapshot?.conversationId===id) attempts.current.delete(key)
+    drafts.current.clear(id)
     setList(previous=>previous?.filter(c=>c.id!==id))
-    if(selectedRef.current===id){selectedRef.current=null;latest.current.selected=null;setSelectedId(null);setSelectedRecord(null)}
+    if(selectedRef.current===id){
+      selectedRef.current=null
+      latest.current.selected=null
+      setSelectedId(null)
+      setSelectedRecord(null)
+      setAppointmentContext(null)
+      setConfirmClose(false)
+      setHits(null)
+      setNewBelow(false)
+    }
     setInitialNotice('That conversation is no longer accessible. Choose another conversation.')
     return true
   }
@@ -196,6 +249,7 @@ function MessageWorkspace({ store, role, initial = null }) {
 
   /** The one sync path: after a realtime signal and on every poll. */
   const syncNewer = async id => {
+    if (deniedThreads.current.has(id)) return
     const t = threadsRef.current[id]
     if (!t?.messages) return
     const last = t.messages[t.messages.length - 1]?.id,version=accessVersion(id)
@@ -245,7 +299,13 @@ function MessageWorkspace({ store, role, initial = null }) {
   useEffect(() => {
     if (!selectedId || !newestShown || !nearBottom.current || (typeof document !== 'undefined' && document.visibilityState === 'hidden')) return
     let current = true
-    markRead(selectedId, newestShown, () => owns() && selectedRef.current===selectedId).then(r => { if (current && owns() && r.ok) refreshList() })
+    markRead(selectedId, newestShown, () => owns() && selectedRef.current===selectedId).then(r => {
+      if (!owns()) return
+      // Even after navigating away, an in-flight 404 must erase that thread's
+      // cached content; only successful acknowledgements respect effect cleanup.
+      if (deniedRead(selectedId,r)) return
+      if (current && r.ok) refreshList()
+    })
     return () => { current = false }
   }, [selectedId, newestShown, newBelow])
   const prevSelectedId = useRef(selectedId)
@@ -286,10 +346,12 @@ function MessageWorkspace({ store, role, initial = null }) {
     const observed=item.conversation
     if (!currentConversation(observed)) return
     inFlight.current.add(item.key)
+    const version=accessVersion(conversationId)
     setPending(previous => ({ ...previous, [conversationId]: (previous[conversationId] || []).map(p => (p.key === item.key ? { ...p, status: 'sending', message: '' } : p)) }))
     try {
       const result = await sendMessage(conversationId, item.text, item.key, () => currentConversation(observed))
-      if (!owns()) return
+      if (!owns() || accessVersion(conversationId)!==version) return
+      if (deniedRead(conversationId,result)) return
       if (result.ok) {
         appendMessages(conversationId, [result.message])
         drafts.current.sent(item.snapshot);redraw();attempts.current.delete(item.key)
@@ -356,17 +418,17 @@ function MessageWorkspace({ store, role, initial = null }) {
   }, [selectedId, searchQuery])
   const filteredList = list || []
 
-  return <div className={patient ? 'pt-page is-wide' : undefined}>
+  return <div className={patient ? 'patient-messages' : undefined}>
     {patient
-      ? <PageHead eyebrow="Appointments & Care" title="Messages" text="Write to the front desk of any branch. Reminders and updates are in Notifications."
+      ? <PageHead title="Messages"
           actions={<div className="chat-head-actions"><LiveStatus state={live}/><Button icon="message" onClick={() => { setComposing(true); setSelectedId(null) }}>New message</Button></div>}/>
       : <PageHeader title="Messages"
           text="Conversations with Patients for the branches you work at. Everyone at the branch front desk can see and reply."
           aside={<div className="chat-head-actions"><LiveStatus state={live}/></div>}/>}
-    <p className="muted-copy">These messages stay inside this application. Nothing is sent by SMS or social media, and “unread” only means not yet opened here.{patient ? ' If you are away when the clinic writes, we email you a short alert — never the message itself.' : ''}</p>
+    {!patient && <p className="muted-copy">These messages stay inside this application. Nothing is sent by SMS or social media, and “unread” only means not yet opened here.</p>}
     {error && <Notice tone="warning" title="Conversations unavailable">{error} <Button size="sm" onClick={refreshList}>Retry</Button></Notice>}
     {initialNotice && <Notice tone="warning" title="Conversation unavailable">{initialNotice}</Notice>}
-    {!list && !error && <div className="chat-skeleton" aria-busy="true"><Notice>Loading conversations…</Notice></div>}
+    {!list && !error && (patient ? <LoadingState label="Loading conversations…"/> : <p className="staff-inline-loading" role="status" aria-busy="true">Loading conversations…</p>)}
     {list && <div className={`chat ${selectedId || composing ? 'has-thread' : ''}`}>
       <section className="chat-list" aria-label="Conversations">
         <SearchInput className="chat-search" value={search} onChange={setSearch} onClear={() => setSearch('')} maxLength={120} placeholder="Search messages or contacts…" ariaLabel="Search messages or contacts"/>
@@ -374,14 +436,14 @@ function MessageWorkspace({ store, role, initial = null }) {
         {!searching && !list.length && !searchQuery && <Empty title="No conversations yet" text={patient ? 'Start one with “New message”. The front desk usually replies during clinic hours.' : 'New Patient messages for your branch will appear here.'}/>}
         {!searching && searchQuery && !filteredList.length && <Empty title="No matching messages or contacts" text="Try a different keyword, patient name, or code."/>}
         <ul>{filteredList.map(c => <li key={c.id}><button type="button" aria-current={c.id === selectedId ? 'true' : undefined} className={`chat-row ${c.id === selectedId ? 'selected' : ''} ${c.unread ? 'is-unread' : ''}`} onClick={() => openThread(c.id)}>
-          <span className="chat-row-main"><b>{searchQuery ? highlightText(title(c), searchQuery) : title(c)}</b><small>{searchQuery ? highlightText(subtitle(c), searchQuery) : subtitle(c)}</small>{searchQuery && <small>{highlightText([c.context, ...c.participants.map(p => p.name)].filter(Boolean).join(' · '), searchQuery)}</small>}</span>
-          <span className="chat-row-meta">{c.lastMessageAt && <small>{day(c.lastMessageAt)}</small>}{c.unread > 0 ? <span className="chat-badge"><span aria-hidden="true">{c.unread}</span><span className="sr-only">{c.unread} unread</span></span> : c.closed ? <Status>Closed</Status> : null}</span>
+          <span className="chat-row-main"><b>{searchQuery ? highlightText(title(c), searchQuery) : title(c)}</b><small>{searchQuery ? highlightText(subtitle(c), searchQuery) : subtitle(c)}</small>{patient ? <small className="patient-chat-preview">{c.preview || c.context || 'Open conversation'}</small> : searchQuery && <small>{highlightText([c.context, ...c.participants.map(p => p.name)].filter(Boolean).join(' · '), searchQuery)}</small>}</span>
+          <span className="chat-row-meta">{c.lastMessageAt && <small>{patient && Number.isFinite(Date.parse(c.lastMessageAt)) ? <time dateTime={c.lastMessageAt}>{patientActivity.format(new Date(c.lastMessageAt))}</time> : day(c.lastMessageAt)}</small>}{c.unread > 0 ? <span className="chat-badge"><span aria-hidden="true">{c.unread}</span><span className="sr-only">{c.unread} unread</span></span> : c.closed ? <Status>Closed</Status> : null}</span>
         </button></li>)}</ul>
         {nextCursor && <Button variant="soft" disabled={searching} onClick={loadMore}>Load more conversations</Button>}
       </section>
 
       <section className="chat-thread" aria-label={selected ? `Conversation: ${title(selected)}` : 'Conversation'}>
-        {composing && <NewConversation current={owns} drafts={drafts.current} prefill={initial?.compose ? initial.text : ''} onCancel={() => setComposing(false)} onStarted={async id => { setComposing(false); await refreshList(); openThread(id) }}/>}
+        {composing && <NewConversation current={owns} drafts={drafts.current} prefill={initial?.compose ? initial.text : ''} preferredBranchId={initial?.branchPublicId} onCancel={() => setComposing(false)} onStarted={async id => { setComposing(false); await refreshList(); openThread(id) }}/>}
         {!composing && !selected && <div className="chat-placeholder"><Icon name="message" size={28}/><p>{list.length ? 'Choose a conversation to read it.' : patient ? 'Your conversations with the clinic will appear here.' : 'Nothing to answer right now.'}</p></div>}
         {!composing && selected && <>
           <header className="chat-thread-head">
@@ -389,6 +451,7 @@ function MessageWorkspace({ store, role, initial = null }) {
             <div><b>{title(selected)}</b><small>{subtitle(selected)}{selected.participants.some(p => p.role === 'Dentist') ? ` · Dentist participants: ${selected.participants.filter(p => p.role === 'Dentist').map(p => p.name).join(', ')}` : ''}</small></div>
             <div className="chat-thread-actions">{staff && !selected.closed && !error && !closing && !closeAttempt.current && <AddDentist key={selected.id} conversationId={selected.id} context={{patientId:selected.patientId,branchId:selected.branchId}} onAdded={refreshList} toast={toast} current={() => currentConversation(conversationSnapshot(selected))}/>}{!patient && !selected.closed && <Button size="sm" variant="ghost" disabled={closing || !!error} onClick={() => setConfirmClose(closeAttempt.current || Object.freeze({...conversationSnapshot(selected),key:commandKey()}))}>Close</Button>}</div>
           </header>
+          {appointmentContext?.conversationId === selected.id && <p className="pp-hint">Appointment {appointmentContext.code} · {appointmentContext.service}</p>}
           {searchQuery && <section className="chat-search-results" aria-label="Matching messages" aria-busy={!!hits?.loading}>
             <b>Matching messages in this conversation</b>
             {hits?.loading && <p role="status">Searching message history…</p>}
@@ -400,7 +463,7 @@ function MessageWorkspace({ store, role, initial = null }) {
             {hits?.nextCursor && <Button size="sm" disabled={hits.loading} onClick={() => loadHits(true)}>Older matches</Button>}
           </section>}
           {thread?.error && <Notice tone="warning" title="Messages unavailable">{thread.error} <Button size="sm" onClick={() => openThread(selected.id)}>Retry</Button></Notice>}
-          {!thread?.messages && !thread?.error && <Notice>Loading messages…</Notice>}
+          {!thread?.messages && !thread?.error && <p className="staff-inline-loading" role="status">Loading messages…</p>}
           {thread?.messages && <div className="chat-log" role="log" aria-label="Messages" ref={logRef} onScroll={e => {
             const el = e.currentTarget; nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60
             if (nearBottom.current) setNewBelow(false)
@@ -443,7 +506,7 @@ function MessageWorkspace({ store, role, initial = null }) {
   </div>
 }
 
-function NewConversation({ drafts, current = () => true, prefill = '', onCancel, onStarted }) {
+function NewConversation({ drafts, current = () => true, prefill = '', preferredBranchId, onCancel, onStarted }) {
   const [options, setOptions] = useState(null)
   const [branchId, setBranchId] = useState('')
   const [changing, setChanging] = useState(false)
@@ -457,7 +520,8 @@ function NewConversation({ drafts, current = () => true, prefill = '', onCancel,
     loadStartOptions().then(r => {
       if (!live.current||!current())return
       if (!r.ok) return setError(r.message || 'Branches could not be loaded.')
-      setOptions(r); setBranchId(r.defaultBranchId || '')
+      const preferred = r.branches.find(branch => branch.id === preferredBranchId?.toLowerCase())
+      setOptions(r); setBranchId(preferred?.id || r.defaultBranchId || '')
     })
   }, [])
   const draftId = 'new-conversation'

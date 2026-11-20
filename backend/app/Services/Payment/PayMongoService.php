@@ -132,6 +132,37 @@ class PayMongoService
         return array_values(array_unique(array_map(fn ($t) => \App\Support\Brand::paymentMethod('PayMongo ('.self::METHOD_LABELS[$t].')'), $types)));
     }
 
+    public function bookingMethodNames(\App\Models\Service $service): array
+    {
+        if (! \App\Support\DevelopmentClinicCatalog::isCatalogService($service)) return $this->acceptedMethodNames();
+
+        return array_map(fn ($type) => match ($type) {
+            'card' => 'Credit or debit card',
+            'gcash' => 'GCash',
+            'paymaya' => 'Maya',
+            'qrph' => 'QR Ph',
+        }, $this->bookingMethodTypes($service));
+    }
+
+    private function bookingMethodTypes(\App\Models\Service $service): array
+    {
+        if (! \App\Support\DevelopmentClinicCatalog::isCatalogService($service)) return $this->paymentMethodTypes();
+        if (! $this->isConfigured() || $this->live() || ! app()->environment('local')) return [];
+
+        try {
+            $response = Http::withBasicAuth($this->secretKey(), '')->acceptJson()->timeout(5)
+                ->get($this->host().'/v1/merchants/capabilities/payment_methods');
+        } catch (ConnectionException) {
+            return [];
+        }
+        if (! $response->successful()) return [];
+        $methods = $response->json('data.attributes.payment_methods') ?? $response->json('data.attributes.payment_method_types')
+            ?? $response->json('data') ?? $response->json();
+        if (! is_array($methods) || ! array_is_list($methods) || array_filter($methods, fn ($method) => ! is_string($method))) return [];
+
+        return array_values(array_intersect($this->paymentMethodTypes(), ['card', 'gcash', 'paymaya', 'qrph'], $methods));
+    }
+
     /** True when online payment credentials and methods are configured on this server. */
     public function isConfigured(): bool
     {
@@ -358,6 +389,10 @@ class PayMongoService
             if (! in_array($appointment->status, ['Pending', 'Confirmed'], true) || $session->fresh()?->status !== 'Open') {
                 return null;
             }
+            if ($appointment->booking_hold_expires_at?->isPast()) {
+                // Keep the provider payment evidence for the existing reconciliation/manual-review path.
+                return null;
+            }
 
             $from = $appointment->status;
             $method = 'PayMongo ('.(self::METHOD_LABELS[$paid['method']] ?? 'ONLINE').')';
@@ -418,7 +453,8 @@ class PayMongoService
     {
         $secret = $this->secretKey();
         $this->live();
-        $methods = $this->paymentMethodTypes();
+        $methods = $this->bookingMethodTypes($appointment->service);
+        if (! $methods) throw new BillingException(503, 'payment_not_configured', 'Online booking payment is unavailable. Choose pay at clinic.');
 
         return DB::transaction(function () use ($appointment, $actor, $secret, $methods, $address) {
             $appointment = Appointment::whereKey($appointment->id)->lockForUpdate()->firstOrFail();
@@ -431,10 +467,7 @@ class PayMongoService
                     $targetService = \App\Models\Service::find($targetService->consultation_service_id) ?? $targetService;
                 }
                 $date = ClinicClock::local($appointment->starts_at)->toDateString();
-                $resolved = app(\App\Services\Pricing\PriceResolver::class)->resolve($targetService, $appointment->branch, $date);
-                $fee = ($resolved instanceof \App\Services\Pricing\ResolvedPrice)
-                    ? $resolved->amount()
-                    : null;
+                $fee = \App\Services\Pricing\BookingFee::resolve($targetService, $appointment->branch, $date);
                 $appointment->booking_fee_php = $fee;
             }
             if ($fee === null) {
@@ -790,6 +823,9 @@ class PayMongoService
                 }
                 if (! in_array($appointment->status, ['Pending', 'Confirmed'], true) || $session->fresh()?->status !== 'Open') {
                     return $this->review($event, $session, 'appointment_not_payable');
+                }
+                if ($appointment->booking_hold_expires_at?->isPast()) {
+                    return $this->review($event, $session, 'appointment_hold_expired', 'Needs review');
                 }
                 $from = $appointment->status;
                 $method = 'PayMongo ('.(self::METHOD_LABELS[$paid['method']] ?? 'ONLINE').')';

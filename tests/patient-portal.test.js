@@ -28,20 +28,20 @@ test('decision 1: a verified email opens sign-in with the address filled in and 
   assert.match(html, /type="password"[^>]*value=""/)
 })
 
-test('decisions 2, 3 and 5: the name is read-only with a front-desk link, email change asks for the current password, and no HMO or placeholder screens', () => {
+test('Account sends profile corrections to the front desk and keeps email read-only', () => {
   const account = read('src/patient/pages/Account.jsx')
-  assert.match(account, /Need to correct your name\? Message the front desk/)
-  assert.doesNotMatch(account, /updatePatientRecordRemote|first_name:/)
-  assert.match(account, /label="Current password"/)
-  assert.match(account, /requestEmailChange\(\{ newEmail: email\.trim\(\), currentPassword: password \}\)/)
+  assert.match(account, /Edit contact details/)
+  assert.match(account, /onNavigate\('messages', \{ compose: true \}\)/)
+  assert.doesNotMatch(account, /updatePatientRecordRemote|requestEmailChange|first_name:/)
+  assert.match(account, /Registered email/)
+  assert.match(account, /Code from your email/)
   const portal = read('src/patient/Portal.jsx')
-  // Prescriptions are real clinic-server data now (M19), so the portal has that page; the other placeholders stay out.
-  for (const word of ['hmo', 'loyalty', 'followups', 'queue']) assert.doesNotMatch(portal, new RegExp(`\\['${word}'`), word)
+  for (const word of ['hmo', 'loyalty', 'followups', 'queue']) assert.ok(!portal.includes(`['${word}'`), word)
 })
 
 test('Section 22 and decision 6: pay at booking via PayMongo, and messages are routed to a front desk with a Change link', () => {
   const book = read('src/patient/pages/Book.jsx')
-  assert.match(book, /Pay at booking via PayMongo/i)
+  assert.match(book, /Continue to secure payment/)
   assert.match(book, /checkout_url/)
   const messages = read('src/pages/ServerMessages.jsx')
   assert.match(messages, /To: <b>\{chosen\.name\} front desk<\/b>/)
@@ -51,7 +51,8 @@ test('Section 22 and decision 6: pay at booking via PayMongo, and messages are r
 test('the portal reads the clinic server only: no local mock state, sample people or invented counts', () => {
   for (const file of portalFiles) {
     const source = read(file)
-    for (const banned of ['patient-view.js', 'data.js', 'store.state', 'Miguel Reyes', 'Math.random']) assert.ok(!source.includes(banned), `${file} uses ${banned}`)
+    assert.doesNotMatch(source, /[/'"](?:patient-view|data)\.js['"]/, `${file} imports a local demo dataset`)
+    for (const banned of ['store.state', 'Miguel Reyes', 'Math.random']) assert.ok(!source.includes(banned), `${file} uses ${banned}`)
   }
 })
 
@@ -65,7 +66,7 @@ test('shared states: skeleton, empty and error states are accessible and the pil
 
 test('booking calendar: only available days can be booked; a full day opens the waitlist only when booking passes onFullDay; closed and past days are disabled', () => {
   const source = read('src/patient/BookingCalendar.jsx')
-  assert.match(source, /disabled=\{day\.status !== 'available' && !\(onFullDay && day\.status === 'full'\) && !\(\(day\.status === 'closed' \|\| day\.status === 'off'\) && day\.reason\)\}/)
+  assert.match(source, /disabled=\{day\.date <= data\.today \|\| day\.status !== 'available' && !\(onFullDay && day\.status === 'full'\) && !\(\(day\.status === 'closed' \|\| day\.status === 'off'\) && day\.reason\)\}/)
   assert.match(source, /aria-disabled=\{day\.status === 'closed' \|\| day\.status === 'off' \? true : undefined\}/) // a closed day with a reason only shows the reason (F5)
   assert.match(source, /onFullDay = null/) // rescheduling does not pass it, so full days stay disabled there
   assert.match(source, /day\.status === 'closed' \|\| day\.status === 'off' \? setClosedNote\(day\) : day\.status === 'full' \? onFullDay\(day\.date\) : onChange\(day\.date\)/)
@@ -117,8 +118,11 @@ test('patient portal sidebar segregation: navigation is grouped with section hea
   assert.match(portal, /NAV_SECTIONS/)
   assert.match(portal, /pp-nav-groups/)
   assert.match(portal, /pp-nav-group-title/)
-  assert.match(portal, /Appointments & Care/)
-  assert.match(portal, /Records & Billing/)
+  const expected = [[null, ['Home']], ['Care', ['Appointments', 'Messages', 'Prescriptions']],
+    ['Records', ['My Teeth', 'History']], ['Settings', ['Account']]]
+  assert.deepEqual(ui.NAV_SECTIONS.map(section => [section.title, section.items.map(item => item[2])]), expected)
+  assert.match(portal, /aria-labelledby=\{title \? headingId/)
+
   const css = read('src/patient/portal.css')
   assert.match(css, /\.pp-nav-groups/)
   assert.match(css, /\.pp-nav-group-title/)
@@ -151,17 +155,14 @@ test('Section 2.1: PrescriptionsPage and TeethPage use shared PageHead and Error
   assert.match(teeth, /<ErrorState text=\{error\} onRetry=\{\(\) => setAttempt\(a => a \+ 1\)\}\/>/)
 })
 
-test('Section 2.1: ProfilePage Open Family link navigates to FamilyPage where dependents are managed via myDependents/addDependent/inviteToClaim', () => {
-  const account = read('src/patient/pages/Account.jsx')
-  assert.match(account, /onNavigate\('family'\)/)
-  assert.match(account, /Open Family/)
-  const portal = read('src/patient/Portal.jsx')
-  assert.match(portal, /case 'family': content = <FamilyPage[^\n]*session=\{store\.session\}[^\n]*getAuthGeneration=\{store\.getAuthGeneration\}/)
-  assert.equal(ui.portalPageFromHash('#p/family'), 'family')
-  const family = read('src/patient/pages/Family.jsx')
-  assert.match(family, /myDependents\(\)/)
-  assert.match(family, /createDependentCommand\(\{guardianId:session\.patientPublicId,payload,isCurrent:owns\}\)/)
-  assert.match(family, /inviteToClaim\(d\.id, inviteEmail\)/)
+test('Family URLs redirect and booking retains authorized dependent selection', () => {
+  assert.equal(ui.portalPageFromHash('#p/family'), 'profile')
+  assert.equal(ui.portalPageFromHash('#p/account/family'), 'profile')
+  assert.equal(ui.portalPageFromHash('#p/profile/messages'), 'messages')
+  assert.equal(ui.portalPageFromHash('#p/account/prescriptions'), 'prescriptions')
+  assert.doesNotMatch(read('src/patient/pages/Account.jsx'), /onNavigate\('family'\)/)
+  assert.doesNotMatch(read('src/patient/Portal.jsx'), /case 'family'/)
+  assert.match(read('src/patient/pages/Book.jsx'), /myDependents\(\)/)
 })
 
 test('Section 2.1: no internal module codes (M1-M26) or internal storage/enum tokens appear in patient-visible portal source', () => {

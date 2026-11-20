@@ -30,6 +30,22 @@ class ServiceController extends Controller
 
     public function index()
     {
-        return response()->json(['data' => ServiceResource::collection(Service::orderBy('name')->get())]);
+        $services = Service::with('consultationService')->orderBy('name')->get();
+        if (request()->user()?->role === \App\Enums\Role::Patient) {
+            [$first, $last] = app(\App\Services\Scheduling\SchedulingService::class)->patientWindow();
+            $versions = \App\Models\ServicePrice::whereNull('retracted_at')->where('effective_from', '<=', $last)
+                ->orderByDesc('effective_from')->get()->groupBy('service_id');
+            foreach ($services as $service) {
+                $stage = $service->online_booking === 'consultation_first' ? $service->consultationService : $service;
+                if (! $stage) continue;
+                $rows = $versions->get($stage->id, collect());
+                // Before branch/date selection, quote only a uniform booking-window price.
+                if ($rows->contains(fn ($row) => $row->branch_id !== null || $row->effective_from->format('Y-m-d') > $first)) continue;
+                $base = $rows->first();
+                $service->setAttribute('stage_fee', $base?->kind === 'priced' ? (string) $base->amount :
+                    \App\Services\Pricing\BookingFee::developmentAmount($stage));
+            }
+        }
+        return response()->json(['data' => ServiceResource::collection($services)]);
     }
 }

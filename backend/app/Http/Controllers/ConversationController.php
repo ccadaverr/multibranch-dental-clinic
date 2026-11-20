@@ -129,6 +129,14 @@ class ConversationController extends Controller
                     ->orWhereHas('branch', fn ($bq) => $bq->whereRaw('LOWER(name) LIKE ?', [$like]));
             });
         }
+        if ($user->role === \App\Enums\Role::Patient && $request->boolean('include_preview')) $query->with('latestMessage');
+        $installed = app(\App\Services\Messaging\ConversationDentistAccess::class)->schemaInstalled();
+        $request->attributes->set('conversation_grants_installed', $installed);
+        if ($installed) {
+            $query->selectSub(\App\Models\ConversationDentistGrant::select('dentist_user_id')
+                ->whereColumn('id', 'conversations.active_dentist_grant_id')->whereColumn('conversation_id', 'conversations.id')
+                ->whereColumn('patient_id', 'conversations.patient_id')->whereColumn('branch_id', 'conversations.branch_id'), 'granted_dentist_id');
+        }
         $rows = $query->with(['patient.person', 'branch', 'participants.user.person', 'assignee.person'])->orderByDesc('id')->limit($per + 1)->get();
         $page = $rows->take($per)->values();
 

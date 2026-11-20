@@ -169,3 +169,22 @@ test('server-revoked access notifies session invalidation without treating ordin
   assert.equal(count, 1)
   off()
 })
+
+test('R23 refund command sends only selected reason, observed revision and stable request key', async () => {
+  mockFetch([jsonResponse(200, {}), jsonResponse(202, { data: {
+    appointment_id: 'apt_public', booking_payment_status: 'paid', refund_status: 'unconfirmed',
+    outcome: 'Reconciliation required',
+  } })])
+  const result = await api.requestBookingRefund('apt_public', {
+    expected_revision: 8, reason: 'requested_by_customer', note: null,
+  }, 'r23-stable-intent')
+  assert.equal(result.ok, true)
+  assert.equal(result.data.refund_status, 'unconfirmed', '202 is not verified settlement')
+  const command = calls.find(c => c.options?.method === 'POST')
+  assert.ok(command)
+  assert.match(command.url, /\/api\/appointments\/apt_public\/booking-refund$/)
+  assert.equal(command.options.headers['Idempotency-Key'], 'r23-stable-intent')
+  assert.deepEqual(JSON.parse(command.options.body), {
+    expected_revision: 8, reason: 'requested_by_customer', note: null,
+  })
+})

@@ -1,19 +1,53 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { Button, Icon } from '../components.jsx'
+import { Button, Icon, RefreshButton } from '../components.jsx'
 
-/** Loads server data: {status: 'loading'|'ready'|'error', data, error, reload}. Never fabricates a result. */
+const INITIAL_LOAD = { status: 'loading', loading: true, data: null, error: '' }
+
+/** Reads are bounded and only the newest request for the current page can update it. */
 export function useLoad(load, deps = []) {
-  const [state, setState] = useState({ status: 'loading', data: null, error: '' })
-  const seq = useRef(0)
-  const run = useCallback(async ({ quiet = false } = {}) => {
-    const id = ++seq.current
-    if (!quiet) setState(s => ({ ...s, status: s.data ? s.status : 'loading', error: '' }))
-    const result = await load()
-    if (id !== seq.current) return
-    setState(result?.ok ? { status: 'ready', data: result.data, error: '', meta: result.meta } : { status: 'error', data: null, error: result?.message || 'This could not be loaded.' })
+  const [state, setState] = useState(INITIAL_LOAD)
+  const current = useRef(null)
+  const run = useCallback(async () => {
+    current.current?.abort()
+    const controller = new AbortController()
+    current.current = controller
+    const { signal } = controller
+    const stopped = new Promise(resolve => signal.addEventListener('abort', () => resolve({
+      ok: false, message: 'This request took too long. Try again.',
+    }), { once: true }))
+    const timeout = setTimeout(() => controller.abort(), 30000)
+    setState(previous => previous.owner === run && previous.data != null
+      ? { ...previous, loading: true, status: 'ready', error: '' }
+      : { ...INITIAL_LOAD, owner: run })
+    let result
+    try {
+      result = await Promise.race([Promise.resolve().then(() => load(signal)), stopped])
+    } catch {
+      result = { ok: false, message: 'This could not be loaded. Try again.' }
+    } finally {
+      clearTimeout(timeout)
+      if (current.current === controller) {
+        current.current = null
+        const retain = !['unauthenticated', 'forbidden', 'stale_context'].includes(result?.kind)
+        setState(previous => result?.ok
+          ? { owner: run, status: 'ready', loading: false, data: result.data, error: '', meta: result.meta }
+          : { owner: run, status: 'error', loading: false, data: retain && previous.owner === run ? previous.data : null, error: result?.message || 'This could not be loaded.' })
+      }
+    }
   }, deps) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { run() }, [run])
-  return { ...state, reload: run }
+  useEffect(() => {
+    run()
+    return () => {
+      const active = current.current
+      current.current = null
+      active?.abort()
+    }
+  }, [run])
+  return { ...(state.owner === run ? state : INITIAL_LOAD), reload: run }
+}
+
+export function LoadingState({ label, compact = false }) {
+  return <p className={`patient-loading${compact ? ' is-compact' : ''}`} role="status">{label}</p>
 }
 
 export function Skeleton({ lines = 3, card = true, label = 'Loading' }) {
@@ -22,9 +56,9 @@ export function Skeleton({ lines = 3, card = true, label = 'Loading' }) {
   </div>
 }
 
-export function EmptyState({ icon = 'sparkles', title, text, children }) {
+export function EmptyState({ icon = null, title, text, children }) {
   return <div className="pp-empty pp-card pp-fade">
-    <span className="pp-empty-icon" aria-hidden="true"><Icon name={icon} size={26}/></span>
+    {icon && <span className="pp-empty-icon" aria-hidden="true"><Icon name={icon} size={22}/></span>}
     <h3>{title}</h3>
     {text && <p>{text}</p>}
     {children && <div className="pp-empty-actions">{children}</div>}
@@ -42,7 +76,7 @@ export function ErrorState({ text, onRetry }) {
 export function PageHead({ eyebrow, title, text, actions }) {
   return <header className="pp-head pp-head-compact pp-fade">
     <div className="pp-head-title">{eyebrow && <p className="pp-eyebrow">{eyebrow}</p>}<h1>{title}</h1>{text && <p className="pp-lead sr-only">{text}</p>}</div>
-    {actions && <div className="pp-head-actions">{actions}</div>}
+    {actions && !(React.isValidElement(actions) && actions.type === RefreshButton && !actions.props.recovery) && <div className="pp-head-actions">{actions}</div>}
   </header>
 }
 

@@ -11,9 +11,9 @@ export function ToothHistory({history,currentEntries,onReviewEncounter}){
   {!entries.length?<p className="od-muted">Nothing recorded yet for this tooth.</p>:<>
    {history!==null&&<p className="od-muted">Original entries. Active surfaces are shown in Current saved findings.</p>}
    <div className="od-history-list">{entries.slice((shown-1)*10,shown*10).map(item=><details key={item.id} className="od-history-entry">
-    <summary><span><b>{item.status}</b><small>{day(item.recorded_on)} · {currentIds.has(item.id)?'Current entry':'Earlier entry'}</small></span><span>{item.surfaces?.length?'Surfaces '+item.surfaces.join(' · '):'Whole tooth'}</span></summary>
+    <summary><span><b>{item.status}{item.service_name && ` · ${item.service_name}`}</b><small>{day(item.recorded_on)} · {currentIds.has(item.id)?'Current entry':'Earlier entry'}</small></span><span>{item.surfaces?.length?'Surfaces '+item.surfaces.join(' · '):'Whole tooth'}</span></summary>
     <div className="od-history-body">
-     {item.dentist&&<p>{item.dentist}</p>}{item.branch&&<p>{item.branch.name}</p>}
+     {item.visit_ref && <p>Visit {item.visit_ref}</p>}{item.dentist&&<p>{item.dentist}</p>}{item.branch&&<p>{item.branch.name}</p>}
      {item.created_at&&<p>Recorded {new Date(item.created_at).toLocaleString('en-PH',{timeZone:'Asia/Manila'})}</p>}
      {item.treatment_id&&<p>Encounter {item.treatment_id} · Visit {item.visit_id}</p>}
      {item.note&&<p className="od-card-note">{item.note}</p>}
